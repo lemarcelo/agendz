@@ -33,12 +33,12 @@ Marcelo (dono da plataforma) acompanha, num painel só dele, todos os clientes (
 Gerar boleto válido e conciliar Pix exige uma instituição (não dá para a aplicação "gerar boleto" sozinha). Opções com API de boleto + Pix + webhook: **Asaas**, **Efí (Gerencianet)**, **Iugu**, **Pagar.me**. Padrão proposto: Asaas (conta de cobrança simples, sandbox gratuito). A implementação usa uma interface `ProvedorCobranca` (criar cobrança, consultar, cancelar, validar webhook) com **simulador** para testes, como já é feito com Pix/WhatsApp; o provedor real só entra com a chave guardada como segredo (nunca no repositório).
 
 ## 6. Perguntas (responda o que quiser; o resto vai no padrão)
-1. **Quem conta como funcionário pago?** Padrão: só quem atende (profissional). Alternativa: todo usuário com login.
-2. **Cobrança antecipada ou pelo uso?** Padrão: antecipada (emite dia 5 para o mês corrente, vence dia 15), pro rata nas entradas.
+1. ~~Quem conta como funcionário pago?~~ **DECIDIDO (Marcelo, 27/10):** só quem realiza serviço (profissional, `usuario.atende`).
+2. **O que o vencimento do dia 15 cobra?** (a) **antecipada**: o mês que vem (cliente paga antes de usar; mais seguro para você; padrão) ou (b) **pós-paga**: o mês que passou (cliente paga depois de usar). Em (a) quem entra no meio do mês paga proporcional na fatura seguinte.
 3. **Funcionário que sai no meio do mês:** padrão: já pago não é devolvido; não entra na próxima.
 4. **Mínimo por cliente** (ex.: 1 licença)? Padrão: sem mínimo.
 5. **Período de teste** para loja nova? Padrão: 14 dias grátis, sem cartão, depois a primeira fatura.
-6. **Você já tem CNPJ/MEI e conta no provedor?** Sem isso, o boleto real não sai; o resto fica pronto com o simulador. Padrão: seguir com simulador e deixar o provedor como a última etapa.
+6. **DECIDIDO (Marcelo, 27/10):** sem CNPJ/MEI; pretende **Pix pela API de uma conta pessoal**. Boleto fica fora (exige conta de cobrança empresarial); a primeira versão é **só Pix**, com o provedor atrás da interface `ProvedorCobranca`. A viabilidade da conta pessoal depende do provedor (verificar termos de Efí, Mercado Pago, Asaas, ou o banco dele); enquanto isso vale o simulador, e a baixa manual existe como plano B.
 7. **Nota fiscal de serviço (NFS-e)** emitida pela plataforma? Padrão: fora do escopo agora (fala com o contador).
 8. **Contrato/termos de uso** com cláusula de suspensão e de dados: precisa de revisão de advogado antes do primeiro cliente real. Não sou advogado; deixo o texto-modelo e o aceite registrado no cadastro.
 9. **Clientes já existentes** (Apex, Dalforno, Offbox): entram como `ativo` sem fatura até uma data que você definir (padrão: 1ª fatura só depois do período de teste/combinado).
