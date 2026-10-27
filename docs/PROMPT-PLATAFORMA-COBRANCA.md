@@ -21,11 +21,11 @@ Marcelo (dono da plataforma) acompanha, num painel só dele, todos os clientes (
 
 ## 4. Ciclo de cobrança (padrões)
 - **Vencimento:** dia 15 de cada mês (se cair em dia não útil, vale o próximo dia útil só para o boleto; o prazo de 20 dias conta do vencimento original).
-- **Emissão:** dia 5, com a contagem de licenças do dia da emissão; valor = licenças × preço do cliente, em centavos inteiros, congelado na fatura. Funcionário entrando depois da emissão entra proporcional por dia na fatura seguinte (`pro rata`).
+- **Emissão (pós-paga):** dia 1, fechando o mês anterior; valor = soma por funcionário de (dias ativos ÷ dias do mês) × preço do cliente, arredondado em centavos inteiros e congelado na fatura (com a lista de licenças usada).
 - **Fatura:** `fatura (loja_id, competencia, vencimento, valor_centavos, status, itens congelados)`; status `aberta`, `paga`, `vencida`, `cancelada`. Fatura paga não é recriada nem apagada; valor nunca vem do cliente.
 - **Meios:** boleto registrado e Pix (copia e cola/QR) por **provedor de pagamento** (seção 5); o dono escolhe na hora, as duas formas ficam válidas até o pagamento de uma delas.
 - **Baixa:** só por **webhook do provedor** (autenticado, idempotente, valor conferido com a fatura) ou baixa manual do Marcelo. Pix compensa na hora; boleto em 1 a 3 dias úteis, e conta pelo pagamento compensado.
-- **Avisos ao dono:** 5 dias antes, no vencimento, +5, +10, +15 e +19 dias (e-mail e faixa na tela); sem spam: um por data.
+- **Avisos ao dono:** na emissão, no vencimento, +5, +10, +15 e +19 dias (e-mail e faixa na tela); sem spam: um por data.
 - **Suspensão:** 20 dias após o vencimento sem pagamento compensado, a loja fica **suspensa**: a API devolve 402 "Sistema suspenso por falta de pagamento" (menos login, tela de pagamento e a própria fatura); a página de agendamento do cliente final mostra "Agendamento indisponível". **Dados ficam guardados** (nada é apagado). Pagou, reativa sozinho em segundos. Quem decide a suspensão é o relógio do servidor (testável com relógio fixo).
 - **Encerramento:** após 90 dias suspensa, o painel pergunta ao Marcelo (exportar dados e encerrar); nunca apaga sozinho.
 
@@ -34,7 +34,7 @@ Gerar boleto válido e conciliar Pix exige uma instituição (não dá para a ap
 
 ## 6. Perguntas (responda o que quiser; o resto vai no padrão)
 1. ~~Quem conta como funcionário pago?~~ **DECIDIDO (Marcelo, 27/10):** só quem realiza serviço (profissional, `usuario.atende`).
-2. **O que o vencimento do dia 15 cobra?** (a) **antecipada**: o mês que vem (cliente paga antes de usar; mais seguro para você; padrão) ou (b) **pós-paga**: o mês que passou (cliente paga depois de usar). Em (a) quem entra no meio do mês paga proporcional na fatura seguinte.
+2. **DECIDIDO (Marcelo, 27/10; lido como "pós-paga"):** o vencimento do dia 15 cobra o mês que já passou. Cada funcionário paga proporcional aos dias em que ficou ativo no mês (licença-dia). Risco aceito: o cliente usa cerca de 50 dias antes de a suspensão valer.
 3. **Funcionário que sai no meio do mês:** padrão: já pago não é devolvido; não entra na próxima.
 4. **Mínimo por cliente** (ex.: 1 licença)? Padrão: sem mínimo.
 5. **Período de teste** para loja nova? Padrão: 14 dias grátis, sem cartão, depois a primeira fatura.
