@@ -2,7 +2,7 @@
 // Pré-visualização do assistente de primeiro acesso no Artifact/demonstração: mesma interface do adaptador real (api-real.js `onboarding`),
 // mas NADA é gravado (nem na loja de exemplo). Os serviços de exemplo vêm da loja atual (domain/catalogo.js). Só roda em MODO_DEMO.
 import { store } from './api.js';
-import { catalogoDeEstado, expedienteDeEstado } from '../domain/catalogo.js';
+import { catalogoDoTipo, expedienteDeEstado } from '../domain/catalogo.js';
 import { tipoDe } from '../domain/tipos.js';
 import { criarEstadoInicial } from '../tipos/estetica_automotiva/seed.js';
 import { criarEstadoBarbearia } from '../tipos/barbearia/seed.js';
@@ -24,7 +24,7 @@ const loginDe = (nome, usados) => {
 export function criarAdaptadorDemo({ reconfigurar = false } = {}) {
   let passo = 'servicos'; let concluido = reconfigurar;
   const atual = () => store.getState();
-  const catalogo = () => (reconfigurar && SEEDS[tipoDe(atual().estabelecimento)] ? catalogoDeEstado(SEEDS[tipoDe(atual().estabelecimento)]()) : catalogoDeEstado(atual()));
+  const catalogo = () => { const t = tipoDe(atual().estabelecimento); return catalogoDoTipo(t, reconfigurar && SEEDS[t] ? SEEDS[t]() : atual()); };
   const nomesDaLoja = () => new Set((atual().servicos || []).map((x) => String(x.nome).toLowerCase()));
   const feitos = new Set(reconfigurar ? catalogo().filter((x) => nomesDaLoja().has(x.nome.toLowerCase())).map((x) => x.chave) : []);
   const usados = new Set(); let expediente = reconfigurar ? expedienteDeEstado(atual()) : null;

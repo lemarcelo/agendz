@@ -30,6 +30,10 @@ const semRolagem = async (p, nome) => assert.ok(await p.evaluate(() => document.
   await p.getByTestId('pa-servicos').waitFor();
   assert.equal(await p.getByTestId('pa-previa').count(), 1);
   assert.match(await p.locator('h1').first().innerText(), /Vamos preparar/);
+  // a barbearia tem uma lista ampla, agrupada por categoria
+  assert.ok((await p.locator('[data-testid^=pa-categoria-]').count()) >= 5, 'categorias do catálogo da barbearia');
+  assert.equal(await p.getByTestId('pa-item-s-barboterapia').count(), 1);
+  assert.ok((await p.locator('[data-testid^=pa-item-]').count()) >= 25);
   // nenhum item marcado: Continuar desligado; marcar todos liga e mostra a contagem; edita preço e duração
   assert.equal(await p.getByTestId('pa-continuar-servicos').isDisabled(), true);
   await p.getByTestId('pa-marcar-todos').click();

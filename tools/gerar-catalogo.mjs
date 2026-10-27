@@ -5,14 +5,14 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { criarEstadoBarbearia } from '../src/tipos/barbearia/seed.js';
 import { criarEstadoInicial } from '../src/tipos/estetica_automotiva/seed.js';
-import { catalogoDeEstado, expedienteDeEstado } from '../src/domain/catalogo.js';
+import { catalogoDoTipo as servicosDoTipo, expedienteDeEstado } from '../src/domain/catalogo.js';
 
 const AGORA = Date.UTC(2026, 9, 12, 12, 0, 0); // fixo: o catálogo não pode mudar conforme o dia em que o gerador roda
 const FONTES = { barbearia: () => criarEstadoBarbearia(AGORA), estetica_automotiva: () => criarEstadoInicial(AGORA) };
 
 export function catalogoDoTipo(tipo) {
   const estado = FONTES[tipo]();
-  return { tipo, expediente: expedienteDeEstado(estado), servicos: catalogoDeEstado(estado) };
+  return { tipo, expediente: expedienteDeEstado(estado), servicos: servicosDoTipo(tipo, estado) };
 }
 export const TIPOS_DO_CATALOGO = Object.keys(FONTES);
 export const caminhoDoCatalogo = (tipo) => `backend/src/main/resources/catalogo/${tipo}.json`;

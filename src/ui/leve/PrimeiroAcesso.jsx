@@ -157,15 +157,18 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
             <p>Marque os serviços que a sua loja oferece. Você pode ajustar preço e duração agora ou depois, em Serviços.</p>
             {estado.servicos.length > 1 && <div className="acoes"><Btn tamanho="sm" onClick={marcarTodos} data-testid="pa-marcar-todos">{todosMarcados ? 'Desmarcar todos' : 'Marcar todos'}</Btn></div>}
             <ul className="pa-lista">
-              {estado.servicos.map((s) => {
+              {estado.servicos.map((s, i) => {
                 const m = marcas[s.chave] || {};
+                const novoGrupo = !!s.categoria && s.categoria !== (estado.servicos[i - 1] && estado.servicos[i - 1].categoria);
                 const existe = ja.has(s.chave);
                 const fx = faixa(s.precos);
                 return (
-                  <li key={s.chave} className={`pa-item${m.on ? ' marcado' : ''}`} data-testid={`pa-item-${s.chave}`}>
+                  <React.Fragment key={s.chave}>
+                  {novoGrupo && <li className="pa-categoria" data-testid={`pa-categoria-${i}`}><b>{s.categoria}</b></li>}
+                  <li className={`pa-item${m.on ? ' marcado' : ''}`} data-testid={`pa-item-${s.chave}`}>
                     <label className="pa-marcar">
                       <input type="checkbox" checked={!!m.on || existe} disabled={existe} onChange={(e) => mudar(s.chave, 'on', e.target.checked)} data-testid={`pa-marcar-${s.chave}`} />
-                      <span><b>{s.nome}</b>{s.categoria ? <small className="muted"> · {s.categoria}</small> : null}{existe ? <small className="muted"> · já está na sua loja</small> : null}</span>
+                      <span><b>{s.nome}</b>{existe ? <small className="muted"> · já está na sua loja</small> : null}</span>
                     </label>
                     {m.on && !existe && (s.precos
                       ? <p className="muted pa-porte">Preço por porte do veículo: {dinheiro(fx[0])} a {dinheiro(fx[1])}. Ajuste em Serviços.</p>
@@ -174,6 +177,7 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
                           <Campo rotulo="Duração (min)"><input inputMode="numeric" value={m.duracao} onChange={(e) => mudar(s.chave, 'duracao', e.target.value)} maxLength={5} data-testid={`pa-duracao-${s.chave}`} /></Campo>
                         </div>)}
                   </li>
+                  </React.Fragment>
                 );
               })}
             </ul>

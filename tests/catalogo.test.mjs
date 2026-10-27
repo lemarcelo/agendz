@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { TIPOS_DO_CATALOGO, caminhoDoCatalogo, catalogoDoTipo, textoDoCatalogo } from '../tools/gerar-catalogo.mjs';
 import { TIPOS } from '../src/domain/tipos.js';
+import { ORDEM_DE_CATEGORIAS } from '../src/tipos/barbearia/catalogo.js';
 
 test('há catálogo para todos os tipos de estabelecimento (e só para eles)', () => {
   assert.deepEqual([...TIPOS_DO_CATALOGO].sort(), Object.keys(TIPOS).sort());
@@ -52,4 +53,23 @@ test('o expediente sugerido de cada tipo tem 7 dias, ao menos um aberto, faixas 
       }
     }
   }
+});
+
+test('barbearia: lista ampla por categoria, com os 5 serviços do seed na base e nenhum combo nem serviço duplicado', () => {
+  const { servicos } = catalogoDoTipo('barbearia');
+  assert.ok(servicos.length >= 25 && servicos.length <= 40, `barbearia: ${servicos.length} itens (o assistente envia no máximo 40 por vez)`);
+  const nomes = servicos.map((s) => s.nome);
+  for (const n of ['Corte somente tesoura', 'Corte na máquina', 'Corte Degradê', 'Barba', 'Barba Degradê']) assert.ok(nomes.includes(n), `falta ${n} do seed`);
+  assert.ok(servicos.every((s) => s.categoria), 'todo serviço da barbearia tem categoria no assistente');
+  const cats = [...new Set(servicos.map((s) => s.categoria))];
+  assert.deepEqual(cats, ORDEM_DE_CATEGORIAS.filter((c) => cats.includes(c)), 'categorias contíguas e na ordem do tipo');
+  assert.ok(cats.length >= 5);
+  assert.ok(servicos.every((s) => !s.multiDia && !s.precos), 'barbearia não tem vários dias nem preço por porte');
+});
+
+test('o seed da barbearia (dados da demonstração e v64) não ganha serviços nem categorias do catálogo ampliado', async () => {
+  const { criarEstadoBarbearia } = await import('../src/tipos/barbearia/seed.js');
+  const seed = criarEstadoBarbearia(Date.UTC(2026, 9, 12, 12, 0, 0));
+  assert.deepEqual(seed.servicos.filter((s) => !s.combo).map((s) => s.id).sort(), ['s-barba', 's-barba-degrade', 's-degrade', 's-maquina', 's-tesoura']);
+  assert.ok(seed.servicos.every((s) => !s.categoria), 'o seed continua sem categoria');
 });
