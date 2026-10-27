@@ -5,10 +5,19 @@ set -euo pipefail
 PASTA=/opt/agendz/backup
 mkdir -p "$PASTA"
 command -v rclone >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq rclone; }
-read -r -p "Endpoint (https://<id>.r2.cloudflarestorage.com): " ENDPOINT
+pedir() { # pedir VARIAVEL "pergunta" REGEX "dica" [secreto]
+  local v
+  while true; do
+    if [ "${5:-}" = secreto ]; then read -r -s -p "$2" v; echo; else read -r -p "$2" v; fi
+    v=$(printf '%s' "$v" | tr -d '[:space:]')
+    if [[ "$v" =~ $3 ]]; then printf -v "$1" '%s' "$v"; return; fi
+    echo "  Valor inválido: $4" >&2
+  done
+}
+pedir ENDPOINT "Endpoint (cole o endereço https://<id>.r2.cloudflarestorage.com): " '^https://[0-9a-f]{32}\.r2\.cloudflarestorage\.com$' "tem que ser https://<32 caracteres>.r2.cloudflarestorage.com, sem /bucket no final"
 read -r -p "Nome do bucket [agendz-backups]: " BUCKET; BUCKET=${BUCKET:-agendz-backups}
-read -r -p "Access Key ID: " AK
-read -r -s -p "Secret Access Key (não aparece): " SK; echo
+pedir AK "Access Key ID (32 caracteres): " '^[0-9a-f]{32}$' "o Access Key ID tem exatamente 32 caracteres (o de 64 é a Secret)"
+pedir SK "Secret Access Key (64 caracteres, não aparece): " '^[0-9a-f]{64}$' "a Secret tem exatamente 64 caracteres" secreto
 (umask 077; cat > "$PASTA/r2.env" <<ENV
 R2_ENDPOINT=$ENDPOINT
 R2_BUCKET=$BUCKET
