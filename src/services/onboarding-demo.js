@@ -4,6 +4,11 @@
 import { store } from './api.js';
 import { catalogoDeEstado, expedienteDeEstado } from '../domain/catalogo.js';
 import { tipoDe } from '../domain/tipos.js';
+import { criarEstadoInicial } from '../tipos/estetica_automotiva/seed.js';
+import { criarEstadoBarbearia } from '../tipos/barbearia/seed.js';
+
+const AGORA = Date.UTC(2026, 9, 12, 12, 0, 0); // fixo: o catálogo de exemplo do tipo não muda conforme o dia
+const SEEDS = { estetica_automotiva: () => criarEstadoInicial(AGORA), barbearia: () => criarEstadoBarbearia(AGORA) };
 
 const ALFABETO = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789'; // sem 0/O, 1/l/I (igual ao servidor)
 const senha = () => { const b = new Uint32Array(12); crypto.getRandomValues(b); return Array.from(b, (n) => ALFABETO[n % ALFABETO.length]).join(''); };
@@ -14,10 +19,15 @@ const loginDe = (nome, usados) => {
   return l;
 };
 
-export function criarAdaptadorDemo() {
-  let passo = 'servicos'; let concluido = false;
-  const feitos = new Set(); const usados = new Set(); let expediente = null;
-  const catalogo = () => catalogoDeEstado(store.getState());
+// `reconfigurar` (Estabelecimento > Reconfigurar): o catálogo é o do TIPO (seed) e já estão "na loja" os que ainda existem na loja atual por nome
+// (apagou um serviço? ele volta a aparecer para marcar); o expediente atual é o da loja. Continua sem gravar nada.
+export function criarAdaptadorDemo({ reconfigurar = false } = {}) {
+  let passo = 'servicos'; let concluido = reconfigurar;
+  const atual = () => store.getState();
+  const catalogo = () => (reconfigurar && SEEDS[tipoDe(atual().estabelecimento)] ? catalogoDeEstado(SEEDS[tipoDe(atual().estabelecimento)]()) : catalogoDeEstado(atual()));
+  const nomesDaLoja = () => new Set((atual().servicos || []).map((x) => String(x.nome).toLowerCase()));
+  const feitos = new Set(reconfigurar ? catalogo().filter((x) => nomesDaLoja().has(x.nome.toLowerCase())).map((x) => x.chave) : []);
+  const usados = new Set(); let expediente = reconfigurar ? expedienteDeEstado(atual()) : null;
   return {
     async carregar() { return { ok: true, estado: { tipo: tipoDe(store.getState().estabelecimento), passo, concluido, servicos: catalogo(), jaCadastrados: [...feitos], expedienteSugerido: expedienteDeEstado(store.getState()), expediente } }; },
     async servicos(itens) {

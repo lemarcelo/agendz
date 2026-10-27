@@ -82,12 +82,15 @@ function TrocarSenha({ loja, sessao, aoTrocar, aoSair }) {
 }
 
 function Painel({ loja, sessao, aoSair }) {
+  const [reconfigurando, setReconfigurando] = useState(false);
+  if (reconfigurando) return <PrimeiroAcesso modo="reconfigurar" tipo={loja.tipo} nomeLoja={loja.nome} adaptador={onboarding} aoConcluir={() => setReconfigurando(false)} aoCancelar={() => setReconfigurando(false)} />;
   const papel = sessao.papel === 'dono' ? 'Proprietário' : rotulo({ tipo: loja.tipo }, 'profissional', { capitalizado: true });
   return (
     <Cartao loja={loja}>
       <div className="form-grade um" data-testid="painel-real">
         <p><b data-testid="painel-nome">{sessao.nome}</b> · <span data-testid="painel-papel">{papel}</span></p>
         <Aviso>Sua conta está pronta e o acesso é seguro. A agenda, os clientes e os serviços chegam ao site nas próximas atualizações.</Aviso>
+        {sessao.papel === 'dono' && <Btn onClick={() => setReconfigurando(true)} data-testid="reconfigurar-abrir">Reconfigurar estabelecimento</Btn>}
         <Btn onClick={aoSair} data-testid="sair">Sair</Btn>
       </div>
     </Cartao>

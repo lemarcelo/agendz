@@ -199,8 +199,13 @@ class OnboardingTest extends BaseApi {
         assertEquals(0, jdbc.queryForObject("select count(*) from escala_faixa", Integer.class));
         pegar(APEX, davi, "/api/onboarding").andExpect(jsonPath("$.passo").value("pronto"));
         enviar(APEX, davi, "/api/onboarding/concluir", "{}").andExpect(status().isOk());
-        enviar(APEX, davi, "/api/onboarding/expediente", "{\"semana\":{\"1\":{\"aberto\":true,\"faixas\":[[\"09:00\",\"18:00\"]]}}}").andExpect(status().isConflict());
-        assertEquals(0, jdbc.queryForObject("select count(*) from escala_faixa", Integer.class));
+        // reaberto depois de concluído: o expediente enviado substitui o da loja (reconfigurar)
+        enviar(APEX, davi, "/api/onboarding/expediente", "{\"semana\":{\"1\":{\"aberto\":true,\"faixas\":[[\"09:00\",\"18:00\"]]}}}").andExpect(status().isOk()).andExpect(jsonPath("$.criados").value(1));
+        assertEquals(1, jdbc.queryForObject("select count(*) from escala_faixa", Integer.class));
+        enviar(APEX, davi, "/api/onboarding/expediente", "{\"semana\":{\"2\":{\"aberto\":true,\"faixas\":[[\"10:00\",\"12:00\"]]}}}").andExpect(status().isOk());
+        assertEquals(1, jdbc.queryForObject("select count(*) from escala_faixa", Integer.class));
+        assertEquals(2, jdbc.queryForObject("select dia from escala_faixa", Integer.class));
+        pegar(APEX, davi, "/api/onboarding").andExpect(jsonPath("$.passo").value("pronto")).andExpect(jsonPath("$.concluido").value(true));
     }
 
     @Test
@@ -217,15 +222,24 @@ class OnboardingTest extends BaseApi {
     }
 
     @Test
-    void concluirFechaOAssistenteEDepoisNadaEscreve() throws Exception {
+    void concluirNaoImpedeReconfigurarMasSoAdicionaENuncaExclui() throws Exception {
         abrirAssistente(LOJA_DALFORNO);
         String t = token(DALFORNO, "alan");
         enviar(DALFORNO, t, "/api/onboarding/concluir", "{}").andExpect(status().isOk()).andExpect(jsonPath("$.concluido").value(true));
         enviar(DALFORNO, t, "/api/onboarding/concluir", "{}").andExpect(status().isOk()); // repetir é inofensivo
         pegar(DALFORNO, t, "/api/onboarding").andExpect(jsonPath("$.concluido").value(true)).andExpect(jsonPath("$.passo").value("pronto"));
-        enviar(DALFORNO, t, "/api/onboarding/servicos", "{\"itens\":[{\"chave\":\"s-barba\"}]}").andExpect(status().isConflict());
-        enviar(DALFORNO, t, "/api/onboarding/equipe", "{\"pessoas\":[{\"nome\":\"Zeferino\"}]}").andExpect(status().isConflict());
-        assertEquals(0, jdbc.queryForObject("select count(*) from servico", Integer.class));
+        // reconfigurar: serviços novos entram, idempotente por nome
+        enviar(DALFORNO, t, "/api/onboarding/servicos", "{\"itens\":[{\"chave\":\"s-barba\"}]}").andExpect(status().isOk()).andExpect(jsonPath("$.criados").value(1));
+        enviar(DALFORNO, t, "/api/onboarding/servicos", "{\"itens\":[{\"chave\":\"s-barba\"}]}").andExpect(jsonPath("$.criados").value(0)).andExpect(jsonPath("$.jaExistiam").value(1));
+        assertEquals(1, jdbc.queryForObject("select count(*) from servico", Integer.class));
+        pegar(DALFORNO, t, "/api/onboarding").andExpect(jsonPath("$.jaCadastrados[0]").value("s-barba"));
+        // reconfigurar: pessoa nova é criada; as que já existiam continuam (nada é excluído)
+        int antes = jdbc.queryForObject("select count(*) from usuario", Integer.class);
+        enviar(DALFORNO, t, "/api/onboarding/equipe", "{\"pessoas\":[{\"nome\":\"Zeferino\"}]}").andExpect(status().isOk()).andExpect(jsonPath("$.pessoas[0].login").value("zeferino"));
+        assertEquals(antes + 1, jdbc.queryForObject("select count(*) from usuario", Integer.class));
+        assertEquals(1, jdbc.queryForObject("select count(*) from usuario where identificador = 'alan'", Integer.class));
+        // o passo e a conclusão não voltam atrás; o login continua sem pendência
+        pegar(DALFORNO, t, "/api/onboarding").andExpect(jsonPath("$.concluido").value(true)).andExpect(jsonPath("$.passo").value("pronto"));
         mvc.perform(post("/api/auth/login").with(host(DALFORNO)).contentType(MediaType.APPLICATION_JSON).content(corpoLogin("alan", "1234")))
                 .andExpect(jsonPath("$.onboardingPendente").value(false));
     }

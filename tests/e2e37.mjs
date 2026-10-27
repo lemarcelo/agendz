@@ -87,6 +87,50 @@ const semRolagem = async (p, nome) => assert.ok(await p.evaluate(() => document.
   await m.p.getByTestId('pa-pronto').waitFor(); await semRolagem(m.p, 'pronto');
   ok('A: estética (390 px, fonte larga): preço por porte sem campo de preço; sem rolagem lateral; pular passos');
   await m.ctx.close();
+
+  // reconfigurar em Estabelecimento (só o dono): serviços do tipo (os da loja já marcados), equipe só adiciona, nada é gravado
+  const r = await novaPagina();
+  await r.p.goto(`${base}?loja=apex`);
+  await r.p.getByTestId('demo-davi').click();
+  await r.p.getByTestId('nav-estab').click();
+  await r.p.getByRole('tab', { name: 'Reconfigurar' }).click();
+  assert.match(await r.p.getByTestId('reconfigurar').innerText(), /ninguém da equipe é excluído/);
+  const usuariosAntes = await r.p.evaluate(() => document.body.innerText.length);
+  await r.p.getByTestId('reconfigurar-abrir').click();
+  await r.p.getByTestId('pa-servicos').waitFor();
+  assert.match(await r.p.getByTestId('pa').locator('h1').innerText(), /Reconfigurar Apex/);
+  assert.equal(await r.p.getByTestId('pa-previa').count(), 1);
+  assert.match(await r.p.getByTestId('pa-reconf-nota').innerText(), /só adiciona/);
+  assert.match(await r.p.getByTestId('pa-item-s-lav-simples').innerText(), /já está na sua loja/);
+  assert.equal(await r.p.getByTestId('pa-continuar-servicos').isDisabled(), true);
+  await r.p.getByTestId('pa-pular-servicos').click();
+  await r.p.getByTestId('pa-equipe').waitFor();
+  assert.match(await r.p.getByTestId('pa-equipe').innerText(), /ninguém|não é alterado/);
+  await r.p.getByTestId('pa-nome-0').fill('Zeca Novo');
+  await r.p.getByTestId('pa-criar-acessos').click();
+  await r.p.getByTestId('pa-acessos').waitFor();
+  assert.match(await r.p.getByTestId('pa-senha-zeca').innerText(), /^[A-HJ-NP-Za-km-z2-9]{12}$/);
+  await r.p.getByTestId('pa-anotei').click();
+  await r.p.getByTestId('pa-expediente').waitFor();
+  assert.equal(await r.p.getByTestId('pa-dia-1').isChecked(), true); // o expediente atual da loja
+  assert.equal(await r.p.getByTestId('pa-dia-0').isChecked(), false);
+  await r.p.getByTestId('pa-pular-expediente').click();
+  await r.p.getByTestId('pa-pronto').waitFor();
+  assert.match(await r.p.getByTestId('pa-pronto').innerText(), /Nada que já existia foi removido/);
+  await r.p.getByTestId('pa-concluir').click(); // "Voltar ao estabelecimento"
+  await r.p.getByTestId('reconfigurar').waitFor();
+  assert.equal(await r.p.getByTestId('pa').count(), 0);
+  // nada foi gravado: a Equipe não ganhou o Zeca
+  await r.p.getByTestId('nav-equipe').click();
+  assert.equal(await r.p.getByText('Zeca Novo').count(), 0);
+  await r.ctx.close();
+  // quem não é dono não vê a aba
+  const q = await novaPagina();
+  await q.p.goto(`${base}?loja=apex`);
+  await q.p.getByTestId('demo-pablo').click();
+  if (await q.p.getByTestId('nav-estab').count()) { await q.p.getByTestId('nav-estab').click(); assert.equal(await q.p.getByRole('tab', { name: 'Reconfigurar' }).count(), 0); }
+  await q.ctx.close();
+  ok('A: Reconfigurar em Estabelecimento (só dono): serviços da loja marcados, equipe só adiciona, expediente atual, nada gravado');
 }
 
 // ---------- B. site real com servidor falso ----------
@@ -204,6 +248,31 @@ const url = `http://127.0.0.1:${servidor.address().port}/`;
   await n.p.getByTestId('painel-real').waitFor();
   assert.equal(await n.p.getByTestId('pa').count(), 0);
   ok('B: assistente concluído não volta');
+  // reconfigurar: o dono reabre o assistente pelo painel; começa nos serviços, os existentes ficam travados, nada é concluído de novo
+  const antesConcluir = chamadas.filter((c) => c.u === '/api/onboarding/concluir').length;
+  await n.p.getByTestId('reconfigurar-abrir').click();
+  await n.p.getByTestId('pa-servicos').waitFor();
+  assert.match(await n.p.getByTestId('pa').locator('h1').innerText(), /Reconfigurar Dalforno/);
+  assert.equal(await n.p.getByTestId('pa-marcar-s-barba').isDisabled(), true); // já existe
+  await n.p.getByTestId('pa-voltar').click();
+  await n.p.getByTestId('painel-real').waitFor();
+  await n.p.getByTestId('reconfigurar-abrir').click();
+  await n.p.getByTestId('pa-marcar-s-corte').check();
+  await n.p.getByTestId('pa-continuar-servicos').click();
+  await n.p.getByTestId('pa-equipe').waitFor();
+  await n.p.getByTestId('pa-nome-0').fill('Zeca Novo');
+  await n.p.getByTestId('pa-criar-acessos').click();
+  await n.p.getByTestId('pa-acessos').waitFor();
+  await n.p.getByTestId('pa-anotei').click();
+  await n.p.getByTestId('pa-expediente').waitFor();
+  await n.p.getByTestId('pa-continuar-expediente').click();
+  await n.p.getByTestId('pa-pronto').waitFor();
+  await n.p.getByTestId('pa-concluir').click();
+  await n.p.getByTestId('painel-real').waitFor();
+  assert.equal(chamadas.filter((c) => c.u === '/api/onboarding/concluir').length, antesConcluir, 'reconfigurar não chama concluir de novo');
+  assert.deepEqual(chamadas.filter((c) => c.u === '/api/onboarding/servicos').at(-1).c.itens.map((i) => i.chave), ['s-corte']);
+  assert.ok(banco.logins.has('zeca'));
+  ok('B: reconfigurar pelo painel (só dono): serviço novo, pessoa nova, expediente; voltar ao painel');
   await n.ctx.close();
 }
 

@@ -10,6 +10,8 @@ import { Abas, Aviso, Btn, Campo, Icon, Interruptor, Modal, Vazio } from './comm
 import { EditorNotificacoes, EditorPixCancelamento } from './Notif.jsx';
 import { SeletorGrupo } from './Grupo.jsx';
 import { Cupons } from './Cupons.jsx';
+import PrimeiroAcesso from './leve/PrimeiroAcesso.jsx';
+import { criarAdaptadorDemo } from '../services/onboarding-demo.js';
 import { nomeCliente, nomeServicos } from './format.js';
 import { toast, useStore } from './hooks.js';
 import { capAtiva, rot, tipoDe, TIPOS, voc, Voc } from '../domain/tipos.js';
@@ -198,7 +200,7 @@ export default function Estabelecimento({ user }) {
   return (
     <section className="tela">
       <header className="tela-topo"><h1>Estabelecimento</h1></header>
-      <Abas valor={aba} onChange={setAba} ordem="estabelecimento" itens={[['dados', 'Dados'], ['escala', 'Horário e exceções'], ['calendario', 'Calendário'], ...(capAtiva('usaRecursoFisico') ? [['boxes', 'Boxes']] : []), ['marca', 'Aparência'], ['notificacoes', 'Notificações'], ['regras', 'Regras'], ['cupons', 'Cupons']]} />
+      <Abas valor={aba} onChange={setAba} ordem="estabelecimento" itens={[['dados', 'Dados'], ['escala', 'Horário e exceções'], ['calendario', 'Calendário'], ...(capAtiva('usaRecursoFisico') ? [['boxes', 'Boxes']] : []), ['marca', 'Aparência'], ['notificacoes', 'Notificações'], ['regras', 'Regras'], ['cupons', 'Cupons'], ...(ehDono(user) ? [['reconfigurar', 'Reconfigurar']] : [])]} />
       <div className="painel">
         {aba === 'dados' && (
           <div className="form-grade">
@@ -216,6 +218,7 @@ export default function Estabelecimento({ user }) {
         {aba === 'boxes' && <PainelBoxes e={e} />}
         {aba === 'marca' && <PainelMarca />}
         {aba === 'cupons' && <Cupons />}
+        {aba === 'reconfigurar' && ehDono(user) && <Reconfigurar st={st} />}
         {aba === 'notificacoes' && (
           <>
             <p>Valem para todos os serviços que não têm notificações próprias. Quando um serviço tem as suas, elas substituem estas por completo.</p>
@@ -243,6 +246,21 @@ export default function Estabelecimento({ user }) {
         )}
       </div>
     </section>
+  );
+}
+
+// Reconfigurar o estabelecimento: reabre o assistente de primeiro acesso (serviços do tipo da loja, equipe nova, horário de funcionamento).
+// Só adiciona (serviço e pessoa nova); nada é excluído. No Artifact é pré-visualização (nada é gravado); no site real o servidor grava.
+function Reconfigurar({ st }) {
+  const [aberto, setAberto] = useState(false);
+  const adaptador = React.useMemo(() => (aberto ? criarAdaptadorDemo({ reconfigurar: true }) : null), [aberto]);
+  if (aberto) return <PrimeiroAcesso modo="reconfigurar" previa tipo={tipoDe(st.estabelecimento)} nomeLoja={st.estabelecimento.nome} adaptador={adaptador} aoConcluir={() => setAberto(false)} aoCancelar={() => setAberto(false)} />;
+  return (
+    <div className="bloco-largo" data-testid="reconfigurar">
+      <p>Refaça a configuração do estabelecimento com o assistente: escolha, entre os serviços do tipo da {rot('loja')}, os que você quer poder prestar; crie novas pessoas na equipe; e redefina o horário de funcionamento.</p>
+      <Aviso>Só adiciona: serviços e pessoas que já existem ficam como estão e <b>ninguém da equipe é excluído</b>.</Aviso>
+      <div><Btn variante="primario" onClick={() => setAberto(true)} data-testid="reconfigurar-abrir">Abrir o assistente</Btn></div>
+    </div>
   );
 }
 

@@ -1,3 +1,5 @@
+> **Atualização (27/10):** a unidade de cobrança passou a ser a **agenda** (estética automotiva = box; barbearia = profissional que atende), não só o funcionário, e a tela do dono vira Estabelecimento > **Cobrança**. Veja `docs/PROMPT-COBRANCA-ESTABELECIMENTO.md`; onde este texto diz "funcionário/licença por funcionário", leia "agenda".
+
 # Prompt: painel da plataforma, licenças por funcionário e cobrança (RASCUNHO, não executado)
 
 > Status: aguardando as respostas da seção 6. Quem não for respondido usa o **padrão** indicado. Regras fixas do projeto (`CLAUDE.md`) valem para tudo aqui.

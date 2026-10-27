@@ -22,7 +22,10 @@ function camposDoExpediente(sug) {
 }
 const etapaDoPasso = (passo) => (passo === 'equipe' || passo === 'expediente' || passo === 'pronto' ? passo : 'servicos'); // 'senha' já foi resolvido antes de chegar aqui
 
-export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, previa = false }) {
+// modo 'primeiro': primeiro acesso do dono (termina com "Ir para o painel"). modo 'reconfigurar': aberto depois, em Estabelecimento > Reconfigurar;
+// só ADICIONA (serviços novos, pessoas novas; nada é excluído) e o expediente enviado substitui o atual. `aoCancelar` mostra o botão Voltar.
+export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, aoCancelar, modo = 'primeiro', previa = false }) {
+  const reconf = modo === 'reconfigurar';
   const [fase, setFase] = useState('carregando');
   const [erroCarga, setErroCarga] = useState('');
   const [estado, setEstado] = useState(null);
@@ -43,7 +46,7 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
     if (!r.ok) { setErroCarga(r.erro); setFase('erro'); return; }
     setEstado(r.estado);
     setExp(camposDoExpediente(r.estado.expediente || r.estado.expedienteSugerido));
-    setEtapa(r.estado.concluido ? 'pronto' : etapaDoPasso(r.estado.passo));
+    setEtapa(reconf ? 'servicos' : r.estado.concluido ? 'pronto' : etapaDoPasso(r.estado.passo));
     setMarcas(Object.fromEntries(r.estado.servicos.map((s) => [s.chave, { on: false, preco: String(s.preco).replace('.', ','), duracao: String(s.duracaoMin) }])));
     setFase('ok');
   };
@@ -123,6 +126,7 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
 
   const concluir = async () => {
     if (enviando) return;
+    if (reconf) { aoConcluir(); return; } // reconfigurar não conclui nada de novo: o assistente já foi concluído antes
     setEnviando(true); setErro('');
     const r = await adaptador.concluir();
     setEnviando(false);
@@ -131,11 +135,14 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
   };
 
   const indice = ETAPAS.findIndex((e) => e[0] === etapa);
+  const Raiz = reconf ? 'div' : 'main';
   return (
-    <main className="login pa" data-testid="pa">
+    <Raiz className={reconf ? 'pa pa-embutido' : 'login pa'} data-testid="pa">
       <div className="login-cartao pa-cartao">
         <header className="pa-topo">
-          <h1>Vamos preparar {nomeLoja || 'sua loja'}</h1>
+          {reconf && aoCancelar && <div className="acoes"><Btn tamanho="sm" onClick={aoCancelar} data-testid="pa-voltar">Voltar</Btn></div>}
+          <h1>{reconf ? `Reconfigurar ${nomeLoja || 'sua loja'}` : `Vamos preparar ${nomeLoja || 'sua loja'}`}</h1>
+          {reconf && <p className="muted" data-testid="pa-reconf-nota">Aqui você só adiciona: serviços e pessoas que já existem continuam como estão e ninguém é excluído. O horário de funcionamento, se você salvar, substitui o atual.</p>}
           {previa && <Aviso data-testid="pa-previa">Pré-visualização: nada do que você marcar aqui é gravado.</Aviso>}
           <ol className="pa-passos" aria-label="Etapas">
             {ETAPAS.map(([id, nome], i) => <li key={id} className={i === indice ? 'atual' : i < indice ? 'feito' : ''} aria-current={i === indice ? 'step' : undefined} data-testid={`pa-etapa-${id}`}><span>{i + 1}</span> {nome}</li>)}
@@ -181,7 +188,7 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
         {fase === 'ok' && etapa === 'equipe' && !criadas && (
           <section data-testid="pa-equipe">
             {aviso && <Aviso data-testid="pa-aviso">{aviso}</Aviso>}
-            <p>Quem trabalha com você? Digite só o nome: cada pessoa recebe um usuário e uma senha temporária para o primeiro acesso.</p>
+            <p>{reconf ? 'Quem entra na equipe? Digite só o nome das pessoas novas (quem já está na equipe não aparece aqui e não é alterado): ' : 'Quem trabalha com você? Digite só o nome: '}cada pessoa recebe um usuário e uma senha temporária para o primeiro acesso.</p>
             <ul className="pa-lista">
               {linhas.map((l, i) => (
                 <li key={i} className="pa-linha">
@@ -238,12 +245,12 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
 
         {fase === 'ok' && etapa === 'pronto' && (
           <section data-testid="pa-pronto">
-            <p><b>Tudo pronto.</b> Você pode mudar serviços, equipe e horários quando quiser, no painel.</p>
+            <p><b>Tudo pronto.</b> {reconf ? 'Nada que já existia foi removido.' : 'Você pode mudar serviços, equipe e horários quando quiser, no painel.'}</p>
             {erro && <Aviso tipo="erro" data-testid="pa-erro">{erro}</Aviso>}
-            <div className="acoes pa-acoes"><Btn variante="primario" disabled={enviando} onClick={concluir} data-testid="pa-concluir">{enviando ? 'Abrindo…' : 'Ir para o painel'}</Btn></div>
+            <div className="acoes pa-acoes"><Btn variante="primario" disabled={enviando} onClick={concluir} data-testid="pa-concluir">{enviando ? 'Abrindo…' : reconf ? 'Voltar ao estabelecimento' : 'Ir para o painel'}</Btn></div>
           </section>
         )}
       </div>
-    </main>
+    </Raiz>
   );
 }

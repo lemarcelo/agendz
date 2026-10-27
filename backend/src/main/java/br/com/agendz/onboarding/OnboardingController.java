@@ -46,7 +46,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Assistente de primeiro acesso (docs/F3-primeiro-acesso.md). Só o dono. A loja é a do Host; a tabela `onboarding` tem RLS; o catálogo é o do
- * TIPO da loja (nunca do corpo). Cada passo é opcional: lista vazia = pular. Depois de concluído, nada disto escreve mais (409).
+ * TIPO da loja (nunca do corpo). Cada passo é opcional: lista vazia = pular.
+ * Depois de concluído o assistente pode ser REABERTO pelo dono (Estabelecimento > Reconfigurar): os mesmos passos continuam valendo, só que
+ * ADITIVOS: serviços novos entram (os que já existem ficam como estão), pessoas novas são criadas (ninguém é excluído ou alterado) e o expediente
+ * da loja é substituído pelo enviado. Nada aqui apaga dado. O passo registrado (`pronto`) e `concluido_em` não mudam.
  * A senha temporária de cada profissional criado aparece UMA vez na resposta (sem cache) e só o hash fica salvo.
  */
 @RestController
@@ -119,7 +122,7 @@ public class OnboardingController {
     @PostMapping("/api/onboarding/servicos")
     public Resultado servicos(@Valid @RequestBody Servicos corpo) {
         Loja loja = LojaContext.exigir();
-        exigirAberto(linha());
+        linha(); // 404 se a loja não tem o assistente
         Catalogo c = catalogos.doTipo(loja.tipo()).orElseThrow(() -> new ErroDeNegocio(HttpStatus.NOT_FOUND, "Não há exemplos para este tipo de estabelecimento"));
         Map<String, Item> porChave = new LinkedHashMap<>();
         c.servicos().forEach((s) -> porChave.put(s.chave(), s));
@@ -156,7 +159,7 @@ public class OnboardingController {
     @PostMapping("/api/onboarding/equipe")
     public ResponseEntity<EquipeCriada> equipe(@Valid @RequestBody Equipe corpo) {
         Loja loja = LojaContext.exigir();
-        exigirAberto(linha());
+        linha(); // 404 se a loja não tem o assistente
         List<PessoaCriada> criadas = banco.naLoja(jdbc -> {
             Set<String> logins = new HashSet<>(jdbc.queryForList("select identificador from usuario", String.class));
             List<PessoaCriada> saida = new ArrayList<>();
@@ -181,7 +184,7 @@ public class OnboardingController {
     @PostMapping("/api/onboarding/expediente")
     public Resultado expediente(@Valid @RequestBody Expediente corpo) {
         Loja loja = LojaContext.exigir();
-        exigirAberto(linha());
+        linha(); // 404 se a loja não tem o assistente
         Map<Integer, List<Faixa>> semana = corpo.semana() == null ? null : EscalaService.validar(new Escala(corpo.semana()));
         boolean grava = semana != null && EscalaService.temFaixa(semana);
         banco.naLoja((jdbc) -> {
@@ -207,9 +210,6 @@ public class OnboardingController {
         return l.get(0);
     }
 
-    private static void exigirAberto(Linha l) {
-        if (l.concluido()) throw new ErroDeNegocio(HttpStatus.CONFLICT, "O assistente de início já foi concluído");
-    }
 
     private String escrever(Object v) {
         if (v == null) return null;
