@@ -1,0 +1,188 @@
+/* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
+// Assistente de primeiro acesso do dono (docs/F3-primeiro-acesso.md): Serviços → Equipe → Pronto. Cada passo é opcional (Pular).
+// Fala com um `adaptador` (async, { ok, erro, ... }): no site real é o de api-real.js (/api/onboarding); no Artifact, a pré-visualização
+// de services/onboarding-demo.js (nada é gravado). Não importa a API simulada: textos do tipo vêm de `rotulo`.
+import React, { useEffect, useMemo, useState } from 'react';
+import { rotulo } from '../../domain/tipos.js';
+import { Aviso, Btn, Campo, Icone } from './mini.jsx';
+
+const dinheiro = (v) => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const lerNumero = (t) => { const n = Number(String(t).replace(/\./g, '').replace(',', '.')); return Number.isFinite(n) ? n : NaN; };
+const faixa = (mapa) => { const v = Object.values(mapa || {}); return v.length ? [Math.min(...v), Math.max(...v)] : null; };
+const ETAPAS = [['servicos', 'Serviços'], ['equipe', 'Equipe'], ['pronto', 'Pronto']];
+const etapaDoPasso = (passo) => (passo === 'equipe' || passo === 'pronto' ? passo : 'servicos'); // 'senha' já foi resolvido antes de chegar aqui
+
+export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, previa = false }) {
+  const [fase, setFase] = useState('carregando');
+  const [erroCarga, setErroCarga] = useState('');
+  const [estado, setEstado] = useState(null);
+  const [etapa, setEtapa] = useState('servicos');
+  const [marcas, setMarcas] = useState({}); // chave → { on, preco, duracao } (textos dos campos)
+  const [linhas, setLinhas] = useState([{ nome: '', atende: true }]);
+  const [criadas, setCriadas] = useState(null);
+  const [aviso, setAviso] = useState('');
+  const [erro, setErro] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  const [copiado, setCopiado] = useState(false);
+  const profissionais = rotulo({ tipo }, 'profissional', { plural: true });
+
+  const carregar = async () => {
+    setFase('carregando'); setErroCarga('');
+    const r = await adaptador.carregar();
+    if (!r.ok) { setErroCarga(r.erro); setFase('erro'); return; }
+    setEstado(r.estado);
+    setEtapa(r.estado.concluido ? 'pronto' : etapaDoPasso(r.estado.passo));
+    setMarcas(Object.fromEntries(r.estado.servicos.map((s) => [s.chave, { on: false, preco: String(s.preco).replace('.', ','), duracao: String(s.duracaoMin) }])));
+    setFase('ok');
+  };
+  useEffect(() => { carregar(); }, []);
+
+  const ja = useMemo(() => new Set(estado ? estado.jaCadastrados : []), [estado]);
+  const escolhidos = estado ? estado.servicos.filter((s) => marcas[s.chave]?.on && !ja.has(s.chave)) : [];
+  const mudar = (chave, campo, valor) => { setMarcas((m) => ({ ...m, [chave]: { ...m[chave], [campo]: valor } })); setErro(''); };
+  const todosMarcados = estado ? estado.servicos.filter((s) => !ja.has(s.chave)).every((s) => marcas[s.chave]?.on) : false;
+  const marcarTodos = () => setMarcas((m) => Object.fromEntries(Object.entries(m).map(([k, v]) => [k, { ...v, on: !ja.has(k) && !todosMarcados }])));
+
+  const enviarServicos = async () => {
+    if (enviando) return;
+    const itens = [];
+    for (const s of escolhidos) {
+      const m = marcas[s.chave];
+      const item = { chave: s.chave };
+      if (!s.precos) {
+        const preco = lerNumero(m.preco); const dur = lerNumero(m.duracao);
+        if (!(preco >= 0 && preco <= 100000)) { setErro(`Confira o preço de “${s.nome}” (de R$ 0 a R$ 100.000).`); return; }
+        if (!(Number.isInteger(dur) && dur >= 1 && dur <= 14400)) { setErro(`Confira a duração de “${s.nome}” (minutos inteiros, a partir de 1).`); return; }
+        item.preco = Math.round(preco * 100) / 100; item.duracaoMin = dur;
+      }
+      itens.push(item);
+    }
+    setEnviando(true); setErro('');
+    const r = await adaptador.servicos(itens);
+    setEnviando(false);
+    if (!r.ok) { setErro(r.erro); return; }
+    setAviso(itens.length ? `${r.resultado.criados} ${r.resultado.criados === 1 ? 'serviço criado' : 'serviços criados'}.` : '');
+    setEtapa('equipe');
+  };
+
+  const mudarLinha = (i, campo, valor) => { setLinhas((l) => l.map((x, j) => (j === i ? { ...x, [campo]: valor } : x))); setErro(''); };
+  const enviarEquipe = async () => {
+    if (enviando) return;
+    const pessoas = linhas.map((l) => ({ nome: l.nome.trim(), atende: l.atende })).filter((l) => l.nome);
+    if (pessoas.some((p) => p.nome.length > 80)) { setErro('Cada nome pode ter até 80 letras.'); return; }
+    setEnviando(true); setErro('');
+    const r = await adaptador.equipe(pessoas);
+    setEnviando(false);
+    if (!r.ok) { setErro(r.erro); return; }
+    if (!pessoas.length) { setEtapa('pronto'); return; }
+    setCriadas(r.pessoas);
+  };
+
+  const copiar = async () => {
+    const texto = (criadas || []).map((p) => `${p.nome}: usuário ${p.login} · senha temporária ${p.senhaTemporaria}`).join('\n');
+    try { await navigator.clipboard.writeText(texto); setCopiado(true); } catch { setCopiado(false); setErro('Não consegui copiar. Anote as senhas na tela.'); }
+  };
+
+  const concluir = async () => {
+    if (enviando) return;
+    setEnviando(true); setErro('');
+    const r = await adaptador.concluir();
+    setEnviando(false);
+    if (!r.ok) { setErro(r.erro); return; }
+    aoConcluir();
+  };
+
+  const indice = ETAPAS.findIndex((e) => e[0] === etapa);
+  return (
+    <main className="login pa" data-testid="pa">
+      <div className="login-cartao pa-cartao">
+        <header className="pa-topo">
+          <h1>Vamos preparar {nomeLoja || 'sua loja'}</h1>
+          {previa && <Aviso data-testid="pa-previa">Pré-visualização: nada do que você marcar aqui é gravado.</Aviso>}
+          <ol className="pa-passos" aria-label="Etapas">
+            {ETAPAS.map(([id, nome], i) => <li key={id} className={i === indice ? 'atual' : i < indice ? 'feito' : ''} aria-current={i === indice ? 'step' : undefined} data-testid={`pa-etapa-${id}`}><span>{i + 1}</span> {nome}</li>)}
+          </ol>
+        </header>
+
+        {fase === 'carregando' && <p className="muted" role="status" data-testid="pa-carregando">Carregando…</p>}
+        {fase === 'erro' && <><Aviso tipo="erro" data-testid="pa-erro-carga">{erroCarga}</Aviso><Btn variante="primario" onClick={carregar} data-testid="pa-tentar">Tentar de novo</Btn></>}
+
+        {fase === 'ok' && etapa === 'servicos' && (
+          <section data-testid="pa-servicos">
+            <p>Marque os serviços que a sua loja oferece. Você pode ajustar preço e duração agora ou depois, em Serviços.</p>
+            {estado.servicos.length > 1 && <div className="acoes"><Btn tamanho="sm" onClick={marcarTodos} data-testid="pa-marcar-todos">{todosMarcados ? 'Desmarcar todos' : 'Marcar todos'}</Btn></div>}
+            <ul className="pa-lista">
+              {estado.servicos.map((s) => {
+                const m = marcas[s.chave] || {};
+                const existe = ja.has(s.chave);
+                const fx = faixa(s.precos);
+                return (
+                  <li key={s.chave} className={`pa-item${m.on ? ' marcado' : ''}`} data-testid={`pa-item-${s.chave}`}>
+                    <label className="pa-marcar">
+                      <input type="checkbox" checked={!!m.on || existe} disabled={existe} onChange={(e) => mudar(s.chave, 'on', e.target.checked)} data-testid={`pa-marcar-${s.chave}`} />
+                      <span><b>{s.nome}</b>{s.categoria ? <small className="muted"> · {s.categoria}</small> : null}{existe ? <small className="muted"> · já está na sua loja</small> : null}</span>
+                    </label>
+                    {m.on && !existe && (s.precos
+                      ? <p className="muted pa-porte">Preço por porte do veículo: {dinheiro(fx[0])} a {dinheiro(fx[1])}. Ajuste em Serviços.</p>
+                      : <div className="pa-campos">
+                          <Campo rotulo="Preço (R$)"><input inputMode="decimal" value={m.preco} onChange={(e) => mudar(s.chave, 'preco', e.target.value)} maxLength={9} data-testid={`pa-preco-${s.chave}`} /></Campo>
+                          <Campo rotulo="Duração (min)"><input inputMode="numeric" value={m.duracao} onChange={(e) => mudar(s.chave, 'duracao', e.target.value)} maxLength={5} data-testid={`pa-duracao-${s.chave}`} /></Campo>
+                        </div>)}
+                  </li>
+                );
+              })}
+            </ul>
+            {erro && <Aviso tipo="erro" data-testid="pa-erro">{erro}</Aviso>}
+            <div className="acoes pa-acoes">
+              <Btn onClick={() => { setAviso(''); setEtapa('equipe'); }} data-testid="pa-pular-servicos">Pular</Btn>
+              <Btn variante="primario" disabled={enviando || !escolhidos.length} onClick={enviarServicos} data-testid="pa-continuar-servicos">{enviando ? 'Salvando…' : `Continuar${escolhidos.length ? ` (${escolhidos.length})` : ''}`}</Btn>
+            </div>
+          </section>
+        )}
+
+        {fase === 'ok' && etapa === 'equipe' && !criadas && (
+          <section data-testid="pa-equipe">
+            {aviso && <Aviso data-testid="pa-aviso">{aviso}</Aviso>}
+            <p>Quem trabalha com você? Digite só o nome: cada pessoa recebe um usuário e uma senha temporária para o primeiro acesso.</p>
+            <ul className="pa-lista">
+              {linhas.map((l, i) => (
+                <li key={i} className="pa-linha">
+                  <Campo rotulo={`Nome ${i + 1}`}><input value={l.nome} onChange={(e) => mudarLinha(i, 'nome', e.target.value)} maxLength={80} autoComplete="off" data-testid={`pa-nome-${i}`} /></Campo>
+                  <label className="pa-check"><input type="checkbox" checked={l.atende} onChange={(e) => mudarLinha(i, 'atende', e.target.checked)} data-testid={`pa-atende-${i}`} /> Atende clientes</label>
+                  {linhas.length > 1 && <button type="button" className="btn btn-neutro btn-sm" onClick={() => setLinhas((x) => x.filter((_, j) => j !== i))} aria-label={`Remover o nome ${i + 1}`} data-testid={`pa-remover-${i}`}><Icone n="x" size={15} /></button>}
+                </li>
+              ))}
+            </ul>
+            {linhas.length < 10 && <div className="acoes"><Btn tamanho="sm" onClick={() => setLinhas((l) => [...l, { nome: '', atende: true }])} data-testid="pa-add">Adicionar pessoa</Btn></div>}
+            <p className="muted">Os {profissionais} que “atendem clientes” aparecem na agenda.</p>
+            {erro && <Aviso tipo="erro" data-testid="pa-erro">{erro}</Aviso>}
+            <div className="acoes pa-acoes">
+              <Btn onClick={() => { setAviso(''); setEtapa('pronto'); }} data-testid="pa-pular-equipe">Pular</Btn>
+              <Btn variante="primario" disabled={enviando} onClick={enviarEquipe} data-testid="pa-criar-acessos">{enviando ? 'Salvando…' : 'Criar acessos'}</Btn>
+            </div>
+          </section>
+        )}
+
+        {fase === 'ok' && etapa === 'equipe' && criadas && (
+          <section data-testid="pa-acessos">
+            <Aviso tipo="alerta">Anote agora: estas senhas <b>não aparecem de novo</b>. Cada pessoa troca a senha no primeiro login.</Aviso>
+            <ul className="pa-lista">
+              {criadas.map((p) => <li key={p.login} className="pa-acesso"><b>{p.nome}</b><span>usuário <code>{p.login}</code></span><span>senha <code data-testid={`pa-senha-${p.login}`}>{p.senhaTemporaria}</code></span></li>)}
+            </ul>
+            <div className="acoes"><Btn tamanho="sm" onClick={copiar} data-testid="pa-copiar">{copiado ? 'Copiado' : 'Copiar tudo'}</Btn></div>
+            {erro && <Aviso tipo="erro" data-testid="pa-erro">{erro}</Aviso>}
+            <div className="acoes pa-acoes"><Btn variante="primario" onClick={() => { setErro(''); setEtapa('pronto'); }} data-testid="pa-anotei">Anotei, continuar</Btn></div>
+          </section>
+        )}
+
+        {fase === 'ok' && etapa === 'pronto' && (
+          <section data-testid="pa-pronto">
+            <p><b>Tudo pronto.</b> Você pode mudar serviços, equipe e horários quando quiser, no painel.</p>
+            {erro && <Aviso tipo="erro" data-testid="pa-erro">{erro}</Aviso>}
+            <div className="acoes pa-acoes"><Btn variante="primario" disabled={enviando} onClick={concluir} data-testid="pa-concluir">{enviando ? 'Abrindo…' : 'Ir para o painel'}</Btn></div>
+          </section>
+        )}
+      </div>
+    </main>
+  );
+}

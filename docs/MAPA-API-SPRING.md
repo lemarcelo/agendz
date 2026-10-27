@@ -193,6 +193,17 @@ Configuração do dono: `estabelecimento.salvar` aceita `linkAgendamento: { ativ
 
 Mapa completo em **[MAPA-DADOS-PESSOAIS.md](MAPA-DADOS-PESSOAIS.md)**: inventário campo a campo (CPF, telefone, nascimento, senha, segredos de banco, extrato, logs), como cifrar e ainda buscar (AES-GCM por campo + hash HMAC), direitos do titular, matriz de acesso por perfil e o teste que prova cada proteção (`DadosPessoaisIT`). Resumo: CPF, telefone e nascimento cifrados por campo; senha só com BCrypt/Argon2; segredos de banco só no cofre e nunca devolvidos; logs sem CPF nem telefone inteiros (nome e apelido podem aparecer, e ficam em texto puro no banco); TLS e disco cifrado.
 
+## 10c. Primeiro acesso do dono (`/api/onboarding/*`, só existe no real; o Artifact tem só a pré-visualização `services/onboarding-demo.js`)
+| Rota | Quem | O que faz | Regras e testes (`OnboardingTest`) |
+|---|---|---|---|
+| `GET /api/onboarding` | dono | `{tipo, passo, concluido, servicos[catálogo do tipo], jaCadastrados[chaves]}` | sem linha em `onboarding` = 404; profissional 403; token de senha temporária 403 |
+| `POST /api/onboarding/servicos` `{itens:[{chave, preco?, duracaoMin?}]}` | dono | cria serviços do catálogo **do tipo da loja**; idempotente por nome; lista vazia = pular | chave de outro tipo/desconhecida/mal formada = 400; preço 0..100000, duração 1..14400; serviço com preço por porte ignora o preço editado; concluído = 409; passo → `equipe` |
+| `POST /api/onboarding/equipe` `{pessoas:[{nome, atende?}]}` (até 10) | dono | cria `profissional` com login (primeiro nome sem acento, sufixo 2, 3…) e senha temporária de 12 caracteres, `deve_trocar_senha = true`; devolve login+senha **uma vez** (`Cache-Control: no-store`) | só o hash fica salvo; concluído = 409; passo → `pronto` |
+| `POST /api/onboarding/concluir` | dono | `concluido_em = now()` | repetir é inofensivo; depois disso o login não traz mais `onboardingPendente` |
+| `PUT /api/usuarios/me/senha` (já existe) | dono | ao trocar a senha temporária do **dono**, o passo `senha` vira `servicos` | profissional trocando a própria senha não mexe no assistente |
+
+O catálogo (`backend/src/main/resources/catalogo/<tipo>.json`) é gerado dos seeds (`node tools/gerar-catalogo.mjs`); `tests/catalogo.test.mjs` falha se divergir.
+
 ## 11. Pontos do protótipo que **não** existem no real (tratar como pendência)
 
 `MODO_DEMO` (código de recuperação na resposta), `bancoSimulado`, `store.avancar`/`reiniciar`, snapshot com senhas e CPFs, sessão em variável do navegador, contadores de login na memória, chave de autoria no front. Todos substituídos pelas camadas das seções 0 a 10.

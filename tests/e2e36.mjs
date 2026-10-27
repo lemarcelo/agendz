@@ -25,14 +25,14 @@ const servidor = http.createServer((req, res) => {
     if (req.url === '/api/auth/login') {
       const c = JSON.parse(corpo);
       if (c.identificador !== 'alan' || c.senha !== (senhaTemporaria ? 'Temporaria-123' : 'Minha-senha-nova')) return json(401, { mensagem: 'Usuário ou senha inválidos' });
-      return json(200, { token: 'tok-login', nome: 'Alan', papel: 'dono', deveTrocarSenha: senhaTemporaria, onboardingPendente: true });
+      return json(200, { token: 'tok-login', nome: 'Alan', papel: 'dono', deveTrocarSenha: senhaTemporaria, onboardingPendente: false });
     }
     if (req.url === '/api/usuarios/me/senha') {
       if (req.headers.authorization !== 'Bearer tok-login') return json(401, { mensagem: 'Sessão inválida' });
       const c = JSON.parse(corpo);
       if (c.senhaAtual !== 'Temporaria-123') return json(400, { mensagem: 'Senha atual incorreta' });
       senhaTemporaria = false;
-      return json(200, { token: 'tok-novo', nome: 'Alan', papel: 'dono', deveTrocarSenha: false, onboardingPendente: true });
+      return json(200, { token: 'tok-novo', nome: 'Alan', papel: 'dono', deveTrocarSenha: false, onboardingPendente: false });
     }
     json(404, {});
   });

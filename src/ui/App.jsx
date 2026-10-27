@@ -1,6 +1,8 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:a6fe1e7410 */
 import React, { useEffect, useState } from 'react';
-import { LOJA_NAO_ENCONTRADA, auth, avisosDoUsuario, equipe } from '../services/api.js';
+import { LOJA_NAO_ENCONTRADA, MODO_DEMO, auth, avisosDoUsuario, equipe } from '../services/api.js';
+import { criarAdaptadorDemo } from '../services/onboarding-demo.js';
+import PrimeiroAcesso from './leve/PrimeiroAcesso.jsx';
 import { ehDono, ehGestor, papelRotulo, pode } from '../domain/rules.js';
 import { iconeServicosAtivo, temaPadraoAtivo, tipoDe } from '../domain/tipos.js';
 import Agenda from './Agenda.jsx';
@@ -68,6 +70,12 @@ function LojaNaoEncontrada({ slug }) {
 // Endereço que pede uma loja inexistente nunca cai numa loja padrão: não mostra dado de ninguém.
 export default function App() { return LOJA_NAO_ENCONTRADA ? <LojaNaoEncontrada slug={LOJA_NAO_ENCONTRADA} /> : <AppDaLoja />; }
 
+// Pré-visualização do assistente de primeiro acesso (só na demonstração; nada é gravado). Link na tela de entrada: #primeiro-acesso.
+function PreviaPrimeiroAcesso({ st }) {
+  const adaptador = React.useMemo(() => criarAdaptadorDemo(), []);
+  return <PrimeiroAcesso tipo={tipoDe(st.estabelecimento)} nomeLoja={st.estabelecimento.nome} adaptador={adaptador} previa aoConcluir={() => { window.location.hash = ''; }} />;
+}
+
 function AppDaLoja() {
   const { state: st, sessao } = useStore();
   const tipo = tipoDe(st.estabelecimento);
@@ -76,6 +84,7 @@ function AppDaLoja() {
   const hash = useHash();
   const [tema, setTema] = useTema();
   const publica = /^#agendar(-[\w-]{1,40})?$/.exec(hash);
+  if (MODO_DEMO && hash === '#primeiro-acesso') return <><TemaMarca /><PreviaPrimeiroAcesso st={st} /></>;
   if (publica) return <><TemaMarca /><AgendarPublico profissionalInicial={publica[1] ? publica[1].slice(1) : ''} logado={!!user} aoVoltar={() => { window.location.hash = ''; }} /></>;
   if (!user) return <><TemaMarca /><Login /><Toasts /></>;
   return <><TemaMarca /><Shell user={user} st={st} tema={tema} setTema={setTema} /></>;

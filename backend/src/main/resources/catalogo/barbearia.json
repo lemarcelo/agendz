@@ -1,0 +1,60 @@
+{
+  "tipo": "barbearia",
+  "servicos": [
+    {
+      "chave": "s-tesoura",
+      "nome": "Corte somente tesoura",
+      "categoria": null,
+      "preco": 40,
+      "duracaoMin": 40,
+      "intervaloMin": 10,
+      "multiDia": false,
+      "precos": null,
+      "duracoes": null
+    },
+    {
+      "chave": "s-maquina",
+      "nome": "Corte na máquina",
+      "categoria": null,
+      "preco": 40,
+      "duracaoMin": 40,
+      "intervaloMin": 10,
+      "multiDia": false,
+      "precos": null,
+      "duracoes": null
+    },
+    {
+      "chave": "s-degrade",
+      "nome": "Corte Degradê",
+      "categoria": null,
+      "preco": 40,
+      "duracaoMin": 40,
+      "intervaloMin": 10,
+      "multiDia": false,
+      "precos": null,
+      "duracoes": null
+    },
+    {
+      "chave": "s-barba",
+      "nome": "Barba",
+      "categoria": null,
+      "preco": 35,
+      "duracaoMin": 40,
+      "intervaloMin": 5,
+      "multiDia": false,
+      "precos": null,
+      "duracoes": null
+    },
+    {
+      "chave": "s-barba-degrade",
+      "nome": "Barba Degradê",
+      "categoria": null,
+      "preco": 35,
+      "duracaoMin": 40,
+      "intervaloMin": 5,
+      "multiDia": false,
+      "precos": null,
+      "duracoes": null
+    }
+  ]
+}

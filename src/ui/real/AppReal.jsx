@@ -3,17 +3,11 @@
 // temporária e mostra o painel inicial. Os módulos (agenda, clientes, serviços…) entram nas partes seguintes do F2, cada um só quando o
 // servidor tem a regra inteira. Não importa `api.js` (a simulada) nem `hooks.js`: o estado aqui é só o da sessão real, em memória.
 import React, { useEffect, useMemo, useState } from 'react';
-import { carregarLoja, entrar, sair, sessaoAtual, trocarSenha } from '../../services/api-real.js';
+import { carregarLoja, entrar, onboarding, sair, sessaoAtual, trocarSenha } from '../../services/api-real.js';
+import PrimeiroAcesso from '../leve/PrimeiroAcesso.jsx';
 import { TIPOS, definirTipoAtivo, rotulo, tipoValido } from '../../domain/tipos.js';
 import { cssDaMarca, logoValida } from '../../domain/tema.js';
-import { P } from '../icones.js';
-
-function Icone({ n, size = 18 }) {
-  return <svg className="ico" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={P[n]} /></svg>;
-}
-const Aviso = ({ tipo = 'info', children, ...p }) => <div className={`aviso aviso-${tipo}`} role={tipo === 'erro' ? 'alert' : undefined} {...p}><Icone n={tipo === 'erro' ? 'alert' : 'info'} size={17} /><div>{children}</div></div>;
-const Campo = ({ rotulo: r, children }) => <label className="campo"><span className="campo-rotulo">{r}</span>{children}</label>;
-const Btn = ({ variante = 'neutro', children, ...p }) => <button type="button" className={`btn btn-${variante}`} {...p}>{children}</button>;
+import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
 
 function Marca({ loja }) {
   const tipo = TIPOS[loja.tipo];
@@ -93,7 +87,7 @@ function Painel({ loja, sessao, aoSair }) {
     <Cartao loja={loja}>
       <div className="form-grade um" data-testid="painel-real">
         <p><b data-testid="painel-nome">{sessao.nome}</b> · <span data-testid="painel-papel">{papel}</span></p>
-        <Aviso>Sua conta está pronta e o acesso é seguro. A agenda, os clientes e os serviços chegam ao site nas próximas atualizações{sessao.onboardingPendente ? ', começando pelo assistente de primeiro acesso' : ''}.</Aviso>
+        <Aviso>Sua conta está pronta e o acesso é seguro. A agenda, os clientes e os serviços chegam ao site nas próximas atualizações.</Aviso>
         <Btn onClick={aoSair} data-testid="sair">Sair</Btn>
       </div>
     </Cartao>
@@ -126,7 +120,8 @@ export default function AppReal() {
       {css && <style id="tema-marca">{css}</style>}
       {!sessao && <Login loja={loja} aoEntrar={setSessao} />}
       {sessao && sessao.deveTrocarSenha && <TrocarSenha loja={loja} sessao={sessao} aoTrocar={setSessao} aoSair={aoSair} />}
-      {sessao && !sessao.deveTrocarSenha && <Painel loja={loja} sessao={sessao} aoSair={aoSair} />}
+      {sessao && !sessao.deveTrocarSenha && sessao.papel === 'dono' && sessao.onboardingPendente && <PrimeiroAcesso tipo={loja.tipo} nomeLoja={loja.nome} adaptador={onboarding} aoConcluir={() => setSessao({ ...sessao, onboardingPendente: false })} />}
+      {sessao && !sessao.deveTrocarSenha && !(sessao.papel === 'dono' && sessao.onboardingPendente) && <Painel loja={loja} sessao={sessao} aoSair={aoSair} />}
     </>
   );
 }

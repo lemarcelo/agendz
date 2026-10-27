@@ -89,3 +89,35 @@ export async function trocarSenha({ senhaAtual, nova }) {
   if (!guardarSessao(r.dados)) return { ok: false, status: 502, erro: mensagemPadrao(500) };
   return { ok: true, sessao: sessaoAtual() };
 }
+
+// ---------- primeiro acesso (só o dono; docs/F3-primeiro-acesso.md) ----------
+const listaDe = (v, max) => (Array.isArray(v) ? v.slice(0, max) : []);
+function lerEstado(d) {
+  d = d || {};
+  return {
+    tipo: texto(d.tipo, 40), passo: texto(d.passo, 20), concluido: d.concluido === true,
+    servicos: listaDe(d.servicos, 60).map((s) => ({
+      chave: texto(s && s.chave, 40), nome: texto(s && s.nome, 100), categoria: s && s.categoria ? texto(s.categoria, 60) : null,
+      preco: Number(s && s.preco) || 0, duracaoMin: Number(s && s.duracaoMin) || 0,
+      precos: s && s.precos && typeof s.precos === 'object' ? s.precos : null, duracoes: s && s.duracoes && typeof s.duracoes === 'object' ? s.duracoes : null,
+    })),
+    jaCadastrados: listaDe(d.jaCadastrados, 60).map((c) => texto(c, 40)),
+  };
+}
+export const onboarding = {
+  // GET /api/onboarding
+  async carregar() { const r = await chamar('GET', '/api/onboarding'); return r.ok ? { ok: true, estado: lerEstado(r.dados) } : r; },
+  // POST /api/onboarding/servicos  { itens: [{ chave, preco?, duracaoMin? }] }  (lista vazia = pular)
+  async servicos(itens) {
+    const r = await chamar('POST', '/api/onboarding/servicos', { itens: listaDe(itens, 40) });
+    return r.ok ? { ok: true, resultado: { criados: Number(r.dados && r.dados.criados) || 0, jaExistiam: Number(r.dados && r.dados.jaExistiam) || 0 } } : r;
+  },
+  // POST /api/onboarding/equipe  { pessoas: [{ nome, atende }] }  → logins e senhas temporárias (aparecem UMA vez)
+  async equipe(pessoas) {
+    const r = await chamar('POST', '/api/onboarding/equipe', { pessoas: listaDe(pessoas, 10) });
+    if (!r.ok) return r;
+    return { ok: true, pessoas: listaDe(r.dados && r.dados.pessoas, 10).map((p) => ({ nome: texto(p && p.nome, 80), login: texto(p && p.login, 60), senhaTemporaria: texto(p && p.senhaTemporaria, 40), atende: !(p && p.atende === false) })) };
+  },
+  // POST /api/onboarding/concluir
+  async concluir() { const r = await chamar('POST', '/api/onboarding/concluir', {}); return r.ok ? { ok: true } : r; },
+};

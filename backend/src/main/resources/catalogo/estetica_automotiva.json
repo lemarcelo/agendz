@@ -1,0 +1,350 @@
+{
+  "tipo": "estetica_automotiva",
+  "servicos": [
+    {
+      "chave": "s-lav-simples",
+      "nome": "Lavagem simples",
+      "categoria": "Lavagem",
+      "preco": 50,
+      "duracaoMin": 40,
+      "intervaloMin": 10,
+      "multiDia": false,
+      "precos": {
+        "pequeno": 40,
+        "medio": 50,
+        "grande": 60,
+        "suv": 70,
+        "pickup": 70
+      },
+      "duracoes": {
+        "pequeno": 30,
+        "medio": 40,
+        "grande": 45,
+        "suv": 50,
+        "pickup": 50
+      }
+    },
+    {
+      "chave": "s-lav-detalhada",
+      "nome": "Lavagem detalhada",
+      "categoria": "Lavagem",
+      "preco": 110,
+      "duracaoMin": 110,
+      "intervaloMin": 10,
+      "multiDia": false,
+      "precos": {
+        "pequeno": 90,
+        "medio": 110,
+        "grande": 130,
+        "suv": 150,
+        "pickup": 150
+      },
+      "duracoes": {
+        "pequeno": 90,
+        "medio": 110,
+        "grande": 130,
+        "suv": 140,
+        "pickup": 140
+      }
+    },
+    {
+      "chave": "s-lav-motor",
+      "nome": "Lavagem de motor",
+      "categoria": "Lavagem",
+      "preco": 70,
+      "duracaoMin": 40,
+      "intervaloMin": 10,
+      "multiDia": false,
+      "precos": {
+        "pequeno": 60,
+        "medio": 70,
+        "grande": 80,
+        "suv": 90,
+        "pickup": 90
+      },
+      "duracoes": {
+        "pequeno": 30,
+        "medio": 40,
+        "grande": 40,
+        "suv": 50,
+        "pickup": 50
+      }
+    },
+    {
+      "chave": "s-higien-interna",
+      "nome": "Higienização interna",
+      "categoria": "Interior",
+      "preco": 220,
+      "duracaoMin": 100,
+      "intervaloMin": 10,
+      "multiDia": false,
+      "precos": {
+        "pequeno": 180,
+        "medio": 220,
+        "grande": 260,
+        "suv": 300,
+        "pickup": 300
+      },
+      "duracoes": {
+        "pequeno": 90,
+        "medio": 100,
+        "grande": 120,
+        "suv": 140,
+        "pickup": 140
+      }
+    },
+    {
+      "chave": "s-hidrat-couro",
+      "nome": "Hidratação de couro",
+      "categoria": "Interior",
+      "preco": 150,
+      "duracaoMin": 75,
+      "intervaloMin": 10,
+      "multiDia": false,
+      "precos": {
+        "pequeno": 120,
+        "medio": 150,
+        "grande": 180,
+        "suv": 200,
+        "pickup": 200
+      },
+      "duracoes": {
+        "pequeno": 60,
+        "medio": 75,
+        "grande": 90,
+        "suv": 90,
+        "pickup": 90
+      }
+    },
+    {
+      "chave": "s-higien-ar",
+      "nome": "Higienização do ar-condicionado",
+      "categoria": "Interior",
+      "preco": 100,
+      "duracaoMin": 40,
+      "intervaloMin": 10,
+      "multiDia": false,
+      "precos": {
+        "pequeno": 90,
+        "medio": 100,
+        "grande": 110,
+        "suv": 120,
+        "pickup": 120
+      },
+      "duracoes": {
+        "pequeno": 30,
+        "medio": 40,
+        "grande": 40,
+        "suv": 45,
+        "pickup": 45
+      }
+    },
+    {
+      "chave": "s-descontam",
+      "nome": "Descontaminação de pintura",
+      "categoria": "Pintura",
+      "preco": 250,
+      "duracaoMin": 120,
+      "intervaloMin": 10,
+      "multiDia": false,
+      "precos": {
+        "pequeno": 200,
+        "medio": 250,
+        "grande": 300,
+        "suv": 350,
+        "pickup": 350
+      },
+      "duracoes": {
+        "pequeno": 90,
+        "medio": 120,
+        "grande": 150,
+        "suv": 150,
+        "pickup": 150
+      }
+    },
+    {
+      "chave": "s-polimento-comercial",
+      "nome": "Polimento comercial",
+      "categoria": "Pintura",
+      "preco": 300,
+      "duracaoMin": 150,
+      "intervaloMin": 10,
+      "multiDia": false,
+      "precos": {
+        "pequeno": 250,
+        "medio": 300,
+        "grande": 380,
+        "suv": 450,
+        "pickup": 450
+      },
+      "duracoes": {
+        "pequeno": 120,
+        "medio": 150,
+        "grande": 180,
+        "suv": 210,
+        "pickup": 210
+      }
+    },
+    {
+      "chave": "s-polim-tecnico",
+      "nome": "Polimento técnico",
+      "categoria": "Pintura",
+      "preco": 750,
+      "duracaoMin": 420,
+      "intervaloMin": 10,
+      "multiDia": true,
+      "precos": {
+        "pequeno": 600,
+        "medio": 750,
+        "grande": 950,
+        "suv": 1100,
+        "pickup": 1100
+      },
+      "duracoes": {
+        "pequeno": 300,
+        "medio": 420,
+        "grande": 540,
+        "suv": 600,
+        "pickup": 600
+      }
+    },
+    {
+      "chave": "s-cristalizacao",
+      "nome": "Cristalização",
+      "categoria": "Proteção",
+      "preco": 420,
+      "duracaoMin": 210,
+      "intervaloMin": 10,
+      "multiDia": false,
+      "precos": {
+        "pequeno": 350,
+        "medio": 420,
+        "grande": 520,
+        "suv": 600,
+        "pickup": 600
+      },
+      "duracoes": {
+        "pequeno": 180,
+        "medio": 210,
+        "grande": 240,
+        "suv": 270,
+        "pickup": 270
+      }
+    },
+    {
+      "chave": "s-vitrificacao",
+      "nome": "Vitrificação cerâmica",
+      "categoria": "Proteção",
+      "preco": 1800,
+      "duracaoMin": 720,
+      "intervaloMin": 10,
+      "multiDia": true,
+      "precos": {
+        "pequeno": 1500,
+        "medio": 1800,
+        "grande": 2200,
+        "suv": 2600,
+        "pickup": 2600
+      },
+      "duracoes": {
+        "pequeno": 600,
+        "medio": 720,
+        "grande": 840,
+        "suv": 900,
+        "pickup": 900
+      }
+    },
+    {
+      "chave": "s-enceramento",
+      "nome": "Enceramento",
+      "categoria": "Proteção",
+      "preco": 130,
+      "duracaoMin": 60,
+      "intervaloMin": 10,
+      "multiDia": false,
+      "precos": {
+        "pequeno": 100,
+        "medio": 130,
+        "grande": 160,
+        "suv": 190,
+        "pickup": 190
+      },
+      "duracoes": {
+        "pequeno": 45,
+        "medio": 60,
+        "grande": 75,
+        "suv": 90,
+        "pickup": 90
+      }
+    },
+    {
+      "chave": "s-revit-plasticos",
+      "nome": "Revitalização de plásticos",
+      "categoria": "Detalhes",
+      "preco": 90,
+      "duracaoMin": 40,
+      "intervaloMin": 10,
+      "multiDia": false,
+      "precos": {
+        "pequeno": 70,
+        "medio": 90,
+        "grande": 110,
+        "suv": 130,
+        "pickup": 130
+      },
+      "duracoes": {
+        "pequeno": 30,
+        "medio": 40,
+        "grande": 50,
+        "suv": 60,
+        "pickup": 60
+      }
+    },
+    {
+      "chave": "s-rest-farois",
+      "nome": "Restauração de faróis",
+      "categoria": "Detalhes",
+      "preco": 180,
+      "duracaoMin": 60,
+      "intervaloMin": 10,
+      "multiDia": false,
+      "precos": {
+        "pequeno": 160,
+        "medio": 180,
+        "grande": 180,
+        "suv": 200,
+        "pickup": 200
+      },
+      "duracoes": {
+        "pequeno": 60,
+        "medio": 60,
+        "grande": 60,
+        "suv": 75,
+        "pickup": 75
+      }
+    },
+    {
+      "chave": "s-imperm-vidros",
+      "nome": "Impermeabilização de vidros",
+      "categoria": "Detalhes",
+      "preco": 110,
+      "duracaoMin": 50,
+      "intervaloMin": 10,
+      "multiDia": false,
+      "precos": {
+        "pequeno": 90,
+        "medio": 110,
+        "grande": 130,
+        "suv": 150,
+        "pickup": 150
+      },
+      "duracoes": {
+        "pequeno": 40,
+        "medio": 50,
+        "grande": 60,
+        "suv": 60,
+        "pickup": 60
+      }
+    }
+  ]
+}

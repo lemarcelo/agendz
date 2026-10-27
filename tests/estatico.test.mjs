@@ -64,6 +64,14 @@ test('só o site real importa o cliente HTTP; o token nunca vai para storage ou 
   }
 });
 
+test('src/ui/leve e src/ui/real não dependem da API simulada (nem de hooks.js e common.jsx, que a importam)', () => {
+  for (const f of fonte.filter((x) => x.startsWith('src/ui/leve/') || x.startsWith('src/ui/real/'))) {
+    for (const m of ler(f).matchAll(/from\s+['"]([^'"]+)['"]/g)) {
+      assert.ok(!/(^|\/)(api|hooks|common|chat)(\.jsx?)?$/.test(m[1]) || /api-real/.test(m[1]), `${f}: importa ${m[1]}`);
+    }
+  }
+});
+
 test('o bundle do Artifact (src/main.jsx) não tem fetch nem o cliente real', async () => {
   const { build } = await import('esbuild');
   const r = await build({ entryPoints: [join(raiz, 'src/main.jsx')], bundle: true, write: false, minify: true, format: 'iife', jsx: 'automatic', loader: { '.css': 'text' }, logLevel: 'silent',

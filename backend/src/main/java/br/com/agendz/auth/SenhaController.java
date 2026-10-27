@@ -69,7 +69,13 @@ public class SenhaController {
         }
         limite.limpar(chave);
         String novoHash = encoder.encode(d.nova());
-        banco.naLoja(jdbc -> jdbc.update("update usuario set senha_hash = ?, deve_trocar_senha = false where id = ?", novoHash, id));
+        boolean dono = "dono".equals(u.papel());
+        banco.naLoja(jdbc -> {
+            jdbc.update("update usuario set senha_hash = ?, deve_trocar_senha = false where id = ?", novoHash, id);
+            // o dono trocou a senha temporária: o assistente de início passa para o passo de serviços
+            if (dono) jdbc.update("update onboarding set passo = 'servicos', atualizado_em = now() where passo = 'senha' and concluido_em is null");
+            return null;
+        });
         return sessao.abrir(id, loja, u.papel(), u.nome(), false);
     }
 }
