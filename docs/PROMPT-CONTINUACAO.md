@@ -26,7 +26,7 @@ Você trabalha no Agendz (repositório `lemarcelo/agendz`, pasta `agendz`). Leia
 2. **Teste no servidor real:** job `smoke-producao` no `deploy-api.yml`, depois do deploy, só com endpoints públicos (sem credencial): `GET /api/publico/loja` de cada loja devolve tipo e nome certos; `/api/clientes` sem token = 401; `/interno/*` de fora = 404; `X-Forwarded-Host` forjado ignorado; login errado = 401; o site responde 200. Falha do smoke deixa o CI vermelho.
 3. **F2 parte 1:** dois builds (simulado sem rede para Artifact/testes; real para o site publicado), `src/services/api-real.js` com cliente HTTP (token só em memória), login real e `GET /api/publico/loja`. O teste estático passa a vigiar que `dist/agenda.html` não tem `fetch`.
 4. **Primeiro acesso:** endpoints de onboarding + catálogo por tipo (derivado dos seeds, com teste de igualdade) + tela `ui/PrimeiroAcesso.jsx` + `api.onboarding` simulada + e2e. Detalhes em `docs/F3-primeiro-acesso.md`.
-5. `POST /plataforma/lojas` (criar loja pela API) e verificação de domínio próprio por DNS.
+5. `POST /plataforma/lojas` (criar loja pela API) e verificação de domínio próprio por DNS. Base pronta: `deploy/nova-loja.sh` + TLS sob demanda no Caddy (`docs/F4-nova-loja-por-subdominio.md`).
 6. Estabelecimento (configuração), escala/expediente e exceções; a agenda valida "o profissional atende nesse horário"; passo "Expediente" entra no primeiro acesso.
 7. Estética: box, veículo e porte, serviço de vários dias (passo "Boxes" no primeiro acesso).
 8. Tick automático (`@Scheduled` + `Clock`), plano de mensagens, status manual.

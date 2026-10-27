@@ -2,6 +2,12 @@
 # O registro DNS curinga (*) já aponta tudo para a VPS; aqui se diz quais nomes têm certificado.
 {
 	email {$EMAIL_ACME}
+	# Loja nova = só criar a loja no banco (deploy/nova-loja.sh). O certificado do subdomínio sai na primeira visita (TLS sob demanda),
+	# mas SÓ se a API confirmar que a loja existe (ou que o domínio próprio foi verificado). Sem isso qualquer nome apontado
+	# para a VPS gastaria o limite de certificados do Let's Encrypt.
+	on_demand_tls {
+		ask http://api:8080/interno/dominio-permitido
+	}
 }
 
 (seguranca) {
@@ -20,6 +26,26 @@
 # /api/* vai para a API Spring (o Caddy repassa o Host original: é ele que decide a loja). /interno/* NUNCA é público.
 # Sem o serviço `api` no ar (compose sem docker-compose.api.yml), /api/* responde 502 e o resto do site segue normal.
 {$DOMINIO}, www.{$DOMINIO}, apex.{$DOMINIO}, dalforno.{$DOMINIO}, offbox.{$DOMINIO} {
+	import seguranca
+	root * /srv/site
+	handle /interno/* {
+		respond 404
+	}
+	handle /api/* {
+		reverse_proxy api:8080
+	}
+	handle {
+		try_files {path} /index.html
+		file_server
+	}
+}
+
+# Qualquer outra loja (subdomínio novo ou domínio próprio verificado): mesmo comportamento, certificado sob demanda.
+# Host desconhecido não ganha certificado (o `ask` responde 404); host de loja inexistente ainda assim recebe "Loja não encontrada" da API.
+https:// {
+	tls {
+		on_demand
+	}
 	import seguranca
 	root * /srv/site
 	handle /interno/* {
