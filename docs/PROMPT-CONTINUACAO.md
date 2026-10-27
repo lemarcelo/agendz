@@ -44,6 +44,7 @@ Você trabalha no Agendz (repositório `lemarcelo/agendz`, pasta `agendz`). Leia
 6c. **Serviços por profissional (novo, pedido de 27/10; ver `docs/PROMPT-COBRANCA-ESTABELECIMENTO.md` seção 4):** cada profissional tem a lista do que realiza; dono edita qualquer uma, o próprio profissional edita só a sua; a agenda só oferece o profissional para serviços dele (Atender, remarcar, link, WhatsApp, `validarHorario`).
 6d. **Aba Estabelecimento > Cobrança (novo, pedido de 27/10; ver o mesmo documento):** cobrança **por agenda** (estética = box; barbearia = profissional que atende), leitura primeiro (C1), licenças e faturas junto com o item 5.
 7. Estética: box, veículo e porte, serviço de vários dias (passo "Boxes" no primeiro acesso).
+7b. **Novo tipo de estabelecimento "Psicologia e terapia" (pedido de 27/10, 16:17): prompt executável em `docs/PROMPT-TIPO-PSICOLOGIA.md`** (fases P0 a P6; sigilo/LGPD e sem prontuário na v1; depende do item 6c, serviços por profissional). Nenhum cliente real antes da P4 e do contrato de operador de dados.
 8. Tick automático (`@Scheduled` + `Clock`), plano de mensagens, status manual.
 9. Cupom, estoque/material, comissão (`docs/MAPA-API-SPRING.md`).
 10. Financeiro e Pix, WhatsApp (formato Meta): interface + simulador; provedor real só quando o Marcelo escolher.
