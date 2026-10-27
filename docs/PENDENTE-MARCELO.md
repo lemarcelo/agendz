@@ -11,3 +11,9 @@ bash provisionar-loja.sh offbox "Offbox Barbearia" barbearia kiko "Kiko"
 - Esqueceu de copiar uma senha? `bash provisionar-loja.sh <slug> "<Nome>" <tipo> <login> "<Dono>" --redefinir` gera outra.
 - O script já grava a logo de cada loja (`logos/<slug>.txt`) e cria o assistente de início pendente.
 - Se preferir outro login que não `davi`, `alan` ou `kiko`, troque no comando.
+
+## Feito em 27/10 (pelo Marcelo)
+- `DEPLOY_API=true`, pacote `agendz-api` público, `provisionar-loja.sh` das três lojas e `SITE_REAL=true` criados. Falta conferir o login real nos três endereços e entregar as senhas temporárias aos donos (cada um escolhe usuário e senha no primeiro acesso, v80).
+
+## Falta o Marcelo
+- Criar o repositório privado `lemarcelo/agendz-admin` (vazio, sem README) para receber o painel (`docs/PROMPT-PAINEL-ADMIN.md`); o ambiente do Claude não consegue criar repositórios.
