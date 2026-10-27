@@ -27,8 +27,11 @@ ENV
 )
 chmod 600 "$PASTA/r2.env"
 . "$PASTA/r2-env.sh"
+# O R2 não aceita envio em streaming (rclone rcat → "501 NotImplemented"): envia sempre de um arquivo local (copyto).
+TMP=$(mktemp); trap 'rm -f "$TMP"' EXIT
+echo "ok $(date -Is)" > "$TMP"
 T="teste/ola-$(date +%s).txt"
-echo "ok $(date -Is)" | rclone rcat "r2:${R2_BUCKET}/${T}"
+rclone copyto "$TMP" "r2:${R2_BUCKET}/${T}"
 rclone ls "r2:${R2_BUCKET}/teste"
 rclone deletefile "r2:${R2_BUCKET}/${T}"
 echo "R2 configurado e testado (enviou, listou e apagou um arquivo de teste)."

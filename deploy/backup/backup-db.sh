@@ -8,7 +8,10 @@ cd /opt/agendz
 set -a; . ./.env; set +a
 DATA=$(date +%F)
 DESTINO="r2:${R2_BUCKET}/db/agendz-${DATA}.dump"
-docker compose exec -T db pg_dump -U agendz -Fc agendz | rclone rcat "$DESTINO"
+# O R2 não aceita envio em streaming (rclone rcat → 501): grava o dump em arquivo temporário e envia com copyto.
+TMP=$(mktemp -p /opt/agendz/backup); trap 'rm -f "$TMP"' EXIT
+docker compose exec -T db pg_dump -U agendz -Fc agendz > "$TMP"
+rclone copyto "$TMP" "$DESTINO"
 TAM=$(rclone size "$DESTINO" --json | sed -n 's/.*"bytes":\([0-9]*\).*/\1/p')
 [ "${TAM:-0}" -gt 1000 ] || { echo "$(date -Is) ERRO: dump ${DATA} vazio ou pequeno demais (${TAM:-0} bytes)" >&2; exit 1; }
 rclone delete "r2:${R2_BUCKET}/db" --min-age 30d
