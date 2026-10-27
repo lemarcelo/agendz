@@ -3,6 +3,8 @@
 // `slug`, `tipo` (definido na criação, nunca muda) e os domínios que apontam para ela. Docs: docs/F1-lojas-por-dns.md.
 import { criarEstadoInicial } from '../tipos/estetica_automotiva/seed.js';
 import { criarEstadoBarbearia } from '../tipos/barbearia/seed.js';
+import { LOGO_DALFORNO } from '../tipos/barbearia/logo-dalforno.js';
+import { LOGO_OFFBOX } from '../tipos/barbearia/logo-offbox.js';
 import { resolverLoja, slugValido } from '../domain/tenant.js';
 
 // Segunda barbearia da demonstração: mesmos dados de exemplo da barbearia, com o nome e o e-mail trocados (são dados fictícios; os reais entram na F1).
@@ -12,11 +14,14 @@ const trocarTextos = (v, pares) => {
   if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, trocarTextos(x, pares)]));
   return v;
 };
-const criarEstadoOffbox = (agora) => trocarTextos(criarEstadoBarbearia(agora), [['Barbearia Dalforno', 'Offbox Barbearia'], ['barbeariadalforno.com.br', 'offbox.example.com'], ['Alan Dalforno', 'Alan Souza']]);
+// Cada loja tem a própria logo (a seed do tipo barbearia não traz logo: é a base das duas lojas).
+const comLogo = (estado, logo) => ({ ...estado, estabelecimento: { ...estado.estabelecimento, logo } });
+const criarEstadoDalforno = (agora) => comLogo(criarEstadoBarbearia(agora), LOGO_DALFORNO);
+const criarEstadoOffbox = (agora) => comLogo(trocarTextos(criarEstadoBarbearia(agora), [['Barbearia Dalforno', 'Offbox Barbearia'], ['barbeariadalforno.com.br', 'offbox.example.com'], ['Alan Dalforno', 'Alan Souza']]), LOGO_OFFBOX);
 
 export const LOJAS_DEMO = Object.freeze([
   Object.freeze({ slug: 'apex', nome: 'Apex', tipo: 'estetica_automotiva', criar: criarEstadoInicial }),
-  Object.freeze({ slug: 'dalforno', nome: 'Dalforno', tipo: 'barbearia', criar: criarEstadoBarbearia }),
+  Object.freeze({ slug: 'dalforno', nome: 'Dalforno', tipo: 'barbearia', criar: criarEstadoDalforno }),
   Object.freeze({ slug: 'offbox', nome: 'Offbox', tipo: 'barbearia', criar: criarEstadoOffbox }),
 ]);
 export const LOJA_PADRAO = 'apex';

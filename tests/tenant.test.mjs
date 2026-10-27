@@ -50,7 +50,7 @@ test('cada loja nasce com estado próprio (nada compartilhado)', () => {
   a.clientes.push({ id: 'c-so-da-apex', nome: 'X' });
   assert.ok(!b.clientes.some((c) => c.id === 'c-so-da-apex'));
   assert.notEqual(a.estabelecimento.nome, b.estabelecimento.nome);
-  assert.ok(!b.estabelecimento.logo, 'a barbearia de exemplo não herda a logo da Apex');
+  assert.ok(b.estabelecimento.logo && b.estabelecimento.logo !== a.estabelecimento.logo, 'a Dalforno tem logo própria, não herda a da Apex');
 });
 
 test('offbox: segunda barbearia com nome próprio e sem rastro da Dalforno', () => {

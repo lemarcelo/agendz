@@ -20,8 +20,9 @@ let T = (id) => p.getByTestId(id);
 assert.equal(await p.locator('html').getAttribute('data-tipo'), 'barbearia');
 assert.match(await p.locator('.login-cartao h1').innerText(), /Dalforno/);
 assert.equal(await T('demo-tipos').count(), 0, 'loja decidida pelo endereço não oferece seletor');
-assert.equal(await T('logo-marca').count(), 0, 'sem logo da Apex na barbearia');
-assert.ok(await T('marca-icone').count(), 'ícone da marca do tipo');
+assert.equal(await T('marca-icone').count(), 0, 'a Dalforno tem logo própria, não o ícone do tipo');
+const logoDalforno = await T('logo-marca').first().getAttribute('src');
+assert.match(logoDalforno, /^data:image\/jpeg;base64,/, 'logo da Dalforno');
 console.log('✓ ?loja=dalforno');
 
 // ?loja=offbox: outra barbearia, nome próprio
@@ -29,6 +30,9 @@ p = await abrir('?loja=offbox'); T = (id) => p.getByTestId(id);
 assert.equal(await p.locator('html').getAttribute('data-tipo'), 'barbearia');
 assert.match(await p.locator('.login-cartao h1').innerText(), /Offbox/);
 assert.ok(!/Dalforno/.test(await p.locator('body').innerText()), 'sem rastro da Dalforno');
+const logoOffbox = await T('logo-marca').first().getAttribute('src');
+assert.match(logoOffbox, /^data:image\/png;base64,/, 'logo da Offbox');
+assert.notEqual(logoOffbox, logoDalforno, 'cada barbearia tem a sua logo');
 console.log('✓ ?loja=offbox');
 
 // ?loja=apex: estética com a logo dela
@@ -53,8 +57,7 @@ const nClientesApex = await p.locator('tbody tr').count();
 await p.evaluate(() => { location.hash = ''; });
 await T('sair').click();
 await T('demo-loja-dalforno').click();
-assert.equal(await T('logo-marca').count(), 0, 'trocar de loja troca a marca');
-assert.ok(await T('marca-icone').count());
+assert.equal(await T('logo-marca').first().getAttribute('src'), logoDalforno, 'trocar de loja troca a marca (a da Apex some)');
 await T('demo-alan').click();
 await T('nav-servicos').click();
 // o menu Serviços usa o ícone do tipo (tesoura) e o da estética usa pincel: compara o desenho do ícone

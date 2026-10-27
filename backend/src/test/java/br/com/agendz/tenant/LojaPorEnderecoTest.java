@@ -1,5 +1,6 @@
 package br.com.agendz.tenant;
 
+import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -32,6 +33,16 @@ class LojaPorEnderecoTest extends BaseIntegracao {
         mvc.perform(get("/api/publico/loja").with(host("apex.agendz.io")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.tipo").value("estetica_automotiva"));
+    }
+
+    @Test
+    void cadaLojaDevolveASuaLogo() throws Exception {
+        mvc.perform(get("/api/publico/loja").with(host("dalforno.agendz.io")))
+                .andExpect(jsonPath("$.logo").value(startsWith("data:image/jpeg;base64,")));
+        mvc.perform(get("/api/publico/loja").with(host("offbox.agendz.io")))
+                .andExpect(jsonPath("$.logo").value(startsWith("data:image/png;base64,")));
+        mvc.perform(get("/api/publico/loja").with(host("apex.agendz.io")))
+                .andExpect(jsonPath("$.logo").value(startsWith("data:image/png;base64,")));
     }
 
     @Test

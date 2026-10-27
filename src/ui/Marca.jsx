@@ -2,6 +2,8 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { estabelecimento as apiEst } from '../services/api.js';
 import { LOGO_APEX } from '../tipos/estetica_automotiva/logo-apex.js';
+import { LOGO_DALFORNO } from '../tipos/barbearia/logo-dalforno.js';
+import { LOGO_OFFBOX } from '../tipos/barbearia/logo-offbox.js';
 import { iconeMarcaAtivo } from '../domain/tipos.js';
 import { LOGO_MAX, PALETAS, coresDoTema, coresDominantes, cssDaMarca, logoValida } from '../domain/tema.js';
 import { Aviso, Btn, Icon } from './common.jsx';
@@ -21,7 +23,7 @@ export function TemaMarca() {
 }
 
 // Marca no topo, no login e no link do cliente: a logo da loja (a enviada pelo dono ou a do seed) e, sem logo, o ícone do TIPO (tesoura, carro…).
-// Nunca a logo de outra loja. O nome ao lado só aparece quando a logo é outra que não a da Apex, que já traz o nome escrito.
+// Nunca a logo de outra loja. O nome ao lado só aparece quando a logo não traz o nome escrito (as das lojas cadastradas trazem).
 export function LogoMarca({ tamanho = 32, comNome = false }) {
   const { state: st } = useStore();
   const enviada = st.estabelecimento.logo;
@@ -29,7 +31,7 @@ export function LogoMarca({ tamanho = 32, comNome = false }) {
   if (!logoValida(enviada)) {
     return <><span className="marca-icone" data-testid="marca-icone" style={tamanho !== 32 ? { width: tamanho, height: tamanho } : undefined}><Icon n={iconeMarcaAtivo()} size={Math.round(tamanho * 0.56)} /></span>{comNome && <b className="marca-nome">{nome}</b>}</>;
   }
-  const daApex = enviada === LOGO_APEX;
+  const daApex = [LOGO_APEX, LOGO_DALFORNO, LOGO_OFFBOX].includes(enviada); // logos que já trazem o nome da loja
   return <><img className="marca-logo" src={enviada} alt={daApex ? nome : ''} width={tamanho} height={tamanho} data-testid="logo-marca" />{comNome && !daApex && <b className="marca-nome">{nome}</b>}</>;
 }
 
