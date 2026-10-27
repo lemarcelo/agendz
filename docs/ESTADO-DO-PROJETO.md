@@ -71,7 +71,7 @@ Tipo imutável; loja pelo endereço; um código só com pastas por tipo; capacid
 
 **Falta (ordem):**
 1. Marcelo: segredos do GitHub (VPS_HOST, VPS_SSH_KEY [chave só de deploy], opcional VPS_KNOWN_HOSTS) e, para a API, variável `DEPLOY_API=true`, pacote `agendz-api` público, `deploy/preparar-api.sh` uma vez na VPS; registro DNS `*`.
-2. Claude: demais endpoints (serviços, profissionais, agenda com `validarHorario`/conflitos, cobrança/Pix, WhatsApp) seguindo `docs/MAPA-API-SPRING.md`; trocar a API simulada do front pela real (cliente HTTP com Bearer, tela de login real, bootstrap por `GET /api/publico/loja`, carregar só a pasta do tipo).
+2. Claude: demais endpoints (**feitos em 27/10: serviços, profissionais e agenda núcleo** — conflito por profissional, encaixe, intervalo, remarcar, status; faltam escala/expediente, box, vários dias, porte do veículo, mensagens/plano, cupom, estoque, comissão, cobrança/Pix, WhatsApp) seguindo `docs/MAPA-API-SPRING.md`; trocar a API simulada do front pela real (cliente HTTP com Bearer, tela de login real, bootstrap por `GET /api/publico/loja`, carregar só a pasta do tipo).
 3. Gate 3 (e): arquivos por loja (`/dados/lojas/{lojaId}`) quando houver upload.
 4. Criação de loja pela plataforma (`POST /plataforma/lojas`, domínio próprio com verificação por DNS).
 5. Ligar cron do backup e testar `restaurar.sh`; snapshot antes de mudança grande.
