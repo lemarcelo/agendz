@@ -16,16 +16,20 @@
 	encode zstd gzip
 }
 
-# Front (protótipo): um único HTML serve qualquer loja; a loja é escolhida pelo endereço (src/domain/tenant.js).
+# Front (protótipo) + API: um único HTML serve qualquer loja; a loja é escolhida pelo endereço (src/domain/tenant.js).
+# /api/* vai para a API Spring (o Caddy repassa o Host original: é ele que decide a loja). /interno/* NUNCA é público.
+# Sem o serviço `api` no ar (compose sem docker-compose.api.yml), /api/* responde 502 e o resto do site segue normal.
 {$DOMINIO}, www.{$DOMINIO}, apex.{$DOMINIO}, dalforno.{$DOMINIO}, offbox.{$DOMINIO} {
 	import seguranca
 	root * /srv/site
-	try_files {path} /index.html
-	file_server
+	handle /interno/* {
+		respond 404
+	}
+	handle /api/* {
+		reverse_proxy api:8080
+	}
+	handle {
+		try_files {path} /index.html
+		file_server
+	}
 }
-
-# F1: API atrás do mesmo host (a loja vem do Host). Descomente com o bloco `api` do compose.
-# {$DOMINIO}, apex.{$DOMINIO}, dalforno.{$DOMINIO} {
-#	handle /api/* { reverse_proxy api:8080 }
-#	...
-# }

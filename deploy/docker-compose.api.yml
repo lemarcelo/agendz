@@ -1,0 +1,37 @@
+# API Spring + PostgreSQL. Usa-se JUNTO do compose principal:
+#   docker compose -f docker-compose.yml -f docker-compose.api.yml up -d
+# Pré-requisito: `.env` com POSTGRES_PASSWORD e JWT_SEGREDO (rode deploy/preparar-api.sh uma vez na VPS).
+# O banco NUNCA publica porta (Docker ignora o ufw para portas publicadas): só a API o alcança, pela rede interna.
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: agendz
+      POSTGRES_USER: agendz
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agendz -d agendz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    image: ghcr.io/lemarcelo/agendz-api:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      AGENDZ_DB_URL: jdbc:postgresql://db:5432/agendz
+      AGENDZ_DB_USER: agendz
+      AGENDZ_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      JWT_SEGREDO: ${JWT_SEGREDO:?defina JWT_SEGREDO no .env}
+      AGENDZ_DOMINIOS_BASE: ${DOMINIO}
+      AGENDZ_PERMITIR_QUERY: "false"
+    # sem ports: só o Caddy fala com a API (reverse_proxy api:8080)
+
+volumes:
+  pg_data:

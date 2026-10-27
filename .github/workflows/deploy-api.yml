@@ -1,0 +1,49 @@
+name: Deploy da API
+# Publica a imagem da API no GHCR e atualiza a VPS. Só roda quando a variável de repositório DEPLOY_API for "true" (Settings > Secrets and variables > Actions > Variables)
+# e os segredos VPS_HOST e VPS_SSH_KEY existirem. Antes: faça `deploy/preparar-api.sh` uma vez na VPS e deixe o pacote ghcr.io/lemarcelo/agendz-api como público.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+env:
+  TZ: America/Sao_Paulo
+
+jobs:
+  api:
+    if: github.event.workflow_run.conclusion == 'success' && vars.DEPLOY_API == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: backend
+          push: true
+          tags: |
+            ghcr.io/lemarcelo/agendz-api:latest
+            ghcr.io/lemarcelo/agendz-api:${{ github.event.workflow_run.head_sha }}
+      - name: Atualiza a VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER || 'agendz' }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
+          if [ -n "$VPS_KNOWN_HOSTS" ]; then printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts; else ssh-keyscan -T 10 "$VPS_HOST" > ~/.ssh/known_hosts; fi
+          OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+          scp $OPTS deploy/docker-compose.yml deploy/docker-compose.api.yml deploy/Caddyfile "$VPS_USER@$VPS_HOST:/opt/agendz/"
+          ssh $OPTS "$VPS_USER@$VPS_HOST" 'cd /opt/agendz && docker compose -f docker-compose.yml -f docker-compose.api.yml pull api && docker compose -f docker-compose.yml -f docker-compose.api.yml up -d && docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile'
+          rm -f ~/.ssh/deploy_key
