@@ -24,12 +24,10 @@ Depois disso, todo push no `main` com testes verdes publica o site sozinho (já 
 - [x] **Front na API real** (`docs/F2-front-na-api-real.md`): confirmado em 27/10: Artifact continua simulado e sem rede; site publicado vira real por partes, começando pelo login.
 - [ ] Domínio: manter `agendz.io` (grátis só no 1º ano; a renovação do `.io` é cara) ou trocar antes de ter cliente. **Marcelo decide depois de domingo (1/11).**
 
-## 2b. Ligar a produção (necessário para as senhas dos donos; passo a passo comigo)
-- [ ] GitHub > Settings > Secrets and variables > Actions > **Variables** > `DEPLOY_API` = `true`
-- [ ] Rodar o CI (re-run); ele publica a imagem `agendz-api` no GitHub Packages
-- [ ] Packages > `agendz-api` > Package settings > **Change visibility: Public**; re-run do deploy da API
-- [ ] VPS: `cd /opt/agendz && bash preparar-api.sh` (gera senha do banco e segredo do JWT sozinho, sem mostrar)
-- [ ] Depois que eu entregar o `provisionar-loja.sh` (fila 1): rodar na VPS uma vez para **Kiko, Alan e Davi** e repassar cada senha (aparece uma única vez) **só quando o F2 parte 1 estiver no ar**.
+## 2b. Ligar a produção (necessário para as senhas dos donos)
+O deploy da API gera os segredos na VPS e entra no GitHub Packages sozinho. Sobra um passo seu:
+- [ ] GitHub > Settings > Secrets and variables > Actions > aba **Variables** > New repository variable: `DEPLOY_API` = `true`. Depois, Actions > último **CI** > *Re-run all jobs*; quando ele terminar, o workflow **Deploy da API** roda sozinho. Me avise se ficar vermelho.
+- [ ] Depois que eu entregar o `provisionar-loja.sh` (fila 1): rodar na VPS uma vez para **Kiko, Alan e Davi** e guardar cada senha (aparece uma única vez). Só entregar aos donos **depois que o F2 parte 1 (login real) estiver no ar**.
 
 ## 3. Esta semana, em paralelo (têm prazo de terceiros; comece cedo)
 - [ ] **WhatsApp (Meta):** criar conta WhatsApp Business Platform, verificar a empresa e separar um número que **não** esteja no WhatsApp comum. A verificação pode levar dias.

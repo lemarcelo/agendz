@@ -1,6 +1,7 @@
 name: Deploy da API
 # Publica a imagem da API no GHCR e atualiza a VPS. Só roda quando a variável de repositório DEPLOY_API for "true" (Settings > Secrets and variables > Actions > Variables)
-# e os segredos VPS_HOST e VPS_SSH_KEY existirem. Antes: faça `deploy/preparar-api.sh` uma vez na VPS e deixe o pacote ghcr.io/lemarcelo/agendz-api como público.
+# e os segredos VPS_HOST e VPS_SSH_KEY existirem. Nada mais é manual: o passo da VPS roda `preparar-api.sh` (gera POSTGRES_PASSWORD e JWT_SEGREDO sozinho, sem mostrar,
+# na primeira vez) e entra no GitHub Packages com o token do próprio job (o pacote pode continuar privado; o login é desfeito no fim).
 on:
   workflow_run:
     workflows: [CI]
@@ -39,11 +40,14 @@ jobs:
           VPS_USER: ${{ secrets.VPS_USER || 'agendz' }}
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
           VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_ACTOR: ${{ github.actor }}
         run: |
           install -m 700 -d ~/.ssh
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
           if [ -n "$VPS_KNOWN_HOSTS" ]; then printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts; else ssh-keyscan -T 10 "$VPS_HOST" > ~/.ssh/known_hosts; fi
           OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
-          scp $OPTS deploy/docker-compose.yml deploy/docker-compose.api.yml deploy/Caddyfile "$VPS_USER@$VPS_HOST:/opt/agendz/"
-          ssh $OPTS "$VPS_USER@$VPS_HOST" 'cd /opt/agendz && docker compose -f docker-compose.yml -f docker-compose.api.yml pull api && docker compose -f docker-compose.yml -f docker-compose.api.yml up -d && docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile'
+          scp $OPTS deploy/docker-compose.yml deploy/docker-compose.api.yml deploy/Caddyfile deploy/preparar-api.sh "$VPS_USER@$VPS_HOST:/opt/agendz/"
+          printf '%s' "$GH_TOKEN" | ssh $OPTS "$VPS_USER@$VPS_HOST" "docker login ghcr.io -u '$GH_ACTOR' --password-stdin"
+          ssh $OPTS "$VPS_USER@$VPS_HOST" 'cd /opt/agendz && bash preparar-api.sh; r=$?; docker logout ghcr.io >/dev/null 2>&1; if [ $r -eq 0 ]; then docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile || r=$?; fi; exit $r'
           rm -f ~/.ssh/deploy_key
