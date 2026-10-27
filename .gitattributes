@@ -1,0 +1,6 @@
+# Scripts e configs que rodam no Linux (VPS) sempre com fim de linha LF, mesmo se o Git do Windows converter para CRLF.
+*.sh text eol=lf
+deploy/Caddyfile text eol=lf
+deploy/docker-compose.yml text eol=lf
+deploy/.env.example text eol=lf
+backend/Dockerfile text eol=lf
