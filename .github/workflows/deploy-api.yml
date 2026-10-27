@@ -52,3 +52,14 @@ jobs:
           printf '%s' "$GH_TOKEN" | ssh $OPTS "$VPS_USER@$VPS_HOST" "docker login ghcr.io -u '$GH_ACTOR' --password-stdin"
           ssh $OPTS "$VPS_USER@$VPS_HOST" 'cd /opt/agendz && bash preparar-api.sh; r=$?; docker logout ghcr.io >/dev/null 2>&1; if [ $r -eq 0 ]; then docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile || r=$?; fi; exit $r'
           rm -f ~/.ssh/deploy_key
+      - name: Teste no servidor real (smoke, só endpoints públicos)
+        env:
+          DOMINIO: ${{ vars.DOMINIO || 'agendz.io' }}
+        run: |
+          # a API leva alguns segundos para subir depois do `up -d`; espera até 3 min por 200 ou 404 (nunca 502)
+          for i in $(seq 1 36); do
+            cod=$(curl -s -m 10 -o /dev/null -w '%{http_code}' "https://apex.$DOMINIO/api/publico/loja" || true)
+            if [ "$cod" = "200" ] || [ "$cod" = "404" ]; then break; fi
+            echo "API ainda não respondeu (código $cod); tentativa $i/36"; sleep 5
+          done
+          bash deploy/smoke-producao.sh "$DOMINIO"
