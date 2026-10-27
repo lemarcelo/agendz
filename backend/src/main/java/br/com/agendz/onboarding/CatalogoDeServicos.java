@@ -1,5 +1,6 @@
 package br.com.agendz.onboarding;
 
+import br.com.agendz.escala.EscalaService.Escala;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.io.InputStream;
@@ -23,7 +24,7 @@ public class CatalogoDeServicos {
                        Map<String, BigDecimal> precos, Map<String, Integer> duracoes) {
     }
 
-    public record Catalogo(String tipo, List<Item> servicos) {
+    public record Catalogo(String tipo, Escala expediente, List<Item> servicos) {
     }
 
     private final ObjectMapper json;
@@ -42,7 +43,7 @@ public class CatalogoDeServicos {
 
     private Catalogo ler(String tipo) {
         ClassPathResource r = new ClassPathResource("catalogo/" + tipo + ".json");
-        if (!r.exists()) return new Catalogo(tipo, List.of());
+        if (!r.exists()) return new Catalogo(tipo, null, List.of());
         try (InputStream in = r.getInputStream()) {
             return json.readValue(in, Catalogo.class);
         } catch (IOException e) {

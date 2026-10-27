@@ -35,3 +35,21 @@ test('o catálogo de cada tipo não traz serviço de outro tipo (barbearia sem l
   assert.ok(!/lavagem|polimento/.test(nomes('barbearia')));
   assert.ok(!/corte|barba/.test(nomes('estetica_automotiva')));
 });
+
+test('o expediente sugerido de cada tipo tem 7 dias, ao menos um aberto, faixas HH:MM em ordem e sem sobreposição', () => {
+  for (const t of TIPOS_DO_CATALOGO) {
+    const { semana } = catalogoDoTipo(t).expediente;
+    assert.deepEqual(Object.keys(semana).sort(), ['0', '1', '2', '3', '4', '5', '6']);
+    assert.ok(Object.values(semana).some((d) => d.aberto), `${t}: nenhum dia aberto`);
+    for (const d of Object.values(semana)) {
+      assert.equal(d.aberto, d.faixas.length > 0);
+      assert.ok(d.faixas.length <= 6);
+      let fim = '';
+      for (const [a, b] of d.faixas) {
+        assert.match(a, /^([01]\d|2[0-3]):[0-5]\d$/); assert.match(b, /^([01]\d|2[0-3]):[0-5]\d$|^24:00$/);
+        assert.ok(a < b && a >= fim, `${t}: faixa ${a}-${b} fora de ordem ou sobreposta`);
+        fim = b;
+      }
+    }
+  }
+});

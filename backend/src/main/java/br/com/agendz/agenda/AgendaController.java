@@ -1,6 +1,7 @@
 package br.com.agendz.agenda;
 
 import br.com.agendz.erro.ErroDeNegocio;
+import br.com.agendz.escala.EscalaService;
 import br.com.agendz.tenant.Loja;
 import br.com.agendz.tenant.LojaContext;
 import br.com.agendz.tenant.LojaJdbc;
@@ -77,7 +78,7 @@ public class AgendaController {
     public record NovoStatus(@NotNull @Pattern(regexp = "^(a_confirmar|confirmado|concluido|cancelado)$", message = "status inválido") String status) {
     }
 
-    private record ServicoLinha(UUID id, String nome, BigDecimal preco, int duracaoMin, int intervaloMin) {
+    private record ServicoLinha(UUID id, String nome, BigDecimal preco, int duracaoMin, int intervaloMin, boolean multiDia) {
     }
 
     private record Conflito(UUID id, String status) {
@@ -88,10 +89,12 @@ public class AgendaController {
 
     private final LojaJdbc banco;
     private final Clock relogio;
+    private final EscalaService escalas;
 
-    public AgendaController(LojaJdbc banco, Clock relogio) {
+    public AgendaController(LojaJdbc banco, Clock relogio, EscalaService escalas) {
         this.banco = banco;
         this.relogio = relogio;
+        this.escalas = escalas;
     }
 
     // ---------------------------------------------------------------- leitura
@@ -158,6 +161,7 @@ public class AgendaController {
             }
             Instant fimServico = inicio.plus(minutos, ChronoUnit.MINUTES);
             Instant fimOcupado = fimServico.plus(servicos.get(servicos.size() - 1).intervaloMin(), ChronoUnit.MINUTES);
+            conferirExpediente(jdbc, d.profissionalId(), inicio, fimServico, servicos.stream().anyMatch(ServicoLinha::multiDia));
             List<UUID> pendentes = conferirConflitos(jdbc, d.profissionalId(), new UUID(0, 0), inicio, fimOcupado, encaixe);
             UUID id = jdbc.queryForObject(
                     "insert into agendamento (loja_id, cliente_id, profissional_id, inicio, fim_servico, fim_ocupado, status, encaixe, total) "
@@ -188,7 +192,8 @@ public class AgendaController {
             if (novo.equals(a.status())) return buscar(jdbc, id, so);
             List<UUID> pendentes = List.of();
             if (CANCELADO.equals(a.status())) {
-                // reativação: o horário pode ter sido tomado enquanto estava cancelado
+                // reativação: o horário pode ter sido tomado enquanto estava cancelado (ou o expediente mudou)
+                conferirExpediente(jdbc, a.profissionalId(), a.inicio(), a.fimServico(), multiDia(jdbc, id));
                 pendentes = conferirConflitos(jdbc, a.profissionalId(), id, a.inicio(), a.fimOcupado(), a.encaixe());
             }
             if (CONFIRMADO.equals(novo)) cancelarPendentesQueCobrem(jdbc, a.profissionalId(), id, a.inicio(), a.fimOcupado());
@@ -219,6 +224,7 @@ public class AgendaController {
             Instant fimServico = novoInicio.plus(servico);
             Instant fimOcupado = fimServico.plus(folga);
             boolean encaixe = d.encaixe() == null ? a.encaixe() : d.encaixe();
+            conferirExpediente(jdbc, alvo, novoInicio, fimServico, multiDia(jdbc, id));
             List<UUID> pendentes = conferirConflitos(jdbc, alvo, id, novoInicio, fimOcupado, encaixe);
             jdbc.update("update agendamento set profissional_id = ?, inicio = ?, fim_servico = ?, fim_ocupado = ?, encaixe = ?, atualizado_em = now() where id = ?",
                     alvo, utc(novoInicio), utc(fimServico), utc(fimOcupado), encaixe, id);
@@ -241,6 +247,19 @@ public class AgendaController {
         return inicio;
     }
 
+    /** O atendimento inteiro precisa caber no expediente da loja e na escala do profissional (EscalaService); sem expediente cadastrado, não restringe. */
+    private void conferirExpediente(JdbcTemplate jdbc, UUID profissionalId, Instant inicio, Instant fimServico, boolean multiDia) {
+        if (!escalas.atende(jdbc, profissionalId, inicio, fimServico, multiDia)) {
+            throw new ErroDeNegocio(HttpStatus.CONFLICT, "O profissional não atende nesse horário (fora do expediente).");
+        }
+    }
+
+    private boolean multiDia(JdbcTemplate jdbc, UUID agendamentoId) {
+        Boolean v = jdbc.queryForObject("select coalesce(bool_or(sv.multi_dia), false) from agendamento_servico x join servico sv on sv.id = x.servico_id where x.agendamento_id = ?",
+                Boolean.class, agendamentoId);
+        return Boolean.TRUE.equals(v);
+    }
+
     /** Trava a linha do profissional até o fim da transação: marcações no mesmo profissional passam uma por vez (sem corrida). */
     private void travarProfissional(JdbcTemplate jdbc, UUID profissionalId) {
         List<Boolean> achado = jdbc.query("select atende from usuario where id = ? and ativo for update", (rs, i) -> rs.getBoolean(1), profissionalId);
@@ -251,8 +270,8 @@ public class AgendaController {
     private List<ServicoLinha> carregarServicos(JdbcTemplate jdbc, List<UUID> ids) {
         String marcas = String.join(",", ids.stream().map(x -> "?").toList());
         List<ServicoLinha> achados = jdbc.query(
-                "select id, nome, preco, duracao_min, intervalo_min from servico where ativo and id in (" + marcas + ")",
-                (rs, i) -> new ServicoLinha(rs.getObject("id", UUID.class), rs.getString("nome"), rs.getBigDecimal("preco"), rs.getInt("duracao_min"), rs.getInt("intervalo_min")),
+                "select id, nome, preco, duracao_min, intervalo_min, multi_dia from servico where ativo and id in (" + marcas + ")",
+                (rs, i) -> new ServicoLinha(rs.getObject("id", UUID.class), rs.getString("nome"), rs.getBigDecimal("preco"), rs.getInt("duracao_min"), rs.getInt("intervalo_min"), rs.getBoolean("multi_dia")),
                 ids.toArray());
         Map<UUID, ServicoLinha> porId = new LinkedHashMap<>();
         for (ServicoLinha s : achados) porId.put(s.id(), s);

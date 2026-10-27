@@ -9,8 +9,18 @@ import { Aviso, Btn, Campo, Icone } from './mini.jsx';
 const dinheiro = (v) => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const lerNumero = (t) => { const n = Number(String(t).replace(/\./g, '').replace(',', '.')); return Number.isFinite(n) ? n : NaN; };
 const faixa = (mapa) => { const v = Object.values(mapa || {}); return v.length ? [Math.min(...v), Math.max(...v)] : null; };
-const ETAPAS = [['servicos', 'Serviços'], ['equipe', 'Equipe'], ['pronto', 'Pronto']];
-const etapaDoPasso = (passo) => (passo === 'equipe' || passo === 'pronto' ? passo : 'servicos'); // 'senha' já foi resolvido antes de chegar aqui
+const ETAPAS = [['servicos', 'Serviços'], ['equipe', 'Equipe'], ['expediente', 'Expediente'], ['pronto', 'Pronto']];
+const DIAS = [[1, 'Seg'], [2, 'Ter'], [3, 'Qua'], [4, 'Qui'], [5, 'Sex'], [6, 'Sáb'], [0, 'Dom']];
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+// Do expediente sugerido (um por dia) para os campos da tela: dias abertos, abre/fecha e a pausa (quando o dia tem duas faixas).
+function camposDoExpediente(sug) {
+  const dias = {}; let ref = null;
+  for (let d = 0; d < 7; d++) { const dia = sug && sug.semana && sug.semana[d]; dias[d] = !!(dia && dia.aberto); if (dias[d] && !ref) ref = dia.faixas; }
+  if (!ref) { for (const d of [1, 2, 3, 4, 5, 6]) dias[d] = true; ref = [['09:00', '12:00'], ['14:00', '18:00']]; }
+  const pausa = ref.length >= 2;
+  return { dias, abre: ref[0][0], fecha: ref[ref.length - 1][1], pausa, pausaDe: pausa ? ref[0][1] : '12:00', pausaAte: pausa ? ref[1][0] : '14:00' };
+}
+const etapaDoPasso = (passo) => (passo === 'equipe' || passo === 'expediente' || passo === 'pronto' ? passo : 'servicos'); // 'senha' já foi resolvido antes de chegar aqui
 
 export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, previa = false }) {
   const [fase, setFase] = useState('carregando');
@@ -24,6 +34,7 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [copiado, setCopiado] = useState(false);
+  const [exp, setExp] = useState(() => camposDoExpediente(null));
   const profissionais = rotulo({ tipo }, 'profissional', { plural: true });
 
   const carregar = async () => {
@@ -31,6 +42,7 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
     const r = await adaptador.carregar();
     if (!r.ok) { setErroCarga(r.erro); setFase('erro'); return; }
     setEstado(r.estado);
+    setExp(camposDoExpediente(r.estado.expediente || r.estado.expedienteSugerido));
     setEtapa(r.estado.concluido ? 'pronto' : etapaDoPasso(r.estado.passo));
     setMarcas(Object.fromEntries(r.estado.servicos.map((s) => [s.chave, { on: false, preco: String(s.preco).replace('.', ','), duracao: String(s.duracaoMin) }])));
     setFase('ok');
@@ -74,8 +86,34 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
     const r = await adaptador.equipe(pessoas);
     setEnviando(false);
     if (!r.ok) { setErro(r.erro); return; }
-    if (!pessoas.length) { setEtapa('pronto'); return; }
+    if (!pessoas.length) { setEtapa('expediente'); return; }
     setCriadas(r.pessoas);
+  };
+
+  const mudarExp = (campo, valor) => { setExp((e) => ({ ...e, [campo]: valor })); setErro(''); };
+  const enviarExpediente = async () => {
+    if (enviando) return;
+    const abertos = DIAS.filter(([d]) => exp.dias[d]);
+    if (!abertos.length) { setErro('Marque ao menos um dia aberto (ou use Pular).'); return; }
+    for (const h of [exp.abre, exp.fecha, ...(exp.pausa ? [exp.pausaDe, exp.pausaAte] : [])]) if (!HHMM.test(h)) { setErro('Confira os horários (use horas e minutos, como 09:00).'); return; }
+    if (!(exp.abre < exp.fecha)) { setErro('A loja precisa abrir antes de fechar.'); return; }
+    if (exp.pausa && !(exp.abre < exp.pausaDe && exp.pausaDe < exp.pausaAte && exp.pausaAte < exp.fecha)) { setErro('A pausa precisa ficar dentro do horário de funcionamento (início antes do fim).'); return; }
+    const faixas = exp.pausa ? [[exp.abre, exp.pausaDe], [exp.pausaAte, exp.fecha]] : [[exp.abre, exp.fecha]];
+    const semana = {};
+    for (let d = 0; d < 7; d++) semana[d] = exp.dias[d] ? { aberto: true, faixas } : { aberto: false, faixas: [] };
+    setEnviando(true); setErro('');
+    const r = await adaptador.expediente(semana);
+    setEnviando(false);
+    if (!r.ok) { setErro(r.erro); return; }
+    setEtapa('pronto');
+  };
+  const pularExpediente = async () => {
+    if (enviando) return;
+    setEnviando(true); setErro('');
+    const r = await adaptador.expediente({});
+    setEnviando(false);
+    if (!r.ok) { setErro(r.erro); return; }
+    setEtapa('pronto');
   };
 
   const copiar = async () => {
@@ -157,7 +195,7 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
             <p className="muted">Os {profissionais} que “atendem clientes” aparecem na agenda.</p>
             {erro && <Aviso tipo="erro" data-testid="pa-erro">{erro}</Aviso>}
             <div className="acoes pa-acoes">
-              <Btn onClick={() => { setAviso(''); setEtapa('pronto'); }} data-testid="pa-pular-equipe">Pular</Btn>
+              <Btn onClick={() => { setAviso(''); setEtapa('expediente'); }} data-testid="pa-pular-equipe">Pular</Btn>
               <Btn variante="primario" disabled={enviando} onClick={enviarEquipe} data-testid="pa-criar-acessos">{enviando ? 'Salvando…' : 'Criar acessos'}</Btn>
             </div>
           </section>
@@ -171,7 +209,30 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
             </ul>
             <div className="acoes"><Btn tamanho="sm" onClick={copiar} data-testid="pa-copiar">{copiado ? 'Copiado' : 'Copiar tudo'}</Btn></div>
             {erro && <Aviso tipo="erro" data-testid="pa-erro">{erro}</Aviso>}
-            <div className="acoes pa-acoes"><Btn variante="primario" onClick={() => { setErro(''); setEtapa('pronto'); }} data-testid="pa-anotei">Anotei, continuar</Btn></div>
+            <div className="acoes pa-acoes"><Btn variante="primario" onClick={() => { setErro(''); setEtapa('expediente'); }} data-testid="pa-anotei">Anotei, continuar</Btn></div>
+          </section>
+        )}
+
+        {fase === 'ok' && etapa === 'expediente' && (
+          <section data-testid="pa-expediente">
+            <p>Quando a loja funciona? A agenda só aceita horários dentro deste expediente. Dá para ajustar cada dia e cada pessoa depois.</p>
+            <fieldset className="pa-dias"><legend>Dias abertos</legend>
+              {DIAS.map(([d, nome]) => <label key={d} className={`pa-dia${exp.dias[d] ? ' on' : ''}`}><input type="checkbox" checked={!!exp.dias[d]} onChange={(e) => setExp((x) => ({ ...x, dias: { ...x.dias, [d]: e.target.checked } }))} data-testid={`pa-dia-${d}`} /> {nome}</label>)}
+            </fieldset>
+            <div className="pa-campos">
+              <Campo rotulo="Abre às"><input type="time" value={exp.abre} onChange={(e) => mudarExp('abre', e.target.value)} data-testid="pa-abre" /></Campo>
+              <Campo rotulo="Fecha às"><input type="time" value={exp.fecha} onChange={(e) => mudarExp('fecha', e.target.value)} data-testid="pa-fecha" /></Campo>
+            </div>
+            <label className="pa-check"><input type="checkbox" checked={exp.pausa} onChange={(e) => mudarExp('pausa', e.target.checked)} data-testid="pa-pausa" /> Fecho para o almoço (pausa)</label>
+            {exp.pausa && <div className="pa-campos">
+              <Campo rotulo="Pausa de"><input type="time" value={exp.pausaDe} onChange={(e) => mudarExp('pausaDe', e.target.value)} data-testid="pa-pausa-de" /></Campo>
+              <Campo rotulo="Volta às"><input type="time" value={exp.pausaAte} onChange={(e) => mudarExp('pausaAte', e.target.value)} data-testid="pa-pausa-ate" /></Campo>
+            </div>}
+            {erro && <Aviso tipo="erro" data-testid="pa-erro">{erro}</Aviso>}
+            <div className="acoes pa-acoes">
+              <Btn onClick={pularExpediente} disabled={enviando} data-testid="pa-pular-expediente">Pular</Btn>
+              <Btn variante="primario" disabled={enviando} onClick={enviarExpediente} data-testid="pa-continuar-expediente">{enviando ? 'Salvando…' : 'Continuar'}</Btn>
+            </div>
           </section>
         )}
 

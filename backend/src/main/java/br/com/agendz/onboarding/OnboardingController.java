@@ -1,6 +1,9 @@
 package br.com.agendz.onboarding;
 
 import br.com.agendz.erro.ErroDeNegocio;
+import br.com.agendz.escala.EscalaService;
+import br.com.agendz.escala.EscalaService.Escala;
+import br.com.agendz.escala.EscalaService.Faixa;
 import br.com.agendz.onboarding.CatalogoDeServicos.Catalogo;
 import br.com.agendz.onboarding.CatalogoDeServicos.Item;
 import br.com.agendz.tenant.Loja;
@@ -53,7 +56,7 @@ public class OnboardingController {
     private static final int TAMANHO_SENHA = 12;
     private static final SecureRandom ALEATORIO = new SecureRandom();
 
-    public record Estado(String tipo, String passo, boolean concluido, List<Item> servicos, List<String> jaCadastrados) {
+    public record Estado(String tipo, String passo, boolean concluido, List<Item> servicos, List<String> jaCadastrados, Escala expedienteSugerido, Escala expediente) {
     }
 
     public record ItemEscolhido(
@@ -80,6 +83,10 @@ public class OnboardingController {
     public record EquipeCriada(List<PessoaCriada> pessoas) {
     }
 
+    /** `semana` ausente ou sem nenhum dia aberto = pular (nada é gravado). */
+    public record Expediente(Map<Integer, @Valid EscalaService.Dia> semana) {
+    }
+
     private record Linha(String passo, boolean concluido) {
     }
 
@@ -87,22 +94,25 @@ public class OnboardingController {
     private final CatalogoDeServicos catalogos;
     private final PasswordEncoder encoder;
     private final ObjectMapper json;
+    private final EscalaService escalas;
 
-    public OnboardingController(LojaJdbc banco, CatalogoDeServicos catalogos, PasswordEncoder encoder, ObjectMapper json) {
+    public OnboardingController(LojaJdbc banco, CatalogoDeServicos catalogos, PasswordEncoder encoder, ObjectMapper json, EscalaService escalas) {
         this.banco = banco;
         this.catalogos = catalogos;
         this.encoder = encoder;
         this.json = json;
+        this.escalas = escalas;
     }
 
     @GetMapping("/api/onboarding")
     public Estado estado() {
         Loja loja = LojaContext.exigir();
         Linha l = linha();
-        Catalogo c = catalogos.doTipo(loja.tipo()).orElse(new Catalogo(loja.tipo(), List.of()));
+        Catalogo c = catalogos.doTipo(loja.tipo()).orElse(new Catalogo(loja.tipo(), null, List.of()));
         Set<String> nomes = new HashSet<>(banco.naLoja(jdbc -> jdbc.queryForList("select lower(nome) from servico", String.class)));
         List<String> ja = c.servicos().stream().filter((s) -> nomes.contains(s.nome().toLowerCase(Locale.ROOT))).map(Item::chave).toList();
-        return new Estado(loja.tipo(), l.passo(), l.concluido(), c.servicos(), ja);
+        Map<Integer, List<Faixa>> atual = banco.naLoja((jdbc) -> escalas.ler(jdbc, null));
+        return new Estado(loja.tipo(), l.passo(), l.concluido(), c.servicos(), ja, c.expediente(), EscalaService.temFaixa(atual) ? EscalaService.paraJson(atual) : null);
     }
 
     @PostMapping("/api/onboarding/servicos")
@@ -160,11 +170,25 @@ public class OnboardingController {
                         loja.id().toString(), login, nome, encoder.encode(senha), atende);
                 saida.add(new PessoaCriada(nome, login, senha, atende));
             }
-            jdbc.update("update onboarding set passo = 'pronto', atualizado_em = now() where concluido_em is null and passo <> 'pronto'");
+            jdbc.update("update onboarding set passo = 'expediente', atualizado_em = now() where concluido_em is null and passo in ('senha', 'servicos', 'equipe')");
             return saida;
         });
         // A resposta traz senhas: nada de cache no navegador nem em proxy.
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(new EquipeCriada(criadas));
+    }
+
+    @PostMapping("/api/onboarding/expediente")
+    public Resultado expediente(@Valid @RequestBody Expediente corpo) {
+        Loja loja = LojaContext.exigir();
+        exigirAberto(linha());
+        Map<Integer, List<Faixa>> semana = corpo.semana() == null ? null : EscalaService.validar(new Escala(corpo.semana()));
+        boolean grava = semana != null && EscalaService.temFaixa(semana);
+        banco.naLoja((jdbc) -> {
+            if (grava) escalas.gravar(jdbc, loja.id(), null, semana);
+            jdbc.update("update onboarding set passo = 'pronto', atualizado_em = now() where concluido_em is null and passo <> 'pronto'");
+            return null;
+        });
+        return new Resultado(grava ? 1 : 0, 0);
     }
 
     @PostMapping("/api/onboarding/concluir")
@@ -172,7 +196,7 @@ public class OnboardingController {
         Loja loja = LojaContext.exigir();
         linha();
         banco.naLoja(jdbc -> jdbc.update("update onboarding set passo = 'pronto', concluido_em = coalesce(concluido_em, now()), atualizado_em = now()"));
-        return new Estado(loja.tipo(), "pronto", true, List.of(), List.of());
+        return new Estado(loja.tipo(), "pronto", true, List.of(), List.of(), null, null);
     }
 
     private Linha linha() {

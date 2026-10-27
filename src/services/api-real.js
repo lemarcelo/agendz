@@ -92,9 +92,20 @@ export async function trocarSenha({ senhaAtual, nova }) {
 
 // ---------- primeiro acesso (só o dono; docs/F3-primeiro-acesso.md) ----------
 const listaDe = (v, max) => (Array.isArray(v) ? v.slice(0, max) : []);
+const lerSemana = (e) => {
+  if (!e || typeof e !== 'object' || !e.semana || typeof e.semana !== 'object') return null;
+  const semana = {};
+  for (let d = 0; d < 7; d++) {
+    const dia = e.semana[d] || e.semana[String(d)] || {};
+    const faixas = listaDe(dia.faixas, 6).filter((f) => Array.isArray(f) && f.length === 2).map((f) => [texto(f[0], 5), texto(f[1], 5)]);
+    semana[d] = { aberto: dia.aberto === true && faixas.length > 0, faixas };
+  }
+  return { semana };
+};
 function lerEstado(d) {
   d = d || {};
   return {
+    expedienteSugerido: lerSemana(d.expedienteSugerido), expediente: lerSemana(d.expediente),
     tipo: texto(d.tipo, 40), passo: texto(d.passo, 20), concluido: d.concluido === true,
     servicos: listaDe(d.servicos, 60).map((s) => ({
       chave: texto(s && s.chave, 40), nome: texto(s && s.nome, 100), categoria: s && s.categoria ? texto(s.categoria, 60) : null,
@@ -117,6 +128,11 @@ export const onboarding = {
     const r = await chamar('POST', '/api/onboarding/equipe', { pessoas: listaDe(pessoas, 10) });
     if (!r.ok) return r;
     return { ok: true, pessoas: listaDe(r.dados && r.dados.pessoas, 10).map((p) => ({ nome: texto(p && p.nome, 80), login: texto(p && p.login, 60), senhaTemporaria: texto(p && p.senhaTemporaria, 40), atende: !(p && p.atende === false) })) };
+  },
+  // POST /api/onboarding/expediente  { semana: { 0..6: { aberto, faixas: [['09:00','12:00']] } } }  (semana vazia = pular)
+  async expediente(semana) {
+    const r = await chamar('POST', '/api/onboarding/expediente', { semana: semana && typeof semana === 'object' ? semana : {} });
+    return r.ok ? { ok: true } : r;
   },
   // POST /api/onboarding/concluir
   async concluir() { const r = await chamar('POST', '/api/onboarding/concluir', {}); return r.ok ? { ok: true } : r; },

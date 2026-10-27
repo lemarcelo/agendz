@@ -52,6 +52,15 @@ const semRolagem = async (p, nome) => assert.ok(await p.evaluate(() => document.
   assert.match(s1, /^[A-HJ-NP-Za-km-z2-9]{12}$/); assert.notEqual(s1, s2);
   await p.getByTestId('pa-copiar').click();
   await p.getByTestId('pa-anotei').click();
+  // expediente: sugestão do tipo já marcada; pausa fora do horário é recusada; depois continua
+  await p.getByTestId('pa-expediente').waitFor();
+  assert.equal(await p.getByTestId('pa-dia-1').isChecked(), true);
+  assert.equal(await p.getByTestId('pa-dia-0').isChecked(), false);
+  await p.getByTestId('pa-pausa-de').fill('20:00');
+  await p.getByTestId('pa-continuar-expediente').click();
+  assert.match(await p.getByTestId('pa-erro').innerText(), /pausa/i);
+  await p.getByTestId('pa-pausa-de').fill('12:00');
+  await p.getByTestId('pa-continuar-expediente').click();
   await p.getByTestId('pa-pronto').waitFor();
   await p.getByTestId('pa-concluir').click();
   await p.getByTestId('login-id').waitFor();
@@ -73,6 +82,8 @@ const semRolagem = async (p, nome) => assert.ok(await p.evaluate(() => document.
   assert.match(await m.p.getByTestId('pa-equipe').innerText(), /Profissionais|esteticistas/i);
   await semRolagem(m.p, 'equipe');
   await m.p.getByTestId('pa-pular-equipe').click();
+  await m.p.getByTestId('pa-expediente').waitFor(); await semRolagem(m.p, 'expediente');
+  await m.p.getByTestId('pa-pular-expediente').click();
   await m.p.getByTestId('pa-pronto').waitFor(); await semRolagem(m.p, 'pronto');
   ok('A: estética (390 px, fonte larga): preço por porte sem campo de preço; sem rolagem lateral; pular passos');
   await m.ctx.close();
@@ -81,6 +92,8 @@ const semRolagem = async (p, nome) => assert.ok(await p.evaluate(() => document.
 // ---------- B. site real com servidor falso ----------
 const pagina = readFileSync(new URL('../dist/index-real.html', import.meta.url), 'utf8');
 const chamadas = [];
+const dia = (a) => ({ aberto: a, faixas: a ? [['09:00', '12:00'], ['14:00', '18:00']] : [] });
+const SUGESTAO = { semana: { 0: dia(false), 1: dia(true), 2: dia(true), 3: dia(true), 4: dia(true), 5: dia(true), 6: dia(true) } };
 const banco = { passo: 'senha', concluido: false, servicos: [], logins: new Set(['marcos']), senhaTemp: true };
 const CATALOGO = [
   { chave: 's-corte', nome: 'Corte', categoria: null, preco: 40, duracaoMin: 30, precos: null, duracoes: null },
@@ -105,7 +118,7 @@ const servidor = http.createServer((req, res) => {
       return json(200, { token: 'tok-ok', nome: 'Alan', papel: 'dono', deveTrocarSenha: false, onboardingPendente: !banco.concluido });
     }
     if (tok !== 'Bearer tok-ok') return json(403, { mensagem: 'Sem permissão' });
-    if (req.url === '/api/onboarding') return json(200, { tipo: 'barbearia', passo: banco.passo, concluido: banco.concluido, servicos: CATALOGO, jaCadastrados: banco.servicos });
+    if (req.url === '/api/onboarding') return json(200, { tipo: 'barbearia', passo: banco.passo, concluido: banco.concluido, servicos: CATALOGO, jaCadastrados: banco.servicos, expedienteSugerido: SUGESTAO });
     if (req.url === '/api/onboarding/servicos') {
       if (banco.falhar) { banco.falhar = false; return json(500, { trace: 'detalhe interno que não pode aparecer' }); }
       let criados = 0;
@@ -115,9 +128,10 @@ const servidor = http.createServer((req, res) => {
     }
     if (req.url === '/api/onboarding/equipe') {
       const pessoas = c.pessoas.map((p, i) => { let l = p.nome.split(' ')[0].toLowerCase(); let n = 2; const base = l; while (banco.logins.has(l)) l = base + n++; banco.logins.add(l); return { nome: p.nome, login: l, senhaTemporaria: `Senha${i}Fake12`.slice(0, 12), atende: p.atende }; });
-      banco.passo = 'pronto';
+      banco.passo = 'expediente';
       return json(200, { pessoas }, { 'Cache-Control': 'no-store' });
     }
+    if (req.url === '/api/onboarding/expediente') { banco.expediente = c.semana; banco.passo = 'pronto'; return json(200, { criados: Object.keys(c.semana || {}).length ? 1 : 0, ignorados: 0 }); }
     if (req.url === '/api/onboarding/concluir') { banco.concluido = true; banco.passo = 'pronto'; return json(200, { tipo: 'barbearia', passo: 'pronto', concluido: true, servicos: [], jaCadastrados: [] }); }
     json(404, {});
   });
@@ -167,6 +181,13 @@ const url = `http://127.0.0.1:${servidor.address().port}/`;
   assert.match(await p.getByTestId('pa-acessos').innerText(), /não aparecem de novo/);
   await semRolagem(p, 'acessos');
   await p.getByTestId('pa-anotei').click();
+  await p.getByTestId('pa-expediente').waitFor();
+  await p.getByTestId('pa-dia-0').check();
+  await p.getByTestId('pa-continuar-expediente').click();
+  await p.getByTestId('pa-pronto').waitFor();
+  const exp = chamadas.filter((c) => c.u === '/api/onboarding/expediente').at(-1);
+  assert.deepEqual(exp.c.semana[0], { aberto: true, faixas: [['09:00', '12:00'], ['14:00', '18:00']] });
+  assert.deepEqual(exp.c.semana[3], { aberto: true, faixas: [['09:00', '12:00'], ['14:00', '18:00']] });
   await p.getByTestId('pa-concluir').click();
   await p.getByTestId('painel-real').waitFor();
   assert.equal(chamadas.at(-1).u, '/api/onboarding/concluir');

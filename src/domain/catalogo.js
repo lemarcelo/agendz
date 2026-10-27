@@ -7,3 +7,13 @@ export function catalogoDeEstado(estado) {
     precos: s.precos || null, duracoes: s.duracoes || null,
   }));
 }
+
+// Expediente sugerido do tipo (semana do estabelecimento do seed): { semana: { 0..6: { aberto, faixas: [['09:00','20:00']] } } }.
+export function expedienteDeEstado(estado) {
+  const semana = {};
+  for (let d = 0; d < 7; d++) {
+    const dia = estado.estabelecimento.escala.semana[d];
+    semana[d] = { aberto: !!dia.aberto, faixas: dia.aberto ? dia.faixas.map(([a, b]) => [a, b]) : [] };
+  }
+  return { semana };
+}

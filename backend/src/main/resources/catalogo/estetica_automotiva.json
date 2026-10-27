@@ -1,5 +1,67 @@
 {
   "tipo": "estetica_automotiva",
+  "expediente": {
+    "semana": {
+      "0": {
+        "aberto": false,
+        "faixas": []
+      },
+      "1": {
+        "aberto": true,
+        "faixas": [
+          [
+            "09:00",
+            "20:00"
+          ]
+        ]
+      },
+      "2": {
+        "aberto": true,
+        "faixas": [
+          [
+            "09:00",
+            "20:00"
+          ]
+        ]
+      },
+      "3": {
+        "aberto": true,
+        "faixas": [
+          [
+            "09:00",
+            "20:00"
+          ]
+        ]
+      },
+      "4": {
+        "aberto": true,
+        "faixas": [
+          [
+            "09:00",
+            "20:00"
+          ]
+        ]
+      },
+      "5": {
+        "aberto": true,
+        "faixas": [
+          [
+            "09:00",
+            "20:00"
+          ]
+        ]
+      },
+      "6": {
+        "aberto": true,
+        "faixas": [
+          [
+            "09:00",
+            "20:00"
+          ]
+        ]
+      }
+    }
+  },
   "servicos": [
     {
       "chave": "s-lav-simples",

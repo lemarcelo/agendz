@@ -51,6 +51,7 @@ class OnboardingTest extends BaseApi {
 
     private void limpar() {
         jdbc.update("delete from onboarding");
+        jdbc.update("delete from escala_faixa");
         jdbc.update("delete from servico");
         jdbc.update("delete from usuario where identificador like 'teste-%' or identificador like 'zeferino%' or identificador like 'zulmira%'");
     }
@@ -168,9 +169,38 @@ class OnboardingTest extends BaseApi {
         String primeira = m.group(1);
         assertTrue(m.find());
         assertNotEquals(primeira, m.group(1));
-        pegar(OFFBOX, t, "/api/onboarding").andExpect(jsonPath("$.passo").value("pronto"));
+        pegar(OFFBOX, t, "/api/onboarding").andExpect(jsonPath("$.passo").value("expediente"));
         // a mesma loja não vira outra: a equipe criada só existe na loja do Host
         assertEquals(0, jdbc.queryForObject("select count(*) from usuario where identificador = 'zeferino' and loja_id <> ?::uuid", Integer.class, LOJA_OFFBOX));
+    }
+
+    @Test
+    void expedienteSugeridoDoTipoEGravacaoDoPasso() throws Exception {
+        abrirAssistente(LOJA_DALFORNO);
+        String t = token(DALFORNO, "alan");
+        pegar(DALFORNO, t, "/api/onboarding").andExpect(jsonPath("$.expedienteSugerido.semana['1'].aberto").value(true))
+                .andExpect(jsonPath("$.expedienteSugerido.semana['0'].aberto").value(false)).andExpect(jsonPath("$.expediente").doesNotExist());
+        String semana = "{\"semana\":{\"1\":{\"aberto\":true,\"faixas\":[[\"09:00\",\"12:00\"],[\"14:00\",\"18:00\"]]},\"2\":{\"aberto\":true,\"faixas\":[[\"09:00\",\"18:00\"]]}}}";
+        enviar(DALFORNO, t, "/api/onboarding/expediente", semana).andExpect(status().isOk()).andExpect(jsonPath("$.criados").value(1));
+        assertEquals(3, jdbc.queryForObject("select count(*) from escala_faixa where usuario_id is null and loja_id = ?::uuid", Integer.class, LOJA_DALFORNO));
+        pegar(DALFORNO, t, "/api/onboarding").andExpect(jsonPath("$.passo").value("pronto")).andExpect(jsonPath("$.expediente.semana['2'].aberto").value(true));
+        // a agenda passa a respeitar o que o dono marcou: o expediente é o mesmo de /api/estabelecimento/escala
+        pegar(DALFORNO, t, "/api/estabelecimento/escala").andExpect(jsonPath("$.semana['1'].faixas[1][0]").value("14:00"));
+    }
+
+    @Test
+    void expedienteInvalidoOuPuladoOuDeProfissionalOuFechado() throws Exception {
+        abrirAssistente(LOJA_APEX);
+        String davi = token(APEX, "davi");
+        enviar(APEX, davi, "/api/onboarding/expediente", "{\"semana\":{\"1\":{\"aberto\":true,\"faixas\":[[\"18:00\",\"09:00\"]]}}}").andExpect(status().isBadRequest());
+        enviar(APEX, token(APEX, "pablo"), "/api/onboarding/expediente", "{}").andExpect(status().isForbidden());
+        assertEquals(0, jdbc.queryForObject("select count(*) from escala_faixa", Integer.class));
+        enviar(APEX, davi, "/api/onboarding/expediente", "{}").andExpect(status().isOk()).andExpect(jsonPath("$.criados").value(0)); // pular
+        assertEquals(0, jdbc.queryForObject("select count(*) from escala_faixa", Integer.class));
+        pegar(APEX, davi, "/api/onboarding").andExpect(jsonPath("$.passo").value("pronto"));
+        enviar(APEX, davi, "/api/onboarding/concluir", "{}").andExpect(status().isOk());
+        enviar(APEX, davi, "/api/onboarding/expediente", "{\"semana\":{\"1\":{\"aberto\":true,\"faixas\":[[\"09:00\",\"18:00\"]]}}}").andExpect(status().isConflict());
+        assertEquals(0, jdbc.queryForObject("select count(*) from escala_faixa", Integer.class));
     }
 
     @Test

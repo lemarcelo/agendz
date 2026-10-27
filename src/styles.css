@@ -810,3 +810,7 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
 .pa-acesso code { font-size: 15px; letter-spacing: .03em; user-select: all; }
 .pa-acoes { justify-content: flex-end; margin-top: 8px; }
 @media (max-width: 420px) { .pa .login-cartao { padding: 18px 14px; } .pa-campos { grid-template-columns: 1fr; } }
+
+.pa-dias { border: 0; padding: 0; margin: 10px 0; display: flex; flex-wrap: wrap; gap: 6px; } .pa-dias legend { font-size: 13px; color: var(--muted); padding: 0; margin-bottom: 6px; }
+.pa-dia { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); cursor: pointer; font-size: 14px; }
+.pa-dia.on { border-color: var(--ink); } .pa-dia input { width: 16px; height: 16px; }

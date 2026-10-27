@@ -198,7 +198,8 @@ Mapa completo em **[MAPA-DADOS-PESSOAIS.md](MAPA-DADOS-PESSOAIS.md)**: inventár
 |---|---|---|---|
 | `GET /api/onboarding` | dono | `{tipo, passo, concluido, servicos[catálogo do tipo], jaCadastrados[chaves]}` | sem linha em `onboarding` = 404; profissional 403; token de senha temporária 403 |
 | `POST /api/onboarding/servicos` `{itens:[{chave, preco?, duracaoMin?}]}` | dono | cria serviços do catálogo **do tipo da loja**; idempotente por nome; lista vazia = pular | chave de outro tipo/desconhecida/mal formada = 400; preço 0..100000, duração 1..14400; serviço com preço por porte ignora o preço editado; concluído = 409; passo → `equipe` |
-| `POST /api/onboarding/equipe` `{pessoas:[{nome, atende?}]}` (até 10) | dono | cria `profissional` com login (primeiro nome sem acento, sufixo 2, 3…) e senha temporária de 12 caracteres, `deve_trocar_senha = true`; devolve login+senha **uma vez** (`Cache-Control: no-store`) | só o hash fica salvo; concluído = 409; passo → `pronto` |
+| `POST /api/onboarding/equipe` `{pessoas:[{nome, atende?}]}` (até 10) | dono | cria `profissional` com login (primeiro nome sem acento, sufixo 2, 3…) e senha temporária de 12 caracteres, `deve_trocar_senha = true`; devolve login+senha **uma vez** (`Cache-Control: no-store`) | só o hash fica salvo; concluído = 409; passo → `expediente` |
+| `POST /api/onboarding/expediente` `{semana:{0..6:{aberto, faixas:[["09:00","12:00"]]}}}` | dono | grava o expediente da **loja** (`escala_faixa` com `usuario_id` nulo); semana vazia ou sem dia aberto = pular (nada gravado); `GET /api/onboarding` traz `expedienteSugerido` (do tipo) e `expediente` (o já gravado) | faixa `HH:MM`, início < fim, sem sobreposição, máx. 6 por dia, dias 0–6; inválido = 400; concluído = 409; passo → `pronto`; resposta `{criados: 1\|0}` (`OnboardingTest`, `EscalaTest`) |
 | `POST /api/onboarding/concluir` | dono | `concluido_em = now()` | repetir é inofensivo; depois disso o login não traz mais `onboardingPendente` |
 | `PUT /api/usuarios/me/senha` (já existe) | dono | ao trocar a senha temporária do **dono**, o passo `senha` vira `servicos` | profissional trocando a própria senha não mexe no assistente |
 
@@ -207,3 +208,12 @@ O catálogo (`backend/src/main/resources/catalogo/<tipo>.json`) é gerado dos se
 ## 11. Pontos do protótipo que **não** existem no real (tratar como pendência)
 
 `MODO_DEMO` (código de recuperação na resposta), `bancoSimulado`, `store.avancar`/`reiniciar`, snapshot com senhas e CPFs, sessão em variável do navegador, contadores de login na memória, chave de autoria no front. Todos substituídos pelas camadas das seções 0 a 10.
+
+## 10d. Expediente e escala no servidor (v76, `escala/`; `EscalaTest`)
+| Rota | Quem | O que faz | Regras |
+|---|---|---|---|
+| `GET /api/estabelecimento/escala` | dono, profissional | expediente da loja `{semana:{0..6:{aberto, faixas}}}` | dia 0 = domingo; sem expediente salvo = sem restrição |
+| `PUT /api/estabelecimento/escala` | dono | grava o expediente da loja (troca inteira) | ao menos um dia aberto; faixas válidas (início < fim, sem sobrepor, máx. 6) |
+| `GET /api/profissionais/{id}/escala` | dono; o próprio profissional | escala própria (vazia = segue a loja) | profissional lendo outro = 404 |
+| `PUT /api/profissionais/{id}/escala` | dono; o próprio profissional | grava a escala própria; **nenhum dia aberto apaga** a escala própria (volta a seguir a loja) | profissional inexistente/inativo = 404 |
+| `POST /api/agendamentos` e remarcar (`AgendaController`) | quem já tinha | recusa com 409 "O profissional não atende nesse horário (fora do expediente)." | o atendimento cabe **inteiro** numa faixa (fuso America/Sao_Paulo); serviço de vários dias só confere a entrada |
