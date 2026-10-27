@@ -17,7 +17,7 @@ function servidor(modo) {
       if (modo !== 'sem-hsts') h['Strict-Transport-Security'] = 'max-age=31536000';
       res.writeHead(cod, h); res.end(corpo);
     };
-    if (caminho === '/') return r(200, '<title>Agendz</title>', 'text/html');
+    if (caminho === '/') return r(200, '<title>Agendz</title>' + '<!-- ' + 'x'.repeat(1_000_000) + ' -->', 'text/html'); // HTML grande, como o real (pega o SIGPIPE do grep -q)
     if (caminho.startsWith('/interno')) return r(modo === 'interno-aberto' ? 200 : 404, '');
     if (caminho === '/api/publico/loja') {
       if (modo === 'api-fora') return r(502, 'Bad Gateway', 'text/plain');
@@ -26,7 +26,7 @@ function servidor(modo) {
       return r(200, JSON.stringify({ slug, nome: slug, tipo: TIPOS[slug] || '?' }));
     }
     if (caminho === '/api/auth/login') return r(modo === 'nao-criada' ? 404 : 401, '{"mensagem":"x"}');
-    return r(modo === 'sem-auth' ? 200 : 401, '{}');
+    return r(modo === 'sem-auth' ? 200 : modo === 'nao-criada' ? 404 : 401, '{}');
   });
 }
 
