@@ -24,7 +24,11 @@ if (etapa === 'tudo' || etapa === 'e2e') {
     const r = spawnSync('node', [`${pasta}/${f}`], { env, encoding: 'utf8', timeout: 180000 });
     const ok = r.status === 0;
     console.log(`${ok ? 'ok  ' : 'FALHOU'} ${f}`);
-    if (!ok) { falhas++; console.log((r.stdout || '').split('\n').slice(-12).join('\n'), r.stderr || ''); }
+    if (!ok) {
+      falhas++; const resto = (r.stdout || '').split('\n').slice(-12).join('\n');
+      console.log(resto, r.stderr || '');
+      if (process.env.GITHUB_ACTIONS) console.log(`::error title=${f}::${(resto + ' ' + (r.stderr || '')).slice(-900).replace(/%/g, '%25').replace(/\r?\n/g, '%0A')}`); // anotação legível pela API
+    }
   }
 }
 process.exit(falhas ? 1 : 0);

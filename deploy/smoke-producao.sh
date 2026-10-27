@@ -9,7 +9,7 @@ ESQUEMA=${SMOKE_ESQUEMA:-https}
 LOJAS=${SMOKE_LOJAS:-"apex:estetica_automotiva dalforno:barbearia offbox:barbearia"}
 FALHAS=0
 url() { printf '%s://%s.%s%s' "$ESQUEMA" "$1" "$DOMINIO" "$2"; }
-falha() { echo "  FALHOU: $*"; FALHAS=$((FALHAS + 1)); }
+falha() { echo "  FALHOU: $*"; FALHAS=$((FALHAS + 1)); [ -z "${GITHUB_ACTIONS:-}" ] || echo "::error title=smoke::$*"; } # no CI, a anotação deixa o motivo legível pela API do GitHub
 ok() { echo "  ok: $*"; }
 # pedido SLUG METODO CAMINHO [curl...] -> CODIGO em $COD, corpo em $CORPO, cabeçalhos em $CAB
 pedido() {
