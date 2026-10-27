@@ -98,7 +98,7 @@ async function segurarToque(p, ctx, loc, ms = 700) {
   assert.equal(await marcado(T, 'filtro-u-davi'), true);
   assert.equal(await marcado(T, 'filtro-u-pablo'), true, 'duplo clique junta');
   assert.equal(await qtd(p, '[data-testid^="remover-u-"]'), 2);
-  await T('remover-u-pablo').click();
+  await p.keyboard.press('Escape'); await T('remover-u-pablo').click();
   assert.equal(await marcado(T, 'filtro-u-pablo'), false);
   assert.equal(await marcado(T, 'filtro-u-davi'), true);
   assert.equal(await qtd(p, '[data-testid^="remover-u-"]'), 0, 'o último não tem X');
@@ -133,7 +133,7 @@ async function segurarToque(p, ctx, loc, ms = 700) {
   // toque longo em esteticista
   await segurarToque(p, ctx, await filtroProf(p, 'u-pablo'));
   assert.equal(await qtd(p, '[data-testid^="remover-u-"]'), 2, 'toque longo junta esteticistas');
-  await T('remover-u-pablo').tap();
+  await p.keyboard.press('Escape'); await T('remover-u-pablo').tap();
   assert.equal(await qtd(p, '[data-testid^="remover-u-"]'), 0);
   const [sw, iw] = await p.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth]);
   assert.ok(sw <= iw, 'celular sem rolagem horizontal');

@@ -35,6 +35,8 @@
 		reverse_proxy api:8080
 	}
 	handle {
+		# o site é um HTML único: sempre revalida (ETag), senão o navegador pode mostrar a versão antiga depois de um deploy
+		header Cache-Control "no-cache"
 		try_files {path} /index.html
 		file_server
 	}
@@ -55,6 +57,8 @@ https:// {
 		reverse_proxy api:8080
 	}
 	handle {
+		# o site é um HTML único: sempre revalida (ETag), senão o navegador pode mostrar a versão antiga depois de um deploy
+		header Cache-Control "no-cache"
 		try_files {path} /index.html
 		file_server
 	}

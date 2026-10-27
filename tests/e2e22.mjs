@@ -14,7 +14,7 @@ p.on('pageerror', (e) => erros.push('PAGE: ' + e.message));
 p.on('console', (m) => { if (m.type() === 'error' && !/ERR_TUNNEL|Failed to load resource/.test(m.text())) erros.push(m.text()); });
 await p.goto(url);
 const T = (id) => p.getByTestId(id);
-const marcados = () => p.locator('.filtros .filtro[aria-pressed="true"]').count();
+const marcados = async () => { await filtroProf(p, 'u-davi'); return p.locator('.seletor-item[aria-selected="true"]').count(); };
 
 await T('demo-davi').click();
 await T('filtro-abrir').waitFor();

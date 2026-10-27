@@ -276,7 +276,10 @@ export default function Agenda({ user, onAbrir, onNovo }) {
   // Um clique abre o WhatsApp (aba nova, com a mensagem pronta) e copia o link como reserva. Os dois começam já no clique.
   const copiarLink = () => {
     const base = `${window.location.origin === 'null' ? '' : window.location.origin}${window.location.pathname}`;
-    const link = `${base}#agendar${ehProfissional ? `-${user.id}` : ''}`;
+    // Na demonstração a loja vem de ?loja=<slug>: o link leva junto, senão o cliente cairia na loja padrão. No site real a loja vem do endereço (o build com domínio ignora ?loja=).
+    const lojaDemo = new URLSearchParams(window.location.search).get('loja');
+    const busca = lojaDemo && /^[a-z0-9-]{1,40}$/.test(lojaDemo) && base ? `?loja=${lojaDemo}` : '';
+    const link = `${base}${busca}#agendar${ehProfissional ? `-${user.id}` : ''}`;
     const copiou = copiarTexto(link);
     const abriu = abrirWhatsapp(textoConvite(st.estabelecimento.nome, link));
     copiou.then((ok) => {

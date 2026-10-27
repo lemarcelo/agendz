@@ -20,7 +20,7 @@ await T('rec-enviar').click();
 const codigo = await T('rec-codigo').textContent();
 await T('rec-cod-in').fill(codigo); await T('rec-nova').fill('abcd'); await T('rec-concluir').click();
 await T('login-id').fill('391.847.260-40'); await T('login-senha').fill('abcd'); await T('login-entrar').click();
-await T('filtro-u-alan').waitFor(); ok('recuperar senha (CPF + telefone) e entrar por CPF');
+await T('filtro-abrir').waitFor(); ok('recuperar senha (CPF + telefone) e entrar por CPF');
 
 // remarcar pelo painel
 await T('evento').first().click();

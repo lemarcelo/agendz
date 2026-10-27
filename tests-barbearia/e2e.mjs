@@ -24,7 +24,7 @@ await p.goto(new URL('../dist/index-barbearia.html', import.meta.url).href);
 await T('login-id').fill('alan'); await T('login-senha').fill('errada'); await T('login-entrar').click();
 await p.getByText('Usuário ou senha incorretos.').waitFor(); ok('login recusa senha errada');
 await T('login-senha').fill('1234'); await T('login-entrar').click();
-await T('filtro-u-alan').waitFor(); ok('login do dono por apelido');
+await T('filtro-abrir').waitFor(); ok('login do dono por apelido');
 
 // vista Dia
 await p.getByRole('button', { name: 'Dia', exact: true }).click();

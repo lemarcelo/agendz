@@ -608,7 +608,7 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
 
 /* ---- seletor de esteticistas quando são muitos ---- */
 .seletor-barb { position: relative; display: grid; gap: 8px; }
-.seletor-linha { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.seletor-linha { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; position: relative; } /* a lista ancora no botão: o X dos marcados não a empurra sob o dedo */
 .seletor-botao { cursor: pointer; width: min(100%, 420px); min-height: 44px; }
 .seletor-botao .filtro-txt { flex: 1 1 auto; } .seletor-seta { margin-left: auto; display: inline-flex; flex: none; color: var(--muted); }
 .seletor-botao .filtro-txt b, .seletor-botao .filtro-txt small, .seletor-item .filtro-txt b, .seletor-item .filtro-txt small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

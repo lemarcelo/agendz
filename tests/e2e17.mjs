@@ -59,7 +59,7 @@ for (const [nome, vp, touch] of [['computador', { width: 1280, height: 800 }, fa
   // seletor: buscar e escolher UM esteticista; escolher outro troca (não soma)
   await T('filtro-abrir').click();
   await T('seletor-painel').waitFor();
-  assert.equal(await p.locator('.seletor-item').count(), 15, `${nome}: 15 na lista`);
+  assert.equal(await p.locator('.seletor-item').count(), 16, `${nome}: Todos + 15 na lista`);
   assert.equal(await p.locator('.seletor-item[aria-selected="true"]').count(), 1, `${nome}: um marcado`);
   await T('seletor-busca').fill('rafa');
   assert.equal(await p.locator('.seletor-item').count(), 1);

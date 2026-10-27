@@ -31,6 +31,9 @@ Regra: exceção nova = linha nesta tabela (decisão registrada), nunca código 
 `barbeiro(s)` → `profissional/profissionais` (o id neutro da F1: `profissionalId`, `papel: 'profissional'`; era `esteticistaId` até a v71), `confirmacaoCorte` → `confirmacaoServico`, `confirmarCorte` → `confirmarServico`, `--brass` → `--acento`. Os rótulos que o usuário vê (ex.: "Barbeiro") continuam vindo do tipo. Uma consequência mecânica: listas de chaves comparadas depois de `.sort()` mudam de ordem (`['barbeiroId','inicio']` vira `['inicio','profissionalId']`); a regra testada é a mesma e o importador faz esse ajuste.
 Origem dos testes: `977aa2dd-agenda-barbearia.zip` (a v64 com `src/services/api.js` único). O arquivo morto `agenda-barbearia-v64.zip` guarda o zip `244c490a` (mesma v64 com o código dividido por assunto); as regras são as mesmas e os dois foram mantidos.
 
+## Exceção v72: seletor de profissionais
+Os e2e importados da barbearia clicavam nos cartões `filtro-<id>`; o seletor único (v72) só mostra os itens com a lista aberta. Os testes em `tests-barbearia/` foram reescritos mecanicamente (`filtroProf` abre a lista antes; Esc antes de clicar no X dos marcados; `filtro-abrir` no lugar de esperar o cartão do dono). As regras testadas são as mesmas. Reimportar com `tools/importar-testes-barbearia.mjs` desfaz isso: refazer o ajuste.
+
 ## Decisões tomadas sem confirmação
 1. Mensagens da página do cliente usam o nome da loja do tenant, não "Agenda Barbearia".
 2. O rótulo do passo é "Dia e horário"; sem veículo, o fluxo do link começa em "Serviço" (3 passos).

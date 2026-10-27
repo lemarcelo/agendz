@@ -14,10 +14,10 @@ p.on('pageerror', (e) => erros.push('PAGE: ' + e.message));
 p.on('console', (m) => { if (m.type() === 'error' && !/ERR_TUNNEL|Failed to load resource/.test(m.text())) erros.push(m.text()); });
 await p.goto(url);
 const T = (id) => p.getByTestId(id);
-const marcados = () => p.locator('.filtros .filtro[aria-pressed="true"]').count();
+const marcados = async () => { await filtroProf(p, 'u-alan'); return p.locator('.seletor-item[aria-selected="true"]').count(); };
 
 await T('demo-alan').click();
-await T('filtro-u-alan').waitFor();
+await T('filtro-abrir').waitFor();
 assert.equal(await (await filtroProf(p, 'u-alan')).getAttribute('aria-pressed'), 'true', 'abre na agenda de quem está logado');
 assert.equal(await marcados(), 1);
 assert.equal(await T('filtro-qualquer').count(), 0, 'não existe "Qualquer"');
