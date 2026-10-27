@@ -25,3 +25,7 @@ agendz:
   dominios-base: ${AGENDZ_DOMINIOS_BASE:agendz.io,localhost}
   # ?loja=slug: só demonstração e desenvolvimento. Em produção fica false.
   permitir-query: ${AGENDZ_PERMITIR_QUERY:false}
+  jwt:
+    # OBRIGATÓRIO em produção (env JWT_SEGREDO, mínimo 32 caracteres, aleatório). Sem ele a API não sobe.
+    segredo: ${JWT_SEGREDO:}
+    validade-minutos: ${JWT_VALIDADE_MINUTOS:480}

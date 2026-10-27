@@ -42,7 +42,13 @@ jobs:
           java-version: 21
           cache: maven
       - name: Testes do backend (Testcontainers sobe o PostgreSQL 16)
-        run: mvn -B -ntp verify
+        run: |
+          set -o pipefail
+          mvn -B -ntp verify 2>&1 | tee mvn.log
+      - name: Anotações de falha (texto dos erros visível pela API)
+        if: failure()
+        working-directory: .
+        run: tools/anotar-falha-maven.sh backend/mvn.log backend/target
 
   deploy:
     # Publica o site na VPS depois que front e backend passam, só no main. Sem os segredos VPS_HOST e VPS_SSH_KEY, o passo é pulado (CI segue verde).

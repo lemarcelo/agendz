@@ -3,3 +3,5 @@ spring:
     locations: classpath:db/migration,classpath:db/seed-dev
 agendz:
   permitir-query: true
+  jwt:
+    segredo: segredo-so-de-desenvolvimento-nao-usar-em-producao-0123456789
