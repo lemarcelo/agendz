@@ -11,8 +11,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-      - run: npm ci --no-audit --no-fund
+      - run: npm install --no-audit --no-fund
       - name: Testes (dominio, seguranca, conflito, verificacoes estaticas)
         run: npm test
       - name: Build do artefato
@@ -49,6 +48,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm ci --no-audit --no-fund
+      - run: npm install --no-audit --no-fund
       - name: Dependencias com falha conhecida
         run: npm audit --audit-level=high
