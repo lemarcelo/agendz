@@ -609,7 +609,10 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
 /* ---- seletor de esteticistas quando são muitos ---- */
 .seletor-barb { position: relative; display: grid; gap: 8px; }
 .seletor-linha { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-.seletor-botao { cursor: pointer; }
+.seletor-botao { cursor: pointer; width: min(100%, 420px); min-height: 44px; }
+.seletor-botao .filtro-txt { flex: 1 1 auto; } .seletor-seta { margin-left: auto; display: inline-flex; flex: none; color: var(--muted); }
+.seletor-botao .filtro-txt b, .seletor-botao .filtro-txt small, .seletor-item .filtro-txt b, .seletor-item .filtro-txt small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.seletor-linha { flex-wrap: nowrap; } .seletor-item .filtro-txt { flex: 1 1 auto; }
 .seletor-escolhidos { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; min-width: 0; }
 .seletor-chip { border: 0; cursor: pointer; background: var(--surface-2); padding: 2px 8px 2px 3px; }
 .seletor-painel { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; width: min(440px, 100%); display: grid; gap: 8px; padding: 10px; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 12px; box-shadow: 0 12px 32px rgba(0,0,0,.28); }

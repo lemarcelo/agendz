@@ -1,6 +1,8 @@
 // Agenda: escolha única de barbeiro (clicar troca, não soma) e padrão de quem está logado.
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
+// O seletor de profissionais é único e recolhe ao escolher: abre a lista se estiver fechada e devolve o item.
+const filtroProf = async (p, id) => { const it = p.getByTestId(`filtro-${id}`); if (!(await it.isVisible().catch(() => false))) await p.getByTestId('filtro-abrir').click(); return it; };
 
 const b = await chromium.launch();
 const erros = [];
@@ -16,22 +18,22 @@ const marcados = () => p.locator('.filtros .filtro[aria-pressed="true"]').count(
 
 await T('demo-alan').click();
 await T('filtro-u-alan').waitFor();
-assert.equal(await T('filtro-u-alan').getAttribute('aria-pressed'), 'true', 'abre na agenda de quem está logado');
+assert.equal(await (await filtroProf(p, 'u-alan')).getAttribute('aria-pressed'), 'true', 'abre na agenda de quem está logado');
 assert.equal(await marcados(), 1);
 assert.equal(await T('filtro-qualquer').count(), 0, 'não existe "Qualquer"');
-await T('filtro-u-kiko').click();
-assert.equal(await T('filtro-u-kiko').getAttribute('aria-pressed'), 'true');
-assert.equal(await T('filtro-u-alan').getAttribute('aria-pressed'), 'false', 'trocou, não somou');
-await T('filtro-u-tailuan').click();
+await (await filtroProf(p, 'u-kiko')).click();
+assert.equal(await (await filtroProf(p, 'u-kiko')).getAttribute('aria-pressed'), 'true');
+assert.equal(await (await filtroProf(p, 'u-alan')).getAttribute('aria-pressed'), 'false', 'trocou, não somou');
+await (await filtroProf(p, 'u-tailuan')).click();
 assert.equal(await marcados(), 1, 'sempre um só');
-assert.equal(await T('filtro-u-tailuan').getAttribute('aria-pressed'), 'true');
-await T('filtro-u-tailuan').click();
-assert.equal(await T('filtro-u-tailuan').getAttribute('aria-pressed'), 'true', 'clicar de novo no mesmo não desmarca');
+assert.equal(await (await filtroProf(p, 'u-tailuan')).getAttribute('aria-pressed'), 'true');
+await (await filtroProf(p, 'u-tailuan')).click();
+assert.equal(await (await filtroProf(p, 'u-tailuan')).getAttribute('aria-pressed'), 'true', 'clicar de novo no mesmo não desmarca');
 // escolha lembrada
 await T('sair').click();
 await p.goto(url);
 await T('demo-alan').click();
-assert.equal(await T('filtro-u-tailuan').getAttribute('aria-pressed'), 'true', 'a escolha continua');
+assert.equal(await (await filtroProf(p, 'u-tailuan')).getAttribute('aria-pressed'), 'true', 'a escolha continua');
 // barbeiro logado: só a própria agenda
 await T('sair').click();
 await T('demo-kiko').click();

@@ -1,6 +1,8 @@
 // Seleção de status e esteticista: clique = um só; segurar / dois cliques (só mouse) / Ctrl+clique = vários; X remove só um.
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
+// O seletor de profissionais é único e recolhe ao escolher: abre a lista se estiver fechada e devolve o item.
+const filtroProf = async (p, id) => { const it = p.getByTestId(`filtro-${id}`); if (!(await it.isVisible().catch(() => false))) await p.getByTestId('filtro-abrir').click(); return it; };
 
 const b = await chromium.launch();
 const erros = [];
@@ -16,7 +18,7 @@ async function abrir(viewport, touch = false) {
   return { ctx, p };
 }
 const ok = (m) => console.log('✓', m);
-const marcado = async (T, id) => (await T(id).getAttribute('aria-pressed')) === 'true';
+const marcado = async (T, id) => { if (id.startsWith('filtro-u-') && !(await T(id).isVisible().catch(() => false))) await T('filtro-abrir').click(); return (await T(id).getAttribute('aria-pressed')) === 'true'; };
 const qtd = (p, sel) => p.locator(sel).count();
 async function segurarMouse(p, loc, ms = 700) {
   const r = await loc.boundingBox();
@@ -87,12 +89,12 @@ async function segurarToque(p, ctx, loc, ms = 700) {
   await T('ordem-restaurar').click().catch(() => {});
 
   // esteticistas (dono): um por vez, vários por gesto, X, mínimo de um
-  await T('filtro-u-pablo').click();
+  await (await filtroProf(p, 'u-pablo')).click();
   assert.equal(await marcado(T, 'filtro-u-pablo'), true);
   assert.equal(await marcado(T, 'filtro-u-davi'), false, 'clique troca a agenda');
-  await T('filtro-u-pablo').click();
+  await (await filtroProf(p, 'u-pablo')).click();
   assert.equal(await marcado(T, 'filtro-u-pablo'), true, 'sempre fica um');
-  await T('filtro-u-davi').dblclick();
+  await (await filtroProf(p, 'u-davi')).dblclick();
   assert.equal(await marcado(T, 'filtro-u-davi'), true);
   assert.equal(await marcado(T, 'filtro-u-pablo'), true, 'duplo clique junta');
   assert.equal(await qtd(p, '[data-testid^="remover-u-"]'), 2);
@@ -100,7 +102,7 @@ async function segurarToque(p, ctx, loc, ms = 700) {
   assert.equal(await marcado(T, 'filtro-u-pablo'), false);
   assert.equal(await marcado(T, 'filtro-u-davi'), true);
   assert.equal(await qtd(p, '[data-testid^="remover-u-"]'), 0, 'o último não tem X');
-  await segurarMouse(p, T('filtro-u-pablo'));
+  await segurarMouse(p, await filtroProf(p, 'u-pablo'));
   assert.equal(await marcado(T, 'filtro-u-pablo'), true, 'segurar junta');
   assert.equal(await qtd(p, '[data-testid^="remover-u-"]'), 2);
   // lembra após recarregar
@@ -129,7 +131,7 @@ async function segurarToque(p, ctx, loc, ms = 700) {
   assert.equal(await marcado(T, 'legenda-cancelado'), false);
   assert.equal(await marcado(T, 'legenda-confirmado'), true);
   // toque longo em esteticista
-  await segurarToque(p, ctx, T('filtro-u-pablo'));
+  await segurarToque(p, ctx, await filtroProf(p, 'u-pablo'));
   assert.equal(await qtd(p, '[data-testid^="remover-u-"]'), 2, 'toque longo junta esteticistas');
   await T('remover-u-pablo').tap();
   assert.equal(await qtd(p, '[data-testid^="remover-u-"]'), 0);

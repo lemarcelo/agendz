@@ -240,13 +240,15 @@ export default function Agenda({ user, onAbrir, onNovo }) {
   const viewEfetiva = view;
 
   const profissionais = profissionaisVisiveis(st, user);
-  // Sempre há UM profissional selecionado; clicar em outro troca a seleção (não soma). Profissional só vê a própria agenda (a API também filtra).
-  // Sem escolha lembrada (ou com um profissional que não existe mais), vale quem está logado, se atende; senão o primeiro da lista.
+  // Clicar em outro profissional troca a seleção (não soma). Profissional só vê a própria agenda (a API também filtra).
+  // Sem escolha lembrada (ou com um profissional que não existe mais): vem selecionado quem está logado, se atende; senão vem "Todos" (nenhum marcado).
+  // "Todos" escolhido de propósito fica guardado como ['*'] (lista vazia = sem escolha lembrada).
   // Escolhas antigas guardadas como lista (filtro múltiplo) valem pelo primeiro nome que ainda existe.
-  const padraoSel = profissionais.some((b) => b.id === user.id) ? user.id : profissionais[0]?.id;
+  const padraoSel = profissionais.some((b) => b.id === user.id) ? user.id : '';
+  const todosEscolhido = Array.isArray(selSalva) && selSalva[0] === '*';
   // Clique escolhe um só. Segurar, duplo clique (só mouse) ou Ctrl/Shift + clique junta vários; o X do cartão tira só aquele. Sempre fica ao menos um.
-  const selecionados = ehProfissional ? [user.id] : sanearSelecao(selSalva, profissionais.map((b) => b.id), padraoSel);
-  const setSel = (v) => { if (!ehProfissional) salvarSel(v); };
+  const selecionados = ehProfissional ? [user.id] : todosEscolhido ? [] : sanearSelecao(selSalva, profissionais.map((b) => b.id), padraoSel);
+  const setSel = (v) => { if (!ehProfissional) salvarSel(v.length ? v : ['*']); };
   const ativosSel = profissionais.filter((b) => !selecionados.length || selecionados.includes(b.id));
   const todos = agendamentosVisiveis(st, user).filter((a) => !selecionados.length || selecionados.includes(a.profissionalId));
   // Marcadores da legenda: clicar liga/desliga o filtro por caso no calendário (vale só nesta tela, não fica salvo). Os totais continuam os do período inteiro.
@@ -282,7 +284,7 @@ export default function Agenda({ user, onAbrir, onNovo }) {
       if (!abriu) toast(ok ? 'Não consegui abrir o WhatsApp. O link foi copiado: cole na conversa.' : 'Não consegui abrir o WhatsApp nem copiar o link.', 'erro');
     });
   };
-  const escolher = (id) => setSel(escolherUnico(selecionados, id, 1));
+  const escolher = (id) => setSel(id ? escolherUnico(selecionados, id, 1) : []);
   const alternarBarb = (id, base) => setSel(alternarMulti(base ?? selecionados, id, 1));
   const gestosBarb = useGestosSelecao({ sel: selecionados, aoUnico: escolher, aoMulti: alternarBarb });
 
@@ -322,7 +324,7 @@ export default function Agenda({ user, onAbrir, onNovo }) {
 
   return (
     <section className="tela">
-      {!ehProfissional && profissionais.length > LIMITE_CARTOES ? (
+      {!ehProfissional ? (
         <SeletorProfissionais profissionais={profissionais} selecionados={selecionados} onEscolher={escolher} onAlternar={alternarBarb} onRemover={(id) => setSel(removerUm(selecionados, id, 1))} contagemHoje={contagemHoje} proximo={proximo} agora={agora} />
       ) : (
       <div className="filtros" role="group" aria-label={`Escolher a agenda do ${rot('profissional')}`}>

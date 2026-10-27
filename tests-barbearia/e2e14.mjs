@@ -5,6 +5,8 @@ import zlib from 'node:zlib';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+// O seletor de profissionais é único e recolhe ao escolher: abre a lista se estiver fechada e devolve o item.
+const filtroProf = async (p, id) => { const it = p.getByTestId(`filtro-${id}`); if (!(await it.isVisible().catch(() => false))) await p.getByTestId('filtro-abrir').click(); return it; };
 
 // PNG 64x64 com um círculo vermelho-tijolo sobre fundo transparente, gerado aqui (sem imagem no repositório).
 function pngLogo() {
@@ -39,12 +41,12 @@ await T('demo-alan').click();
 await visao('Mês').click();
 await p.waitForTimeout(150);
 assert.equal(await visao('Mês').getAttribute('aria-pressed'), 'true');
-await T('filtro-u-kiko').click();
+await (await filtroProf(p, 'u-kiko')).click();
 await T('sair').click();
 await p.goto(url); // recarrega: o navegador guarda a preferência, o estado do app volta ao início
 await T('demo-alan').click();
 assert.equal(await visao('Mês').getAttribute('aria-pressed'), 'true', 'a última visão escolhida continua');
-assert.equal(await T('filtro-u-kiko').getAttribute('aria-pressed'), 'true', 'o filtro de barbeiro continua');
+assert.equal(await (await filtroProf(p, 'u-kiko')).getAttribute('aria-pressed'), 'true', 'o filtro de barbeiro continua');
 console.log('✓ visão e filtro de barbeiro lembrados');
 
 // 2) clicar em um dia abre o dia só desta vez

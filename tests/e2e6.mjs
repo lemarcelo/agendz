@@ -1,5 +1,7 @@
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
+// O seletor de profissionais é único e recolhe ao escolher: abre a lista se estiver fechada e devolve o item.
+const filtroProf = async (p, id) => { const it = p.getByTestId(`filtro-${id}`); if (!(await it.isVisible().catch(() => false))) await p.getByTestId('filtro-abrir').click(); return it; };
 const b = await chromium.launch();
 const erros = [];
 const novo = async (w, h, scheme = 'light') => {
@@ -89,7 +91,7 @@ const ok = (m) => console.log('✓', m);
 
   // divergente: Marcelo 14:00 (a confirmar) outro dia
   await p.keyboard.press('Escape');
-  await T('filtro-u-pablo').click();
+  await (await filtroProf(p, 'u-pablo')).click();
   await p.locator('[data-testid=evento][title*="14:00 Marcelo"]').first().click();
   await T('pix-cpf').waitFor();
   await T('pix-gerar').click();

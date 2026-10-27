@@ -1,6 +1,8 @@
 // Link de agendamento: botão na Agenda, página do cliente (celular), "Cliente agendou", Meus agendamentos, lembretes e celular da Agenda.
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
+// O seletor de profissionais é único e recolhe ao escolher: abre a lista se estiver fechada e devolve o item.
+const filtroProf = async (p, id) => { const it = p.getByTestId(`filtro-${id}`); if (!(await it.isVisible().catch(() => false))) await p.getByTestId('filtro-abrir').click(); return it; };
 
 const b = await chromium.launch();
 const erros = [];
@@ -122,7 +124,7 @@ const NOMES_DO_SEED = ['Igor', 'Marcos', 'Rafael'];
   await p.evaluate(() => { location.hash = ''; });
   await T('nav-agenda').click();
   await p.getByRole('button', { name: 'Semana', exact: true }).click();
-  await T('filtro-u-kiko').click(); // o pedido foi para o Kiko
+  await (await filtroProf(p, 'u-kiko')).click(); // o pedido foi para o Kiko
   assert.ok(Number(await T('cont-cliente-agendou').innerText()) >= 1, 'legenda conta o pedido do cliente');
   await T('legenda-cliente-agendou').click();
   const roxo = await p.locator('.grade-col .ev').evaluateAll((e) => e.map((x) => [...x.classList].find((c) => c.startsWith('st-'))));

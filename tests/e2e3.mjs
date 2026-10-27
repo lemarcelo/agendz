@@ -1,5 +1,7 @@
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
+// O seletor de profissionais é único e recolhe ao escolher: abre a lista se estiver fechada e devolve o item.
+const filtroProf = async (p, id) => { const it = p.getByTestId(`filtro-${id}`); if (!(await it.isVisible().catch(() => false))) await p.getByTestId('filtro-abrir').click(); return it; };
 const b = await chromium.launch();
 const erros = [];
 const ctx = await b.newContext({ viewport: { width: 1440, height: 900 }, locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' });
@@ -20,7 +22,7 @@ await T('rec-enviar').click();
 const codigo = await T('rec-codigo').textContent();
 await T('rec-cod-in').fill(codigo); await T('rec-nova').fill('abcd'); await T('rec-concluir').click();
 await T('login-id').fill('391.847.260-40'); await T('login-senha').fill('abcd'); await T('login-entrar').click();
-await T('filtro-u-davi').waitFor(); ok('recuperar senha (CPF + telefone) e entrar por CPF');
+await T('filtro-abrir').waitFor(); ok('recuperar senha (CPF + telefone) e entrar por CPF');
 
 // remarcar pelo painel
 await T('evento').first().click();

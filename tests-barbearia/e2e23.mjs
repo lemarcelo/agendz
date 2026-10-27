@@ -1,6 +1,8 @@
 // Comissão por período (De/Até) e trava da ficha depois de a comissão ser paga.
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
+// O seletor de profissionais é único e recolhe ao escolher: abre a lista se estiver fechada e devolve o item.
+const filtroProf = async (p, id) => { const it = p.getByTestId(`filtro-${id}`); if (!(await it.isVisible().catch(() => false))) await p.getByTestId('filtro-abrir').click(); return it; };
 
 const b = await chromium.launch();
 const erros = [];
@@ -44,7 +46,7 @@ await T('com-pagar-u-kiko').click();
 await T('com-confirmar-u-kiko').click();
 assert.equal(await num('com-apagar-u-kiko'), 0);
 await T('nav-agenda').click();
-await T('filtro-u-kiko').click();
+await (await filtroProf(p, 'u-kiko')).click();
 await p.getByTestId('evento').filter({ hasText: 'Venda de produtos' }).first().click();
 await T('comissao-travada').waitFor();
 assert.equal(await p.locator('[data-testid^="rm-produto-"]').count(), 0);

@@ -2,6 +2,8 @@
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import { salvarAtender } from './e2e-util.mjs';
+// O seletor de profissionais é único e recolhe ao escolher: abre a lista se estiver fechada e devolve o item.
+const filtroProf = async (p, id) => { const it = p.getByTestId(`filtro-${id}`); if (!(await it.isVisible().catch(() => false))) await p.getByTestId('filtro-abrir').click(); return it; };
 
 const b = await chromium.launch();
 const erros = [];
@@ -45,7 +47,7 @@ await T('com-pagar-u-pablo').click();
 await T('com-confirmar-u-pablo').click();
 assert.equal(await num('com-apagar-u-pablo'), 0);
 await T('nav-agenda').click();
-await T('filtro-u-pablo').click();
+await (await filtroProf(p, 'u-pablo')).click();
 await p.getByTestId('evento').filter({ hasText: 'Venda de produtos' }).first().click();
 await T('comissao-travada').waitFor();
 assert.equal(await p.locator('[data-testid^="rm-produto-"]').count(), 0);

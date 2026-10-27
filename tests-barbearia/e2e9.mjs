@@ -1,5 +1,7 @@
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
+// O seletor de profissionais é único e recolhe ao escolher: abre a lista se estiver fechada e devolve o item.
+const filtroProf = async (p, id) => { const it = p.getByTestId(`filtro-${id}`); if (!(await it.isVisible().catch(() => false))) await p.getByTestId('filtro-abrir').click(); return it; };
 const b = await chromium.launch();
 const erros = [];
 const novo = async (w, h, scheme = 'light') => {
@@ -81,7 +83,7 @@ const arq = (nome) => ({ name: nome, mimeType: 'application/octet-stream', buffe
   await T('atender-srv-s-maquina').check(); await T('atender-srv-s-barba').check();
   await T('atender-status-confirmado').check();
   await T('salvar-atender').click();
-  await T('filtro-u-tailuan').click();
+  await (await filtroProf(p, 'u-tailuan')).click();
   await p.locator('[data-testid=evento][title*="16:00 Marcelo"]').first().click();
   await T('pix-divisao').waitFor();
   assert.match(await T('pix-divisao').innerText(), /2 Pix/);

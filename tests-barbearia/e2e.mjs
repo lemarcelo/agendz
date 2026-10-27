@@ -1,6 +1,8 @@
 import { chromium } from 'playwright';
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
+// O seletor de profissionais é único e recolhe ao escolher: abre a lista se estiver fechada e devolve o item.
+const filtroProf = async (p, id) => { const it = p.getByTestId(`filtro-${id}`); if (!(await it.isVisible().catch(() => false))) await p.getByTestId('filtro-abrir').click(); return it; };
 const html = '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"></head><body>' + fs.readFileSync('dist/agenda-barbearia.html', 'utf8') + '</body></html>';
 fs.writeFileSync('dist/index.html', html);
 const b = await chromium.launch();
@@ -39,10 +41,10 @@ await T('gaveta').waitFor(); await shot('05-gaveta'); ok('gaveta abre ao clicar 
 await p.keyboard.press('Escape');
 
 // filtro por barbeiro
-await T('filtro-u-kiko').click();
+await (await filtroProf(p, 'u-kiko')).click();
 const evs = await T('evento').evaluateAll((els) => els.length);
 assert.ok(evs >= 1); ok('filtro por barbeiro');
-await T('filtro-u-alan').click();
+await (await filtroProf(p, 'u-alan')).click();
 
 // novo agendamento pelo painel: conflito com pendente
 await T('atender').click();

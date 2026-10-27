@@ -3,9 +3,10 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Avatar, Icon } from './common.jsx';
 import { fmtDateShort, fmtHM, sameDay } from '../domain/time.js';
 import { BotaoRemover, useGestosSelecao } from './selecao.jsx';
-import { rot } from '../domain/tipos.js';
+import { rot, rots } from '../domain/tipos.js';
 
-// Com muitos profissionais os cartões lado a lado não cabem: este seletor mostra de quem é a agenda aberta e abre uma lista com busca.
+// Seletor único e compacto (qualquer número de profissionais, qualquer largura): mostra de quem é a agenda aberta, com a seta à direita; a lista abre ao tocar e RECOLHE ao escolher.
+// "Todos" = nenhum profissional marcado. Nome comprido é cortado com reticências (nunca se sobrepõe a outro botão).
 // Clique escolhe um só (troca a agenda). Segurar, dois cliques (só mouse) ou Ctrl/Shift + clique junta vários sem fechar a lista; o X tira só aquele.
 export const LIMITE_CARTOES = 6;
 
@@ -34,8 +35,8 @@ export default function SeletorProfissionais({ profissionais, selecionados, onEs
       <div className="seletor-linha">
         <button type="button" className="filtro seletor-botao on" onClick={() => setAberto(!aberto)} aria-expanded={aberto} aria-haspopup="listbox" data-testid="filtro-abrir">
           {atual ? <Avatar nome={atual.apelido || atual.nome} foto={atual.foto} chave={atual.id} /> : <span className="avatar avatar-todos"><Icon n="users" size={16} /></span>}
-          <span className="filtro-txt"><b>{atual ? `${atual.apelido || atual.nome}${marcados.length > 1 ? ` +${marcados.length - 1}` : ''}` : `Escolher ${rot('profissional')}`}</b><small>{profissionais.length} no total · toque para trocar</small></span>
-          <Icon n={aberto ? 'up' : 'down'} size={16} />
+          <span className="filtro-txt"><b title={atual ? `${atual.apelido || atual.nome}` : undefined}>{atual ? `${atual.apelido || atual.nome}${marcados.length > 1 ? ` +${marcados.length - 1}` : ''}` : `Todos`}</b><small>{atual ? `${profissionais.length} no total · toque para trocar` : `${profissionais.length} ${profissionais.length === 1 ? rot('profissional') : rots('profissional')} · toque para trocar`}</small></span>
+          <span className="seletor-seta"><Icon n={aberto ? 'up' : 'down'} size={16} /></span>
         </button>
       </div>
       {marcados.length > 1 && (
@@ -52,6 +53,15 @@ export default function SeletorProfissionais({ profissionais, selecionados, onEs
             <span className="muted">{lista.length} {lista.length === 1 ? 'resultado' : 'resultados'}</span>
           </div>
           <ul className="seletor-lista">
+            {!busca.trim() && (
+              <li>
+                <button type="button" role="option" aria-selected={!selecionados.length} aria-pressed={!selecionados.length} className={`seletor-item ${!selecionados.length ? 'on' : ''}`} onClick={() => escolher('')} data-testid="filtro-todos">
+                  <span className={`caixa ${!selecionados.length ? 'on' : ''}`} aria-hidden="true">{!selecionados.length && <Icon n="check" size={12} stroke={3} />}</span>
+                  <span className="avatar avatar-todos"><Icon n="users" size={16} /></span>
+                  <span className="filtro-txt"><b>Todos</b><small>{profissionais.length} {profissionais.length === 1 ? rot('profissional') : rots('profissional')}</small></span>
+                </button>
+              </li>
+            )}
             {lista.map((b) => {
               const on = selecionados.includes(b.id);
               const p = proximo(b.id);
