@@ -2,6 +2,7 @@ package br.com.agendz.onboarding;
 
 import br.com.agendz.erro.ErroDeNegocio;
 import br.com.agendz.escala.EscalaService;
+import br.com.agendz.escala.EscalaService.Dia;
 import br.com.agendz.escala.EscalaService.Escala;
 import br.com.agendz.escala.EscalaService.Faixa;
 import br.com.agendz.onboarding.CatalogoDeServicos.Catalogo;
@@ -84,7 +85,7 @@ public class OnboardingController {
     }
 
     /** `semana` ausente ou sem nenhum dia aberto = pular (nada é gravado). */
-    public record Expediente(Map<Integer, @Valid EscalaService.Dia> semana) {
+    public record Expediente(Map<Integer, @Valid Dia> semana) {
     }
 
     private record Linha(String passo, boolean concluido) {

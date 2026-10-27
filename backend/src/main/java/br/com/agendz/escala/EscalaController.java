@@ -1,6 +1,7 @@
 package br.com.agendz.escala;
 
 import br.com.agendz.erro.ErroDeNegocio;
+import br.com.agendz.escala.EscalaService.Dia;
 import br.com.agendz.escala.EscalaService.Escala;
 import br.com.agendz.escala.EscalaService.Faixa;
 import br.com.agendz.tenant.Loja;
@@ -30,7 +31,7 @@ import org.springframework.web.bind.annotation.RestController;
 @PreAuthorize("hasAnyRole('DONO','PROFISSIONAL')")
 public class EscalaController {
 
-    public record CorpoEscala(@NotNull Map<Integer, @Valid EscalaService.Dia> semana) {
+    public record CorpoEscala(@NotNull Map<Integer, @Valid Dia> semana) {
     }
 
     private final LojaJdbc banco;
