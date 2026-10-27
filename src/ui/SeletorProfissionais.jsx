@@ -8,8 +8,6 @@ import { rot, rots } from '../domain/tipos.js';
 // Seletor único e compacto (qualquer número de profissionais, qualquer largura): mostra de quem é a agenda aberta, com a seta à direita; a lista abre ao tocar e RECOLHE ao escolher.
 // "Todos" = nenhum profissional marcado. Nome comprido é cortado com reticências (nunca se sobrepõe a outro botão).
 // Clique escolhe um só (troca a agenda). Segurar, dois cliques (só mouse) ou Ctrl/Shift + clique junta vários sem fechar a lista; o X tira só aquele.
-export const LIMITE_CARTOES = 6;
-
 export default function SeletorProfissionais({ profissionais, selecionados, onEscolher, onAlternar, onRemover, contagemHoje, proximo, agora }) {
   const [aberto, setAberto] = useState(false);
   const [busca, setBusca] = useState('');

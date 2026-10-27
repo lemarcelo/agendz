@@ -1,5 +1,15 @@
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
+// A Agenda mostra um dia por vez (v73): procura o cartão hoje, depois nos dias seguintes e nos anteriores, e devolve o primeiro que achar.
+const irAteCartao = async (p, seletor, dias = 21) => {
+  const alvo = p.locator(seletor);
+  await p.getByTestId('agenda-modo-horarios').click().catch(() => {});
+  for (const dir of ['Próximo', 'Anterior']) {
+    await p.getByRole('button', { name: 'Hoje', exact: true }).click();
+    for (let i = 0; i <= dias; i++) { if (await alvo.count()) return alvo.first(); await p.getByRole('button', { name: dir, exact: true }).click(); }
+  }
+  throw new Error('cartão não encontrado em ±' + dias + ' dias: ' + seletor);
+};
 const b = await chromium.launch();
 const erros = [];
 const novo = async (w, h, scheme = 'light') => {
@@ -31,7 +41,7 @@ const ok = (m) => console.log('✓', m);
   await p.waitForTimeout(400);
   await p.screenshot({ path: 'shots/71-apos-salvar.png' });
   // abrir ficha
-  await p.locator('[data-testid=evento][title^="09:00 Igor"][title*="máquina"]').first().click();
+  await (await irAteCartao(p, '[data-testid=cartao][title^="09:00 Igor"][title*="máquina"]')).click();
   const g = await T('valores-gaveta').innerText();
   console.log(g);
   assert.doesNotMatch(g, /Acr/);

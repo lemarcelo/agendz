@@ -773,3 +773,14 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
 /* Nome da plataforma (Agendz) no rodapé do login e da página do cliente; o nome da loja é o do cadastro */
 .rodape-plataforma { margin: 0; text-align: center; font-size: 12px; letter-spacing: 0.08em; color: var(--muted); opacity: 0.8; }
 .login > .rodape-plataforma { position: absolute; left: 0; right: 0; bottom: 14px; }
+
+/* ---- Agenda em cartões (v73): Horários e Calendário ---- */
+.agenda-topo { display: grid; gap: 10px; }
+.agenda-acoes { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.agenda-acoes .btn-link-agendar { margin-inline: 0; }
+.agenda-modos { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+.agenda-modos button { min-height: 44px; font-size: 15px; }
+.agenda-horarios { display: grid; gap: 10px; }
+.agenda-titulo-dia { display: flex; align-items: center; gap: 8px; margin: 4px 0 0; font-size: 15px; }
+.agenda-cartoes { grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
+@media (min-width: 761px) { .agenda-modos { width: min(100%, 360px); } }

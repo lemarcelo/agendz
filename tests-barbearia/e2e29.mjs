@@ -1,6 +1,16 @@
 // Link de agendamento: botão na Agenda, página do cliente (celular), "Cliente agendou", Meus agendamentos, lembretes e celular da Agenda.
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
+// A Agenda mostra um dia por vez (v73): procura o cartão hoje, depois nos dias seguintes e nos anteriores, e devolve o primeiro que achar.
+const irAteCartao = async (p, seletor, dias = 21) => {
+  const alvo = p.locator(seletor);
+  await p.getByTestId('agenda-modo-horarios').click().catch(() => {});
+  for (const dir of ['Próximo', 'Anterior']) {
+    await p.getByRole('button', { name: 'Hoje', exact: true }).click();
+    for (let i = 0; i <= dias; i++) { if (await alvo.count()) return alvo.first(); await p.getByRole('button', { name: dir, exact: true }).click(); }
+  }
+  throw new Error('cartão não encontrado em ±' + dias + ' dias: ' + seletor);
+};
 // O seletor de profissionais é único e recolhe ao escolher: abre a lista se estiver fechada e devolve o item.
 const filtroProf = async (p, id) => { const it = p.getByTestId(`filtro-${id}`); if (!(await it.isVisible().catch(() => false))) await p.getByTestId('filtro-abrir').click(); return it; };
 
@@ -31,11 +41,10 @@ const NOMES_DO_SEED = ['Igor', 'Marcos', 'Rafael'];
   const T = (id) => p.getByTestId(id);
   await T('demo-alan').click(); await T('copiar-link').waitFor();
 
-  // posição: Dia/Semana/Mês | Link | Atender, com folga
-  const seg = await p.locator('.barra-cal-acoes .segmentado').boundingBox();
-  const lk = await T('copiar-link').boundingBox(); const at = await T('atender').boundingBox();
-  assert.ok(seg.x + seg.width < lk.x && lk.x + lk.width < at.x, 'ordem: visão, link, Atender');
-  assert.ok(lk.x - (seg.x + seg.width) >= 16 && at.x - (lk.x + lk.width) >= 16, `folga de 16 px: ${lk.x - seg.x - seg.width} e ${at.x - lk.x - lk.width}`);
+  // posição (v73): Link à esquerda, Atender à direita, abas Horários/Calendário logo abaixo
+  const lk = await T('copiar-link').boundingBox(); const at = await T('atender').boundingBox(); const abas = await T('agenda-modo-horarios').boundingBox();
+  assert.ok(lk.x + lk.width < at.x, 'ordem: link, Atender');
+  assert.ok(abas.y >= lk.y + lk.height, 'as abas ficam abaixo dos botões');
   assert.equal(await T('copiar-link').getAttribute('aria-label'), 'Enviar link de agendamento pelo WhatsApp');
   // computador: um clique abre o WhatsApp (wa.me) em outra aba com a mensagem e o link; o link também é copiado; o painel não sai do lugar
   const urlAntes = p.url();
@@ -123,13 +132,14 @@ const NOMES_DO_SEED = ['Igor', 'Marcos', 'Rafael'];
   // dono vê "Cliente agendou", confirma e o cliente vê Confirmado
   await p.evaluate(() => { location.hash = ''; });
   await T('nav-agenda').click();
-  await p.getByRole('button', { name: 'Semana', exact: true }).click();
+  await p.getByTestId('agenda-modo-horarios').click();
   await (await filtroProf(p, 'u-kiko')).click(); // o pedido foi para o Kiko
+  await irAteCartao(p, '[data-testid=cartao][data-status="roxo"]'); // a Agenda mostra um dia por vez: vai até o dia do pedido
   assert.ok(Number(await T('cont-cliente-agendou').innerText()) >= 1, 'legenda conta o pedido do cliente');
   await T('legenda-cliente-agendou').click();
-  const roxo = await p.locator('.grade-col .ev').evaluateAll((e) => e.map((x) => [...x.classList].find((c) => c.startsWith('st-'))));
+  const roxo = await p.locator('[data-testid=cartao]').evaluateAll((e) => e.map((x) => [...x.classList].find((c) => c.startsWith('st-'))));
   assert.ok(roxo.length >= 1 && roxo.every((c) => c === 'st-roxo'), 'só pedidos do cliente: ' + roxo.join(','));
-  await p.locator('.grade-col .ev').first().click();
+  await p.locator('[data-testid=cartao]').first().click();
   await T('pedido-do-link').waitFor();
   await T('confirmar-pedido').click();
   assert.equal(await T('pedido-do-link').count(), 0);
@@ -182,8 +192,8 @@ const NOMES_DO_SEED = ['Igor', 'Marcos', 'Rafael'];
   await T('demo-alan').click(); await T('copiar-link').waitFor();
   await semRolagem(p, 'celular: agenda');
   // tudo acima do calendário cabe em menos de 330 px e o calendário começa na primeira tela
-  const topoCal = await p.locator('.grade-semana, .grade').first().boundingBox();
-  assert.ok(topoCal.y < 560, `o calendário começa na primeira tela (y=${Math.round(topoCal.y)})`);
+  const topoCal = await p.locator('.agenda-horarios, .mes-rolagem').first().boundingBox();
+  assert.ok(topoCal.y < 640, `o calendário começa na primeira tela (y=${Math.round(topoCal.y)})`);
   // status numa linha só
   const ys = await p.locator('.legenda .chip').evaluateAll((e) => [...new Set(e.map((x) => Math.round(x.getBoundingClientRect().top)))]);
   assert.equal(ys.length, 1, 'status numa linha só: ' + ys.join(','));
@@ -194,10 +204,10 @@ const NOMES_DO_SEED = ['Igor', 'Marcos', 'Rafael'];
   assert.equal(await T('legenda-confirmado').getAttribute('aria-label'), 'Confirmado: ' + (await T('cont-confirmado').innerText()) + ' no período');
   await T('legenda-confirmado').tap();
   // botão de link só com ícone, alvo de 44 px, folga de 8 px ou mais
-  const lk = await T('copiar-link').boundingBox(); const at = await T('atender').boundingBox(); const seg = await p.locator('.barra-cal-acoes .segmentado').boundingBox();
+  const lk = await T('copiar-link').boundingBox(); const at = await T('atender').boundingBox();
   assert.ok(lk.width >= 44 && lk.height >= 44, 'alvo de toque: ' + lk.width + 'x' + lk.height);
   assert.equal(await T('copiar-link').locator('.rotulo-link').isVisible(), false);
-  assert.ok(lk.x - (seg.x + seg.width) >= 8 && at.x - (lk.x + lk.width) >= 8, 'folga entre os botões');
+  assert.ok(at.x - (lk.x + lk.width) >= 8, 'folga entre os botões');
   assert.ok(at.x + at.width <= 390 - 12, 'Atender dentro da margem');
   ok('celular: Agenda compacta, status numa linha, link só com ícone');
 

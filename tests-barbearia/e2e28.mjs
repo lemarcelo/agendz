@@ -36,7 +36,7 @@ async function segurarToque(p, ctx, loc, ms = 700) {
   const { ctx, p } = await abrir({ width: 1440, height: 900 });
   const T = (id) => p.getByTestId(id);
   await T('demo-alan').click(); await T('nav-agenda').waitFor();
-  await p.getByRole('button', { name: 'Mês', exact: true }).click();
+  await p.getByTestId('agenda-modo-calendario').click();
 
   // status: clique escolhe um só
   await T('legenda-confirmado').click();

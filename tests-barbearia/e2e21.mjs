@@ -47,7 +47,7 @@ for (const [nome, vp, touch] of [['computador', { width: 1280, height: 800 }, fa
   await T('salvar-atender').waitFor({ state: 'detached' });
   // aparece na agenda como venda de produtos, no dia de hoje, e a gaveta mostra a comissão do vendedor
   await (await filtroProf(p, 'u-kiko')).click(); // a venda ficou na coluna do vendedor
-  const ev = p.getByTestId('evento').filter({ hasText: 'Venda de produtos' });
+  const ev = p.getByTestId('cartao').filter({ hasText: 'Venda de produtos' });
   await ev.first().click();
   const g = T('gaveta');
   await g.waitFor();

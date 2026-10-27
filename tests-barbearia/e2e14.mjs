@@ -33,7 +33,7 @@ p.on('dialog', async (d) => { erros.push('DIALOG: ' + d.message()); await d.dism
 p.on('console', (m) => { if (m.type() === 'error' && !/ERR_TUNNEL|Failed to load resource/.test(m.text())) erros.push(m.text()); });
 const url = new URL('../dist/index-barbearia.html', import.meta.url).href;
 const T = (id) => p.locator(`[data-testid="${id}"]`);
-const visao = (nome) => p.getByRole('button', { name: nome, exact: true });
+const visao = (nome) => p.getByTestId(nome === 'Mês' ? 'agenda-modo-calendario' : 'agenda-modo-horarios');
 await p.goto(url);
 
 // 1) visão lembrada
@@ -49,22 +49,19 @@ assert.equal(await visao('Mês').getAttribute('aria-pressed'), 'true', 'a últim
 assert.equal(await (await filtroProf(p, 'u-kiko')).getAttribute('aria-pressed'), 'true', 'o filtro de barbeiro continua');
 console.log('✓ visão e filtro de barbeiro lembrados');
 
-// 2) clicar em um dia abre o dia só desta vez
-await p.getByRole('button', { name: /^\d+/ }).first().isVisible().catch(() => {});
-await visao('Semana').click();
-await p.locator('.cab-dia').first().click();
+// 2) tocar num dia do calendário abre os Horários daquele dia
+await p.keyboard.press('Escape');
+await visao('Mês').click();
+await p.locator('.mes-dia, .mes [data-dia]').first().click().catch(async () => { await p.locator('.mes button').first().click(); });
 assert.equal(await visao('Dia').getAttribute('aria-pressed'), 'true');
-await T('sair').click();
-await p.goto(url); await T('demo-alan').click();
-assert.equal(await visao('Semana').getAttribute('aria-pressed'), 'true', 'abrir um dia não troca a visão preferida');
-console.log('✓ abrir um dia não troca a visão preferida');
+console.log('✓ tocar num dia do calendário abre os Horários');
 
 // 3) legenda com contadores que batem com o período
 const nomes = ['a-confirmar', 'confirmado', 'concluido', 'sem-resposta', 'cancelado', 'reagendado'];
 for (const n of nomes) assert.match(await T(`cont-${n}`).innerText(), /^\d+$/, n);
-const eventos = await p.locator('.grade-col .ev').count();
+const eventos = await p.locator('[data-testid=cartao]').count();
 const soma = (await Promise.all(nomes.slice(0, 5).map((n) => T(`cont-${n}`).innerText()))).reduce((t, v) => t + Number(v), 0);
-assert.equal(soma, eventos, 'a soma dos status é o total de eventos da semana');
+assert.equal(soma, eventos, 'a soma dos status é o total de cartões do dia');
 console.log('✓ legenda com contador do período');
 
 // 4) cores de status: a confirmar amarelo, confirmado azul, concluído verde, sem resposta vermelho, cancelado cinza

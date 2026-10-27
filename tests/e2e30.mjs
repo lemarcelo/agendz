@@ -21,8 +21,8 @@ const ok = (m) => console.log('✓', m);
 const semRolagem = async (p, onde) => { const [sw, iw] = await p.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth]); assert.ok(sw <= iw, `${onde}: rolagem horizontal (${sw} > ${iw})`); };
 const fundo = (p) => p.evaluate(() => getComputedStyle(document.body).backgroundColor);
 async function abrirEvento(p, nome) {
-  await p.getByRole('button', { name: 'Semana', exact: true }).click();
-  const ev = p.locator('[data-testid=evento]', { hasText: nome }).first();
+  await p.getByTestId('agenda-modo-horarios').click();
+  const ev = p.locator('[data-testid=cartao]', { hasText: nome }).first();
   for (let i = 0; i < 3 && !(await ev.count()); i++) { await p.getByRole('button', { name: /Próxim/ }).first().click(); }
   await ev.click();
 }
@@ -160,7 +160,7 @@ const dinheiro = (t) => Number(t.replace(/[^\d,]/g, '').replace(',', '.'));
   await p.keyboard.press('Escape');
   // a legenda conta o marcador e filtra
   await T('legenda-pronto').click();
-  assert.equal(await p.locator('[data-testid=evento]').count() >= 1, true);
+  assert.equal(await p.locator('[data-testid=cartao]').count() >= 1, true);
   ok('painel: Iniciar serviço, Pronto para retirada, desfazer e filtro pela legenda');
   await semRolagem(p, 'computador: agenda');
   await p.screenshot({ path: 'shots/e2e30-desktop.png' });

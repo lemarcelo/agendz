@@ -2,6 +2,16 @@ import { chromium } from 'playwright';
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import { waServico, waVeiculoNovo } from './e2e-util.mjs';
+// A Agenda mostra um dia por vez (v73): procura o cartão hoje, depois nos dias seguintes e nos anteriores, e devolve o primeiro que achar.
+const irAteCartao = async (p, seletor, dias = 21) => {
+  const alvo = p.locator(seletor);
+  await p.getByTestId('agenda-modo-horarios').click().catch(() => {});
+  for (const dir of ['Próximo', 'Anterior']) {
+    await p.getByRole('button', { name: 'Hoje', exact: true }).click();
+    for (let i = 0; i <= dias; i++) { if (await alvo.count()) return alvo.first(); await p.getByRole('button', { name: dir, exact: true }).click(); }
+  }
+  throw new Error('cartão não encontrado em ±' + dias + ' dias: ' + seletor);
+};
 // O seletor de profissionais é único e recolhe ao escolher: abre a lista se estiver fechada e devolve o item.
 const filtroProf = async (p, id) => { const it = p.getByTestId(`filtro-${id}`); if (!(await it.isVisible().catch(() => false))) await p.getByTestId('filtro-abrir').click(); return it; };
 const html = '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"></head><body>' + fs.readFileSync('dist/agenda.html', 'utf8') + '</body></html>';
@@ -28,23 +38,22 @@ await T('login-senha').fill('1234'); await T('login-entrar').click();
 await T('filtro-abrir').waitFor(); ok('login do dono por apelido');
 
 // vista Dia
-await p.getByRole('button', { name: 'Dia', exact: true }).click();
+await p.getByTestId('agenda-modo-horarios').click();
 await p.getByRole('button', { name: 'Próximo' }).click();
 await shot('03-dia');
 assert.ok((await T('cartao').count()) >= 1); ok('vista dia lista cartões do dia');
 // mês
-await p.getByRole('button', { name: 'Mês', exact: true }).click();
+await p.getByTestId('agenda-modo-calendario').click();
 await shot('04-mes'); ok('vista mês');
 // semana → clicar evento → gaveta
-await p.getByRole('button', { name: 'Semana', exact: true }).click();
-await T('evento').first().click();
+await p.getByTestId('agenda-modo-horarios').click();
+await (await irAteCartao(p, '[data-testid=\"cartao\"]')).click();
 await T('gaveta').waitFor(); await shot('05-gaveta'); ok('gaveta abre ao clicar no evento');
 await p.keyboard.press('Escape');
 
 // filtro por esteticista
 await (await filtroProf(p, 'u-pablo')).click();
-const evs = await T('evento').evaluateAll((els) => els.length);
-assert.ok(evs >= 1); ok('filtro por esteticista');
+await irAteCartao(p, '[data-testid=cartao]'); ok('filtro por esteticista'); // há agendamento deste profissional em algum dia próximo
 await (await filtroProf(p, 'u-davi')).click();
 
 // novo agendamento pelo painel: conflito com pendente

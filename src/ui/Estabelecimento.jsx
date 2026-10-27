@@ -207,9 +207,6 @@ export default function Estabelecimento({ user }) {
             <Campo rotulo="Telefone"><input value={dados.telefone} onChange={(x) => setDados({ ...dados, telefone: x.target.value })} /></Campo>
             <Campo rotulo="Endereço" className="campo-largo" dica="Aparece na página de agendamento do cliente."><input value={dados.endereco} maxLength={200} onChange={(x) => setDados({ ...dados, endereco: x.target.value })} data-testid="est-endereco" /></Campo>
             <Campo rotulo={`E-mail (Google Agenda da ${rot('loja')})`}><input type="email" value={dados.email} onChange={(x) => setDados({ ...dados, email: x.target.value })} /></Campo>
-            <Campo rotulo="Visualização padrão da agenda">
-              <select value={dados.visaoPadrao} onChange={(x) => setDados({ ...dados, visaoPadrao: x.target.value })}><option value="dia">Dia</option><option value="semana">Semana</option><option value="mes">Mês</option></select>
-            </Campo>
             <div className="campo-largo"><SeletorGrupo st={st} valor={dados.grupoMovimentacaoId} onChange={(v) => setDados({ ...dados, grupoMovimentacaoId: v })} rotulo="Grupo de movimentação padrão" dica="A conta responsável por este grupo recebe os serviços e paga as despesas que não têm grupo próprio. Cada serviço e cada despesa pode escolher outro grupo." testid="estab-grupo" /></div>
             <div className="campo-largo"><Btn variante="primario" onClick={salvarDados} data-testid="salvar-dados">Salvar dados</Btn></div>
           </div>

@@ -107,7 +107,7 @@ const semRolagem = async (p, onde) => {
 
   // legenda: segura e muda a ordem; clicar filtra o calendário
   await T('nav-agenda').click();
-  await p.getByRole('button', { name: 'Mês', exact: true }).click();
+  await p.getByTestId('agenda-modo-calendario').click();
   const leg0 = await ordemTestIds(p, '.legenda button[data-testid^="legenda-"]');
   assert.equal(leg0[0], 'legenda-a-confirmar');
   await arrastarMouse(p, T('legenda-cancelado'), T('legenda-a-confirmar'), 'antes');
@@ -131,13 +131,13 @@ const semRolagem = async (p, onde) => {
   const duas = await p.locator('.mes-ponto').evaluateAll((els) => (els.map((e) => [...e.classList].find((c) => c.startsWith('st-')))));
   assert.ok([...duas].every((c) => ['st-azul', 'st-cinza'].includes(c)));
   // vale também no dia
-  await p.getByRole('button', { name: 'Dia', exact: true }).click();
+  await p.getByTestId('agenda-modo-horarios').click();
   const cart = await p.locator('[data-testid="cartao"]').evaluateAll((els) => els.map((e) => [...e.classList].find((c) => c.startsWith('st-'))));
   assert.ok(cart.every((c) => ['st-azul', 'st-cinza'].includes(c)), 'no dia só aparecem os casos escolhidos: ' + cart.join(','));
   await T('legenda-limpar').click();
   assert.equal(await T('filtro-ativo').count(), 0);
   assert.equal(await T('legenda-confirmado').getAttribute('aria-pressed'), 'false');
-  await p.getByRole('button', { name: 'Mês', exact: true }).click();
+  await p.getByTestId('agenda-modo-calendario').click();
   assert.equal(await p.locator('.mes-ponto').count(), totalPontos, 'sem filtro volta tudo');
 
   // restaurar ordem padrão

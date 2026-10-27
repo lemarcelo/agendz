@@ -39,20 +39,19 @@ for (const [nome, vp, touch] of [['computador', { width: 1280, height: 800 }, fa
   assert.equal(await p.locator('.filtros .filtro').count(), 0, `${nome}: sem 15 cartões lado a lado`);
   await semRolagem(p, `${nome}: agenda`);
   // dia com todos
-  await p.getByRole('button', { name: 'Dia', exact: true }).click().catch(() => {});
+  await p.getByTestId('agenda-modo-horarios').click().catch(() => {});
   await p.waitForTimeout(150);
-  const cols = await p.locator('[data-testid^="coluna-"]').count();
-  assert.equal(cols, 1, `${nome}: o dia mostra só a agenda de um esteticista (${cols})`);
+  assert.equal(await T('agenda-horarios').isVisible(), true, `${nome}: os Horários do dia aparecem`);
   await semRolagem(p, `${nome}: dia cheio`);
   // miniatura do esteticista nos eventos
   // semana também aparece no celular (rolagem fica dentro da grade)
-  await p.getByRole('button', { name: 'Semana', exact: true }).click();
+  await p.getByTestId('agenda-modo-horarios').click();
   await p.waitForTimeout(150);
-  assert.ok(await p.getByRole('button', { name: 'Semana', exact: true }).isVisible(), `${nome}: botão Semana visível`);
-  assert.ok(await p.locator('.grade-semana').count(), `${nome}: grade da semana`);
+  assert.ok(await p.getByTestId('agenda-modo-horarios').isVisible(), `${nome}: aba Horários visível`);
+  assert.ok(await p.getByTestId('agenda-horarios').isVisible(), `${nome}: Horários do dia`);
   await semRolagem(p, `${nome}: semana`);
   await p.screenshot({ path: new URL(`../shots/semana-${nome}.png`, import.meta.url).pathname });
-  await p.getByRole('button', { name: 'Dia', exact: true }).click();
+  await p.getByTestId('agenda-modo-horarios').click();
   await p.waitForTimeout(150);
   await p.screenshot({ path: new URL(`../shots/muitos-${nome}.png`, import.meta.url).pathname });
 
@@ -65,10 +64,10 @@ for (const [nome, vp, touch] of [['computador', { width: 1280, height: 800 }, fa
   assert.equal(await p.locator('.seletor-item').count(), 1);
   await p.locator('.seletor-item').first().click();
   await T('seletor-painel').waitFor({ state: 'detached' });
-  assert.equal(await p.locator('[data-testid^="coluna-"]').count(), 1, `${nome}: uma coluna`);
+  assert.match(await T('filtro-abrir').innerText(), /Rafa/i, `${nome}: escolheu a Rafa`);
   await T('filtro-abrir').click();
   await p.locator('.seletor-item').nth(2).click();
-  assert.equal(await p.locator('[data-testid^="coluna-"]').count(), 1, `${nome}: trocou, não somou`);
+  assert.doesNotMatch(await T('filtro-abrir').innerText(), /\+\d/, `${nome}: trocou, não somou`);
   assert.equal(await T('filtro-qualquer').count(), 0, `${nome}: não existe mais "Qualquer"`);
   await p.screenshot({ path: new URL(`../shots/seletor-${nome}.png`, import.meta.url).pathname });
   await ctx.close();

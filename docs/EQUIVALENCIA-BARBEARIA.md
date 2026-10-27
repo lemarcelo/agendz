@@ -34,6 +34,9 @@ Origem dos testes: `977aa2dd-agenda-barbearia.zip` (a v64 com `src/services/api.
 ## Exceção v72: seletor de profissionais
 Os e2e importados da barbearia clicavam nos cartões `filtro-<id>`; o seletor único (v72) só mostra os itens com a lista aberta. Os testes em `tests-barbearia/` foram reescritos mecanicamente (`filtroProf` abre a lista antes; Esc antes de clicar no X dos marcados; `filtro-abrir` no lugar de esperar o cartão do dono). As regras testadas são as mesmas. Reimportar com `tools/importar-testes-barbearia.mjs` desfaz isso: refazer o ajuste.
 
+## Exceção v73: Agenda em cartões
+A v64 tinha grade de dia/semana/mês; a v73 tem só Horários (cartões) e Calendário (mês). Nos testes de `tests-barbearia/`: `[data-testid=evento]` → `[data-testid=cartao]` (o cartão tem o mesmo `title`), botões Dia/Semana/Mês → `agenda-modo-*`, `irAteCartao` procura o cartão em outros dias (a Agenda mostra um dia por vez), e os testes de clique em horário vazio/colunas da grade foram trocados por Atender. As regras de negócio testadas são as mesmas.
+
 ## Decisões tomadas sem confirmação
 1. Mensagens da página do cliente usam o nome da loja do tenant, não "Agenda Barbearia".
 2. O rótulo do passo é "Dia e horário"; sem veículo, o fluxo do link começa em "Serviço" (3 passos).

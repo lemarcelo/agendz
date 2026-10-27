@@ -31,7 +31,7 @@ for (const k of ['a-confirmar', 'confirmado', 'concluido', 'sem-resposta', 'canc
 await T('legenda-reagendado').scrollIntoViewIfNeeded();
 const rb = await T('legenda-reagendado').boundingBox();
 assert.ok(rb && rb.x + rb.width <= 390, 'legenda reagendado fora da tela');
-await p.getByRole('button', { name: 'Mês', exact: true }).click();
+await p.getByTestId('agenda-modo-calendario').click();
 await p.waitForTimeout(200);
 const pontos = await p.locator('.mes-ponto').count();
 assert.ok(pontos > 0, 'o mês mostra a contagem por status');

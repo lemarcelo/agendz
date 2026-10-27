@@ -2,6 +2,16 @@
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import { salvarAtender } from './e2e-util.mjs';
+// A Agenda mostra um dia por vez (v73): procura o cartão hoje, depois nos dias seguintes e nos anteriores, e devolve o primeiro que achar.
+const irAteCartao = async (p, seletor, dias = 21) => {
+  const alvo = p.locator(seletor);
+  await p.getByTestId('agenda-modo-horarios').click().catch(() => {});
+  for (const dir of ['Próximo', 'Anterior']) {
+    await p.getByRole('button', { name: 'Hoje', exact: true }).click();
+    for (let i = 0; i <= dias; i++) { if (await alvo.count()) return alvo.first(); await p.getByRole('button', { name: dir, exact: true }).click(); }
+  }
+  throw new Error('cartão não encontrado em ±' + dias + ' dias: ' + seletor);
+};
 // O seletor de profissionais é único e recolhe ao escolher: abre a lista se estiver fechada e devolve o item.
 const filtroProf = async (p, id) => { const it = p.getByTestId(`filtro-${id}`); if (!(await it.isVisible().catch(() => false))) await p.getByTestId('filtro-abrir').click(); return it; };
 
@@ -48,7 +58,7 @@ await T('com-confirmar-u-pablo').click();
 assert.equal(await num('com-apagar-u-pablo'), 0);
 await T('nav-agenda').click();
 await (await filtroProf(p, 'u-pablo')).click();
-await p.getByTestId('evento').filter({ hasText: 'Venda de produtos' }).first().click();
+await (await irAteCartao(p, '[data-testid=cartao]:has-text(\"Venda de produtos\")')).click();
 await T('comissao-travada').waitFor();
 assert.equal(await p.locator('[data-testid^="rm-produto-"]').count(), 0);
 assert.equal(await T('add-servico-sel').count(), 0);

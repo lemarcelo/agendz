@@ -1,5 +1,15 @@
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
+// A Agenda mostra um dia por vez (v73): procura o cartão hoje, depois nos dias seguintes e nos anteriores, e devolve o primeiro que achar.
+const irAteCartao = async (p, seletor, dias = 21) => {
+  const alvo = p.locator(seletor);
+  await p.getByTestId('agenda-modo-horarios').click().catch(() => {});
+  for (const dir of ['Próximo', 'Anterior']) {
+    await p.getByRole('button', { name: 'Hoje', exact: true }).click();
+    for (let i = 0; i <= dias; i++) { if (await alvo.count()) return alvo.first(); await p.getByRole('button', { name: dir, exact: true }).click(); }
+  }
+  throw new Error('cartão não encontrado em ±' + dias + ' dias: ' + seletor);
+};
 // O seletor de profissionais é único e recolhe ao escolher: abre a lista se estiver fechada e devolve o item.
 const filtroProf = async (p, id) => { const it = p.getByTestId(`filtro-${id}`); if (!(await it.isVisible().catch(() => false))) await p.getByTestId('filtro-abrir').click(); return it; };
 const b = await chromium.launch();
@@ -49,7 +59,7 @@ const pagar = async (p, T, nome, cpf) => {
   ok('serviço com avisos próprios tem a sua configuração');
 
   await T('nav-agenda').click();
-  await p.locator('[data-testid=evento][title*="14:30 Marcelo"]').first().click();
+  await (await irAteCartao(p, '[data-testid=cartao][title*="14:30 Marcelo"]')).click();
   await T('pix-gerar').click();
   await p.locator('[data-testid^=pix-codigo-]').waitFor();
   const txt = await T('bloco-pagamento').innerText();
@@ -103,7 +113,7 @@ const pagar = async (p, T, nome, cpf) => {
   await T('nav-agenda').click();
   // pendente cancelado no banco pelo botão
   await (await filtroProf(p, 'u-pablo')).click();
-  await p.locator('[data-testid=evento][title*="14:00 Marcelo"]').first().click();
+  await (await irAteCartao(p, '[data-testid=cartao][title*="14:00 Marcelo"]')).click();
   await T('pix-gerar').click();
   await p.locator('[data-testid^=pix-codigo-]').waitFor();
   const cancelar = p.locator('[data-testid^=pix-cancelar-]').first();
@@ -112,7 +122,7 @@ const pagar = async (p, T, nome, cpf) => {
   await p.keyboard.press('Escape');
   // pago e depois agendamento cancelado -> devolve via API
   await (await filtroProf(p, 'u-davi')).click();
-  await p.locator('[data-testid=evento][title*="14:30 Marcelo"]').first().click();
+  await (await irAteCartao(p, '[data-testid=cartao][title*="14:30 Marcelo"]')).click();
   await T('pix-gerar').click();
   await p.locator('[data-testid^=pix-codigo-]').waitFor();
   await pagar(p, T, 'Marcelo Santos', '284.510.937-79');
@@ -127,7 +137,7 @@ const pagar = async (p, T, nome, cpf) => {
   // outro agendamento do mesmo cliente mostra qual agendamento pago está pendente de análise
   await p.keyboard.press('Escape');
   await (await filtroProf(p, 'u-pablo')).click();
-  await p.locator('[data-testid=evento][title*="14:00 Marcelo"]').first().click();
+  await (await irAteCartao(p, '[data-testid=cartao][title*="14:00 Marcelo"]')).click();
   await T('pix-pendente-analise').waitFor();
   assert.match(await T('pix-pendente-analise').innerText(), /pendente de análise[\s\S]*cancelado/);
   await p.screenshot({ path: 'shots/102b-pendente-analise.png' });

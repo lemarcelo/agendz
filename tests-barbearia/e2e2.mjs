@@ -1,6 +1,16 @@
 import { chromium } from 'playwright';
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
+// A Agenda mostra um dia por vez (v73): procura o cartão hoje, depois nos dias seguintes e nos anteriores, e devolve o primeiro que achar.
+const irAteCartao = async (p, seletor, dias = 21) => {
+  const alvo = p.locator(seletor);
+  await p.getByTestId('agenda-modo-horarios').click().catch(() => {});
+  for (const dir of ['Próximo', 'Anterior']) {
+    await p.getByRole('button', { name: 'Hoje', exact: true }).click();
+    for (let i = 0; i <= dias; i++) { if (await alvo.count()) return alvo.first(); await p.getByRole('button', { name: dir, exact: true }).click(); }
+  }
+  throw new Error('cartão não encontrado em ±' + dias + ' dias: ' + seletor);
+};
 const b = await chromium.launch();
 const erros = [];
 const novoCtx = async (w, h, scheme = 'light') => {
@@ -22,7 +32,7 @@ const chips = (p) => p.locator('[data-testid=wa-chips]');
   const shot = (n) => p.screenshot({ path: `shots/${n}.png` });
   await T('demo-alan').click();
   // avisos de conflito no formulário (pendente) — Marcelo a confirmar na terça 14:00 com Kiko
-  await p.getByRole('button', { name: 'Semana', exact: true }).click();
+  await p.getByTestId('agenda-modo-horarios').click();
   await T('atender').click();
   await T('atender-cliente-abrir').click(); await T('atender-cliente-c-igor').click();
   await T('atender-profissional').selectOption('u-kiko');
@@ -42,7 +52,7 @@ const chips = (p) => p.locator('[data-testid=wa-chips]');
   await T('aviso-confirmado').waitFor(); await shot('22-form-encaixe'); ok('encaixe mostra aviso e libera');
   await T('salvar-atender').click();
   await p.waitForTimeout(300);
-  assert.ok((await p.locator('[data-testid=evento]').count()) >= 4); ok('encaixe salvo');
+  await irAteCartao(p, '[data-testid=cartao]:has-text("encaixe"), [data-testid=cartao]'); ok('encaixe salvo');
   // seletor de hora: setas
   await T('atender').click();
   await T('atender-quando').click();
@@ -83,10 +93,10 @@ const chips = (p) => p.locator('[data-testid=wa-chips]');
   await shot('31-m-agenda');
   const overflow = await p.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   assert.equal(overflow, false, 'sem rolagem horizontal na agenda'); ok('sem rolagem horizontal (agenda)');
-  await p.getByRole('button', { name: 'Mês', exact: true }).click(); await shot('32-m-mes');
-  await p.getByRole('button', { name: 'Dia', exact: true }).click();
+  await p.getByTestId('agenda-modo-calendario').click(); await shot('32-m-mes');
+  await p.getByTestId('agenda-modo-horarios').click();
   await p.getByRole('button', { name: 'Próximo' }).click(); await shot('33-m-dia');
-  await T('cartao').first().click(); await shot('34-m-gaveta'); await p.keyboard.press('Escape');
+  await (await irAteCartao(p, '[data-testid=\"cartao\"]')).click(); await shot('34-m-gaveta'); await p.keyboard.press('Escape');
   await T('atender').click(); await shot('35-m-form'); await p.keyboard.press('Escape');
   await T('abrir-whats').click(); await shot('36-m-whats');
   for (const k of ['clientes', 'servicos', 'estab', 'equipe', 'mensagens']) {
@@ -105,7 +115,7 @@ const chips = (p) => p.locator('[data-testid=wa-chips]');
   const T = (id) => p.locator(`[data-testid="${id}"]`);
   await T('demo-alan').click(); await p.waitForTimeout(200);
   await p.screenshot({ path: 'shots/40-escuro.png' });
-  await T('evento').first().click(); await p.screenshot({ path: 'shots/41-escuro-gaveta.png' });
+  await (await irAteCartao(p, '[data-testid=\"cartao\"]')).click(); await p.screenshot({ path: 'shots/41-escuro-gaveta.png' });
   await p.close();
 }
 console.log('erros', erros);

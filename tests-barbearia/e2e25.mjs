@@ -88,15 +88,14 @@ await p.getByRole('tab', { name: 'Regras' }).click();
 await T('obrig-local-nome').uncheck();
 ok('campos obrigatórios configuráveis');
 
-// 5) clique em horário vazio da grade abre o Atender com a data
+// 5) o botão Atender da Agenda abre o Atender com a data do dia aberto (a grade de horas saiu na v73)
 await T('nav-agenda').click();
-const col = p.locator('.grade-col').nth(2);
-const box = await col.boundingBox();
-await p.mouse.click(box.x + box.width / 2, box.y + 60);
+await T('atender').click();
+await T('atender-quando').click();
 await T('atender-data').waitFor();
 assert.match(await T('atender-data').inputValue(), /^2026-10-/);
 await p.getByRole('button', { name: 'Cancelar' }).click();
-ok('horário vazio abre o Atender com a data');
+ok('Atender abre com a data do dia');
 
 console.log('erros', erros);
 assert.deepEqual(erros, []);

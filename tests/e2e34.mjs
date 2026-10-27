@@ -66,12 +66,12 @@ for (const slug of LOJAS) {
     const seta = await p.locator('[data-testid="filtro-abrir"] .seletor-seta').boundingBox();
     const txt = await p.locator('[data-testid="filtro-abrir"] .filtro-txt').boundingBox();
     assert.ok(seta.x >= txt.x + txt.width - 1 && seta.x + seta.width <= caixa.x + caixa.width + 1, `${slug}: seta à direita, sem sobrepor o texto`);
-    const abaixo = await p.locator('.barra-cal').boundingBox();
+    const abaixo = await p.locator('.agenda-topo').boundingBox();
     assert.ok(abaixo.y >= caixa.y + caixa.height, `${slug} ${vp.width}: a barra do calendário não é coberta pelo seletor`);
     const [sw, iw] = await p.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth]);
     assert.ok(sw <= iw, `${slug} ${vp.width}: sem rolagem horizontal (${sw} > ${iw})`);
     // barra de ações (Dia/Semana/Mês, Link, Atender) dentro da tela e sem se sobrepor
-    const caixas = await p.locator('.barra-cal-acoes > *').evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return [r.x, r.x + r.width]; }));
+    const caixas = await p.locator('.agenda-acoes > *').evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return [r.x, r.x + r.width]; }));
     for (let i = 0; i < caixas.length; i++) {
       assert.ok(caixas[i][1] <= vp.width, `${slug} ${vp.width}: botão ${i} passa da tela`);
       if (i) assert.ok(caixas[i][0] >= caixas[i - 1][1] - 0.5, `${slug} ${vp.width}: botões ${i - 1} e ${i} se sobrepõem`);
