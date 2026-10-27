@@ -8,6 +8,9 @@ Esqueleto F1: **a loja vem do endereço** (`docs/F1-lojas-por-dns.md`).
 | Filtro que lê o `Host` e fixa a loja | `tenant/LojaFilter` (404 sem loja) |
 | `GET /api/publico/loja` | `publico/LojaPublicaController` |
 | Pergunta do Caddy (`ask`) | `interno/DominioPermitidoController` (`/interno/dominio-permitido?domain=`) |
+| Login, JWT e segurança | `auth/`, `seguranca/` (token com claim `loja`; 403 se for de outra loja) |
+| Clientes (primeiro recurso de negócio) | `clientes/ClienteController` |
+| Acesso ao banco com RLS | `tenant/LojaJdbc` (única porta para tabelas de negócio) |
 | Tabelas e RLS | `src/main/resources/db/migration` (V1 lojas, V2 cliente com RLS) |
 | Lojas só de dev/teste | `db/seed-dev` (perfis `dev` e `test`) |
 

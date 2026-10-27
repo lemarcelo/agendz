@@ -1,6 +1,6 @@
 # F1: a loja (tipo, dados, marca) vem do endereço usado (DNS/URL)
 
-Status: **projeto + protótipo funcionando** (`src/domain/tenant.js`, `src/services/lojas-demo.js`, `tests/tenant.test.mjs`, `tests/e2e33.mjs`). O Spring Boot, o Caddy e o banco são da F1.
+Status: **projeto + protótipo + esqueleto Spring com Gate 3 no CI (`backend/`)** (`src/domain/tenant.js`, `src/services/lojas-demo.js`, `tests/tenant.test.mjs`, `tests/e2e33.mjs`). O Spring Boot, o Caddy e o banco são da F1.
 
 ## Regra
 Quem decide a loja é **o endereço**, nunca um campo que o navegador escreve. Da loja saem o **tipo** (imutável), os **dados**, a **marca** (logo, cores) e as **permissões**. Endereço desconhecido = "loja não encontrada"; **nunca** cai em loja padrão (em produção).
@@ -40,3 +40,8 @@ Para cada rota: (a) usuário da loja A com token A pedindo id da loja B → 404 
 - Domínio da plataforma (hoje `agendz.com.br` é provisório; falta checar registro e INPI).
 - Painel no mesmo host da loja (`dalforno.agendz.com.br`) ou em `app.agendz.com.br` com login que descobre a loja? **Recomendado: mesmo host** (o `Host` já define a loja; sem tela "qual é a sua loja?").
 - Domínio próprio exige plano pago? (regra comercial.)
+
+## Como ficou no backend (27/10/2026)
+- Banco acessado só por `LojaJdbc.naLoja` (transação + `SET LOCAL ROLE agendz_app` + `set_config('app.loja_id', …, true)`); **sem Hibernate filter** (a segunda trava é o próprio RLS). Tabela de negócio nova: `loja_id NOT NULL` + política RLS (copie `V2`/`V4`) + teste em `IsolamentoNoBancoTest`.
+- Token: `JwtService` (HS256, claim `loja`, `papel`, `nome`); `ConferirLojaDoTokenFilter` devolve 403 se a loja do token difere da do Host. Segredo em `JWT_SEGREDO` (≥ 32 caracteres, a API não sobe sem ele).
+- Testes: `LojaPorEnderecoTest`, `IsolamentoEntreLojasTest`, `IsolamentoNoBancoTest`, `AutenticacaoTest`, `TenantResolverTest`.

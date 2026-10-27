@@ -61,3 +61,18 @@ Tipo imutável; loja pelo endereço; um código só com pastas por tipo; capacid
 - Backup: conta Cloudflare criada, bucket `agendz-backups` e token de conta (Object Read & Write, só esse bucket) em 27/10/2026. Scripts prontos em `deploy/backup/` (`configurar-r2.sh`, `backup-db.sh`, `restaurar.sh`); falta rodar `configurar-r2.sh` na VPS e ligar o cron quando o PostgreSQL subir. Chaves só na VPS.
 - Backup R2 testado na VPS em 27/10/2026 (envio, listagem e exclusão ok; chaves em `/opt/agendz/backup/r2.env`, modo 600). O R2 não aceita `rclone rcat` (501): os scripts enviam de arquivo temporário com `copyto`. A Secret foi exposta no chat; Marcelo decidiu mantê-la (token restrito ao bucket `agendz-backups`). Falta ligar o cron do `backup-db.sh` quando o PostgreSQL subir e testar `restaurar.sh` antes do primeiro cliente real.
 - Acesso: SSH só por chave com o usuário `agendz` (atalho `vps1` no PowerShell; WinSCP com `agendz.ppk`). `root` não entra por SSH; senha do root só no Web Console do hPanel. Scripts `.sh` precisam de LF (`.gitattributes` força).
+
+## Onde paramos (27/10/2026, madrugada)
+**Pronto e testado (CI verde: front 449 testes + e2e + barbearia 381; backend com PostgreSQL real):**
+- Site no ar: apex/dalforno/offbox.agendz.io (nomes por loja, logos, celular ok). Repositório `lemarcelo/agendz` com CI.
+- Backend `backend/`: loja pelo Host (404 sem loja, X-Forwarded-Host ignorado), `GET /api/publico/loja`, Caddy `ask`, login (`POST /api/auth/login`, BCrypt, 5 erros/15 min = 429), JWT HS256 com claim `loja` (403 se a loja do token != Host), clientes (`/api/clientes`, 404 para outra loja, 409 telefone repetido), RLS por transação (`LojaJdbc`: `SET LOCAL ROLE agendz_app` + `app.loja_id`), testes do Gate 3 (a), (b), (c), (d), (f) + token adulterado/expirado/alg none/outro segredo. Decisão: JDBC + RLS no lugar do Hibernate filter (uma só porta de acesso, `LojaJdbc`).
+- Deploy preparado, **desligado**: job `deploy` do CI (site) pula sem segredos; `deploy-api.yml` (GHCR + VPS) só com `DEPLOY_API=true`; `deploy/docker-compose.api.yml` (PostgreSQL sem porta, API), `deploy/preparar-api.sh`, Caddy com `/api/*` e `/interno/*` bloqueado (ainda não copiado para a VPS).
+- Backup no R2 testado (cron do `pg_dump` falta ligar com o PostgreSQL).
+
+**Falta (ordem):**
+1. Marcelo: segredos do GitHub (VPS_HOST, VPS_SSH_KEY [chave só de deploy], opcional VPS_KNOWN_HOSTS) e, para a API, variável `DEPLOY_API=true`, pacote `agendz-api` público, `deploy/preparar-api.sh` uma vez na VPS; registro DNS `*`.
+2. Claude: demais endpoints (serviços, profissionais, agenda com `validarHorario`/conflitos, cobrança/Pix, WhatsApp) seguindo `docs/MAPA-API-SPRING.md`; trocar a API simulada do front pela real (cliente HTTP com Bearer, tela de login real, bootstrap por `GET /api/publico/loja`, carregar só a pasta do tipo).
+3. Gate 3 (e): arquivos por loja (`/dados/lojas/{lojaId}`) quando houver upload.
+4. Criação de loja pela plataforma (`POST /plataforma/lojas`, domínio próprio com verificação por DNS).
+5. Ligar cron do backup e testar `restaurar.sh`; snapshot antes de mudança grande.
+6. Pendências do Marcelo: INPI/registro "Agendz", sobrenomes/e-mails reais (Davi, Pablo), logo da Apex em alta, dados reais da Offbox, `npm run autoria`.

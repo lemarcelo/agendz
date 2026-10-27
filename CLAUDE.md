@@ -7,6 +7,7 @@ Protótipo React 19 + esbuild com API simulada (`src/services/api.js`), que depo
 ## Documentos de migração
 - `docs/MAPA-API-SPRING.md`: cada método de `api.js` → endpoint Spring Boot, permissão, validação, regra e teste. Se `api.js` ganhar ou perder método, atualize o mapa.
 - `docs/MAPA-DADOS-PESSOAIS.md`: inventário de dados pessoais, como cada um é protegido (nome e apelido ficam em texto puro e podem ir ao log; CPF, telefone, nascimento cifrados).
+- `backend/`: API Spring Boot real (loja pelo Host, JWT, RLS, login, clientes); o CI roda `mvn verify` com PostgreSQL (Testcontainers). Leia `backend/README.md` e `docs/F1-lojas-por-dns.md` antes de mexer. Falha do CI: a API do GitHub mostra só anotações (o texto vem de `tools/anotar-falha-maven.sh`).
 - `backend-esqueleto/`: esqueleto dos testes de integração (JUnit) do back-end; não compilado neste ambiente.
 
 ## Ordem personalizada
