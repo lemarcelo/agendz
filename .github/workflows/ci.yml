@@ -1,0 +1,37 @@
+name: CI
+on:
+  push:
+  pull_request:
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm install --no-audit --no-fund
+      - name: Testes (dominio, seguranca, conflito, verificacoes estaticas)
+        run: npm test
+      - name: Build do artefato
+        # Chave de autoria (marca de build assinada): guarde em Settings > Secrets > AUTORIA_SEGREDO. Sem ela o build sai sem assinatura verificável.
+        env:
+          AUTORIA_SEGREDO: ${{ secrets.AUTORIA_SEGREDO }}
+        run: npm run build
+      - name: Navegador (Playwright)
+        run: |
+          npx playwright install --with-deps chromium
+          npm run e2e
+
+  auditoria:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - name: Dependencias com falha conhecida
+        run: npm audit --audit-level=high

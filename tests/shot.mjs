@@ -1,0 +1,16 @@
+import { chromium } from 'playwright';
+import fs from 'node:fs';
+const html = '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"></head><body>' + fs.readFileSync('dist/agenda.html', 'utf8') + '</body></html>';
+fs.writeFileSync('dist/index.html', html);
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' }).catch(async () => chromium.launch());
+const p = await b.newPage({ viewport: { width: 1440, height: 900 } });
+const erros = [];
+p.on('pageerror', (e) => erros.push(e.message));
+p.on('console', (m) => { if (m.type() === 'error') erros.push(m.text()); });
+await p.goto(new URL('../dist/index.html', import.meta.url).href);
+await p.screenshot({ path: 'shots/01-login.png' });
+await p.click('[data-testid=demo-davi]');
+await p.waitForTimeout(300);
+await p.screenshot({ path: 'shots/02-semana.png' });
+console.log('erros', erros);
+await b.close();

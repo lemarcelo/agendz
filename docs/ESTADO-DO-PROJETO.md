@@ -1,0 +1,52 @@
+# Agendz: estado do projeto (resumo para retomar em qualquer conversa)
+
+Atualizado em 2026-10-26. Leia este arquivo primeiro; depois `CLAUDE.md` (regras fixas) e `/home/claude/prompt-agendz-regras.md` (regras de negócio + histórico v1–v72).
+
+## 1. O que é
+Agendz: plataforma multi-tenant de agendamento (dono: Marcelo). Cada **loja** tem um **tipo** (definido na criação, nunca muda): `estetica_automotiva` (Apex, cliente real) e `barbearia`. Academia fica adiada. O código é um só; o que muda por tipo está em `src/tipos/<tipo>/` (definição com capacidades, rótulos, frases, visual; seed; mensagens de WhatsApp; tema CSS) e na tabela "O que muda por tipo" de `docs/EQUIVALENCIA-BARBEARIA.md`.
+
+## 2. Stack e estado do código
+- **Hoje:** protótipo React 19 + esbuild, API simulada em memória (`src/services/api.js`), domínio puro em `src/domain`. Build único HTML (`node build.mjs` → `dist/agenda.html` = Artifact; `dist/index.html` = testes).
+- **Destino (F1+):** Java 21, Spring Boot 3, PostgreSQL 16, Flyway, JWT, Docker Compose + Caddy na VPS.
+- **Testes:** `npm run verificar` (estética: 445 unidade + 33 navegador) e `npm run verificar-tudo` (+ suíte da barbearia v64: 381 + 29, `npm run testar:barbearia`). Portão 1 e 2 verdes; **Gate 3 (isolamento entre lojas) bloqueado até a F1**.
+- **Ids neutros (v71):** `profissionalId`, `papel: 'profissional'`; "esteticista"/"barbeiro" só como rótulo do tipo.
+- **Loja pelo endereço (v70):** `src/domain/tenant.js` (`resolverLoja`: domínio próprio > subdomínio > `/agendar/{slug}` > `?loja=` só demo), `src/services/lojas-demo.js` (lojas `apex` estética, `dalforno` e `offbox` barbearias; offbox = dados fictícios da Dalforno com nome trocado). Endereço desconhecido = "Loja não encontrada". Marca sem logo = ícone do tipo. Detalhe e desenho do backend: `docs/F1-lojas-por-dns.md`.
+- **Skills:** 3 conjuntos `agendz-*` (manutenção/entrega, regras/segurança, backend/integrações); cópias em `docs/skills/`.
+- **Docs:** `MAPA-API-SPRING.md` (api.js → endpoints), `MAPA-DADOS-PESSOAIS.md` (LGPD), `F0-tipos-de-estabelecimento.md`, `F1-lojas-por-dns.md`, `EQUIVALENCIA-BARBEARIA.md`, `backend-esqueleto/` (testes JUnit não compilados), `barbearia-v64/` (histórico arquivado).
+- **Artifact:** `https://claude.ai/artifact/JVXrYoWFyrxi3nAEfo28QQ` (sempre `dist/agenda.html`, sem `icon` na republicação).
+
+## 3. Implantação na VPS (feita em 2026-10-26)
+- **Hospedagem:** Hostinger VPS KVM 2 (2 vCPU, 8 GB, 100 GB), contrato de 12 meses, Brasil, Ubuntu 24.04 puro, sem painel nem apps; Monarx (malware) ligado; Gerenciador Docker desligado. **Sem backup diário pago** (decisão): vale o semanal grátis + snapshot manual antes de mudança grande + `pg_dump` diário para fora (F1).
+- **IP:** `179.197.84.7`. **Acesso:** `ssh agendz@179.197.84.7` (só chave; senha e root desligados; usuário com sudo e Docker). Chave criada com `ssh-keygen -t ed25519` no PC do Marcelo (Windows, PowerShell).
+- **Domínio:** `agendz.io` (grátis por 1 ano na compra; renovação do `.io` costuma ser cara: decidir antes de vencer). DNS no hPanel (TTL 300): A `@`, A `apex`, A `dalforno`, A `offbox` → IP da VPS; CNAME `www` → `agendz.io`. (Sem registro `*`: cada loja nova hoje exige um A + uma linha no Caddyfile; na F1 vira `*` + certificado sob demanda.)
+- **Pilha no ar:** Docker Compose em `/opt/agendz` com **Caddy** (HTTPS Let's Encrypt, e-mail da conta) servindo `site/index.html` (build com `AGENDZ_DOMINIO=agendz.io`). Certificados obtidos para `agendz.io`, `www`, `apex`, `dalforno`, `offbox`. URLs: `https://apex.agendz.io` (estética), `https://dalforno.agendz.io`, `https://offbox.agendz.io` (barbearias), `https://agendz.io` (seletor da demo).
+- **Arquivos:** `deploy/` (compose, Caddyfile, `.env.example`, `preparar-servidor.sh`, `montar-site.sh`, `backup/backup-db.sh` e `restaurar.sh` para a F1, README). No servidor: `.env` com `DOMINIO` e `EMAIL_ACME` (nunca vai ao GitHub).
+- **Atualizar o site hoje (PowerShell):** gerar `bash deploy/montar-site.sh agendz.io` (aqui, comigo), baixar o zip, `scp deploy\site\index.html agendz@179.197.84.7:/opt/agendz/site/` (não precisa reiniciar). Caddyfile novo: copiar e `docker compose restart caddy`.
+- **Aviso:** o ar é do **protótipo** (dados de exemplo, estado no navegador). Sem cliente real até a F1.
+
+- **Pasta local do Marcelo:** `C:\git\agendz` (Windows), criada por `git clone` do repositório privado `agendz` (nada de zip). Claude envia para o GitHub; Marcelo traz com `git pull`; não editar lá em paralelo sem avisar.
+
+## 4. Limites deste ambiente (Claude)
+- Sem SSH para fora; sem Maven Central nem Docker/Caddy/PostgreSQL locais → o Spring **não compila aqui**. Por isso a F1 usa **GitHub Actions** para compilar e testar (`mvn verify` com PostgreSQL), e eu leio o resultado com `gh`.
+- `gh` aqui está com token inválido e **nenhum GitHub está ligado** à conta: precisa ligar em claude.ai (Configurações > Conectores > GitHub) e depois eu anexo o repositório com `add_repo` (acesso de escrita).
+- Segredos (chave SSH, tokens, senhas) **nunca no chat**: vão em GitHub Secrets / `.env` no servidor / configuração do conector.
+
+## 5. Decisões já tomadas
+Tipo imutável; loja pelo endereço; um código só com pastas por tipo; capacidades (não `if`); regras da barbearia v64 intactas (só ids/texto mudam); preço por porte só na estética; Gate 3 só na F1; sem backup diário pago; Ubuntu puro sem painel; cupom Hostinger usado; domínio `agendz.io`.
+
+## 6. Em aberto
+- INPI e registro do nome "Agendz" (o domínio `.io` não resolve isso); custo da renovação do `.io`.
+- Sobrenomes/e-mails reais de Davi e Pablo; logo da Apex em alta resolução; horário por dia da semana; dados reais da Offbox (hoje fictícios).
+- Domínio próprio de loja só em plano pago? (regra comercial).
+- `npm run autoria` com a chave do Marcelo (arquivos novos têm `ref:0000000000`).
+- Apagar as skills antigas (`apex-*`, `estetica-automotiva-*`, `barbearia-*`); apagar o Artifact antigo da barbearia só se ele pedir.
+- Itens herdados da v64: push real do navegador, WhatsApp real (Meta), trava de horário no banco sob concorrência, mensagem ao cliente quando o dono confirma, estado em memória (vira banco).
+
+## 7. Próximos passos (ordem)
+1. **GitHub:** Marcelo liga o GitHub ao Claude, cria o repositório **privado** `agendz` e eu anexo (`add_repo`, escrita). Enviar o projeto (sem `node_modules`, `dist`, `shots`, `.env`, chaves).
+2. **CI (GitHub Actions):** front (`npm run verificar-tudo`) e, depois, backend (`mvn verify` + PostgreSQL de serviço). Eu leio os logs com `gh`.
+3. **Backend F1 em `backend/`:** esqueleto Spring Boot + Flyway (`tipo_estabelecimento`, `loja`, `loja_dominio`, `loja_id` em tudo) → `LojaFilter` pelo `Host` → JWT com claim `loja` → RLS (`SET LOCAL app.loja_id`) → endpoints um a um a partir de `MAPA-API-SPRING.md` → `GET /api/publico/loja` → front trocando `api.js` por HTTP.
+4. **Gate 3:** testes de isolamento por rota (casos a–f de `F1-lojas-por-dns.md`) no CI.
+5. **Deploy automático:** imagens da API/front no GHCR; Actions entra na VPS com chave só de deploy (GitHub Secret) e roda `docker compose pull && up -d`; Postgres no compose **sem `ports:`**; certificado sob demanda com `ask` na API; registro `*` no DNS.
+6. **Backup:** `pg_dump` diário (cron 3h) para Cloudflare R2/Backblaze B2 com rclone, 30 dias; **testar `restaurar.sh` antes do primeiro cliente real**.
+7. **Depois:** dados reais da Apex e da Offbox, WhatsApp (Meta), push, Pix real, academia.

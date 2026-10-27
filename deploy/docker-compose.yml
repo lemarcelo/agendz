@@ -1,0 +1,45 @@
+# Agendz na VPS: hoje só o Caddy servindo o front (protótipo). A API Spring e o PostgreSQL entram na F1 (blocos comentados abaixo).
+# Uso: cp .env.example .env  (preencha)  &&  docker compose up -d
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMINIO: ${DOMINIO}
+      EMAIL_ACME: ${EMAIL_ACME}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./site:/srv/site:ro
+      - caddy_data:/data      # certificados: não apague
+      - caddy_config:/config
+
+  # ---- F1 (descomente quando a API existir) ----
+  # db:
+  #   image: postgres:16-alpine
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_DB: agendz
+  #     POSTGRES_USER: agendz
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+  #   volumes:
+  #     - pg_data:/var/lib/postgresql/data
+  #   # NUNCA publique a porta do banco (ports:). Docker ignora o firewall (ufw) para portas publicadas.
+  # api:
+  #   image: ghcr.io/SEU_USUARIO/agendz-api:latest
+  #   restart: unless-stopped
+  #   depends_on: [db]
+  #   environment:
+  #     SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/agendz
+  #     SPRING_DATASOURCE_USERNAME: agendz
+  #     SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+  #     JWT_SEGREDO: ${JWT_SEGREDO}
+  #   # sem ports: só o Caddy fala com a API (reverse_proxy api:8080)
+
+volumes:
+  caddy_data:
+  caddy_config:
+  # pg_data:

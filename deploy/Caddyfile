@@ -1,0 +1,31 @@
+# Caddy: HTTPS automático (Let's Encrypt) para o domínio e para cada loja (subdomínio). Cada loja nova = uma linha na lista de hosts.
+# O registro DNS curinga (*) já aponta tudo para a VPS; aqui se diz quais nomes têm certificado.
+{
+	email {$EMAIL_ACME}
+}
+
+(seguranca) {
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+	encode zstd gzip
+}
+
+# Front (protótipo): um único HTML serve qualquer loja; a loja é escolhida pelo endereço (src/domain/tenant.js).
+{$DOMINIO}, www.{$DOMINIO}, apex.{$DOMINIO}, dalforno.{$DOMINIO}, offbox.{$DOMINIO} {
+	import seguranca
+	root * /srv/site
+	try_files {path} /index.html
+	file_server
+}
+
+# F1: API atrás do mesmo host (a loja vem do Host). Descomente com o bloco `api` do compose.
+# {$DOMINIO}, apex.{$DOMINIO}, dalforno.{$DOMINIO} {
+#	handle /api/* { reverse_proxy api:8080 }
+#	...
+# }

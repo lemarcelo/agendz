@@ -1,0 +1,14 @@
+node_modules/
+dist/
+shots/
+deploy/site/
+*.zip
+*.log
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+id_*
+target/
+.DS_Store

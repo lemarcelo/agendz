@@ -1,0 +1,26 @@
+{
+  "name": "agendz",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test \"tests/**/*.test.mjs\"",
+    "e2e": "node tests/run-e2e.mjs",
+    "estatico": "node --test tests/estatico.test.mjs",
+    "verificar": "npm test && npm run build && npm run e2e",
+    "autoria": "node tools/marcar-fonte.mjs",
+    "verificar-autoria": "node tools/verificar-autoria.mjs",
+    "testar:barbearia": "node tools/rodar-testes-tipo.mjs barbearia",
+    "importar:barbearia": "node tools/importar-testes-barbearia.mjs",
+    "verificar-tudo": "npm run verificar && npm run testar:barbearia"
+  },
+  "dependencies": {
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "playwright": "^1.56.0"
+  },
+  "license": "UNLICENSED"
+}

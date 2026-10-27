@@ -1,0 +1,63 @@
+/* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
+/* Agendz: identidade visual do tipo "barbearia" (paleta creme + latão). Segue o claro/escuro do sistema (tema padrão 'auto' no catálogo de tipos);
+   o usuário pode fixar o escuro ou o claro (data-theme). Só entra com <html data-tipo="barbearia">; os seletores têm um atributo a mais que o padrão da
+   estética (arquivo de estilos geral), então este arquivo ganha sem depender da ordem. Tipo novo = uma pasta nova com o seu tema.css (o build junta todas). */
+:root[data-tipo="barbearia"] {
+  --bg: #f4f1ea; --surface: #ffffff; --surface-2: #eeeae1; --surface-3: #e5dfd2;
+  --fg: #1d1b17; --muted: #6a645a; --line: #ddd6c8; --line-strong: #c6bda9;
+  --ink: #23272b; --ink-fg: #ffffff; --acento: #9c7424; --focus: #2b66e0;
+  --azul: #1d4ed8; --azul-bg: #dbe7ff;
+  --amarelo: #8a5f00; --amarelo-bg: #fdf0c0;
+  --verde: #15803d; --verde-bg: #d8f1df;
+  --vermelho: #b91c1c; --vermelho-bg: #fde1e1;
+  --cinza: #5b5852; --cinza-bg: #e6e3dc;
+  --laranja: #c2410c; --laranja-bg: #ffe5cf; --roxo: #6d28d9; --roxo-bg: #ece3ff;
+  --hatch: rgba(120, 108, 84, .16); --sombra: 0 10px 30px rgba(40, 30, 10, .16);
+  --wa-fundo: #ece6dc; --wa-eu: #d6f5cf; --wa-bot: #ffffff; --wa-topo: #0f6b5c; --wa-chip: #0f6b5c;
+  --fonte-titulo: 'Bricolage Grotesque', 'Inter', system-ui, sans-serif;
+  color-scheme: light;
+}
+:root[data-tipo="barbearia"][data-theme="light"] {
+  --bg: #f4f1ea; --surface: #ffffff; --surface-2: #eeeae1; --surface-3: #e5dfd2;
+  --fg: #1d1b17; --muted: #6a645a; --line: #ddd6c8; --line-strong: #c6bda9;
+  --ink: #23272b; --ink-fg: #ffffff; --acento: #9c7424; --focus: #2b66e0;
+  --azul: #1d4ed8; --azul-bg: #dbe7ff;
+  --amarelo: #8a5f00; --amarelo-bg: #fdf0c0;
+  --verde: #15803d; --verde-bg: #d8f1df;
+  --vermelho: #b91c1c; --vermelho-bg: #fde1e1;
+  --cinza: #5b5852; --cinza-bg: #e6e3dc;
+  --laranja: #c2410c; --laranja-bg: #ffe5cf; --roxo: #6d28d9; --roxo-bg: #ece3ff;
+  --hatch: rgba(120, 108, 84, .16); --sombra: 0 10px 30px rgba(40, 30, 10, .16);
+  --wa-fundo: #ece6dc; --wa-eu: #d6f5cf; --wa-bot: #ffffff; --wa-topo: #0f6b5c; --wa-chip: #0f6b5c;
+  --fonte-titulo: 'Bricolage Grotesque', 'Inter', system-ui, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-tipo="barbearia"]:not([data-theme="light"]) {
+    --bg: #141517; --surface: #1d1f22; --surface-2: #26292d; --surface-3: #30343a;
+    --fg: #ece8df; --muted: #a29d91; --line: #34373c; --line-strong: #4a4e55;
+    --ink: #ece8df; --ink-fg: #17181a; --acento: #d3a64a; --focus: #7ba2ff;
+    --azul: #8db0ff; --azul-bg: #1c2b4d; --amarelo: #f2c14e; --amarelo-bg: #463611; --verde: #66d58a; --verde-bg: #173523;
+    --vermelho: #ff8b8b; --vermelho-bg: #4a1d1f; --cinza: #aeaa9f; --cinza-bg: #2c2e31;
+    --laranja: #ffab72; --laranja-bg: #4a2a15; --roxo: #c9b1ff; --roxo-bg: #2f2250; --hatch: rgba(255, 255, 255, .06); --sombra: 0 10px 30px rgba(0, 0, 0, .55);
+    --wa-fundo: #0e1418; --wa-eu: #0b5444; --wa-bot: #202b32; --wa-topo: #14473f; --wa-chip: #5fd3bd;
+    color-scheme: dark;
+  }
+}
+:root[data-tipo="barbearia"][data-theme="dark"] {
+  --bg: #141517; --surface: #1d1f22; --surface-2: #26292d; --surface-3: #30343a;
+  --fg: #ece8df; --muted: #a29d91; --line: #34373c; --line-strong: #4a4e55;
+  --ink: #ece8df; --ink-fg: #17181a; --acento: #d3a64a; --focus: #7ba2ff;
+  --azul: #8db0ff; --azul-bg: #1c2b4d; --amarelo: #f2c14e; --amarelo-bg: #463611; --verde: #66d58a; --verde-bg: #173523;
+  --vermelho: #ff8b8b; --vermelho-bg: #4a1d1f; --cinza: #aeaa9f; --cinza-bg: #2c2e31;
+  --laranja: #ffab72; --laranja-bg: #4a2a15; --roxo: #c9b1ff; --roxo-bg: #2f2250; --hatch: rgba(255, 255, 255, .06); --sombra: 0 10px 30px rgba(0, 0, 0, .55);
+  --wa-fundo: #0e1418; --wa-eu: #0b5444; --wa-bot: #202b32; --wa-topo: #14473f; --wa-chip: #5fd3bd;
+  color-scheme: dark;
+}
+/* texto dos crachás e marcadores: branco no claro, escuro no tema escuro (o padrão da estética trata "não claro" como escuro) */
+:root[data-tipo="barbearia"] .badge { color: #fff; } :root[data-tipo="barbearia"] .mini-reag { color: #fff; }
+@media (prefers-color-scheme: dark) {
+  :root[data-tipo="barbearia"]:not([data-theme="light"]) .badge { color: #1a0707; }
+  :root[data-tipo="barbearia"]:not([data-theme="light"]) .mini-reag { color: #1d0d02; }
+}
+:root[data-tipo="barbearia"][data-theme="dark"] .badge { color: #1a0707; } :root[data-tipo="barbearia"][data-theme="dark"] .mini-reag { color: #1d0d02; }

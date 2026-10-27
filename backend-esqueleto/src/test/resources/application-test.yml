@@ -1,0 +1,16 @@
+# Perfil de teste: banco PostgreSQL vem do Testcontainers (@ServiceConnection); Flyway aplica as migrações e o seed de teste.
+spring:
+  flyway:
+    locations: classpath:db/migration,classpath:db/seed-test   # seed-test = os dados de src/services/seed.js
+  jpa:
+    hibernate:
+      ddl-auto: validate
+app:
+  demo: false                       # MODO_DEMO desligado: o código de recuperação NÃO volta na resposta
+  seguranca:
+    login-max-falhas: 5
+    login-bloqueio-minutos: 15
+    recuperacao-max-pedidos-por-hora: 5
+    whatsapp-segredo-assinatura: segredo-de-teste
+    pix-segredo-assinatura: segredo-pix-de-teste
+    chave-cifra-dados: 00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff   # só para teste; produção vem do cofre
