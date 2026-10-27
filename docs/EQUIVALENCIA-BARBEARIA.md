@@ -37,6 +37,9 @@ Os e2e importados da barbearia clicavam nos cartões `filtro-<id>`; o seletor ú
 ## Exceção v73: Agenda em cartões
 A v64 tinha grade de dia/semana/mês; a v73 tem só Horários (cartões) e Calendário (mês). Nos testes de `tests-barbearia/`: `[data-testid=evento]` → `[data-testid=cartao]` (o cartão tem o mesmo `title`), botões Dia/Semana/Mês → `agenda-modo-*`, `irAteCartao` procura o cartão em outros dias (a Agenda mostra um dia por vez), e os testes de clique em horário vazio/colunas da grade foram trocados por Atender. As regras de negócio testadas são as mesmas.
 
+## Exceção v74: cliente da API real
+O teste estático importado da v64 proíbe `fetch` em todo `src/`. Na v74 `src/services/api-real.js` (site publicado, login real) é a única exceção; o Artifact continua sem rede e `tests/estatico.test.mjs` confere isso montando o bundle.
+
 ## Decisões tomadas sem confirmação
 1. Mensagens da página do cliente usam o nome da loja do tenant, não "Agenda Barbearia".
 2. O rótulo do passo é "Dia e horário"; sem veículo, o fluxo do link começa em "Serviço" (3 passos).

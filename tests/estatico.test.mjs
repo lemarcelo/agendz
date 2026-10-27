@@ -41,12 +41,36 @@ test('localStorage/sessionStorage só dentro de try/catch (pode lançar em janel
   }
 });
 
+// Único arquivo com rede: o cliente da API real. Ele só entra no build do site publicado (src/main-real.jsx); o Artifact e os testes de regra usam a API simulada.
+const COM_REDE = 'src/services/api-real.js';
 test('o app não carrega nada de fora (fetch, XHR, WebSocket, scripts e imagens remotas)', () => {
-  for (const f of fonte) {
+  for (const f of fonte.filter((x) => x !== COM_REDE)) {
     const t = semComentarios(ler(f));
     assert.ok(!/\bfetch\s*\(|XMLHttpRequest|new\s+WebSocket|navigator\.sendBeacon/.test(t), `${f}: chamada de rede`);
     assert.ok(!/(src|href)=["']https?:/.test(t) || /target="_blank"/.test(t), `${f}: recurso externo`);
   }
+});
+
+test('só o site real importa o cliente HTTP; o token nunca vai para storage ou cookie', () => {
+  const t = semComentarios(ler(COM_REDE));
+  assert.ok(/\bfetch\s*\(/.test(t), 'o cliente real precisa existir');
+  assert.ok(!/XMLHttpRequest|new\s+WebSocket|sendBeacon/.test(t), 'só fetch');
+  assert.ok(!/localStorage|sessionStorage|indexedDB|document\.cookie/.test(t), 'token só em memória');
+  assert.ok(/credentials:\s*'omit'/.test(t), 'sem cookies');
+  for (const f of fonte) {
+    if (f === COM_REDE) continue;
+    const importa = /from\s+['"][^'"]*api-real(\.js)?['"]/.test(ler(f));
+    if (importa) assert.ok(f.startsWith('src/ui/real/'), `${f}: só src/ui/real/ pode importar api-real.js`);
+  }
+});
+
+test('o bundle do Artifact (src/main.jsx) não tem fetch nem o cliente real', async () => {
+  const { build } = await import('esbuild');
+  const r = await build({ entryPoints: [join(raiz, 'src/main.jsx')], bundle: true, write: false, minify: true, format: 'iife', jsx: 'automatic', loader: { '.css': 'text' }, logLevel: 'silent',
+    define: { 'process.env.NODE_ENV': '"production"', __MARCA_ID__: '"x"', __MARCA_SIG__: '"x"', __MARCA_ZW__: '""', __HOSTS_LICENCIADOS__: '[]', __AGENDZ_TIPO__: '""', __AGENDZ_DOMINIO__: '""' } });
+  const js = r.outputFiles[0].text;
+  assert.ok(!/\bfetch\s*\(/.test(js), 'o bundle do Artifact tem fetch(');
+  assert.ok(!js.includes('/api/auth/login') && !js.includes('/api/publico/loja'), 'o bundle do Artifact tem rota da API real');
 });
 
 test('CPF completo não é exibido onde só o mascarado deve aparecer (pedidos de vínculo)', () => {

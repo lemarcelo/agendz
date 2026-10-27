@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "node build.mjs",
+    "build": "node build.mjs && node build.mjs --real",
     "test": "node --test \"tests/**/*.test.mjs\"",
     "e2e": "node tests/run-e2e.mjs",
     "estatico": "node --test tests/estatico.test.mjs",

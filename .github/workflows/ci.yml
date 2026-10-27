@@ -58,6 +58,8 @@ jobs:
     env:
       TEM_CHAVE: ${{ secrets.VPS_SSH_KEY != '' && secrets.VPS_HOST != '' }}
       DOMINIO: ${{ vars.DOMINIO || 'agendz.io' }}
+      # SITE_REAL=true (Settings > Variables): o site publicado passa a falar com a API real (login real). Sem a variável, continua a demonstração.
+      SITE_REAL: ${{ vars.SITE_REAL || 'false' }}
     steps:
       - uses: actions/checkout@v4
       - name: Aviso (sem segredos de deploy)
@@ -75,6 +77,9 @@ jobs:
         run: |
           npm install --no-audit --no-fund
           AGENDZ_DOMINIO="$DOMINIO" node build.mjs
+          AGENDZ_DOMINIO="$DOMINIO" node build.mjs --real
+          if [ "$SITE_REAL" = "true" ]; then cp dist/index-real.html dist/index-site.html; else cp dist/index.html dist/index-site.html; fi
+          echo "Site: $([ "$SITE_REAL" = "true" ] && echo 'API real' || echo 'demonstração')"
       - name: Envia para a VPS (troca atômica do index.html)
         if: env.TEM_CHAVE == 'true'
         env:
@@ -87,7 +92,7 @@ jobs:
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
           if [ -n "$VPS_KNOWN_HOSTS" ]; then printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts; else ssh-keyscan -T 10 "$VPS_HOST" > ~/.ssh/known_hosts; fi
           OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
-          scp $OPTS dist/index.html "$VPS_USER@$VPS_HOST:/opt/agendz/site/index.html.novo"
+          scp $OPTS dist/index-site.html "$VPS_USER@$VPS_HOST:/opt/agendz/site/index.html.novo"
           ssh $OPTS "$VPS_USER@$VPS_HOST" 'mv -f /opt/agendz/site/index.html.novo /opt/agendz/site/index.html'
           echo "Site publicado em https://$DOMINIO"
           rm -f ~/.ssh/deploy_key

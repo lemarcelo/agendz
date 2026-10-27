@@ -41,7 +41,7 @@ docker compose logs -f caddy           # espera "certificate obtained" para cada
 Acrescente o nome no `Caddyfile` (linha dos hosts), rode `docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile`. Na F1 isso some: o Caddy emite certificado sob demanda e pergunta à API se o host existe.
 
 ## 5. Atualizar o site
-Gere o novo `index.html`, copie para `/opt/agendz/site/` (`scp deploy/site/index.html agendz@IP:/opt/agendz/site/`). Não precisa reiniciar.
+Gere o novo `index.html` (`deploy/montar-site.sh dominio` = demonstração; `deploy/montar-site.sh dominio --real` = login real na API), copie para `/opt/agendz/site/` (`scp deploy/site/index.html agendz@IP:/opt/agendz/site/`). Não precisa reiniciar.
 
 ## 6. Backup (decisão: sem o diário pago da Hostinger)
 - Grátis da Hostinger: backup semanal + snapshot manual (faça um **antes de cada mudança grande**, em hPanel > VPS > Snapshots).

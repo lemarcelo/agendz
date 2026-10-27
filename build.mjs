@@ -10,9 +10,12 @@ const tipo = process.env.AGENDZ_TIPO || '';
 const sufixo = tipo ? `-${tipo}` : '';
 // Domínio da plataforma neste build (AGENDZ_DOMINIO=exemplo.com.br): `apex.exemplo.com.br` abre a loja `apex`, `dalforno.exemplo.com.br` a `dalforno` (domain/tenant.js).
 const dominio = (process.env.AGENDZ_DOMINIO || '').trim().toLowerCase();
+// AGENDZ_API=real: build do SITE PUBLICADO, com o cliente HTTP da API real (src/main-real.jsx) → dist/index-real.html. Sem a variável (o padrão), o app
+// usa a API simulada, sem rede (Artifact e testes). O arquivo com `fetch` só entra no build real (tests/estatico.test.mjs vigia).
+const real = process.env.AGENDZ_API === 'real' || process.argv.includes('--real');
 const hosts = (process.env.AUTORIA_HOSTS || '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
 const r = await build({
-  entryPoints: ['src/main.jsx'], bundle: true, minify: true, format: 'iife', write: false, jsx: 'automatic',
+  entryPoints: [real ? 'src/main-real.jsx' : 'src/main.jsx'], bundle: true, minify: true, format: 'iife', write: false, jsx: 'automatic',
   define: { 'process.env.NODE_ENV': '"production"', __MARCA_ID__: JSON.stringify(marcas.id), __MARCA_SIG__: JSON.stringify(marcas.sig), __MARCA_ZW__: JSON.stringify(marcas.zw), __HOSTS_LICENCIADOS__: JSON.stringify(hosts), __AGENDZ_TIPO__: JSON.stringify(tipo), __AGENDZ_DOMINIO__: JSON.stringify(dominio) }, loader: { '.css': 'text' }, target: ['es2020'], legalComments: 'none', charset: 'utf8', banner: { js: `/*! AGENDZ-MARCA id=${marcas.id} sig=${marcas.sig} © Marcelo, todos os direitos reservados */` },
 });
 const js = r.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
@@ -27,6 +30,12 @@ const html = `<title>Agendz</title>
 <script>${js}</script>
 `;
 fs.mkdirSync('dist', { recursive: true });
+const pagina = (h) => '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"></head><body>' + h + '</body></html>';
+if (real) {
+  fs.writeFileSync(`dist/index-real${sufixo}.html`, pagina(html));
+  console.log('ok (site real)', (html.length / 1024).toFixed(0), 'KB');
+  process.exit(0);
+}
 fs.writeFileSync(`dist/agenda${sufixo}.html`, html);
 console.log('ok', (html.length / 1024).toFixed(0), 'KB');
-fs.writeFileSync(`dist/index${sufixo}.html`, '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"></head><body>' + html + '</body></html>');
+fs.writeFileSync(`dist/index${sufixo}.html`, pagina(html));

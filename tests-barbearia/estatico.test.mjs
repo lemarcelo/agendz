@@ -42,7 +42,7 @@ test('localStorage/sessionStorage só dentro de try/catch (pode lançar em janel
 });
 
 test('o app não carrega nada de fora (fetch, XHR, WebSocket, scripts e imagens remotas)', () => {
-  for (const f of fonte) {
+  for (const f of fonte.filter((x) => x !== 'src/services/api-real.js')) { // exceção v74: o cliente do site real (fora do bundle do Artifact; ver tests/estatico.test.mjs)
     const t = semComentarios(ler(f));
     assert.ok(!/\bfetch\s*\(|XMLHttpRequest|new\s+WebSocket|navigator\.sendBeacon/.test(t), `${f}: chamada de rede`);
     assert.ok(!/(src|href)=["']https?:/.test(t) || /target="_blank"/.test(t), `${f}: recurso externo`);
