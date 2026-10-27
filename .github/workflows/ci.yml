@@ -44,6 +44,47 @@ jobs:
       - name: Testes do backend (Testcontainers sobe o PostgreSQL 16)
         run: mvn -B -ntp verify
 
+  deploy:
+    # Publica o site na VPS depois que front e backend passam, só no main. Sem os segredos VPS_HOST e VPS_SSH_KEY, o passo é pulado (CI segue verde).
+    needs: [testes, backend]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    env:
+      TEM_CHAVE: ${{ secrets.VPS_SSH_KEY != '' && secrets.VPS_HOST != '' }}
+      DOMINIO: ${{ vars.DOMINIO || 'agendz.io' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Aviso (sem segredos de deploy)
+        if: env.TEM_CHAVE != 'true'
+        run: echo "::notice::Deploy pulado: cadastre VPS_HOST e VPS_SSH_KEY em Settings > Secrets and variables > Actions."
+      - uses: actions/setup-node@v4
+        if: env.TEM_CHAVE == 'true'
+        with:
+          node-version: 22
+      - name: Build do site publicado (com domínio)
+        if: env.TEM_CHAVE == 'true'
+        env:
+          AUTORIA_SEGREDO: ${{ secrets.AUTORIA_SEGREDO }}
+        run: |
+          npm install --no-audit --no-fund
+          AGENDZ_DOMINIO="$DOMINIO" node build.mjs
+      - name: Envia para a VPS (troca atômica do index.html)
+        if: env.TEM_CHAVE == 'true'
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER || 'agendz' }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
+          if [ -n "$VPS_KNOWN_HOSTS" ]; then printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts; else ssh-keyscan -T 10 "$VPS_HOST" > ~/.ssh/known_hosts; fi
+          OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+          scp $OPTS dist/index.html "$VPS_USER@$VPS_HOST:/opt/agendz/site/index.html.novo"
+          ssh $OPTS "$VPS_USER@$VPS_HOST" 'mv -f /opt/agendz/site/index.html.novo /opt/agendz/site/index.html'
+          echo "Site publicado em https://$DOMINIO"
+          rm -f ~/.ssh/deploy_key
+
   auditoria:
     runs-on: ubuntu-latest
     steps:
