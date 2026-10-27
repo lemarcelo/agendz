@@ -4,30 +4,30 @@ Marque `[x]` e faça `git commit` quando concluir; eu leio este arquivo no come�
 
 ## 1. Hoje (≈15 min): deploy automático do site
 Depois disso, todo push no `main` com testes verdes publica o site sozinho (já está no `ci.yml`).
-- [ ] **Chave só de deploy** (PowerShell no seu PC):
+- [x] **Chave só de deploy** (PowerShell no seu PC):
   ```
   ssh-keygen -t ed25519 -f "$HOME\.ssh\agendz_deploy" -N '""' -C "github-deploy"
   Get-Content "$HOME\.ssh\agendz_deploy.pub" | ssh agendz@179.197.84.7 "cat >> ~/.ssh/authorized_keys"
   ssh -i "$HOME\.ssh\agendz_deploy" -o IdentitiesOnly=yes agendz@179.197.84.7 "echo ok"
   ```
   (se pedir senha da chave, Enter duas vezes; a última linha deve responder `ok`)
-- [ ] **Impressão digital do servidor:** `ssh-keyscan -t ed25519 179.197.84.7` → copie a linha que **não** começa com `#`.
-- [ ] **Chave privada para a área de transferência:** `Get-Content "$HOME\.ssh\agendz_deploy" -Raw | Set-Clipboard`
-- [ ] GitHub > repositório `agendz` > Settings > Secrets and variables > Actions > **New repository secret**:
+- [x] **Impressão digital do servidor:** `ssh-keyscan -t ed25519 179.197.84.7` → copie a linha que **não** começa com `#`.
+- [x] **Chave privada para a área de transferência:** `Get-Content "$HOME\.ssh\agendz_deploy" -Raw | Set-Clipboard`
+- [x] GitHub > repositório `agendz` > Settings > Secrets and variables > Actions > **New repository secret**:
   - `VPS_HOST` = `179.197.84.7`
   - `VPS_SSH_KEY` = cole a chave privada (com as linhas BEGIN/END)
   - `VPS_KNOWN_HOSTS` = a linha do `ssh-keyscan`
   - (opcional) `AUTORIA_SEGREDO` = conteúdo do `segredo-autoria.txt`, para o site publicado sair com assinatura de autoria
-- [ ] Actions > último **CI** > *Re-run all jobs* (ou me avise que eu subo um commit). O job `deploy` deve ficar verde e o site atualiza (logo nova da Dalforno aparece em `dalforno.agendz.io`).
+- [x] Actions > último **CI** > *Re-run all jobs* (ou me avise que eu subo um commit). O job `deploy` deve ficar verde e o site atualiza (logo nova da Dalforno aparece em `dalforno.agendz.io`).
 
 ## 2. Hoje: decisões que destravam meu trabalho
-- [ ] **Front na API real** (`docs/F2-front-na-api-real.md`): responda "sim" para (1) Artifact continua simulado e sem rede; (2) site publicado vira real por partes, começando pelo login. Sem isso eu não começo o F2.
-- [ ] Domínio: manter `agendz.io` (grátis só no 1º ano; a renovação do `.io` é cara) ou trocar antes de ter cliente. Não é urgente, mas decida antes de divulgar.
+- [x] **Front na API real** (`docs/F2-front-na-api-real.md`): confirmado em 27/10: Artifact continua simulado e sem rede; site publicado vira real por partes, começando pelo login.
+- [ ] Domínio: manter `agendz.io` (grátis só no 1º ano; a renovação do `.io` é cara) ou trocar antes de ter cliente. **Marcelo decide depois de domingo (1/11).**
 
 ## 3. Esta semana, em paralelo (têm prazo de terceiros; comece cedo)
 - [ ] **WhatsApp (Meta):** criar conta WhatsApp Business Platform, verificar a empresa e separar um número que **não** esteja no WhatsApp comum. A verificação pode levar dias.
 - [ ] **Pix/banco:** escolher o provedor (cobrança Pix via API e conciliação). Me diga qual e eu preparo a integração sobre a interface que já existe; enquanto isso uso simulador.
-- [ ] **INPI:** registro da marca "Agendz".
+- [ ] **INPI:** registro da marca "Agendz" (Marcelo faz no domingo, 1/11, no fim da tarde).
 - [ ] Rotacionar o token do R2 (a secret foi exposta no chat) e atualizar `/opt/agendz/backup/r2.env` na VPS. *(Você decidiu manter; fica aqui como lembrete antes de cliente real.)*
 
 ## 4. Antes do primeiro cliente real
