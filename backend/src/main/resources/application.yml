@@ -9,6 +9,8 @@ spring:
     locations: classpath:db/migration
   jackson:
     default-property-inclusion: non_null
+    deserialization:
+      fail-on-unknown-properties: true   # campo desconhecido no corpo = 400 (nada de Object.assign do corpo inteiro)
 
 # Nunca confiar em X-Forwarded-Host vindo de fora: a loja sai só do Host que o proxy (Caddy) repassa.
 server:
