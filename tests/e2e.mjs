@@ -68,7 +68,8 @@ await T('salvar-atender').click();
 await p.waitForTimeout(300);
 await shot('07-apos-salvar'); ok('agendamento criado pelo painel');
 
-// WhatsApp: conversa completa de cliente novo
+// WhatsApp: conversa completa de cliente novo (o simulador só existe na tela Mensagens)
+await T('nav-mensagens').click();
 await T('wa-quem').selectOption('p:novo');
 await T('wa-input').fill('oi'); await T('wa-input').press('Enter');
 await p.locator('[data-testid=wa-chips]').getByRole('button', { name: 'Agendar horário' }).click(); // o menu já aparece no primeiro contato

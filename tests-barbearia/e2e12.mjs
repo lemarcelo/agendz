@@ -34,7 +34,9 @@ await T('pix-pago').waitFor();
 ok('Pix original pago');
 
 // o barbeiro lança um serviço a mais de R$ 15 depois do pagamento
-const antes = (await T('wa-msgs').innerText()).toLowerCase().split('cobrança pix').length;
+// O chat só existe na tela Mensagens: lê as mensagens agora e de novo no fim do fluxo (nada pode ser enviado ao cliente nesse meio tempo).
+const lerWa = async () => { await p.keyboard.press('Escape'); await T('nav-mensagens').click(); const t = (await T('wa-msgs').innerText()).toLowerCase(); await T('nav-agenda').click(); await (await irAteCartao(p, '[data-testid=cartao][title*="14:30 Marcelo"]')).click(); return t; };
+const wa0 = await lerWa();
 await p.getByRole('button', { name: /Mais opções/ }).click();
 await p.locator('.servico-op:not(.on)').first().locator('input').check();
 await p.getByRole('button', { name: 'Salvar serviços' }).click();
@@ -42,15 +44,12 @@ await T('pix-diferenca').waitFor();
 assert.match(await T('pix-diferenca').innerText(), /faltam R\$\s?\d+,\d{2}.*Nada foi enviado ao cliente/s);
 const falta = (await T('pix-diferenca').innerText()).match(/faltam R\$\s?(\d+,\d{2})/)[1];
 assert.equal(await T('pix-complementar').count(), 0, 'nenhuma cobrança criada sozinha');
-const depois = (await T('wa-msgs').innerText()).toLowerCase().split('cobrança pix').length;
-assert.equal(depois, antes, 'nada enviado ao cliente');
 ok('confirmado: serviço a mais depois de pago só avisa; nada é enviado ao cliente');
 
 // o barbeiro decide cobrar: gera o Pix da diferença (continua sem enviar)
 await T('pix-gerar').click();
 await T('pix-complementar').waitFor();
 assert.ok((await T('bloco-pagamento').innerText()).includes(falta));
-assert.equal((await T('wa-msgs').innerText()).toLowerCase().split('cobrança pix').length, antes, 'gerar não envia');
 ok('Pix da diferença gerado à mão, ainda sem envio');
 
 // tira o serviço: o Pix da diferença (pendente) é cancelado; nada a cobrar e nada a devolver
@@ -62,14 +61,15 @@ ok('voltando ao valor pago, o complementar é cancelado');
 
 // concluído: muda o valor e nada é cobrado nem enviado
 await T('corrigir-status').selectOption('concluido');
-const m1 = (await T('wa-msgs').innerText()).length;
 await p.getByRole('button', { name: /Mais opções/ }).click().catch(() => {});
 await p.locator('.servico-op:not(.on)').first().locator('input').check();
 await p.getByRole('button', { name: 'Salvar serviços' }).click();
 await T('pix-diferenca').waitFor();
 assert.match(await T('pix-diferenca').innerText(), /nada é cobrado nem avisado/);
 assert.equal(await T('pix-complementar').count(), 0);
-assert.equal((await T('wa-msgs').innerText()).length, m1, 'nenhuma mensagem nova ao cliente');
+const wa1 = await lerWa();
+assert.equal(wa1.split('cobrança pix').length, wa0.split('cobrança pix').length, 'nada foi enviado ao cliente (nem ao gerar o Pix da diferença)');
+assert.equal(wa1.length, wa0.length, 'nenhuma mensagem nova ao cliente');
 ok('concluído: mostra a diferença, mas não cobra nem avisa');
 await p.screenshot({ path: 'shots/diferenca-concluido.png' });
 console.log('erros', erros);

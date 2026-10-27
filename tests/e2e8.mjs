@@ -25,13 +25,17 @@ const novo = async (w, h, scheme = 'light') => {
 };
 const ok = (m) => console.log('✓', m);
 const arq = (nome) => ({ name: nome, mimeType: 'application/octet-stream', buffer: Buffer.from('x') });
-const pagar = async (p, T, nome, cpf) => {
+// O banco simulado e o chat só existem na tela Mensagens: fecha a gaveta, paga lá e reabre o cartão.
+const pagar = async (p, T, nome, cpf, cartao) => {
   await p.locator('[data-testid^=pix-enviar-]').click();
   const codigo = await p.locator('[data-testid^=pix-codigo-] code').innerText();
+  await p.keyboard.press('Escape'); await T('nav-mensagens').click();
   await p.getByRole('tab', { name: 'Banco' }).click();
   await T('banco-codigo').fill(codigo); await T('banco-nome').fill(nome); await T('banco-cpf').fill(cpf);
   await T('banco-pagar').click();
   await p.getByRole('tab', { name: 'Conversa' }).click();
+  await T('nav-agenda').click();
+  await (await irAteCartao(p, cartao)).click();
 };
 // 1) sem API: configuração nos avisos + cancelar com Pix pago: aviso para devolver e crédito do cliente
 {
@@ -73,10 +77,10 @@ const pagar = async (p, T, nome, cpf) => {
   await T('acao-cancelar-sim').click();
   await p.getByText('Agendamento cancelado.').waitFor();
   await T('pix-creditar').waitFor();
+  await p.screenshot({ path: 'shots/100-cancelado-pago.png' });
+  await p.keyboard.press('Escape'); await T('nav-mensagens').click();
   const msgs = (await T('wa-msgs').innerText()).toLowerCase();
   assert.ok(!msgs.includes('pix devolvido') && !msgs.includes('devolvemos'), 'o sistema não manda nada ao cliente');
-  await p.screenshot({ path: 'shots/100-cancelado-pago.png' });
-  await p.keyboard.press('Escape');
   await T('nav-financeiro').click();
   assert.match(await p.locator('main').innerText(), /agendamentos pagos pendentes de análise/);
   await T('nav-avisos').click();
@@ -84,12 +88,12 @@ const pagar = async (p, T, nome, cpf) => {
   await p.getByRole('button', { name: 'Abrir agendamento' }).first().click();
   await T('manter-credito').click();
   await p.getByText('Valor mantido como crédito. O cliente foi avisado no WhatsApp.').waitFor();
-  assert.match((await T('wa-msgs').innerText()).toLowerCase(), /crédito de r\$ 220,00/, 'o cliente é avisado do crédito depois da confirmação');
   await T('pix-credito-mantido').waitFor();
   assert.equal(await T('manter-credito').count(), 0);
   assert.equal(await T('pix-diferenca').count(), 0, 'cancelado não mostra "faltam R$"');
   await p.screenshot({ path: 'shots/101-credito-mantido.png' });
-  await p.keyboard.press('Escape');
+  await p.keyboard.press('Escape'); await T('nav-mensagens').click();
+  assert.match((await T('wa-msgs').innerText()).toLowerCase(), /crédito de r\$ 220,00/, 'o cliente é avisado do crédito depois da confirmação');
   await T('nav-financeiro').click();
   await p.getByRole('tab', { name: 'Cobranças Pix' }).click();
   assert.match(await T('lista-creditos').innerText(), /Disponível/);
@@ -125,17 +129,18 @@ const pagar = async (p, T, nome, cpf) => {
   await (await irAteCartao(p, '[data-testid=cartao][title*="14:30 Marcelo"]')).click();
   await T('pix-gerar').click();
   await p.locator('[data-testid^=pix-codigo-]').waitFor();
-  await pagar(p, T, 'Marcelo Santos', '284.510.937-79');
+  await pagar(p, T, 'Marcelo Santos', '284.510.937-79', '[data-testid=cartao][title*="14:30 Marcelo"]');
   await T('acao-cancelar').click();
   await T('acao-cancelar-sim').click();
   await p.getByText('Agendamento cancelado.').waitFor();
   await p.waitForTimeout(300);
   await T('pix-creditar').waitFor();
+  await p.screenshot({ path: 'shots/102-cancelado-pago-api.png' });
+  await p.keyboard.press('Escape'); await T('nav-mensagens').click();
   const msgs = (await T('wa-msgs').innerText()).toLowerCase();
   assert.ok(!msgs.includes('pix devolvido') && !msgs.includes('devolvemos'), 'nem com a API o sistema devolve ou avisa o cliente');
-  await p.screenshot({ path: 'shots/102-cancelado-pago-api.png' });
   // outro agendamento do mesmo cliente mostra qual agendamento pago está pendente de análise
-  await p.keyboard.press('Escape');
+  await T('nav-agenda').click();
   await (await filtroProf(p, 'u-pablo')).click();
   await (await irAteCartao(p, '[data-testid=cartao][title*="14:00 Marcelo"]')).click();
   await T('pix-pendente-analise').waitFor();
@@ -147,6 +152,7 @@ const pagar = async (p, T, nome, cpf) => {
   // devolveu pelo banco: lança a despesa (o cliente não recebe mensagem)
   await T('acerto-despesa').click();
   await p.getByText('Despesa lançada. Concilie com a saída do banco.').waitFor();
+  await p.keyboard.press('Escape'); await T('nav-mensagens').click();
   assert.ok(!(await T('wa-msgs').innerText()).toLowerCase().includes('crédito de'), 'despesa não avisa o cliente');
   await p.keyboard.press('Escape');
   await T('nav-financeiro').click();

@@ -17,6 +17,7 @@ async function profissionalSeHouver() { await p.waitForTimeout(200); if (/Com qu
 
 // 1) o cliente chega por um número novo e informa o CPF do Igor (o simulador de WhatsApp fica dentro do painel logado)
 await T('demo-davi').click();
+await T('nav-mensagens').click(); // o simulador de WhatsApp só existe na tela Mensagens
 await T('wa-quem').selectOption('p:novo');
 await T('wa-input').fill('oi'); await T('wa-input').press('Enter');
 await chip('Agendar horário').click();
@@ -60,6 +61,7 @@ assert.equal(await p.locator('[data-testid^=aprovar-]').count(), 0);
 console.log('✓ proprietário aprova na tela de Clientes e o telefone antigo fica registrado');
 
 // 4) agora o cliente consegue agendar pelo número novo
+await T('nav-mensagens').click(); // o simulador de WhatsApp só existe na tela Mensagens
 await T('wa-input').fill('oi'); await T('wa-input').press('Enter');
 await p.waitForTimeout(200);
 await chip('Agendar horário').click();

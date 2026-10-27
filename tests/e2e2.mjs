@@ -65,6 +65,7 @@ const chips = (p) => p.locator('[data-testid=wa-chips]');
   await p.keyboard.press('Escape');
 
   // Marcelo confirma pelo WhatsApp quando chega a pergunta
+  await T('nav-mensagens').click(); // o simulador de WhatsApp só existe na tela Mensagens
   await T('wa-quem').selectOption('c:c-marcelo');
   await p.getByRole('tab', { name: 'Relógio' }).click();
   for (let i = 0; i < 14; i++) { const t = await T('relogio').textContent(); if (/12\/10\/2026 às (17|18|19|2)/.test(t) || /13\/10/.test(t)) break; await T('proximo-evento').click(); }
@@ -99,7 +100,8 @@ const chips = (p) => p.locator('[data-testid=wa-chips]');
   await p.getByRole('button', { name: 'Próximo' }).click(); await shot('33-m-dia');
   await (await irAteCartao(p, '[data-testid=\"cartao\"]')).click(); await shot('34-m-gaveta'); await p.keyboard.press('Escape');
   await T('atender').click(); await shot('35-m-form'); await p.keyboard.press('Escape');
-  await T('abrir-whats').click(); await shot('36-m-whats');
+  assert.equal(await T('abrir-whats').count(), 0, 'fora da tela Mensagens não há botão do WhatsApp');
+  await T('nav-mensagens').click(); await T('abrir-whats').click(); await shot('36-m-whats');
   for (const k of ['clientes', 'servicos', 'estab', 'equipe', 'mensagens']) {
     if (await p.locator('.dock').count()) await p.locator('.dock button[aria-label="Fechar o WhatsApp"]').click();
     await T(`nav-${k}`).click(); await p.waitForTimeout(100);

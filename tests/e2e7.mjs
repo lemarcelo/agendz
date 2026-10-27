@@ -56,14 +56,17 @@ const arq = (nome) => ({ name: nome, mimeType: 'application/octet-stream', buffe
   const codigo = await p.locator('[data-testid^=pix-codigo-] code').innerText();
   assert.ok(codigo.includes('pix-simulado.sicredi.example'));
   await p.locator('[data-testid^=pix-enviar-]').click();
+  await p.keyboard.press('Escape'); await T('nav-mensagens').click(); // o banco simulado e o chat só existem na tela Mensagens
   await p.getByRole('tab', { name: 'Banco' }).click();
   await T('banco-codigo').fill(codigo); await T('banco-nome').fill('Marcelo Santos'); await T('banco-cpf').fill('284.510.937-79');
   await T('banco-pagar').click();
   assert.match(await T('banco-resultado').innerText(), /webhook/);
   await p.screenshot({ path: 'shots/94-api-webhook.png' });
-  assert.match(await T('pix-pago').innerText(), /API Pix/);
   await p.getByRole('tab', { name: 'Conversa' }).click();
   assert.ok((await T('wa-msgs').innerText()).toLowerCase().includes('pagamento confirmado'));
+  await T('nav-agenda').click();
+  await (await irAteCartao(p, '[data-testid=cartao][title*="14:30 Marcelo"]')).click();
+  assert.match(await T('pix-pago').innerText(), /API Pix/);
   ok('pagamento confirma por webhook e avisa no WhatsApp');
   console.log('erros', erros);
 }

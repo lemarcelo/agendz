@@ -110,7 +110,7 @@ const arq = (nome) => ({ name: nome, mimeType: 'application/octet-stream', buffe
   assert.equal(codes.length, 2); assert.notEqual(codes[0], codes[1]);
   ok('um Pix por conta, com chaves diferentes');
   // paga o da conta de fornecedores pelo banco (API ativada nela) e confere o chip do cartão
-  await p.keyboard.press('Escape');
+  await p.keyboard.press('Escape'); await T('nav-mensagens').click(); // o banco simulado só existe na tela Mensagens
   await p.getByRole('tab', { name: 'Banco' }).click();
   assert.equal(await p.locator('[data-testid^=banco-conta-]').count(), 2);
   await p.screenshot({ path: 'shots/113-banco-contas.png' });

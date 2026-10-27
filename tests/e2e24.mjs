@@ -38,11 +38,13 @@ await p.getByRole('tab', { name: 'Contas' }).click();
 await T('of-conectar').click(); await T('of-autorizar').click();
 const precos = [...corpo.matchAll(/R\$\s?([\d.]+,\d{2})/g)].map((m) => m[1]);
 assert.ok(precos.length >= 2);
+await T('nav-mensagens').click(); // o banco simulado só existe na tela Mensagens
 await p.getByRole('tab', { name: 'Banco' }).click();
 await T('banco-av-valor').fill('80');
 await p.locator('select[aria-label="Tipo"]').selectOption('credito');
 await p.locator('input[aria-label="Descrição do movimento"]').fill('Pix do dia');
 await T('banco-av-ok').click();
+await T('nav-financeiro').click();
 await p.getByRole('tab', { name: 'Conciliação' }).click();
 await p.getByRole('button', { name: /Sincronizar/ }).first().click();
 await T('conciliar-grupo').waitFor();

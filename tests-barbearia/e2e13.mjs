@@ -14,6 +14,7 @@ const T = (id) => p.locator(`[data-testid="${id}"]`);
 const chip = (nome) => p.locator('[data-testid=wa-chips]').getByRole('button', { name: nome });
 
 await T('demo-alan').click();
+await T('nav-mensagens').click(); // o simulador de WhatsApp só existe na tela Mensagens
 await T('wa-quem').selectOption('c:c-marcelo');
 await T('wa-input').fill('oi'); await T('wa-input').press('Enter');
 await chip('Meus horários').click();

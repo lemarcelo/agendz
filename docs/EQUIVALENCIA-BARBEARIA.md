@@ -46,6 +46,7 @@ O teste estático importado da v64 proíbe `fetch` em todo `src/`. Na v74 `src/s
 3. Recursos da Apex (combo, categoria, vários dias) existem no código comum como **superconjunto**; no tipo barbearia o vários dias fica desligado e combo/categoria só aparecem se cadastrados.
 4. Código em pastas por tipo (`src/tipos/<tipo>/`: definição, seed, modelos, tema), diferente da v64, que era um projeto só com tudo junto.
 5. Seletor de tipo na tela de login existe **só na demonstração** (cria uma loja de exemplo nova do tipo escolhido; lembra a escolha no navegador). Fica oculto quando o build fixa o tipo. Não existe em produção: lá o tipo é escolhido na criação da loja e nunca muda.
+6. (v77) O simulador de WhatsApp (painel e botão) existe **só na tela Mensagens**; na v64 ficava ao lado de todas as telas. Os e2e importados (`e2e`, `e2e2`, `e2e11`, `e2e13`) passam por `nav-mensagens` antes de usar o chat.
 
 ## Fora do código
 - Rotas públicas: `#agendar` vira `/agendar/{slug}` na F1; o link por profissional `#agendar-<id>` continua existindo.

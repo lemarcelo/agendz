@@ -97,7 +97,6 @@ function Shell({ user, st, tema, setTema }) {
   const [dockPref, setDockPref] = useLocal('wa-aberto', null);
   const [senha, setSenha] = useState(false);
   const largo = useMedia('(min-width: 1320px)');
-  const dockAberto = dockPref === null ? largo : dockPref;
 
   const avisos = avisosDoUsuario(st, user).filter((a) => !a.lido).length;
   const itens = [
@@ -115,6 +114,9 @@ function Shell({ user, st, tema, setTema }) {
     pode(user, 'agenda') && ['avisos', 'Avisos', 'bell'],
   ].filter(Boolean);
   const abaAtual = itens.some((i) => i[0] === aba) ? aba : itens[0][0];
+  // O simulador de WhatsApp (conversa com o robô da loja) existe SÓ na tela Mensagens: nas outras telas nem o painel nem o botão aparecem.
+  const naTelaMensagens = abaAtual === 'mensagens';
+  const dockAberto = naTelaMensagens && (dockPref === null ? largo : dockPref);
   // Menu: segurar e arrastar muda a ordem (salva por usuário). Itens sem permissão nem aparecem; os novos entram no fim.
   const ordemMenu = useOrdem('nav', itens.map((i) => i[0]), { eixo: 'x', rotulo: (id) => itens.find((i) => i[0] === id)?.[1] ?? id });
   const itensOrdenados = ordemMenu.ids.map((id) => itens.find((i) => i[0] === id)).filter(Boolean);
@@ -164,7 +166,7 @@ function Shell({ user, st, tema, setTema }) {
         {dockAberto && <div className="dock"><PainelWhats onFechar={() => setDockPref(false)} /></div>}
       </div>
 
-      {!dockAberto && (
+      {naTelaMensagens && !dockAberto && (
         <button type="button" className="bolha-whats" onClick={() => setDockPref(true)} aria-label="Abrir simulador de WhatsApp" data-testid="abrir-whats">
           <Icon n="msg" size={22} /><span>Simular WhatsApp</span>
         </button>
