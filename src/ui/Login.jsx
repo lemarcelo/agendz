@@ -82,7 +82,7 @@ export default function Login() {
           )}
           <p className="muted"><b>Para testar</b> (senha de todos: 1234)</p>
           <div className="acoes">
-            {st.usuarios.map((u) => <Btn key={u.id} tamanho="sm" onClick={() => rapido(u)} data-testid={`demo-${u.apelido.toLowerCase()}`}>{u.apelido}{u.papel === 'dono' ? ' (proprietário)' : ''}</Btn>)}
+            {st.usuarios.map((u) => <Btn key={u.id} tamanho="sm" onClick={() => rapido(u)} data-testid={`demo-${u.apelido.toLowerCase()}`}>{u.apelido}{u.papel === 'dono' && u.apelido.toLowerCase() !== 'proprietário' ? ' (proprietário)' : ''}</Btn>)}
           </div>
         </div>
       </div>

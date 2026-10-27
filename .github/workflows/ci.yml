@@ -3,6 +3,9 @@ on:
   push:
   pull_request:
 
+env:
+  TZ: America/Sao_Paulo   # as regras usam o horário local da loja (ex.: aviso às 9h); o runner vem em UTC
+
 jobs:
   testes:
     runs-on: ubuntu-latest

@@ -5,6 +5,7 @@ import { criarEstadoInicial } from '../tipos/estetica_automotiva/seed.js';
 import { criarEstadoBarbearia } from '../tipos/barbearia/seed.js';
 import { LOGO_DALFORNO } from '../tipos/barbearia/logo-dalforno.js';
 import { LOGO_OFFBOX } from '../tipos/barbearia/logo-offbox.js';
+import { PESSOAS_POR_LOJA } from './pessoas-demo.js';
 import { resolverLoja, slugValido } from '../domain/tenant.js';
 
 // Segunda barbearia da demonstração: mesmos dados de exemplo da barbearia, com o nome e o e-mail trocados (são dados fictícios; os reais entram na F1).
@@ -21,10 +22,14 @@ const comLogo = (estado, logo) => (TIPO_FIXO ? estado : { ...estado, estabelecim
 const criarEstadoDalforno = (agora) => comLogo(criarEstadoBarbearia(agora), LOGO_DALFORNO);
 const criarEstadoOffbox = (agora) => comLogo(trocarTextos(criarEstadoBarbearia(agora), [['Barbearia Dalforno', 'Offbox Barbearia'], ['barbeariadalforno.com.br', 'offbox.example.com'], ['Alan Dalforno', 'Alan Souza']]), LOGO_OFFBOX);
 
+// Site publicado (build com AGENDZ_DOMINIO): pessoas de exemplo de cada loja (pessoas-demo.js). Os builds de teste e o Artifact mantêm Davi, Pablo, Alan, Kiko…
+const PUBLICADO = typeof __AGENDZ_DOMINIO__ !== 'undefined' && !!__AGENDZ_DOMINIO__ && !TIPO_FIXO;
+const comPessoas = (slug, criar) => (agora) => (PUBLICADO ? PESSOAS_POR_LOJA[slug](criar(agora)) : criar(agora));
+
 export const LOJAS_DEMO = Object.freeze([
-  Object.freeze({ slug: 'apex', nome: 'Apex', tipo: 'estetica_automotiva', criar: criarEstadoInicial }),
-  Object.freeze({ slug: 'dalforno', nome: 'Dalforno', tipo: 'barbearia', criar: criarEstadoDalforno }),
-  Object.freeze({ slug: 'offbox', nome: 'Offbox', tipo: 'barbearia', criar: criarEstadoOffbox }),
+  Object.freeze({ slug: 'apex', nome: 'Apex', tipo: 'estetica_automotiva', criar: comPessoas('apex', criarEstadoInicial) }),
+  Object.freeze({ slug: 'dalforno', nome: 'Dalforno', tipo: 'barbearia', criar: comPessoas('dalforno', criarEstadoDalforno) }),
+  Object.freeze({ slug: 'offbox', nome: 'Offbox', tipo: 'barbearia', criar: comPessoas('offbox', criarEstadoOffbox) }),
 ]);
 export const LOJA_PADRAO = 'apex';
 export const lojaDemo = (slug) => LOJAS_DEMO.find((l) => l.slug === slug) || null;
