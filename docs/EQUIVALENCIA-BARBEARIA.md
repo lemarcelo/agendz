@@ -22,6 +22,7 @@ Critério: o Agendz com `tipo = barbearia` faz tudo o que a Agenda Barbearia v64
 | Preço e duração | do serviço (`preco`, `duracao`); duração exibida como "N min" | por porte |
 | Dados de exemplo | Alan, Kiko, Tailuan e 5 serviços; "Folga do Kiko" | Apex (Davi, Pablo, Marcelo) |
 | **Tema padrão e identidade visual** | segue o sistema (claro creme `#f4f1ea` / escuro `#141517`, latão); botão alterna automático → escuro → claro | escuro por padrão (`#0d0f12`), claro por escolha; preto + verde→lima |
+| Logo da loja | Dalforno e Offbox têm logo própria (`src/tipos/barbearia/logo-*.js`); no build de equivalência (`AGENDZ_TIPO` fixo) a seed sai sem logo, como na v64 | Apex: logo da Apex |
 | Modelos de WhatsApp | textos da v64 (`src/tipos/barbearia/templates.js`) | textos da estética |
 
 Regra: exceção nova = linha nesta tabela (decisão registrada), nunca código escondido.

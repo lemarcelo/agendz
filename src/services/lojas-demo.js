@@ -15,7 +15,9 @@ const trocarTextos = (v, pares) => {
   return v;
 };
 // Cada loja tem a própria logo (a seed do tipo barbearia não traz logo: é a base das duas lojas).
-const comLogo = (estado, logo) => ({ ...estado, estabelecimento: { ...estado.estabelecimento, logo } });
+// Build de equivalência (AGENDZ_TIPO fixo, usado pela suíte da barbearia v64): sem logo, como na v64 (docs/EQUIVALENCIA-BARBEARIA.md).
+const TIPO_FIXO = (typeof __AGENDZ_TIPO__ !== 'undefined' ? __AGENDZ_TIPO__ : (typeof process !== 'undefined' && process.env ? process.env.AGENDZ_TIPO : '')) || '';
+const comLogo = (estado, logo) => (TIPO_FIXO ? estado : { ...estado, estabelecimento: { ...estado.estabelecimento, logo } });
 const criarEstadoDalforno = (agora) => comLogo(criarEstadoBarbearia(agora), LOGO_DALFORNO);
 const criarEstadoOffbox = (agora) => comLogo(trocarTextos(criarEstadoBarbearia(agora), [['Barbearia Dalforno', 'Offbox Barbearia'], ['barbeariadalforno.com.br', 'offbox.example.com'], ['Alan Dalforno', 'Alan Souza']]), LOGO_OFFBOX);
 
