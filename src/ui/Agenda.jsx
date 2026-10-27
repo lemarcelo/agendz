@@ -12,6 +12,7 @@ import { toast, useLocal, useMedia, useStore } from './hooks.js';
 import { MARCADORES, chavesAtivas, casaMarcadores, contarMarcadores, visualDoCartao } from '../domain/marcadores.js';
 import { useOrdem } from './ordem.jsx';
 import SeletorProfissionais, { LIMITE_CARTOES } from './SeletorProfissionais.jsx';
+import { sanearModoExperimento, sanearRolagem } from '../domain/experimento.js';
 import { alternarMulti, escolherUnico, removerUm, sanearSelecao } from '../domain/selecao.js';
 import { BotaoRemover, useGestosSelecao } from './selecao.jsx';
 import { copiarTexto } from './clipboard.js';
@@ -225,6 +226,10 @@ function Mes({ cursor, evs, st, agora, onDia, onEvento, mostraBarb }) {
   );
 }
 
+// EXPERIMENTO (só no Artifact de avaliação): `__AGENDZ_EXP_CARTOES__` é um booleano fixo do build (build.mjs). Usado DIRETO nas condições (não via variável):
+// só assim o esbuild remove o ramo inteiro do experimento do pacote do site (tests/estatico.test.mjs confere).
+const ultimaRolagemExp = new Map(); // experimento: rolagem da Agenda por usuário, em memória
+
 export default function Agenda({ user, onAbrir, onNovo }) {
   const { state: st, agora } = useStore();
   const estreito = useMedia('(max-width: 760px)');
@@ -233,8 +238,12 @@ export default function Agenda({ user, onAbrir, onNovo }) {
   // Clicar num dia da semana ou do mês abre aquele dia só desta vez (visaoTemp) e não troca a visão preferida.
   const [visaoSalva, salvarVisao] = useLocal(`agenda-visao:${user.id}`, null);
   const [visaoTemp, setVisaoTemp] = useState(null);
-  const view = visaoTemp || (['dia', 'semana', 'mes'].includes(visaoSalva) ? visaoSalva : st.estabelecimento.visaoPadrao);
+  // EXPERIMENTO (só no Artifact de avaliação, flag de build): Horários = cartões do dia; Calendário = só o mês. Sem a flag, este código é descartado do build.
+  const [modoExpSalvo, salvarModoExp] = useLocal(`agenda-exp-modo:${user.id}`, 'horarios');
+  const modoExp = sanearModoExperimento(modoExpSalvo);
+  const view = __AGENDZ_EXP_CARTOES__ ? (modoExp === 'calendario' ? 'mes' : 'dia') : visaoTemp || (['dia', 'semana', 'mes'].includes(visaoSalva) ? visaoSalva : st.estabelecimento.visaoPadrao);
   const setView = (v) => { setVisaoTemp(null); salvarVisao(v); };
+  const abrirDia = (d) => { setCursor(d); if (__AGENDZ_EXP_CARTOES__) salvarModoExp('horarios'); else setVisaoTemp('dia'); };
   const [cursor, setCursor] = useState(() => startOfDay(agora));
   const [selSalva, salvarSel] = useLocal(`agenda-profissionais:${user.id}`, []);
   const viewEfetiva = view;
@@ -301,7 +310,7 @@ export default function Agenda({ user, onAbrir, onNovo }) {
         key: String(d), dayTs: d, profissionalId: selecionados.length === 1 ? selecionados[0] : '', hoje: sameDay(d, agora),
         eventos: exibidos.filter((a) => sameDay(a.inicio, d)), disp: disponivelEm(st, ativosSel, d),
         cabecalho: (
-          <button type="button" className="cab-dia" onClick={() => { setCursor(d); setVisaoTemp('dia'); }}>
+          <button type="button" className="cab-dia" onClick={() => abrirDia(d)}>
             <span>{DIAS_CURTOS[new Date(d).getDay()]}</span><b>{new Date(d).getDate()}</b>
             {ex && ex.tipo !== 'horario' && <small>{ex.rotulo || TIPOS_EXCECAO[ex.tipo]}</small>}
           </button>
@@ -325,6 +334,29 @@ export default function Agenda({ user, onAbrir, onNovo }) {
   const [pIni, pFim] = viewEfetiva === 'dia' ? [startOfDay(cursor), addDays(startOfDay(cursor), 1)] : viewEfetiva === 'semana' ? [weekStart(cursor), addDays(weekStart(cursor), 7)] : [monthStart(cursor), addMonths(monthStart(cursor), 1)];
   const contagem = contarMarcadores(todos.filter((x) => x.inicio >= pIni && x.inicio < pFim), agora);
 
+  // EXPERIMENTO: a rolagem da página volta como o usuário deixou (na sessão, em memória; entre sessões, em localStorage quando o navegador permite).
+  const chaveRolagem = `agenda-exp-rolagem:${user.id}`;
+  useEffect(() => {
+    if (!__AGENDZ_EXP_CARTOES__) return undefined;
+    let salvo = ultimaRolagemExp.get(chaveRolagem);
+    if (salvo === undefined) { try { salvo = sanearRolagem(localStorage.getItem(chaveRolagem)); } catch { salvo = 0; } }
+    const alvo = sanearRolagem(salvo);
+    const volta = requestAnimationFrame(() => window.scrollTo(0, alvo));
+    let t = 0;
+    const gravar = () => { const y = sanearRolagem(window.scrollY); ultimaRolagemExp.set(chaveRolagem, y); try { localStorage.setItem(chaveRolagem, String(y)); } catch { /* sem armazenamento: fica só em memória */ } };
+    const aoRolar = () => { clearTimeout(t); t = setTimeout(gravar, 150); };
+    window.addEventListener('scroll', aoRolar, { passive: true });
+    return () => { cancelAnimationFrame(volta); clearTimeout(t); window.removeEventListener('scroll', aoRolar); }; // sem gravar aqui: ao sair da tela o navegador já pode ter zerado a rolagem
+  }, [__AGENDZ_EXP_CARTOES__, chaveRolagem]);
+  const botaoLink = (
+  <button type="button" className={`btn btn-link-agendar ${copiado ? 'copiado' : ''}`} onClick={copiarLink} disabled={!linkAtivo} aria-label="Enviar link de agendamento pelo WhatsApp"
+    title={linkAtivo ? 'Abrir o WhatsApp com o link da página de agendamento do cliente (o link também é copiado)' : 'Link desligado em Estabelecimento > Regras'} data-testid="copiar-link">
+    <Icon n={copiado ? 'check' : 'link'} size={17} /><span className="rotulo-link">{copiado ? 'Link copiado' : 'Link de agendamento'}</span><span className="rotulo-link-curto">{copiado ? 'Copiado' : 'Link Agenda'}</span>
+  </button>
+  );
+  const botaoAtender = (
+  <Btn variante="primario" icone="plus" onClick={() => onNovo({ profissionalId: selecionados.length === 1 ? selecionados[0] : ehProfissional ? user.id : '' })} data-testid="atender">Atender</Btn>
+  );
   return (
     <section className="tela">
       {!ehProfissional ? (
@@ -348,7 +380,23 @@ export default function Agenda({ user, onAbrir, onNovo }) {
       </div>
       )}
 
-      <div className="barra-cal">
+      {__AGENDZ_EXP_CARTOES__ ? (
+        <div className="exp-topo" data-testid="exp-topo">
+          <div className="exp-acoes">{botaoLink}{botaoAtender}</div>
+          <div className="segmentado exp-modos" role="group" aria-label="Como ver a agenda">
+            {[['horarios', 'Horários'], ['calendario', 'Calendário']].map(([k, r]) => (
+              <button key={k} type="button" className={modoExp === k ? 'on' : ''} onClick={() => salvarModoExp(k)} aria-pressed={modoExp === k} data-testid={`exp-modo-${k}`}>{r}</button>
+            ))}
+          </div>
+          <div className="barra-cal-nav">
+            <Btn tamanho="sm" onClick={() => setCursor(startOfDay(agora))}>Hoje</Btn>
+            <button type="button" className="icone-btn" onClick={() => mover(-1)} aria-label="Anterior"><Icon n="left" /></button>
+            <button type="button" className="icone-btn" onClick={() => mover(1)} aria-label="Próximo"><Icon n="right" /></button>
+            <h2 className="cal-titulo" data-testid="cal-titulo">{titulo}</h2>
+          </div>
+        </div>
+      ) : (
+        <div className="barra-cal">
         <div className="barra-cal-nav">
           <Btn tamanho="sm" onClick={() => setCursor(startOfDay(agora))}>Hoje</Btn>
           <button type="button" className="icone-btn" onClick={() => mover(-1)} aria-label="Anterior"><Icon n="left" /></button>
@@ -361,13 +409,11 @@ export default function Agenda({ user, onAbrir, onNovo }) {
               <button key={k} type="button" className={viewEfetiva === k ? 'on' : ''} onClick={() => setView(k)} aria-pressed={viewEfetiva === k}>{r}</button>
             ))}
           </div>
-          <button type="button" className={`btn btn-link-agendar ${copiado ? 'copiado' : ''}`} onClick={copiarLink} disabled={!linkAtivo} aria-label="Enviar link de agendamento pelo WhatsApp"
-            title={linkAtivo ? 'Abrir o WhatsApp com o link da página de agendamento do cliente (o link também é copiado)' : 'Link desligado em Estabelecimento > Regras'} data-testid="copiar-link">
-            <Icon n={copiado ? 'check' : 'link'} size={17} /><span className="rotulo-link">{copiado ? 'Link copiado' : 'Link de agendamento'}</span><span className="rotulo-link-curto">{copiado ? 'Copiado' : 'Link Agenda'}</span>
-          </button>
-          <Btn variante="primario" icone="plus" onClick={() => onNovo({ profissionalId: selecionados.length === 1 ? selecionados[0] : ehProfissional ? user.id : '' })} data-testid="atender">Atender</Btn>
+          {botaoLink}
+          {botaoAtender}
         </div>
-      </div>
+        </div>
+      )}
 
       <div className="legenda" role="group" aria-label="Legenda de cores e total do período. Clique para filtrar por um status; segure ou dê dois cliques para juntar vários; arraste para mudar a ordem.">
         {ordemLegenda.ids.map((k) => {
@@ -388,13 +434,30 @@ export default function Agenda({ user, onAbrir, onNovo }) {
       </div>
       {marcados.length > 0 && <p className="muted filtro-ativo" role="status" data-testid="filtro-ativo">Mostrando só: {marcados.map((k) => MARCADORES.find((m) => m.k === k)?.rotulo).join(' ou ')}.</p>}
 
-      {viewEfetiva === 'mes' && <Mes mostraBarb={ativosSel.length > 1} cursor={cursor} evs={exibidos} st={st} agora={agora} onDia={(d) => { setCursor(d); setVisaoTemp('dia'); }} onEvento={onAbrir} />}
+      {viewEfetiva === 'mes' && <Mes mostraBarb={ativosSel.length > 1} cursor={cursor} evs={exibidos} st={st} agora={agora} onDia={abrirDia} onEvento={onAbrir} />}
 
       {viewEfetiva === 'semana' && (
         <Grade mostraBarb={ativosSel.length > 1} colunas={colunas} st={st} agora={agora} modo="semana" pm={1.15} onEvento={onAbrir} onVazio={(p) => onNovo({ ...p })} />
       )}
 
-      {viewEfetiva === 'dia' && (
+      {viewEfetiva === 'dia' && __AGENDZ_EXP_CARTOES__ && (
+        <div className="exp-horarios" data-testid="exp-horarios">
+          {exDia && exDia.tipo !== 'horario' && <div className="faixa-ex"><Icon n="calendar" size={15} /> {exDia.rotulo || TIPOS_EXCECAO[exDia.tipo]} · sem atendimento</div>}
+          <h3 className="exp-titulo-dia">Agendamentos do dia <span className="chip chip-p">{listaDia.length}</span></h3>
+          {listaDia.length === 0 && <Vazio icone="calendar" titulo="Dia livre" texto={marcados.length ? "Nenhum agendamento com o marcador escolhido nesta data." : "Nenhum agendamento nesta data."} />}
+          {noBox.length > 0 && (
+            <div className="no-box" data-testid="carros-no-box">
+              <h4>Carros no box desde dias anteriores</h4>
+              <div className="cartoes exp-cartoes">{noBox.map((a) => <CartaoAgendamento key={a.id} a={a} st={st} agora={agora} mostraBarb={ativosSel.length > 1} onClick={() => onAbrir(a.id)} />)}</div>
+            </div>
+          )}
+          <div className="cartoes exp-cartoes" data-testid="exp-cartoes">
+            {listaDia.map((a) => <CartaoAgendamento key={a.id} a={a} st={st} agora={agora} mostraBarb={ativosSel.length > 1} onClick={() => onAbrir(a.id)} />)}
+          </div>
+        </div>
+      )}
+
+      {viewEfetiva === 'dia' && !__AGENDZ_EXP_CARTOES__ && (
         <div className="dia-layout">
           <div className="dia-grade">
             {boxesHoje.length > 0 && (
