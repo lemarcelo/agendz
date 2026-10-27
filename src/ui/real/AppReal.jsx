@@ -43,7 +43,7 @@ function Login({ loja, aoEntrar }) {
   return (
     <Cartao loja={loja}>
       <form onSubmit={enviar} className="form-grade um">
-        <Campo rotulo="CPF, apelido ou e-mail"><input value={id} onChange={(e) => { setId(e.target.value); setErro(''); }} autoComplete="username" autoFocus maxLength={60} data-testid="login-id" /></Campo>
+        <Campo rotulo="Usuário"><input value={id} onChange={(e) => { setId(e.target.value); setErro(''); }} autoComplete="username" autoFocus maxLength={60} data-testid="login-id" /></Campo>
         <Campo rotulo="Senha"><input type="password" value={senha} onChange={(e) => { setSenha(e.target.value); setErro(''); }} autoComplete="current-password" maxLength={100} data-testid="login-senha" /></Campo>
         {erro && <Aviso tipo="erro" data-testid="login-erro">{erro}</Aviso>}
         <Btn variante="primario" type="submit" disabled={enviando} data-testid="login-entrar">{enviando ? 'Entrando…' : 'Entrar'}</Btn>
