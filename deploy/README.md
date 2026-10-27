@@ -45,7 +45,7 @@ Gere o novo `index.html`, copie para `/opt/agendz/site/` (`scp deploy/site/index
 
 ## 6. Backup (decisão: sem o diário pago da Hostinger)
 - Grátis da Hostinger: backup semanal + snapshot manual (faça um **antes de cada mudança grande**, em hPanel > VPS > Snapshots).
-- F1: `backup/backup-db.sh` (cron às 3h) envia `pg_dump` para R2/B2 com rclone e guarda 30 dias; `backup/restaurar.sh DATA` prova a restauração em banco de teste. **Teste a restauração uma vez antes do primeiro cliente real.**
+- Cloudflare R2 (bucket `agendz-backups`, token de conta só desse bucket): na VPS, `backup/configurar-r2.sh` (uma vez; guarda as chaves em `/opt/agendz/backup/r2.env`, modo 600, fora do GitHub) e testa enviar/listar/apagar. F1: `backup/backup-db.sh` (cron às 3h) envia `pg_dump` para o R2 com rclone e guarda 30 dias; `backup/restaurar.sh DATA` prova a restauração em banco de teste. **Teste a restauração uma vez antes do primeiro cliente real.**
 
 ## Segurança (resumo)
 - Nunca publique a porta do PostgreSQL (o Docker ignora o ufw para portas publicadas).
