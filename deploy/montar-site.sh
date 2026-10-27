@@ -5,5 +5,5 @@ set -euo pipefail
 DOMINIO=${1:?informe o domínio, ex.: seudominio.com.br}
 cd "$(dirname "$0")/.."
 AGENDZ_DOMINIO="$DOMINIO" node build.mjs
-mkdir -p deploy/site && cp dist/agenda.html deploy/site/index.html
+mkdir -p deploy/site && cp dist/index.html deploy/site/index.html  # index.html = página completa (doctype + viewport); agenda.html é só o fragmento do Artifact
 echo "deploy/site/index.html pronto para $DOMINIO"
