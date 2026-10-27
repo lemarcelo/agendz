@@ -1,3 +1,5 @@
+> **Atualização (27/10, 15:39):** o painel, o repositório separado, o suporte e os chamados agora têm prompt próprio e executável: `docs/PROMPT-PAINEL-ADMIN.md` (substitui a seção 2 e a fase P1 daqui). Este documento segue valendo para licenças, faturas, Pix e suspensão (P2 a P5).
+
 > **Atualização (27/10):** a unidade de cobrança passou a ser a **agenda** (estética automotiva = box; barbearia = profissional que atende), não só o funcionário, e a tela do dono vira Estabelecimento > **Cobrança**. Veja `docs/PROMPT-COBRANCA-ESTABELECIMENTO.md`; onde este texto diz "funcionário/licença por funcionário", leia "agenda".
 
 # Prompt: painel da plataforma, licenças por funcionário e cobrança (RASCUNHO, não executado)
