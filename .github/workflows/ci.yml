@@ -24,6 +24,8 @@ jobs:
         run: |
           npx playwright install --with-deps chromium
           npm run e2e
+      - name: Suite da barbearia (Gate 1)
+        run: npm run testar:barbearia
 
   auditoria:
     runs-on: ubuntu-latest
