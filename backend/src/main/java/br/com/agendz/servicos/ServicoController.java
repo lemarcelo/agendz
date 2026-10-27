@@ -52,10 +52,10 @@ public class ServicoController {
     private static final TypeReference<Map<String, Integer>> MAPA_DURACOES = new TypeReference<>() {
     };
     private static final String COLUNAS =
-            "id, codigo, nome, categoria, preco, duracao_min, multi_dia, comissao_pct, ativo, precos::text as precos, duracoes::text as duracoes";
+            "id, codigo, nome, categoria, preco, duracao_min, intervalo_min, multi_dia, comissao_pct, ativo, precos::text as precos, duracoes::text as duracoes";
 
     public record Servico(UUID id, String codigo, String nome, String categoria, BigDecimal preco, int duracaoMin,
-                          boolean multiDia, BigDecimal comissaoPct, boolean ativo,
+                          int intervaloMin, boolean multiDia, BigDecimal comissaoPct, boolean ativo,
                           Map<String, BigDecimal> precos, Map<String, Integer> duracoes) {
     }
 
@@ -65,6 +65,7 @@ public class ServicoController {
             @Size(max = 60) String categoria,
             @NotNull @DecimalMin("0") @DecimalMax("100000") BigDecimal preco,
             @NotNull @Min(1) @Max(14400) Integer duracaoMin,
+            @Min(0) @Max(600) Integer intervaloMin,
             Boolean multiDia,
             @DecimalMin("0") @DecimalMax("100") BigDecimal comissaoPct,
             Boolean ativo,
@@ -110,10 +111,10 @@ public class ServicoController {
         boolean multiDia = Boolean.TRUE.equals(d.multiDia());
         conferirDuracao(d.duracaoMin(), multiDia, duracoes == null ? null : d.duracoes());
         UUID id = banco.naLoja(jdbc -> jdbc.queryForObject(
-                "insert into servico (loja_id, codigo, nome, categoria, preco, duracao_min, multi_dia, comissao_pct, ativo, precos, duracoes) "
+                "insert into servico (loja_id, codigo, nome, categoria, preco, duracao_min, intervalo_min, multi_dia, comissao_pct, ativo, precos, duracoes) "
                         + "values (?::uuid, coalesce(nullif(?, ''), (select (coalesce(max(case when codigo ~ '^[0-9]{1,9}$' then codigo::int end), 0) + 1)::text from servico)), "
-                        + "?, nullif(?, ''), ?, ?, ?, ?, ?, cast(? as jsonb), cast(? as jsonb)) returning id",
-                UUID.class, loja.id().toString(), codigo, nome, categoria, dinheiro(d.preco()), d.duracaoMin(), multiDia,
+                        + "?, nullif(?, ''), ?, ?, ?, ?, ?, ?, cast(? as jsonb), cast(? as jsonb)) returning id",
+                UUID.class, loja.id().toString(), codigo, nome, categoria, dinheiro(d.preco()), d.duracaoMin(), d.intervaloMin() == null ? 0 : d.intervaloMin(), multiDia,
                 d.comissaoPct(), d.ativo() == null || d.ativo(), precos, duracoes));
         return ResponseEntity.status(HttpStatus.CREATED).body(buscar(id));
     }
@@ -129,10 +130,10 @@ public class ServicoController {
         String categoria = d.categoria() == null ? null : Texto.limpar(d.categoria());
         conferirDuracao(d.duracaoMin(), Boolean.TRUE.equals(d.multiDia()), d.duracoes());
         int mudou = banco.naLoja(jdbc -> jdbc.update(
-                "update servico set codigo = coalesce(?, codigo), nome = ?, categoria = coalesce(nullif(?, ''), categoria), preco = ?, duracao_min = ?, "
+                "update servico set codigo = coalesce(?, codigo), nome = ?, categoria = coalesce(nullif(?, ''), categoria), preco = ?, duracao_min = ?, intervalo_min = coalesce(?, intervalo_min), "
                         + "multi_dia = coalesce(?, multi_dia), comissao_pct = coalesce(?, comissao_pct), ativo = coalesce(?, ativo), "
                         + "precos = coalesce(cast(? as jsonb), precos), duracoes = coalesce(cast(? as jsonb), duracoes) where id = ?",
-                codigo, nome, categoria, dinheiro(d.preco()), d.duracaoMin(), d.multiDia(), d.comissaoPct(), d.ativo(), precos, duracoes, id));
+                codigo, nome, categoria, dinheiro(d.preco()), d.duracaoMin(), d.intervaloMin(), d.multiDia(), d.comissaoPct(), d.ativo(), precos, duracoes, id));
         if (mudou == 0) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, "Serviço não encontrado");
         return buscar(id);
     }
@@ -154,7 +155,7 @@ public class ServicoController {
 
     private Servico linha(java.sql.ResultSet rs) throws java.sql.SQLException {
         return new Servico(rs.getObject("id", UUID.class), rs.getString("codigo"), rs.getString("nome"), rs.getString("categoria"),
-                rs.getBigDecimal("preco"), rs.getInt("duracao_min"), rs.getBoolean("multi_dia"), rs.getBigDecimal("comissao_pct"),
+                rs.getBigDecimal("preco"), rs.getInt("duracao_min"), rs.getInt("intervalo_min"), rs.getBoolean("multi_dia"), rs.getBigDecimal("comissao_pct"),
                 rs.getBoolean("ativo"), lerMapa(rs.getString("precos"), MAPA_PRECOS), lerMapa(rs.getString("duracoes"), MAPA_DURACOES));
     }
 
