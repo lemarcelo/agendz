@@ -12,9 +12,10 @@ Esqueleto F1: **a loja vem do endereço** (`docs/F1-lojas-por-dns.md`).
 | Clientes | `clientes/ClienteController` |
 | Serviços (dono escreve; profissional lê só os ativos; remover = desativar) | `servicos/ServicoController` |
 | Profissionais / equipe (dono cria e desativa; sem login e senha na lista) | `equipe/ProfissionalController` |
+| Primeiro acesso: senha temporária (token só troca a senha), `PUT /api/usuarios/me/senha`, aviso do assistente | `auth/SenhaController`, `auth/SessaoService`, `seguranca/TrocarSenhaFilter` |
 | Agenda: conflito por profissional, encaixe, intervalo, remarcar, status (profissional só a própria; travada por `for update` no profissional) | `agenda/AgendaController` |
 | Acesso ao banco com RLS | `tenant/LojaJdbc` (única porta para tabelas de negócio) |
-| Tabelas e RLS | `src/main/resources/db/migration` (V1 lojas, V2 cliente, V4 usuário, V5 serviço, V6 atende, V7 agendamento; todas com RLS) |
+| Tabelas e RLS | `src/main/resources/db/migration` (V1 lojas, V2 cliente, V4 usuário, V5 serviço, V6 atende, V7 agendamento, V8 primeiro acesso; todas com RLS) |
 | Lojas só de dev/teste | `db/seed-dev` (perfis `dev` e `test`) |
 
 ## Rodar os testes

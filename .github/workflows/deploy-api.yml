@@ -47,7 +47,8 @@ jobs:
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
           if [ -n "$VPS_KNOWN_HOSTS" ]; then printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts; else ssh-keyscan -T 10 "$VPS_HOST" > ~/.ssh/known_hosts; fi
           OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
-          scp $OPTS deploy/docker-compose.yml deploy/docker-compose.api.yml deploy/Caddyfile deploy/preparar-api.sh "$VPS_USER@$VPS_HOST:/opt/agendz/"
+          scp $OPTS deploy/docker-compose.yml deploy/docker-compose.api.yml deploy/Caddyfile deploy/preparar-api.sh deploy/provisionar-loja.sh "$VPS_USER@$VPS_HOST:/opt/agendz/"
+          scp -r $OPTS deploy/logos "$VPS_USER@$VPS_HOST:/opt/agendz/"
           printf '%s' "$GH_TOKEN" | ssh $OPTS "$VPS_USER@$VPS_HOST" "docker login ghcr.io -u '$GH_ACTOR' --password-stdin"
           ssh $OPTS "$VPS_USER@$VPS_HOST" 'cd /opt/agendz && bash preparar-api.sh; r=$?; docker logout ghcr.io >/dev/null 2>&1; if [ $r -eq 0 ]; then docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile || r=$?; fi; exit $r'
           rm -f ~/.ssh/deploy_key

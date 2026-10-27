@@ -86,6 +86,7 @@ public class SegurancaConfig {
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(o -> o.jwt(j -> j.decoder(decoder).jwtAuthenticationConverter(conversor)))
                 .addFilterAfter(new ConferirLojaDoTokenFilter(), BearerTokenAuthenticationFilter.class)
+                .addFilterAfter(new TrocarSenhaFilter(), ConferirLojaDoTokenFilter.class)
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable);
         return http.build();

@@ -1,7 +1,6 @@
 package br.com.agendz.auth;
 
 import br.com.agendz.erro.ErroDeNegocio;
-import br.com.agendz.seguranca.JwtService;
 import br.com.agendz.tenant.Loja;
 import br.com.agendz.tenant.LojaContext;
 import br.com.agendz.tenant.LojaJdbc;
@@ -24,10 +23,7 @@ public class AuthController {
     public record LoginRequest(@NotBlank @Size(max = 60) String identificador, @NotBlank @Size(max = 100) String senha) {
     }
 
-    public record LoginResposta(String token, String nome, String papel) {
-    }
-
-    private record Usuario(UUID id, String nome, String papel, String senhaHash, boolean ativo) {
+    private record Usuario(UUID id, String nome, String papel, String senhaHash, boolean ativo, boolean deveTrocarSenha) {
     }
 
     // BCrypt de uma senha qualquer: gasta o mesmo tempo quando o usuário não existe (evita descobrir logins pelo tempo de resposta).
@@ -35,18 +31,18 @@ public class AuthController {
 
     private final LojaJdbc banco;
     private final PasswordEncoder encoder;
-    private final JwtService jwt;
+    private final SessaoService sessao;
     private final LimiteDeLogin limite;
 
-    public AuthController(LojaJdbc banco, PasswordEncoder encoder, JwtService jwt, LimiteDeLogin limite) {
+    public AuthController(LojaJdbc banco, PasswordEncoder encoder, SessaoService sessao, LimiteDeLogin limite) {
         this.banco = banco;
         this.encoder = encoder;
-        this.jwt = jwt;
+        this.sessao = sessao;
         this.limite = limite;
     }
 
     @PostMapping("/api/auth/login")
-    public LoginResposta login(@Valid @RequestBody LoginRequest req) {
+    public Sessao login(@Valid @RequestBody LoginRequest req) {
         Loja loja = LojaContext.exigir();
         String login = req.identificador().trim().toLowerCase(Locale.ROOT);
         String chave = loja.id() + "|" + login;
@@ -54,9 +50,9 @@ public class AuthController {
             throw new ErroDeNegocio(HttpStatus.TOO_MANY_REQUESTS, "Muitas tentativas. Aguarde alguns minutos e tente de novo.");
         }
         List<Usuario> achados = banco.naLoja(jdbc -> jdbc.query(
-                "select id, nome, papel, senha_hash, ativo from usuario where identificador = ?",
+                "select id, nome, papel, senha_hash, ativo, deve_trocar_senha from usuario where identificador = ?",
                 (rs, i) -> new Usuario(rs.getObject("id", UUID.class), rs.getString("nome"), rs.getString("papel"),
-                        rs.getString("senha_hash"), rs.getBoolean("ativo")),
+                        rs.getString("senha_hash"), rs.getBoolean("ativo"), rs.getBoolean("deve_trocar_senha")),
                 login));
         Usuario u = achados.isEmpty() ? null : achados.get(0);
         boolean senhaOk = encoder.matches(req.senha(), u == null ? HASH_FALSO : u.senhaHash());
@@ -65,6 +61,6 @@ public class AuthController {
             throw new ErroDeNegocio(HttpStatus.UNAUTHORIZED, "Usuário ou senha inválidos");
         }
         limite.limpar(chave);
-        return new LoginResposta(jwt.emitir(u.id(), loja.id(), u.papel(), u.nome()), u.nome(), u.papel());
+        return sessao.abrir(u.id(), loja, u.papel(), u.nome(), u.deveTrocarSenha());
     }
 }

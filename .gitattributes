@@ -4,3 +4,4 @@ deploy/Caddyfile text eol=lf
 deploy/docker-compose.yml text eol=lf
 deploy/.env.example text eol=lf
 backend/Dockerfile text eol=lf
+deploy/logos/*.txt text eol=lf

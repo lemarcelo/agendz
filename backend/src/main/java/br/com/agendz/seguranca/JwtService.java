@@ -25,17 +25,19 @@ public class JwtService {
         this.relogio = relogio;
     }
 
-    public String emitir(UUID usuarioId, UUID lojaId, String papel, String nome) {
+    /** `trocar` = senha temporária: o token só serve para trocar a senha (TrocarSenhaFilter). */
+    public String emitir(UUID usuarioId, UUID lojaId, String papel, String nome, boolean trocar) {
         Instant agora = Instant.now(relogio);
-        JwtClaimsSet claims = JwtClaimsSet.builder()
+        JwtClaimsSet.Builder construtor = JwtClaimsSet.builder()
                 .issuer("agendz")
                 .subject(usuarioId.toString())
                 .issuedAt(agora)
                 .expiresAt(agora.plus(Duration.ofMinutes(props.validadeMinutos())))
                 .claim("loja", lojaId.toString())
                 .claim("papel", papel)
-                .claim("nome", nome)
-                .build();
+                .claim("nome", nome);
+        if (trocar) construtor.claim("trocar", true);
+        JwtClaimsSet claims = construtor.build();
         JwsHeader cabecalho = JwsHeader.with(MacAlgorithm.HS256).build();
         return encoder.encode(JwtEncoderParameters.from(cabecalho, claims)).getTokenValue();
     }
