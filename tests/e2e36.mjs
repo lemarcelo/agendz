@@ -13,6 +13,7 @@ const chamadas = [];
 let loja = { slug: 'dalforno', nome: 'Dalforno', tipo: 'barbearia', logo: null, temaCor: null, temaCor2: null };
 let status404 = false;
 let senhaTemporaria = true; // dono novo: a primeira senha é temporária
+let loginAtual = 'alan'; // o dono escolhe o próprio usuário na troca
 
 const servidor = http.createServer((req, res) => {
   let corpo = '';
@@ -24,13 +25,15 @@ const servidor = http.createServer((req, res) => {
     if (req.url === '/api/publico/loja') return status404 ? json(404, { mensagem: 'Loja não encontrada' }) : json(200, loja);
     if (req.url === '/api/auth/login') {
       const c = JSON.parse(corpo);
-      if (c.identificador !== 'alan' || c.senha !== (senhaTemporaria ? 'Temporaria-123' : 'Minha-senha-nova')) return json(401, { mensagem: 'Usuário ou senha inválidos' });
+      if (c.identificador !== loginAtual || c.senha !== (senhaTemporaria ? 'Temporaria-123' : 'Minha-senha-nova')) return json(401, { mensagem: 'Usuário ou senha inválidos' });
       return json(200, { token: 'tok-login', nome: 'Alan', papel: 'dono', deveTrocarSenha: senhaTemporaria, onboardingPendente: false });
     }
     if (req.url === '/api/usuarios/me/senha') {
       if (req.headers.authorization !== 'Bearer tok-login') return json(401, { mensagem: 'Sessão inválida' });
       const c = JSON.parse(corpo);
       if (c.senhaAtual !== 'Temporaria-123') return json(400, { mensagem: 'Senha atual incorreta' });
+      if (!/^[a-z0-9._-]{2,60}$/.test(c.usuario || '')) return json(400, { mensagem: 'Usuário inválido' });
+      loginAtual = c.usuario;
       senhaTemporaria = false;
       return json(200, { token: 'tok-novo', nome: 'Alan', papel: 'dono', deveTrocarSenha: false, onboardingPendente: false });
     }
@@ -75,15 +78,29 @@ async function abrir(viewport = { width: 1280, height: 800 }) {
   await p.getByTestId('login-erro').waitFor();
   assert.match(await p.getByTestId('login-erro').innerText(), /Usuário ou senha inválidos/);
   assert.equal(await p.getByTestId('login-senha').inputValue(), '');
+  assert.equal(await p.getByTestId('login-esqueci-texto').count(), 0);
+  await p.getByTestId('login-esqueci').click();
+  assert.match(await p.getByTestId('login-esqueci-texto').innerText(), /suporte/);
+  assert.equal(await p.getByTestId('login-esqueci').getAttribute('aria-expanded'), 'true');
   await p.getByTestId('login-senha').fill('Temporaria-123');
   await p.getByTestId('login-entrar').click();
   await p.getByTestId('troca-nova').waitFor();
+  assert.match(await p.getByTestId('troca-esqueci').innerText(), /suporte/);
+  assert.equal(await p.getByTestId('troca-usuario').inputValue(), '', 'o usuário é preenchido pela própria pessoa');
   assert.equal(await p.getByTestId('painel-real').count(), 0, 'com senha temporária não chega ao painel');
   ok('login errado recusado; senha temporária pede a troca');
 
   // 3. troca: confirmação diferente e senha curta ficam na tela; senha atual errada mostra o erro do servidor
   await p.getByTestId('troca-atual').fill('Temporaria-123');
   await p.getByTestId('troca-nova').fill('Minha-senha-nova');
+  await p.getByTestId('troca-repetir').fill('Minha-senha-nova');
+  await p.getByTestId('troca-salvar').click(); // sem usuário: não segue
+  assert.match(await p.getByTestId('troca-erro').innerText(), /seu usuário/);
+  await p.getByTestId('troca-usuario').fill('Alan Dalforno'); // espaço: inválido
+  await p.getByTestId('troca-salvar').click();
+  assert.match(await p.getByTestId('troca-erro').innerText(), /seu usuário/);
+  assert.equal(chamadas.filter((c) => c.u === '/api/usuarios/me/senha').length, 0, 'usuário vazio ou inválido não chega ao servidor');
+  await p.getByTestId('troca-usuario').fill('Alan.Dalforno'); // maiúsculas viram minúsculas
   await p.getByTestId('troca-repetir').fill('outra-coisa-aqui');
   await p.getByTestId('troca-salvar').click();
   assert.match(await p.getByTestId('troca-erro').innerText(), /confirmação/);
@@ -104,6 +121,7 @@ async function abrir(viewport = { width: 1280, height: 800 }) {
   assert.equal(await p.getByTestId('painel-papel').innerText(), 'Proprietário');
   const troca = chamadas.filter((c) => c.u === '/api/usuarios/me/senha');
   assert.ok(troca.length >= 2 && troca.every((c) => c.auth === 'Bearer tok-login'), 'a troca leva o token do login');
+  assert.equal(troca.at(-1).corpo.usuario, 'alan.dalforno', 'o usuário escolhido vai em minúsculas');
   ok('troca de senha: erros na tela, servidor confere a atual, painel depois');
 
   // 4. token só em memória: nada em storage nem cookie; recarregar pede o login de novo; sair volta ao login
@@ -111,7 +129,7 @@ async function abrir(viewport = { width: 1280, height: 800 }) {
   assert.ok(!/tok-|Temporaria|Minha-senha/.test(guardado), 'token ou senha em storage/cookie: ' + guardado);
   await p.getByTestId('sair').click();
   await p.getByTestId('login-id').waitFor();
-  await p.getByTestId('login-id').fill('alan');
+  await p.getByTestId('login-id').fill('alan.dalforno');
   await p.getByTestId('login-senha').fill('Minha-senha-nova');
   await p.getByTestId('login-entrar').click();
   await p.getByTestId('painel-real').waitFor();
@@ -124,7 +142,7 @@ async function abrir(viewport = { width: 1280, height: 800 }) {
 // 5. loja de outro tipo e 390 px sem rolagem lateral (login, troca e painel)
 {
   loja = { slug: 'apex', nome: 'Apex Estética Automotiva', tipo: 'estetica_automotiva', logo: null, temaCor: null, temaCor2: null };
-  senhaTemporaria = true;
+  senhaTemporaria = true; loginAtual = 'alan';
   const { ctx, p } = await abrir({ width: 390, height: 780 });
   await p.getByTestId('login-id').waitFor();
   await p.addStyleTag({ content: '*{font-family:"DejaVu Sans" !important}' }); // a fonte (mais larga) dos testes no CI
@@ -133,7 +151,7 @@ async function abrir(viewport = { width: 1280, height: 800 }) {
   await semRolagem('login');
   await p.getByTestId('login-id').fill('alan'); await p.getByTestId('login-senha').fill('Temporaria-123'); await p.getByTestId('login-entrar').click();
   await p.getByTestId('troca-nova').waitFor(); await semRolagem('troca');
-  await p.getByTestId('troca-atual').fill('Temporaria-123'); await p.getByTestId('troca-nova').fill('Minha-senha-nova'); await p.getByTestId('troca-repetir').fill('Minha-senha-nova'); await p.getByTestId('troca-salvar').click();
+  await p.getByTestId('troca-atual').fill('Temporaria-123'); await p.getByTestId('troca-usuario').fill('alan'); await p.getByTestId('troca-nova').fill('Minha-senha-nova'); await p.getByTestId('troca-repetir').fill('Minha-senha-nova'); await p.getByTestId('troca-salvar').click();
   await p.getByTestId('painel-real').waitFor(); await semRolagem('painel');
   ok('estética: tipo certo e 390 px sem rolagem lateral (login, troca, painel)');
   await ctx.close();

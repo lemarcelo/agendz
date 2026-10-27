@@ -3,7 +3,7 @@
 // temporária e mostra o painel inicial. Os módulos (agenda, clientes, serviços…) entram nas partes seguintes do F2, cada um só quando o
 // servidor tem a regra inteira. Não importa `api.js` (a simulada) nem `hooks.js`: o estado aqui é só o da sessão real, em memória.
 import React, { useEffect, useMemo, useState } from 'react';
-import { carregarLoja, entrar, onboarding, sair, sessaoAtual, trocarSenha } from '../../services/api-real.js';
+import { carregarLoja, entrar, loginValido, onboarding, sair, sessaoAtual, trocarSenha } from '../../services/api-real.js';
 import PrimeiroAcesso from '../leve/PrimeiroAcesso.jsx';
 import { TIPOS, definirTipoAtivo, rotulo, tipoValido } from '../../domain/tipos.js';
 import { cssDaMarca, logoValida } from '../../domain/tema.js';
@@ -30,6 +30,7 @@ function Login({ loja, aoEntrar }) {
   const [senha, setSenha] = useState('');
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
+  const [esqueci, setEsqueci] = useState(false);
   const enviar = async (e) => {
     e.preventDefault();
     if (enviando) return;
@@ -46,22 +47,26 @@ function Login({ loja, aoEntrar }) {
         <Campo rotulo="Senha"><input type="password" value={senha} onChange={(e) => { setSenha(e.target.value); setErro(''); }} autoComplete="current-password" maxLength={100} data-testid="login-senha" /></Campo>
         {erro && <Aviso tipo="erro" data-testid="login-erro">{erro}</Aviso>}
         <Btn variante="primario" type="submit" disabled={enviando} data-testid="login-entrar">{enviando ? 'Entrando…' : 'Entrar'}</Btn>
+        <button type="button" className="link" onClick={() => setEsqueci(!esqueci)} aria-expanded={esqueci} data-testid="login-esqueci">Esqueci minha senha</button>
+        {esqueci && <Aviso data-testid="login-esqueci-texto">Ainda não há e-mail nem WhatsApp configurado para recuperar a senha. Peça ao suporte do Agendz para redefinir: você recebe uma senha temporária e escolhe a sua no primeiro acesso.</Aviso>}
       </form>
     </Cartao>
   );
 }
 
 function TrocarSenha({ loja, sessao, aoTrocar, aoSair }) {
-  const [f, setF] = useState({ atual: '', nova: '', repetir: '' });
+  const [f, setF] = useState({ atual: '', usuario: '', nova: '', repetir: '' });
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
   const mudar = (k) => (e) => { setF({ ...f, [k]: e.target.value }); setErro(''); };
   const enviar = async (e) => {
     e.preventDefault();
     if (enviando) return;
+    const usuario = f.usuario.trim().toLowerCase();
+    if (!loginValido(usuario)) { setErro('Escolha o seu usuário: de 2 a 60 caracteres, só letras, números, ponto, hífen e sublinhado'); return; }
     if (f.nova !== f.repetir) { setErro('A confirmação da nova senha não confere'); return; }
     setEnviando(true); setErro('');
-    const r = await trocarSenha({ senhaAtual: f.atual, nova: f.nova });
+    const r = await trocarSenha({ senhaAtual: f.atual, nova: f.nova, usuario });
     setEnviando(false);
     if (!r.ok) { setErro(r.erro); return; }
     aoTrocar(r.sessao);
@@ -69,12 +74,14 @@ function TrocarSenha({ loja, sessao, aoTrocar, aoSair }) {
   return (
     <Cartao loja={loja}>
       <form onSubmit={enviar} className="form-grade um">
-        <p><b>Olá, {sessao.nome}.</b> Sua senha é temporária: crie uma senha só sua para continuar.</p>
-        <Campo rotulo="Senha atual (a que você recebeu)"><input type="password" value={f.atual} onChange={mudar('atual')} autoComplete="current-password" autoFocus maxLength={100} data-testid="troca-atual" /></Campo>
-        <Campo rotulo="Nova senha (8 caracteres ou mais)"><input type="password" value={f.nova} onChange={mudar('nova')} autoComplete="new-password" maxLength={100} data-testid="troca-nova" /></Campo>
-        <Campo rotulo="Repita a nova senha"><input type="password" value={f.repetir} onChange={mudar('repetir')} autoComplete="new-password" maxLength={100} data-testid="troca-repetir" /></Campo>
+        <p><b>Olá, {sessao.nome}.</b> Sua senha é temporária. Confirme-a e escolha o seu usuário e a sua senha para continuar.</p>
+        <Campo rotulo="Senha temporária (a que você recebeu)"><input type="password" value={f.atual} onChange={mudar('atual')} autoComplete="current-password" autoFocus maxLength={100} data-testid="troca-atual" /></Campo>
+        <Campo rotulo="Seu usuário (você escolhe; letras, números, ponto, hífen)"><input value={f.usuario} onChange={mudar('usuario')} autoComplete="username" autoCapitalize="none" spellCheck={false} maxLength={60} data-testid="troca-usuario" /></Campo>
+        <Campo rotulo="Sua senha definitiva (8 caracteres ou mais)"><input type="password" value={f.nova} onChange={mudar('nova')} autoComplete="new-password" maxLength={100} data-testid="troca-nova" /></Campo>
+        <Campo rotulo="Repita a senha definitiva"><input type="password" value={f.repetir} onChange={mudar('repetir')} autoComplete="new-password" maxLength={100} data-testid="troca-repetir" /></Campo>
         {erro && <Aviso tipo="erro" data-testid="troca-erro">{erro}</Aviso>}
-        <Btn variante="primario" type="submit" disabled={enviando} data-testid="troca-salvar">{enviando ? 'Salvando…' : 'Salvar nova senha'}</Btn>
+        <p className="muted" data-testid="troca-esqueci">Esqueceu a senha depois? Quando o e-mail ou o WhatsApp da loja estiver configurado, dá para redefinir por lá. Até lá, peça ao suporte do Agendz, que redefine para você.</p>
+        <Btn variante="primario" type="submit" disabled={enviando} data-testid="troca-salvar">{enviando ? 'Salvando…' : 'Salvar usuário e senha'}</Btn>
         <button type="button" className="link" onClick={aoSair} data-testid="troca-sair">Sair</button>
       </form>
     </Cartao>

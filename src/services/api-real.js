@@ -78,13 +78,21 @@ export async function entrar({ identificador, senha }) {
   return { ok: true, sessao: sessaoAtual() };
 }
 
-// PUT /api/usuarios/me/senha: devolve token novo (sem a marca de senha temporária).
-export async function trocarSenha({ senhaAtual, nova }) {
+// Usuário (login) que a pessoa escolhe no primeiro acesso: minúsculas, 2 a 60 (mesma regra do servidor).
+export const loginValido = (v) => /^[a-z0-9._-]{2,60}$/.test(String(v ?? ''));
+
+// PUT /api/usuarios/me/senha  { senhaAtual, nova, usuario? }: devolve token novo (sem a marca de senha temporária).
+// `usuario` (opcional) é o login escolhido pela própria pessoa; vem em minúsculas e sem espaços nas pontas.
+export async function trocarSenha({ senhaAtual, nova, usuario }) {
   const n = String(nova ?? '');
+  const novoLogin = usuario === undefined || usuario === null ? null : String(usuario).trim().toLowerCase();
+  if (novoLogin !== null && !loginValido(novoLogin)) return { ok: false, status: 0, erro: 'Usuário: de 2 a 60 caracteres, só letras, números, ponto, hífen e sublinhado' };
   if (n.length < 8) return { ok: false, status: 0, erro: 'A nova senha precisa ter pelo menos 8 caracteres' };
   if (n.length > 100) return { ok: false, status: 0, erro: 'A nova senha pode ter no máximo 100 caracteres' };
   if (n === String(senhaAtual ?? '')) return { ok: false, status: 0, erro: 'A nova senha precisa ser diferente da atual' };
-  const r = await chamar('PUT', '/api/usuarios/me/senha', { senhaAtual: String(senhaAtual ?? '').slice(0, 100), nova: n });
+  const corpo = { senhaAtual: String(senhaAtual ?? '').slice(0, 100), nova: n };
+  if (novoLogin !== null) corpo.usuario = novoLogin;
+  const r = await chamar('PUT', '/api/usuarios/me/senha', corpo);
   if (!r.ok) return r;
   if (!guardarSessao(r.dados)) return { ok: false, status: 502, erro: mensagemPadrao(500) };
   return { ok: true, sessao: sessaoAtual() };

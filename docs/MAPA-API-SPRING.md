@@ -28,7 +28,7 @@ Convenções: **Perm.** = quem pode. `agenda`, `clientes`, `servicos`, `estoque`
 | `auth.logout` | `POST /auth/logout` | logado | — | invalida o token (lista de revogação) | `AuthSecurityIT` |
 | `auth.iniciarRecuperacao` | `POST /auth/recuperar` | pública | `cpf`, `telefone`, `canal` (whatsapp\|email) | código de 6 dígitos (SecureRandom), vale 30 min, só o último; **máx. 5 pedidos por CPF por hora**; o código sai só pelo canal | `security.test`, `coerencia.test` → `AuthSecurityIT` |
 | `auth.concluirRecuperacao` | `POST /auth/redefinir` | pública | `cpf`, `codigo`, `senha` 4–100 | uso único, 5 tentativas erradas invalidam; erro igual para errado e expirado; libera só o bloqueio de quem recuperou | `security.test` → `AuthSecurityIT` |
-| `equipe.alterarSenha` | `PUT /usuarios/me/senha` (**feito**, `SenhaController`) | logado | `senhaAtual`, `nova` **8–100** (mudou de 4 para 8 em 27/10/2026) e diferente da atual; 5 erros bloqueiam 15 min; token de senha temporária (`trocar`) só aceita esta rota | BCrypt/Argon2; confere a senha atual | `security.test` → `AuthSecurityIT` |
+| `equipe.alterarSenha` | `PUT /usuarios/me/senha` (**feito**, `SenhaController`; v80: `usuario` opcional = login escolhido pela própria pessoa no primeiro acesso, `^[a-z0-9._-]{2,60}$`, único na loja, 409 se já existe, conferido só depois da senha atual) | logado | `senhaAtual`, `nova` **8–100** (mudou de 4 para 8 em 27/10/2026) e diferente da atual; 5 erros bloqueiam 15 min; token de senha temporária (`trocar`) só aceita esta rota | BCrypt/Argon2; confere a senha atual | `security.test` → `AuthSecurityIT` |
 
 ## 2. Agenda (painel)
 

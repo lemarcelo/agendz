@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { carregarLoja, configurar, entrar, sair, sessaoAtual, trocarSenha } from '../src/services/api-real.js';
+import { carregarLoja, configurar, entrar, loginValido, sair, sessaoAtual, trocarSenha } from '../src/services/api-real.js';
 
 const chamadas = [];
 let modo = 'normal';
@@ -113,4 +113,22 @@ test('sem conexão: não lança erro e a mensagem é em português', async () =>
   const r = await carregarLoja();
   assert.deepEqual([r.ok, r.status], [false, 0]);
   assert.match(r.erro, /conexão/);
+});
+
+test('trocar a senha com usuário escolhido: valida e normaliza antes da rede; sem usuário o corpo não leva o campo', async () => {
+  await entrar({ identificador: 'alan', senha: 'x' });
+  chamadas.length = 0;
+  for (const ruim of ['a', 'com espaco', 'ç', 'x'.repeat(61), '']) {
+    const r = await trocarSenha({ senhaAtual: 'x', nova: 'uma-senha-longa', usuario: ruim });
+    assert.equal(r.ok, false, `usuário inválido aceito: ${ruim}`);
+  }
+  assert.equal(chamadas.length, 0, 'usuário inválido não chega ao servidor');
+  assert.equal(loginValido('alan.dalforno'), true);
+  assert.equal(loginValido('Alan'), false);
+  const r = await trocarSenha({ senhaAtual: 'x', nova: 'uma-senha-longa', usuario: '  Alan.Dalforno ' });
+  assert.equal(r.ok, true);
+  assert.equal(chamadas.at(-1).corpo.usuario, 'alan.dalforno');
+  await entrar({ identificador: 'alan', senha: 'x' });
+  await trocarSenha({ senhaAtual: 'x', nova: 'uma-senha-longa' });
+  assert.ok(!('usuario' in chamadas.at(-1).corpo), 'sem usuário, o campo não é enviado');
 });

@@ -59,6 +59,46 @@ class PrimeiroAcessoTest extends BaseApi {
                 .contentType(MediaType.APPLICATION_JSON).content("{\"senhaAtual\":\"" + atual + "\",\"nova\":\"" + nova + "\"}"));
     }
 
+    private org.springframework.test.web.servlet.ResultActions trocarComUsuario(String host, String token, String atual, String nova, String usuario) throws Exception {
+        return mvc.perform(put("/api/usuarios/me/senha").with(host(host)).header(HttpHeaders.AUTHORIZATION, bearer(token))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"senhaAtual\":\"" + atual + "\",\"nova\":\"" + nova + "\",\"usuario\":\"" + usuario + "\"}"));
+    }
+
+    @Test
+    void donoEscolheOProprioUsuarioNaTrocaEEntraComOsDadosNovos() throws Exception {
+        String t = token(login(OFFBOX, "teste-kiko", TEMPORARIA));
+        trocarComUsuario(OFFBOX, t, TEMPORARIA, "NovaSenhaForte#2026", "  Teste-Novo.Kiko ").andExpect(status().isOk()).andExpect(jsonPath("$.deveTrocarSenha").value(false));
+        // o usuário antigo e a senha temporária deixam de valer; o novo (em minúsculas) entra
+        mvc.perform(post("/api/auth/login").with(host(OFFBOX)).contentType(MediaType.APPLICATION_JSON).content(corpoLogin("teste-kiko", "NovaSenhaForte#2026")))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/auth/login").with(host(OFFBOX)).contentType(MediaType.APPLICATION_JSON).content(corpoLogin("teste-novo.kiko", TEMPORARIA)))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/auth/login").with(host(OFFBOX)).contentType(MediaType.APPLICATION_JSON).content(corpoLogin("teste-novo.kiko", "NovaSenhaForte#2026")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.deveTrocarSenha").value(false));
+    }
+
+    @Test
+    void usuarioEscolhidoPrecisaSerValidoEUnicoNaLojaMasPodeRepetirEmOutra() throws Exception {
+        jdbc.update("insert into usuario (loja_id, identificador, nome, papel, senha_hash) values (?::uuid, 'teste-outro', 'Outro', 'profissional', ?)", LOJA_OFFBOX, encoder.encode("QualquerSenha123"));
+        jdbc.update("insert into usuario (loja_id, identificador, nome, papel, senha_hash) values (?::uuid, 'teste-dup', 'Dup', 'profissional', ?)", LOJA_DALFORNO, encoder.encode("QualquerSenha123"));
+        String t = token(login(OFFBOX, "teste-kiko", TEMPORARIA));
+        trocarComUsuario(OFFBOX, t, TEMPORARIA, "NovaSenhaForte#2026", "teste-outro").andExpect(status().isConflict());   // já existe nesta loja
+        trocarComUsuario(OFFBOX, t, TEMPORARIA, "NovaSenhaForte#2026", "a").andExpect(status().isBadRequest());           // curto
+        trocarComUsuario(OFFBOX, t, TEMPORARIA, "NovaSenhaForte#2026", "com espaco").andExpect(status().isBadRequest());  // caracteres inválidos
+        trocarComUsuario(OFFBOX, t, "errada-errada", "NovaSenhaForte#2026", "teste-livre").andExpect(status().isBadRequest()); // senha atual errada
+        login(OFFBOX, "teste-kiko", TEMPORARIA); // nada mudou
+        // o mesmo login em outra loja é permitido (único só dentro da loja)
+        trocarComUsuario(OFFBOX, t, TEMPORARIA, "NovaSenhaForte#2026", "teste-dup").andExpect(status().isOk());
+        login(OFFBOX, "teste-dup", "NovaSenhaForte#2026");
+    }
+
+    @Test
+    void semUsuarioOLoginNaoMuda() throws Exception {
+        String t = token(login(OFFBOX, "teste-kiko", TEMPORARIA));
+        trocar(OFFBOX, t, TEMPORARIA, "NovaSenhaForte#2026").andExpect(status().isOk());
+        login(OFFBOX, "teste-kiko", "NovaSenhaForte#2026");
+    }
+
     @Test
     void loginComSenhaTemporariaAvisaETokenSoServeParaTrocarASenha() throws Exception {
         String json = login(OFFBOX, "teste-kiko", TEMPORARIA);
