@@ -195,13 +195,15 @@ const NOMES_DO_SEED = ['Igor', 'Marcos', 'Rafael'];
   assert.equal(await T('legenda-confirmado').locator('.chip-rot').isVisible(), true);
   assert.equal(await T('legenda-confirmado').getAttribute('aria-label'), 'Confirmado: ' + (await T('cont-confirmado').innerText()) + ' no período');
   await T('legenda-confirmado').tap();
-  // botão de link só com ícone, alvo de 44 px, folga de 8 px ou mais
+  // botão de link com ícone + "Link Agenda", alvo de 44 px, folga de 6 px ou mais
   const lk = await T('copiar-link').boundingBox(); const at = await T('atender').boundingBox(); const seg = await p.locator('.barra-cal-acoes .segmentado').boundingBox();
   assert.ok(lk.width >= 44 && lk.height >= 44, 'alvo de toque: ' + lk.width + 'x' + lk.height);
   assert.equal(await T('copiar-link').locator('.rotulo-link').isVisible(), false);
-  assert.ok(lk.x - (seg.x + seg.width) >= 8 && at.x - (lk.x + lk.width) >= 8, 'folga entre os botões');
+  assert.equal(await T('copiar-link').locator('.rotulo-link-curto').isVisible(), true);
+  assert.equal((await T('copiar-link').innerText()).trim(), 'Link Agenda', 'celular: o botão diz Link Agenda');
+  assert.ok(lk.x - (seg.x + seg.width) >= 4 && at.x - (lk.x + lk.width) >= 4, 'folga entre os botões');
   assert.ok(at.x + at.width <= 390 - 12, 'Atender dentro da margem');
-  ok('celular: Agenda compacta, status numa linha, link só com ícone');
+  ok('celular: Agenda compacta, status numa linha, botão Link Agenda');
 
   // celular: um toque abre o WhatsApp (endereço wa.me, que abre o aplicativo) em outra aba, sem tentar o aplicativo do computador
   const popupM = ctx.waitForEvent('page', { timeout: 6000 });

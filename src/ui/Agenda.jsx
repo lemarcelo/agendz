@@ -358,7 +358,7 @@ export default function Agenda({ user, onAbrir, onNovo }) {
           </div>
           <button type="button" className={`btn btn-link-agendar ${copiado ? 'copiado' : ''}`} onClick={copiarLink} disabled={!linkAtivo} aria-label="Enviar link de agendamento pelo WhatsApp"
             title={linkAtivo ? 'Abrir o WhatsApp com o link da página de agendamento do cliente (o link também é copiado)' : 'Link desligado em Estabelecimento > Regras'} data-testid="copiar-link">
-            <Icon n={copiado ? 'check' : 'link'} size={17} /><span className="rotulo-link">{copiado ? 'Link copiado' : 'Link de agendamento'}</span>
+            <Icon n={copiado ? 'check' : 'link'} size={17} /><span className="rotulo-link">{copiado ? 'Link copiado' : 'Link de agendamento'}</span><span className="rotulo-link-curto">{copiado ? 'Copiado' : 'Link Agenda'}</span>
           </button>
           <Btn variante="primario" icone="plus" onClick={() => onNovo({ profissionalId: selecionados.length === 1 ? selecionados[0] : ehProfissional ? user.id : '' })} data-testid="atender">Atender</Btn>
         </div>
