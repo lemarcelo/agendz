@@ -50,3 +50,8 @@ Tipo imutável; loja pelo endereço; um código só com pastas por tipo; capacid
 5. **Deploy automático:** imagens da API/front no GHCR; Actions entra na VPS com chave só de deploy (GitHub Secret) e roda `docker compose pull && up -d`; Postgres no compose **sem `ports:`**; certificado sob demanda com `ask` na API; registro `*` no DNS.
 6. **Backup:** `pg_dump` diário (cron 3h) para Cloudflare R2/Backblaze B2 com rclone, 30 dias; **testar `restaurar.sh` antes do primeiro cliente real**.
 7. **Depois:** dados reais da Apex e da Offbox, WhatsApp (Meta), push, Pix real, academia.
+
+
+## Repositório e backend (26/10/2026)
+- GitHub: `lemarcelo/agendz` (privado, branch `main`); Claude envia, Marcelo faz `git pull` em `C:\git\agendz`. CI em `.github/workflows/ci.yml` (front: `npm test`, build, e2e, suíte da barbearia; `backend`: `mvn verify`; auditoria npm).
+- `backend/` (Spring Boot 3.5, Java 21, Flyway, PostgreSQL 16, Testcontainers): `TenantResolver` + `LojaFilter` (loja pelo Host, 404 sem loja), `GET /api/publico/loja`, `GET /interno/dominio-permitido?domain=` (Caddy `ask`), V1 lojas/domínios, V2 `cliente` com RLS, seed só dev/test. **SQL validado em PostgreSQL 16 real; Java não compilado aqui (sem Maven Central): o primeiro `mvn verify` é o do CI.** Falta: JWT com claim `loja` (403 se diferente), Hibernate filter, `SET LOCAL app.loja_id` por transação, endpoints de negócio, Caddy `on_demand_tls`.

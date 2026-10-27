@@ -9,7 +9,7 @@ export const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/;
 export const SLUGS_RESERVADOS = Object.freeze(['www', 'app', 'api', 'admin', 'painel', 'static', 'assets', 'mail', 'agendar', 'login', 'suporte', 'status']);
 export const slugValido = (s) => typeof s === 'string' && SLUG_RE.test(s) && !SLUGS_RESERVADOS.includes(s);
 
-const limparHost = (h) => String(h || '').trim().toLowerCase().replace(/\.$/, '').replace(/:\d+$/, '');
+const limparHost = (h) => String(h || '').trim().toLowerCase().replace(/:\d+$/, '').replace(/\.$/, '');
 
 // loc = { hostname, pathname, search }; cfg = { dominiosBase: ['agendz.com.br'], dominios: { 'agenda.apexestetica.com.br': 'apex' }, permitirQuery: false }
 // Devolve { slug, via } ou { slug: null, via: null } quando o endereço não aponta para nenhuma loja (a tela mostra "loja não encontrada";

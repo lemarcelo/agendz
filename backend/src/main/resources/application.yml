@@ -1,0 +1,27 @@
+spring:
+  application:
+    name: agendz-api
+  datasource:
+    url: ${AGENDZ_DB_URL:jdbc:postgresql://localhost:5432/agendz}
+    username: ${AGENDZ_DB_USER:agendz}
+    password: ${AGENDZ_DB_PASSWORD:agendz}
+  flyway:
+    locations: classpath:db/migration
+  jackson:
+    default-property-inclusion: non_null
+
+# Nunca confiar em X-Forwarded-Host vindo de fora: a loja sai só do Host que o proxy (Caddy) repassa.
+server:
+  forward-headers-strategy: none
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+agendz:
+  # Subdomínios de UM rótulo destes domínios apontam para a loja (docs/F1-lojas-por-dns.md).
+  dominios-base: ${AGENDZ_DOMINIOS_BASE:agendz.io,localhost}
+  # ?loja=slug: só demonstração e desenvolvimento. Em produção fica false.
+  permitir-query: ${AGENDZ_PERMITIR_QUERY:false}
