@@ -2,7 +2,7 @@
 import ListaItens from './ListaItens.jsx';
 import { casaBusca, porUltimoUso } from '../domain/codigo.js';
 import React, { useEffect, useMemo, useState } from 'react';
-import { agenda, clientes as apiClientes, destinosCalendario } from '../services/api.js';
+import { agenda, clientes as apiClientes, comissoes, destinosCalendario } from '../services/api.js';
 import { ROTULO_STATUS, STATUS, boxesAtivos, duracaoMin, exigeConfirmacaoServico, nomeBox, ocupadoMin, ocupacaoDe, servicosPorIds, totalPreco, notificacoesEfetivas } from '../domain/rules.js';
 import { ROTULO_PORTE, rotuloVeiculo } from '../domain/veiculos.js';
 import { visualDoCartao } from '../domain/marcadores.js';
@@ -13,7 +13,7 @@ import { MIN, fmtDate, fmtDateTime, fmtDuration, fmtHM, fmtMoney, fmtRelative, f
 import { Aviso, Btn, Campo, Etiquetas, Icon, Modal, StatusChip } from './common.jsx';
 import { profissionalDe, campoLog, clienteDe, nomeProfissional, nomeCliente, nomeServicos, textoSemConfirmacao, textoUltimo } from './format.js';
 import { Pagamento } from './Pagamento.jsx';
-import { comissaoJaPaga, formatarTelefone, usaIntegracaoPix } from '../domain/rules.js';
+import { comissaoJaPaga, ehDono, formatarTelefone, usaIntegracaoPix } from '../domain/rules.js';
 import { agendamentosVisiveis } from '../services/api.js';
 import { partesDoAgendamento } from '../domain/comissao.js';
 import { toast, useStore } from './hooks.js';
@@ -279,6 +279,9 @@ export function GavetaAgendamento({ id, user, onClose, onRemarcar }) {
   const [mais, setMais] = useState(false);
   const [chaveCupom, setChaveCupom] = useState('');
   const [erroCupom, setErroCupom] = useState('');
+  const [cancelandoCom, setCancelandoCom] = useState(null); // quem (id) está com o motivo do cancelamento da comissão aberto
+  const [motivoCom, setMotivoCom] = useState('');
+  const [erroCom, setErroCom] = useState('');
   useEffect(() => { const f = (e) => { if (e.key === 'Escape') onClose(); }; document.addEventListener('keydown', f); return () => document.removeEventListener('keydown', f); }, [onClose]);
   if (!a) return null;
   const c = clienteDe(st, a);
@@ -357,6 +360,9 @@ export function GavetaAgendamento({ id, user, onClose, onRemarcar }) {
                 <span className="v-total"><span className="muted">Produtos {fmtMoney(totalProdutos(st, a))}</span><b data-testid="total-com-produtos">Total com produtos {fmtMoney(sv.reduce((t, s) => t + (a.precos?.[s.id] ?? s.preco), 0) + totalAcrescimos(a) - descontoCupom + totalProdutos(st, a))}</b></span>
               </dd></div>
             )}
+            {a.retroativo && (
+              <div><dt>Lançamento</dt><dd data-testid="a-retroativo">Lançado depois, em {fmtDateTime(a.retroativo.lancadoEm)}: {a.retroativo.motivo}{a.retroativo.proximoPagamento ? ' · a comissão entra no próximo pagamento.' : ''}</dd></div>
+            )}
             {partes.length > 0 && (
               <div><dt>{user.papel === 'profissional' ? 'Valor a receber' : 'Comissão'}</dt><dd data-testid="a-receber">
                 {user.papel === 'profissional' ? (
@@ -366,7 +372,17 @@ export function GavetaAgendamento({ id, user, onClose, onRemarcar }) {
                     {partes.map((p) => (
                       <span key={p.quem} className="v-linha" data-testid={`comissao-${p.quem}`}>
                         <span>{nomeDe(st, p.quem)}{p.itens.length === 0 ? ' (venda)' : p.produtos.length ? ' (serviços e vendas)' : ''}</span>
-                        <b {...(p.quem === a.profissionalId ? { 'data-testid': 'a-receber-valor' } : {})}>{fmtMoney(p.comissao)}{p.paga && <span className="muted"> · já pago</span>}</b>
+                        <b {...(p.quem === a.profissionalId ? { 'data-testid': 'a-receber-valor' } : {})}>{fmtMoney(p.comissao)}{p.paga && <span className="muted"> · já pago</span>}{p.cancelada && <span className="muted" data-testid={`comissao-cancelada-${p.quem}`}> · cancelada ({p.motivoCancelada})</span>}</b>
+                        {ehDono(user) && p.cancelada && <Btn tamanho="sm" onClick={() => executa(comissoes.restaurar(a.id, { quem: p.quem }), 'Comissão restaurada.')} data-testid={`comissao-restaurar-${p.quem}`}>Restaurar</Btn>}
+                        {ehDono(user) && !p.cancelada && !p.paga && p.comissao > 0 && cancelandoCom !== p.quem && <Btn tamanho="sm" onClick={() => { setCancelandoCom(p.quem); setMotivoCom(''); setErroCom(''); }} data-testid={`comissao-cancelar-${p.quem}`}>Cancelar comissão</Btn>}
+                        {ehDono(user) && cancelandoCom === p.quem && (
+                          <span className="campo-largo" style={{ flexBasis: '100%' }}>
+                            <input type="text" maxLength={300} value={motivoCom} onChange={(e) => setMotivoCom(e.target.value)} placeholder="Motivo do cancelamento da comissão (obrigatório)" aria-label="Motivo do cancelamento da comissão" data-testid="comissao-motivo" />
+                            {erroCom && <span className="msg-conflito" data-testid="comissao-erro">{erroCom}</span>}
+                            <Btn tamanho="sm" onClick={() => setCancelandoCom(null)}>Voltar</Btn>
+                            <Btn tamanho="sm" variante="perigo" data-testid="comissao-cancelar-ok" onClick={() => { const r = comissoes.cancelar(a.id, { quem: p.quem, motivo: motivoCom }); if (r.ok) { setCancelandoCom(null); toast('Comissão cancelada.'); } else setErroCom(r.erros[0]); }}>Cancelar a comissão</Btn>
+                          </span>
+                        )}
                       </span>
                     ))}
                     <span className="muted" data-testid="parte-casa">estabelecimento {fmtMoney(partes.reduce((t, p) => t + p.casa, 0))}</span>
@@ -416,7 +432,7 @@ export function GavetaAgendamento({ id, user, onClose, onRemarcar }) {
 
           {ativo && (
             <div className="acoes">
-              {!local && <Btn variante="primario" icone="repeat" onClick={() => onRemarcar(a.id)} data-testid="acao-remarcar">Remarcar</Btn>}
+              {!local && a.status !== STATUS.CONCLUIDO && <Btn variante="primario" icone="repeat" onClick={() => onRemarcar(a.id)} data-testid="acao-remarcar">Remarcar</Btn>}
               {!confirmaCancel ? <Btn variante="perigo" icone="x" onClick={() => setConfirmaCancel(true)} data-testid="acao-cancelar">Cancelar</Btn> : (
                 <span className="confirmar-cancel">
                   <b>Cancelar este horário?</b>

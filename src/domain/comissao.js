@@ -1,11 +1,15 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:4a9efb8d88 */
 // Comissão do profissional: quanto de cada atendimento fica com ele e quanto com o estabelecimento (puro, exceto `pagarComissao`).
 // O profissional só enxerga a parte dele (`relatorioDoProfissional`); a parte do estabelecimento e o valor cheio só aparecem para o proprietário.
-import { STATUS, pctComissao } from './rules.js';
+import { STATUS, limparTexto, pctComissao } from './rules.js';
 import { itensDoAgendamento, produtosDoAgendamento, r2 } from './reports.js';
 import { addDays, addMonths, fmtDate, fmtMonthYear, monthStart, startOfDay } from './time.js';
 import { salvarLancamento } from './financeiro.js';
 import { Rot, rot } from './tipos.js';
+
+// Em que data o atendimento conta para a comissão: a do atendimento, ou (lançamento retroativo cujo período já foi pago) a do lançamento,
+// que o põe no PRÓXIMO pagamento em vez de reabrir um mês fechado (`comissaoEm`, definido em `registrarAtendimentoLocal`).
+export const dataComissao = (a) => (a.comissaoEm !== undefined && a.comissaoEm !== null ? a.comissaoEm : a.inicio);
 
 const semComissao = (u) => !u || u.papel === 'dono' || u.papel === 'master'; // quem é dono não paga comissão a si mesmo
 
@@ -44,9 +48,17 @@ export function partesDoAgendamento(st, a) {
   for (const p of out) {
     for (const k of ['base', 'comissao', 'casa']) p[k] = r2([...p.itens, ...p.produtos].reduce((t, i) => t + i[k], 0));
     p.paga = p.quem === a.profissionalId ? !!a.comissaoPaga : p.produtos.every((x) => (a.produtos.find((l) => l.materialId === x.id) || {}).comissaoPaga);
+    // Comissão cancelada pelo proprietário (com motivo): vale zero e a parte vira do estabelecimento; o valor original fica em `comissaoOriginal`.
+    const canc = p.quem === a.profissionalId ? a.comissaoCancelada : (p.produtos.length && p.produtos.every((x) => (a.produtos.find((l) => l.materialId === x.id) || {}).comissaoCancelada) ? a.produtos.find((l) => l.materialId === p.produtos[0].id).comissaoCancelada : null);
+    p.cancelada = !!canc; p.motivoCancelada = canc ? canc.motivo : '';
+    if (p.cancelada) { p.comissaoOriginal = p.comissao; p.comissao = 0; p.casa = p.base; }
   }
   return out;
 }
+const marcarCancelada = (a, parte, info) => {
+  if (parte.quem === a.profissionalId) { if (info) a.comissaoCancelada = info; else delete a.comissaoCancelada; return; }
+  for (const l of a.produtos || []) if (parte.produtos.some((x) => x.id === l.materialId)) { if (info) l.comissaoCancelada = info; else delete l.comissaoCancelada; }
+};
 const marcarPaga = (a, parte, flag) => {
   if (parte.quem === a.profissionalId) { a.comissaoPaga = flag; return; }
   for (const l of a.produtos || []) if (parte.produtos.some((x) => x.id === l.materialId)) l.comissaoPaga = flag;
@@ -65,7 +77,7 @@ export function intervaloComissao({ mesTs, deTs, ateTs }) {
 }
 const rotuloPeriodo = ({ ini, fim }) => (ini === monthStart(ini) && fim === addMonths(ini, 1) ? fmtMonthYear(ini) : `${fmtDate(ini)} a ${fmtDate(fim - 1)}`);
 const doMes = (st, { ini, fim }) => {
-  return st.agendamentos.filter((a) => a.status === STATUS.CONCLUIDO && a.inicio >= ini && a.inicio < fim);
+  return st.agendamentos.filter((a) => a.status === STATUS.CONCLUIDO && dataComissao(a) >= ini && dataComissao(a) < fim);
 };
 
 // Visão do proprietário: por profissional, quanto ele ganhou de comissão, quanto já foi pago e quanto ainda se deve.
@@ -90,10 +102,10 @@ export function relatorioComissoes(st, per) {
 export function relatorioDoProfissional(st, { mesTs, deTs, ateTs, profissionalId }) {
   const { ini, fim } = intervaloComissao({ mesTs, deTs, ateTs });
   // Atendimentos em que ele tem parte: os dele e as vendas de produto que ele fez em atendimento de outro.
-  const doMesTodos = st.agendamentos.filter((a) => a.inicio >= ini && a.inicio < fim);
+  const doMesTodos = st.agendamentos.filter((a) => (a.status === STATUS.CONCLUIDO ? dataComissao(a) : a.inicio) >= ini && (a.status === STATUS.CONCLUIDO ? dataComissao(a) : a.inicio) < fim);
   const partesDele = (a) => partesDoAgendamento(st, a).filter((p) => p.quem === profissionalId);
   const linhas = doMesTodos.filter((a) => a.status === STATUS.CONCLUIDO).sort((x, y) => x.inicio - y.inicio).flatMap((a) => partesDele(a).map((c) => (
-    { id: a.id, inicio: a.inicio, local: !!a.local, clienteId: a.clienteId, nomeAvulso: a.nomeAvulso || '', servicos: [...c.itens.map((i) => i.nome), ...c.produtos.map((p) => `${p.qtd}× ${p.nome}`)], receber: c.comissao, paga: c.paga, pagaEm: c.paga ? (c.quem === a.profissionalId ? a.comissaoPaga?.em : (a.produtos.find((l) => c.produtos.some((x) => x.id === l.materialId))?.comissaoPaga?.em)) || null : null }
+    { id: a.id, inicio: a.inicio, local: !!a.local, clienteId: a.clienteId, nomeAvulso: a.nomeAvulso || '', servicos: [...c.itens.map((i) => i.nome), ...c.produtos.map((p) => `${p.qtd}× ${p.nome}`)], receber: c.comissao, cancelada: c.cancelada, motivoCancelada: c.motivoCancelada, retroativo: !!a.retroativo, paga: c.paga, pagaEm: c.paga ? (c.quem === a.profissionalId ? a.comissaoPaga?.em : (a.produtos.find((l) => c.produtos.some((x) => x.id === l.materialId))?.comissaoPaga?.em)) || null : null }
   )));
   const previstos = doMesTodos.filter((a) => [STATUS.A_CONFIRMAR, STATUS.CONFIRMADO].includes(a.status));
   const soma = (l) => r2(l.reduce((t, x) => t + x.receber, 0));
@@ -112,7 +124,7 @@ export function pagarComissao(s, { profissionalId, mesTs, deTs, ateTs }, autor, 
   const u = s.usuarios.find((x) => x.id === profissionalId);
   if (!u) return { ok: false, erros: [`${Rot('profissional')} não encontrado.`] };
   if (semComissao(u)) return { ok: false, erros: ['O proprietário não recebe comissão: o que ele atende já é dele.'] };
-  const abertos = doMes(s, per).flatMap((a) => partesDoAgendamento(s, a).filter((c) => c.quem === profissionalId && !c.paga).map((c) => ({ a, c })));
+  const abertos = doMes(s, per).flatMap((a) => partesDoAgendamento(s, a).filter((c) => c.quem === profissionalId && !c.paga && !c.cancelada).map((c) => ({ a, c })));
   const valor = r2(abertos.reduce((t, x) => t + x.c.comissao, 0));
   if (!abertos.length || !(valor > 0)) return { ok: false, erros: [`Não há comissão a pagar neste período para esse ${rot('profissional')}.`] };
   const nome = u.apelido || u.nome;
@@ -124,3 +136,35 @@ export function pagarComissao(s, { profissionalId, mesTs, deTs, ateTs }, autor, 
   for (const { a, c } of abertos) marcarPaga(a, c, { pagamentoId: p.id, em: agora });
   return { ok: true, valor, atendimentos: abertos.length, pagamento: p };
 }
+
+// Cancelar a comissão de um atendimento (só o proprietário; o motivo é obrigatório e fica no histórico). A parte do beneficiário vira do estabelecimento.
+// Comissão já paga não se cancela. `quem` = o beneficiário (padrão: o profissional do atendimento; o vendedor de um produto de outra pessoa também tem a dele).
+// POST /agendamentos/{id}/comissao/cancelar  { quem?, motivo }
+export function cancelarComissao(s, { agendamentoId, quem, motivo }, autor, agora) {
+  const a = s.agendamentos.find((x) => x.id === agendamentoId);
+  if (!a || a.status === STATUS.CANCELADO) return { ok: false, erros: ['Agendamento não encontrado.'] };
+  const alvo = quem || a.profissionalId;
+  const parte = partesDoAgendamento(s, a).find((p) => p.quem === alvo);
+  if (!parte) return { ok: false, erros: ['Esse atendimento não tem comissão para essa pessoa.'] };
+  if (semComissao(s.usuarios.find((u) => u.id === alvo))) return { ok: false, erros: ['O proprietário não recebe comissão: o que ele atende já é dele.'] };
+  if (parte.paga) return { ok: false, erros: ['Comissão já paga: não dá para cancelar.'] };
+  if (parte.cancelada) return { ok: false, erros: ['A comissão já está cancelada.'] };
+  const m = limparTexto(String(motivo || ''), 300).trim();
+  if (m.length < 5) return { ok: false, erros: ['Informe o motivo do cancelamento da comissão (pelo menos 5 letras).'] };
+  marcarCancelada(a, parte, { motivo: m, em: agora, autor: { nome: autor?.nome, id: autor?.id } });
+  a.log.push({ id: `l${++s.seq}`, em: agora, autor, campo: 'comissão', de: nomeCurto(s, alvo), para: `Cancelada: ${m}` });
+  return { ok: true, agendamento: a };
+}
+// Desfaz o cancelamento (enquanto não foi paga: aliás, cancelada nunca é paga). Fica no histórico.
+// POST /agendamentos/{id}/comissao/restaurar  { quem? }
+export function restaurarComissao(s, { agendamentoId, quem }, autor, agora) {
+  const a = s.agendamentos.find((x) => x.id === agendamentoId);
+  if (!a || a.status === STATUS.CANCELADO) return { ok: false, erros: ['Agendamento não encontrado.'] };
+  const alvo = quem || a.profissionalId;
+  const parte = partesDoAgendamento(s, a).find((p) => p.quem === alvo);
+  if (!parte || !parte.cancelada) return { ok: false, erros: ['Não há comissão cancelada para restaurar.'] };
+  marcarCancelada(a, parte, null);
+  a.log.push({ id: `l${++s.seq}`, em: agora, autor, campo: 'comissão', de: `Cancelada: ${parte.motivoCancelada}`, para: `Restaurada (${nomeCurto(s, alvo)})` });
+  return { ok: true, agendamento: a };
+}
+const nomeCurto = (s, id) => { const u = s.usuarios.find((x) => x.id === id); return u ? u.apelido || u.nome : '—'; };

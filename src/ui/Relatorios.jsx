@@ -67,7 +67,7 @@ export function RelatorioProfissional() {
           { id: 'cliente', titulo: 'Cliente', cel: (l) => nomeLinha(st, l) },
           { id: 'servicos', titulo: 'Serviços', cel: (l) => l.servicos.join(' + ') },
           { id: 'receber', titulo: 'A receber', cls: 'num', cel: (l) => <b>{fmtMoney(l.receber)}</b> },
-          { id: 'situacao', titulo: 'Situação', cel: (l) => (l.paga ? <span className="chip chip-ok">Pago</span> : <span className="muted">A receber</span>) },
+          { id: 'situacao', titulo: 'Situação', cel: (l) => (l.cancelada ? <span className="chip" title={l.motivoCancelada} data-testid="meu-cancelada">Comissão cancelada: {l.motivoCancelada}</span> : l.paga ? <span className="chip chip-ok">Pago</span> : <span className="muted">{l.retroativo ? 'A receber (lançado depois)' : 'A receber'}</span>) },
         ]} rodape={{ rotulo: `Total (${r.totais.atendimentos})`, celulas: { receber: fmtMoney(r.totais.receber) } }} />
       )}
     </section>
@@ -127,7 +127,7 @@ function Comissoes() {
             { id: 'base', titulo: 'Valor', cls: 'num', cel: (l) => fmtMoney(l.base) },
             { id: 'comissao', titulo: 'Comissão', cls: 'num', cel: (l) => <b>{fmtMoney(l.comissao)}</b> },
             { id: 'casa', titulo: 'Estabelecimento', cls: 'num', cel: (l) => fmtMoney(l.casa) },
-            { id: 'situacao', titulo: 'Situação', cel: (l) => (l.paga ? <span className="chip chip-ok">Pago</span> : <span className="muted">A pagar</span>) },
+            { id: 'situacao', titulo: 'Situação', cel: (l) => (l.cancelada ? <span className="chip" title={l.motivoCancelada} data-testid="com-cancelada">Cancelada: {l.motivoCancelada}</span> : l.paga ? <span className="chip chip-ok">Pago</span> : <span className="muted">{l.a.retroativo ? 'A pagar (lançado depois)' : 'A pagar'}</span>) },
           ]} />
         </div>
       )}

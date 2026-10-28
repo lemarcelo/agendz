@@ -139,7 +139,7 @@ const portes = async (p, precos, duracoes) => { for (const [i, k] of PORTES.entr
   await p.getByTestId('salvar-servico').click();
   await p.getByTestId('srv-salvo').waitFor();
   assert.deepEqual(chamadas.filter((c) => c.m === 'POST').at(-1).corpo.componentes, [a, c2]);
-  assert.match(await p.getByTestId('srv-lista').innerText(), /Combo de 2/);
+  await p.waitForFunction(([id, src]) => new RegExp(src).test(document.querySelector(`[data-testid="${id}"]`)?.innerText || ''), ['srv-lista', 'Combo de 2']);
   ok('combo: erro do servidor com 1 serviço; salva com 2');
 
   // remover com confirmação na própria tela; serviço dentro de combo só desativa
@@ -165,7 +165,7 @@ const portes = async (p, precos, duracoes) => { for (const [i, k] of PORTES.entr
   await p.getByTestId('srv-salvo').waitFor();
   const put = chamadas.filter((c) => c.m === 'PUT').at(-1);
   assert.equal(put.u, `/api/servicos/${c2}`); assert.equal(put.corpo.precos.medio, 99);
-  assert.match(await p.getByTestId('srv-lista').innerText(), /Cera premium/);
+  await p.waitForFunction(([id, src]) => new RegExp(src).test(document.querySelector(`[data-testid="${id}"]`)?.innerText || ''), ['srv-lista', 'Cera premium']);
   // busca local
   await p.getByTestId('srv-busca').fill('zzzz'); await p.getByTestId('srv-vazio').waitFor();
   await p.getByTestId('srv-busca').fill('premium'); assert.equal(await p.locator('[data-testid="srv-item-nome"]').count(), 1);

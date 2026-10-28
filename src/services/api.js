@@ -8,7 +8,7 @@ import * as F from '../domain/financeiro.js';
 import '../domain/pagamento.js'; // registra no tick o lançamento das receitas e estornos do atendimento local
 import * as CU from '../domain/resgate.js';
 import { TIPOS_CUPOM } from '../domain/cupons.js';
-import { intervaloComissao, pagarComissao, relatorioComissoes, relatorioDoProfissional } from '../domain/comissao.js';
+import { cancelarComissao, intervaloComissao, pagarComissao, relatorioComissoes, relatorioDoProfissional, restaurarComissao } from '../domain/comissao.js';
 import * as T from '../domain/tema.js';
 import { capAtiva, definirTipoAtivo, exemploAtivo, rot, Rot, TIPO_PADRAO, tipoDe, tipoValido, Voc } from '../domain/tipos.js';
 import { fotoValida, proximoSlot } from '../domain/foto.js';
@@ -282,7 +282,7 @@ export const agenda = {
   atender(entrada) {
     const u = usuario();
     if (!u || !R.pode(u, 'agenda')) return semPermissao();
-    const d = pegar(entrada, permitidos(['servicoIds', 'produtos', 'nome', 'telefone', 'clienteId', 'profissionalId', 'vendedorId', 'formaPagamento', 'inicio', 'status', 'encaixe', 'cupomChave', 'veiculoId', 'veiculo', 'boxId']));
+    const d = pegar(entrada, permitidos(['servicoIds', 'produtos', 'nome', 'telefone', 'clienteId', 'profissionalId', 'vendedorId', 'formaPagamento', 'inicio', 'status', 'encaixe', 'cupomChave', 'veiculoId', 'veiculo', 'boxId', 'motivoRetroativo']));
     if (d.servicoIds === undefined || d.servicoIds === null) d.servicoIds = [];
     if (!(Array.isArray(d.servicoIds) && d.servicoIds.length <= 10 && d.servicoIds.every((x) => texto(x, 60)))) return erro('Escolha até 10 serviços.');
     if (d.produtos === undefined || d.produtos === null) d.produtos = [];
@@ -297,6 +297,10 @@ export const agenda = {
     if (d.inicio !== undefined && d.inicio !== null && (!finito(d.inicio) || Math.abs(Number(d.inicio)) > 8.64e15)) return erro('Data e hora inválidas.');
     if (d.inicio === null) delete d.inicio;
     if (d.encaixe !== undefined && typeof d.encaixe !== 'boolean') return erro('Encaixe inválido.');
+    if (d.motivoRetroativo === undefined || d.motivoRetroativo === null || d.motivoRetroativo === '') delete d.motivoRetroativo;
+    else if (!texto(d.motivoRetroativo, 300)) return erro('O motivo pode ter até 300 letras.');
+    // Dia anterior ("esqueci de registrar") é com o proprietário, o administrador ou a recepção: o profissional só lança o que aconteceu hoje (senão poderia inventar comissão).
+    if (u.papel === 'profissional' && d.inicio != null && Number(d.inicio) < startOfDay(now())) return erro('Lançar um dia anterior é com o proprietário ou a recepção. Peça a eles para registrar.');
     // Profissional atende e vende sempre como ele mesmo; recepção: vendedor padrão é quem está lançando (se tiver "Pode vender produtos").
     if (u.papel === 'profissional') { d.profissionalId = u.id; d.vendedorId = u.id; }
     else if (!d.vendedorId && d.produtos.length && u.podeVender !== false) d.vendedorId = u.id;
@@ -694,6 +698,23 @@ export const comissoes = {
     if (per.erro) return erro(per.erro);
     if (per.mesTs !== undefined && Math.abs(per.mesTs) > 8.64e15) return erro(`Informe o ${rot('profissional')} e o período.`);
     return mutate((s, agora) => pagarComissao(s, { profissionalId, ...per }, autor(), agora), { metodo: 'POST', rota: '/comissoes/pagamentos' });
+  },
+  // POST /agendamentos/{id}/comissao/cancelar  { quem?, motivo }  (só o proprietário; motivo obrigatório; comissão paga não se cancela)
+  cancelar(agendamentoId, entrada) {
+    if (!R.ehDono(usuario())) return semPermissao();
+    if (!texto(agendamentoId, 60)) return erro('Agendamento não encontrado.');
+    const d = pegar(entrada || {}, permitidos(['quem', 'motivo']));
+    if (d.quem !== undefined && d.quem !== null && d.quem !== '' && !texto(d.quem, 60)) return erro('Pessoa inválida.');
+    if (d.motivo !== undefined && d.motivo !== null && !texto(d.motivo, 300)) return erro('O motivo pode ter até 300 letras.');
+    return mutate((s, agora) => cancelarComissao(s, { agendamentoId, quem: d.quem || undefined, motivo: d.motivo }, autor(), agora), { metodo: 'POST', rota: `/agendamentos/${agendamentoId}/comissao/cancelar` });
+  },
+  // POST /agendamentos/{id}/comissao/restaurar  { quem? }
+  restaurar(agendamentoId, entrada) {
+    if (!R.ehDono(usuario())) return semPermissao();
+    if (!texto(agendamentoId, 60)) return erro('Agendamento não encontrado.');
+    const d = pegar(entrada || {}, permitidos(['quem']));
+    if (d.quem !== undefined && d.quem !== null && d.quem !== '' && !texto(d.quem, 60)) return erro('Pessoa inválida.');
+    return mutate((s, agora) => restaurarComissao(s, { agendamentoId, quem: d.quem || undefined }, autor(), agora), { metodo: 'POST', rota: `/agendamentos/${agendamentoId}/comissao/restaurar` });
   },
 };
 

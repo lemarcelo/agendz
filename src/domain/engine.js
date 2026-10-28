@@ -6,7 +6,7 @@ import {
   montarPlano, montarLembretes, notificacoesEfetivas, ocupadoMin, servicosPorIds, servicosDoAg, validarHorario, congelarComissoes, ocupacaoDe, retiradaDe, nomeBox,
 } from './rules.js';
 import { LIMITE_VEICULOS, fotoDoVeiculo, limparVeiculo, resumoVeiculo, veiculoPorPlaca } from './veiculos.js';
-import { fmtDate, fmtHM, fmtMoney, HORA, MIN } from './time.js';
+import { fmtDate, fmtHM, fmtMoney, HORA, MIN, startOfDay } from './time.js';
 import { consumoDoAgendamento, r2, r3, totalAgendamento } from './reports.js';
 import { renderizar } from './templates.js';
 import { diasDaExcecao } from './schedule.js';
@@ -280,6 +280,10 @@ export function profissionalRemarca(s, id, { inicio, status, profissionalId, box
   const a = s.agendamentos.find((x) => x.id === id);
   if (!a) return { ok: false, erros: ['Agendamento não encontrado.'] };
   if (status !== undefined && !Object.values(STATUS).includes(status)) return { ok: false, erros: ['Status inválido.'] };
+  // Concluído já aconteceu: reabra o atendimento (status) antes de mexer no horário. Cancelado só se remarca junto com a reativação
+  // (`status` não cancelado), validada no horário NOVO: o antigo pode já ter sido ocupado (cancelado por conflito, por exemplo).
+  if (a.status === STATUS.CONCLUIDO) return { ok: false, erros: ['Agendamento concluído não pode ser remarcado.'] };
+  if (a.status === STATUS.CANCELADO && (status === undefined || status === STATUS.CANCELADO)) return { ok: false, erros: ['Agendamento cancelado não pode ser remarcado. Reative-o antes.'] };
   if (a.status === STATUS.CANCELADO && jaCreditado(s, a)) return { ok: false, erros: ERRO_DEVOLVIDO };
   const novoProfissional = profissionalId || a.profissionalId;
   const v = validarHorario(s, { profissionalId: novoProfissional, inicio, servicoIds: a.servicoIds, porte: a.porte, boxId, boxPreferido: a.boxId, ignoreId: a.id, encaixe: a.encaixe, origem: 'painel', agora });
@@ -378,7 +382,7 @@ export function resolverClienteDoAtendimento(s, { nome, telefone, clienteId }, a
 // Atendimento local (cliente que chegou no balcão, ou registro de algo que já aconteceu): nasce concluído, para entrar no relatório, no estoque,
 // na comissão e no financeiro. Não manda mensagem, não passa por conflito de horário (já aconteceu). `inicio` opcional (passado); sem ele, é agora.
 // Cliente: ver `resolverClienteDoAtendimento` (telefone cria cadastro; só nome não).
-export function registrarAtendimentoLocal(s, { profissionalId, servicoIds, nome, telefone, clienteId: clienteEscolhido, produtos, vendedorId, formaPagamento, inicio, veiculoId, veiculo }, autor, agora) {
+export function registrarAtendimentoLocal(s, { profissionalId, servicoIds, nome, telefone, clienteId: clienteEscolhido, produtos, vendedorId, formaPagamento, inicio, veiculoId, veiculo, motivoRetroativo }, autor, agora) {
   const ids = Array.isArray(servicoIds) ? servicoIds : [];
   const temProdutos = Array.isArray(produtos) && produtos.length > 0;
   // Venda de produto sem serviço: vale quando há ao menos um produto; senão continua exigindo ao menos um serviço.
@@ -406,6 +410,10 @@ export function registrarAtendimentoLocal(s, { profissionalId, servicoIds, nome,
   const quando = inicio === undefined || inicio === null ? Math.floor(agora / 60000) * 60000 : Number(inicio);
   if (!Number.isFinite(quando) || quando > agora + 60000) return { ok: false, erros: ['Atendimento que já aconteceu não pode ter data no futuro. Para o futuro, use agendamento.'] };
   if (quando < agora - 400 * 24 * 3600 * 1000) return { ok: false, erros: ['A data do atendimento é antiga demais (máximo de 400 dias atrás).'] };
+  // Lançamento de um dia anterior ("esqueci de registrar"): exige o motivo, que fica no histórico. Hoje, mesmo em hora anterior, é atendimento comum.
+  const retro = quando < startOfDay(agora);
+  const motivoRetro = retro ? limparTexto(String(motivoRetroativo || ''), 300).trim() : '';
+  if (retro && motivoRetro.length < 5) return { ok: false, erros: ['Informe o motivo do lançamento de um dia anterior (por que não foi registrado na hora).'] };
   const rc = resolverClienteDoAtendimento(s, { nome, telefone, clienteId: clienteEscolhido }, agora);
   if (!rc.ok) return rc;
   const cli = rc.cliente;
@@ -428,6 +436,14 @@ export function registrarAtendimentoLocal(s, { profissionalId, servicoIds, nome,
   }
   const resumo = [ids.length ? nomesServicos(s, a) : '', a.produtos.length ? `venda de ${textoProdutos(s, a)}` : ''].filter(Boolean).join(' + ');
   registrar(s, a, autor, 'criação', null, `Atendimento local: ${resumo}${cli ? ` (cliente ${cli.apelido || cli.nome})` : a.nomeAvulso ? ` (${a.nomeAvulso})` : ''}`, agora);
+  if (retro) {
+    // Se o período da comissão desse atendimento já foi pago a alguém que participa dele, a comissão entra no PRÓXIMO pagamento (não reabre o mês fechado).
+    const quem = [a.profissionalId, ...a.produtos.map((p) => p.vendedorId || a.profissionalId)];
+    const fechado = (s.comissoesPagas || []).some((p) => quem.includes(p.profissionalId) && p.mesTs <= a.inicio && a.inicio <= p.ateTs);
+    a.retroativo = { motivo: motivoRetro, lancadoEm: agora, proximoPagamento: fechado };
+    if (fechado) a.comissaoEm = agora;
+    registrar(s, a, autor, 'lançamento retroativo', null, `${motivoRetro}${fechado ? ' · comissão entra no próximo pagamento (o período já foi pago)' : ''}`, agora);
+  }
   s.agendamentos.push(a);
   tick(s, agora);
   return { ok: true, agendamento: a };

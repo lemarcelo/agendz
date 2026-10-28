@@ -148,7 +148,7 @@ const semRolagem = async (p, nome) => assert.ok(await p.evaluate(() => document.
   assert.equal(put.u, `/api/clientes/${id}`);
   assert.equal(put.corpo.veiculos.length, 1);
   assert.ok(put.corpo.veiculos[0].id, 'o id do veículo que ficou volta ao servidor');
-  assert.match(await p.getByTestId('cli-lista').innerText(), /“Aninha”/);
+  await p.waitForFunction(([id, src]) => new RegExp(src).test(document.querySelector(`[data-testid="${id}"]`)?.innerText || ''), ['cli-lista', '“Aninha”']);
   ok('editar: ficha com CPF completo, veículo removido, id mantido; busca por placa; duplicado recusado com a mensagem do servidor');
 
   const guardado = await p.evaluate(() => JSON.stringify([Object.entries(localStorage), Object.entries(sessionStorage), document.cookie]));

@@ -1,5 +1,5 @@
 {
- "descricao": "Casos da agenda (criar, remarcar, status, conflito, expediente) executados na API simulada (tests/agenda-equivalencia.test.mjs) e no servidor (AgendaEquivalenciaTest). Cenário igual dos dois lados: loja Dalforno (barbearia: sem veículo nem box), expediente segunda a sábado 09:00–18:00, profissionais Alan (dono) e EqAgPro, clientes c1 e c2, serviços s30 (30 min), s60 (60 min + 10 min de intervalo) e s30b. 'quando' = semanas à frente, dia da semana (0 domingo) e hora, no fuso de São Paulo. '@n' = id criado no passo n; '@nenhum' = id que não existe. Só o último passo é conferido. Fora do contrato por enquanto (decisão pendente): remarcar agendamento concluído ou cancelado, status na remarcação. Em 'esperado.estado' o caso também confere o agendamento '@n' depois do último passo: status, motivo do cancelamento, reagendado e os eventos de histórico dos campos status e profissional (campo, de, para).",
+ "descricao": "Casos da agenda (criar, remarcar, status, conflito, expediente) executados na API simulada (tests/agenda-equivalencia.test.mjs) e no servidor (AgendaEquivalenciaTest). Cenário igual dos dois lados: loja Dalforno (barbearia: sem veículo nem box), expediente segunda a sábado 09:00–18:00, profissionais Alan (dono) e EqAgPro, clientes c1 e c2, serviços s30 (30 min), s60 (60 min + 10 min de intervalo) e s30b. 'quando' = semanas à frente, dia da semana (0 domingo) e hora, no fuso de São Paulo. '@n' = id criado no passo n; '@nenhum' = id que não existe. Só o último passo é conferido. Em 'esperado.estado' o caso também confere o agendamento '@n' depois do último passo: status, motivo do cancelamento, reagendado e os eventos de histórico dos campos status e profissional (campo, de, para). Remarcar: concluído nunca (reabra antes); cancelado só junto com a reativação (status não cancelado), validada no horário novo.",
  "cenario": {
   "escala": {
    "1": [
@@ -1303,6 +1303,260 @@
       ]
      ]
     }
+   }
+  },
+  {
+   "nome": "remarcar concluído é recusado",
+   "passos": [
+    {
+     "op": "criar",
+     "cliente": "c1",
+     "prof": "alan",
+     "servicos": [
+      "s30"
+     ],
+     "quando": {
+      "semanas": 2,
+      "dow": 1,
+      "hora": "10:00"
+     },
+     "status": "confirmado"
+    },
+    {
+     "op": "status",
+     "alvo": "@1",
+     "status": "concluido"
+    },
+    {
+     "op": "remarcar",
+     "alvo": "@1",
+     "quando": {
+      "semanas": 2,
+      "dow": 1,
+      "hora": "14:00"
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Agendamento concluído não pode ser remarcado."
+   }
+  },
+  {
+   "nome": "remarcar cancelado sem reativar é recusado",
+   "passos": [
+    {
+     "op": "criar",
+     "cliente": "c1",
+     "prof": "alan",
+     "servicos": [
+      "s30"
+     ],
+     "quando": {
+      "semanas": 2,
+      "dow": 1,
+      "hora": "10:00"
+     }
+    },
+    {
+     "op": "status",
+     "alvo": "@1",
+     "status": "cancelado"
+    },
+    {
+     "op": "remarcar",
+     "alvo": "@1",
+     "quando": {
+      "semanas": 2,
+      "dow": 1,
+      "hora": "14:00"
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Agendamento cancelado não pode ser remarcado. Reative-o antes."
+   }
+  },
+  {
+   "nome": "remarcar cancelado reativando em outro horário",
+   "passos": [
+    {
+     "op": "criar",
+     "cliente": "c1",
+     "prof": "alan",
+     "servicos": [
+      "s30"
+     ],
+     "quando": {
+      "semanas": 2,
+      "dow": 1,
+      "hora": "10:00"
+     }
+    },
+    {
+     "op": "status",
+     "alvo": "@1",
+     "status": "cancelado"
+    },
+    {
+     "op": "remarcar",
+     "alvo": "@1",
+     "quando": {
+      "semanas": 2,
+      "dow": 1,
+      "hora": "14:00"
+     },
+     "status": "confirmado"
+    }
+   ],
+   "esperado": {
+    "ok": true,
+    "estado": {
+     "alvo": "@1",
+     "status": "confirmado",
+     "motivo": null,
+     "reagendado": true,
+     "eventos": [
+      [
+       "status",
+       "A confirmar",
+       "Cancelado"
+      ],
+      [
+       "status",
+       "Cancelado",
+       "Confirmado"
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "nome": "remarcar cancelado reativando em cima de confirmado é recusado",
+   "passos": [
+    {
+     "op": "criar",
+     "cliente": "c1",
+     "prof": "alan",
+     "servicos": [
+      "s30"
+     ],
+     "quando": {
+      "semanas": 2,
+      "dow": 1,
+      "hora": "10:00"
+     }
+    },
+    {
+     "op": "status",
+     "alvo": "@1",
+     "status": "cancelado"
+    },
+    {
+     "op": "criar",
+     "cliente": "c2",
+     "prof": "alan",
+     "servicos": [
+      "s30"
+     ],
+     "quando": {
+      "semanas": 2,
+      "dow": 1,
+      "hora": "14:00"
+     },
+     "status": "confirmado"
+    },
+    {
+     "op": "remarcar",
+     "alvo": "@1",
+     "quando": {
+      "semanas": 2,
+      "dow": 1,
+      "hora": "14:00"
+     },
+     "status": "confirmado"
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Esse horário já está confirmado para outro cliente. Para forçar, marque como encaixe."
+   }
+  },
+  {
+   "nome": "remarcar escolhendo o status",
+   "passos": [
+    {
+     "op": "criar",
+     "cliente": "c1",
+     "prof": "alan",
+     "servicos": [
+      "s30"
+     ],
+     "quando": {
+      "semanas": 2,
+      "dow": 1,
+      "hora": "10:00"
+     }
+    },
+    {
+     "op": "remarcar",
+     "alvo": "@1",
+     "quando": {
+      "semanas": 2,
+      "dow": 1,
+      "hora": "14:00"
+     },
+     "status": "confirmado"
+    }
+   ],
+   "esperado": {
+    "ok": true,
+    "estado": {
+     "alvo": "@1",
+     "status": "confirmado",
+     "motivo": null,
+     "reagendado": true,
+     "eventos": [
+      [
+       "status",
+       "A confirmar",
+       "Confirmado"
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "nome": "remarcar com status inválido",
+   "passos": [
+    {
+     "op": "criar",
+     "cliente": "c1",
+     "prof": "alan",
+     "servicos": [
+      "s30"
+     ],
+     "quando": {
+      "semanas": 2,
+      "dow": 1,
+      "hora": "10:00"
+     }
+    },
+    {
+     "op": "remarcar",
+     "alvo": "@1",
+     "quando": {
+      "semanas": 2,
+      "dow": 1,
+      "hora": "14:00"
+     },
+     "status": "xyz"
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Status inválido."
    }
   }
  ]

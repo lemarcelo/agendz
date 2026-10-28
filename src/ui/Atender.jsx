@@ -40,10 +40,12 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
   const [vNovo, setVNovo] = useState({ placa: '', marca: '', modelo: '', cor: '', porte: '' });
   const [boxId, setBoxId] = useState('');
   const [erros, setErros] = useState([]);
+  const [motivoRetro, setMotivoRetro] = useState('');
 
   const inicio = personalizar && data ? tsAt(fromYmd(data), minutos) : null;
   const futuro = inicio != null && inicio > agora + 60000;
   const passado = inicio != null && !futuro && inicio < agora - 60000;
+  const retro = inicio != null && inicio < startOfDay(agora); // dia anterior ("esqueci de registrar"): pede o motivo
   const tipo = futuro ? 'futuro' : 'local';
   const obrig = camposObrigatorios(st, tipo);
   const pede = (k) => obrig.includes(k);
@@ -101,7 +103,7 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
     const r = agenda.atender({
       servicoIds, produtos: itensProduto, nome: nome.trim() || undefined, telefone: telefone.trim() || undefined, clienteId: clienteId || undefined,
       profissionalId: profissionalId || undefined, vendedorId: vendeProduto && !ehProfissional && vendedorEscolhido ? vendedorEscolhido : undefined,
-      formaPagamento: futuro ? undefined : formaEscolhida || undefined, inicio: inicio != null ? inicio : undefined,
+      formaPagamento: futuro ? undefined : formaEscolhida || undefined, inicio: inicio != null ? inicio : undefined, motivoRetroativo: retro ? motivoRetro.trim() || undefined : undefined,
       ...(temServico && usaVeiculo ? (veicSel === 'novo' ? { veiculo: vNovo } : veicSel ? { veiculoId: veicSel } : {}) : {}),
       ...(futuro ? { status, encaixe, boxId: boxId || undefined, cupomChave: chaveCupom.trim() || undefined } : {}),
     });
@@ -149,6 +151,15 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
               </div>
             )}
           </div>
+          {retro && !ehProfissional && (
+            <div className="campo-largo">
+              <Campo rotulo="Motivo do lançamento atrasado *">
+                <input type="text" maxLength={300} value={motivoRetro} onChange={(e) => setMotivoRetro(e.target.value)} placeholder="Por que não foi registrado na hora? (fica no histórico)" data-testid="atender-motivo-retro" />
+              </Campo>
+              <p className="muted" data-testid="atender-retro-dica">Se a comissão desse período já foi paga, ela entra no próximo pagamento.</p>
+            </div>
+          )}
+          {retro && ehProfissional && <p className="msg-conflito" data-testid="atender-retro-bloqueado"><Icon n="alert" size={15} /> Lançar um dia anterior é com o proprietário ou a recepção. Peça a eles para registrar.</p>}
           <div className="grupo-hora-avisos" aria-live="polite">
             <p className="muted" data-testid="atender-tipo">{quando}</p>
             {v && v.pendentes.length > 0 && <p className="msg-conflito" data-testid="aviso-pendente"><Icon n="alert" size={15} /> Já há {v.pendentes.length === 1 ? 'um agendamento a confirmar' : `${v.pendentes.length} agendamentos a confirmar`} nesse horário ({v.pendentes.map(nomeDe).join(', ')}).</p>}

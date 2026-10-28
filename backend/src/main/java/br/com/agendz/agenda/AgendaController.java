@@ -83,7 +83,7 @@ public class AgendaController {
             Boolean encaixe) {
     }
 
-    public record Remarcacao(@NotNull Instant inicio, UUID profissionalId, Boolean encaixe) {
+    public record Remarcacao(@NotNull Instant inicio, UUID profissionalId, Boolean encaixe, @Size(max = 30) String status) {
     }
 
     public record NovoStatus(@NotNull @Size(max = 30) String status) {
@@ -234,14 +234,19 @@ public class AgendaController {
             throw new ErroDeNegocio(HttpStatus.FORBIDDEN, "Só o dono repassa o atendimento a outro profissional.");
         }
         Instant novoInicio = conferirInicio(d.inicio());
+        if (d.status() != null && !ROTULOS.containsKey(d.status())) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Status inválido.");
         Loja loja = LojaContext.exigir();
         return banco.naLoja(jdbc -> {
             Atual a = ler(jdbc, id, so, false);
             UUID alvo = d.profissionalId() == null ? a.profissionalId() : d.profissionalId();
             travarProfissional(jdbc, alvo);
             a = ler(jdbc, id, so, true);
-            if (CANCELADO.equals(a.status())) throw new ErroDeNegocio(HttpStatus.CONFLICT, "Agendamento cancelado não pode ser remarcado. Reative-o antes.");
-            if ("concluido".equals(a.status())) throw new ErroDeNegocio(HttpStatus.CONFLICT, "Agendamento concluído não pode ser remarcado.");
+            // Concluído já aconteceu: reabra (status) antes. Cancelado só se remarca junto com a reativação (`status` não cancelado), validada no horário NOVO.
+            if (CONCLUIDO.equals(a.status())) throw new ErroDeNegocio(HttpStatus.CONFLICT, "Agendamento concluído não pode ser remarcado.");
+            if (CANCELADO.equals(a.status()) && (d.status() == null || CANCELADO.equals(d.status()))) {
+                throw new ErroDeNegocio(HttpStatus.CONFLICT, "Agendamento cancelado não pode ser remarcado. Reative-o antes.");
+            }
+            String novoStatus = d.status() == null ? a.status() : d.status();
             Duration servico = Duration.between(a.inicio(), a.fimServico());
             Duration folga = Duration.between(a.fimServico(), a.fimOcupado());
             Instant fimServico = novoInicio.plus(servico);
@@ -250,13 +255,14 @@ public class AgendaController {
             conferirExpediente(jdbc, alvo, novoInicio, fimServico, multiDia(jdbc, id));
             List<UUID> pendentes = conferirConflitos(jdbc, alvo, id, novoInicio, fimOcupado, encaixe);
             registrar(jdbc, loja.id(), id, jwt, "data e hora", dataHora(a.inicio()), dataHora(novoInicio));
+            if (!novoStatus.equals(a.status())) registrar(jdbc, loja.id(), id, jwt, "status", ROTULOS.get(a.status()), ROTULOS.get(novoStatus));
             if (!alvo.equals(a.profissionalId())) registrar(jdbc, loja.id(), id, jwt, "profissional", nomeDe(jdbc, a.profissionalId()), nomeDe(jdbc, alvo));
             // reagendado: etiqueta fixa (a data ou a hora mudou); o motivo do cancelamento, se havia, não vale mais
-            jdbc.update("update agendamento set profissional_id = ?, inicio = ?, fim_servico = ?, fim_ocupado = ?, encaixe = ?, reagendado = true, motivo_cancelamento = null, atualizado_em = now() where id = ?",
-                    alvo, utc(novoInicio), utc(fimServico), utc(fimOcupado), encaixe, id);
-            if (CONFIRMADO.equals(a.status()) || CONCLUIDO.equals(a.status())) cancelarPendentesQueCobrem(jdbc, loja.id(), alvo, id, novoInicio, fimOcupado);
+            jdbc.update("update agendamento set profissional_id = ?, inicio = ?, fim_servico = ?, fim_ocupado = ?, encaixe = ?, status = ?, reagendado = true, motivo_cancelamento = null, atualizado_em = now() where id = ?",
+                    alvo, utc(novoInicio), utc(fimServico), utc(fimOcupado), encaixe, novoStatus, id);
+            if (CONFIRMADO.equals(novoStatus) || CONCLUIDO.equals(novoStatus)) cancelarPendentesQueCobrem(jdbc, loja.id(), alvo, id, novoInicio, fimOcupado);
             Agendamento r = buscar(jdbc, id, so);
-            return CONFIRMADO.equals(a.status()) || pendentes.isEmpty() ? r : r.comAvisos(pendentes);
+            return CONFIRMADO.equals(novoStatus) || pendentes.isEmpty() ? r : r.comAvisos(pendentes);
         });
     }
 

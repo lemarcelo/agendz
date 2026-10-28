@@ -52,6 +52,7 @@ await primeiroServico();
 await T('atender-quando').click();
 await T('atender-data').fill('2026-10-10');
 await T('hora-h').fill('10'); await T('hora-m').fill('00');
+await T('atender-motivo-retro').fill('Esqueci de lançar ontem');
 assert.match(await T('atender-tipo').innerText(), /concluído|registra/i);
 assert.match(await T('salvar-atender').innerText(), /Registrar/);
 await salvar();

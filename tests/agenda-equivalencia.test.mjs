@@ -58,7 +58,7 @@ for (const caso of fixture.casos) {
           ...(p.status ? { status: p.status } : {}), ...(p.encaixe ? { encaixe: true } : {}) });
         ids.push(r.ok ? r.agendamento.id : null);
       } else if (p.op === 'remarcar') {
-        r = agenda.remarcar(res(p.alvo), { inicio: quando(p.quando), ...(p.prof ? { profissionalId: ctx.profs[p.prof] } : {}) });
+        r = agenda.remarcar(res(p.alvo), { inicio: quando(p.quando), ...(p.prof ? { profissionalId: ctx.profs[p.prof] } : {}), ...(p.status ? { status: p.status } : {}) });
         ids.push(null);
       } else if (p.op === 'status') {
         r = agenda.alterarStatus(res(p.alvo), p.status);

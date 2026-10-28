@@ -26,7 +26,7 @@ test('só serviço ou só produto basta: sem data vira atendimento de agora, con
 
 test('data passada: atendimento concluído nessa data e hora; no financeiro a receita fica no dia; futuro dentro do tolerado vira local', () => {
   const ontem = store.agora() - DIA - 3 * 3600 * 1000;
-  const r = agenda.atender({ servicoIds: ['s-lav-simples'], profissionalId: 'u-pablo', inicio: ontem });
+  const r = agenda.atender({ servicoIds: ['s-lav-simples'], profissionalId: 'u-pablo', inicio: ontem, motivoRetroativo: 'Esqueci de lançar ontem' });
   assert.ok(r.ok, JSON.stringify(r)); assert.equal(r.tipo, 'local');
   assert.equal(ag(r.agendamento.id).inicio, ontem - (ontem % 60000)); assert.equal(ag(r.agendamento.id).status, 'concluido');
   const l = st().financeiro.lancamentos.find((x) => x.agendamentoId === r.agendamento.id);

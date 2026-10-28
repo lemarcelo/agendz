@@ -22,5 +22,5 @@ export function textoUltimo(st, a) {
 
 export const textoSemConfirmacao = (st, a) => `${nomeCliente(st, a)} não confirmou o agendamento de ${nomeServicos(st, a)} com ${nomeProfissional(st, a)}, marcado para ${fmtDate(a.inicio)} às ${fmtHM(a.inicio)}.`;
 
-export const campoLog = { andamento: 'Andamento do carro', box: 'Box', veículo: 'Veículo', produtos: 'Produtos', 'data e hora': 'Data e hora', status: 'Status', serviços: 'Serviços', get profissional() { return Rot('profissional'); }, 'criação': 'Criação', aviso: 'Aviso' };
+export const campoLog = { andamento: 'Andamento do carro', box: 'Box', veículo: 'Veículo', produtos: 'Produtos', 'data e hora': 'Data e hora', status: 'Status', serviços: 'Serviços', get profissional() { return Rot('profissional'); }, 'criação': 'Criação', aviso: 'Aviso', 'lançamento retroativo': 'Lançamento atrasado', 'comissão': 'Comissão' };
 export { fmtDateShort };

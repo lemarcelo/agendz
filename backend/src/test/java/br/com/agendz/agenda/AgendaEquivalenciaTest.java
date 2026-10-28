@@ -144,6 +144,7 @@ class AgendaEquivalenciaTest extends BaseApi {
                     ObjectNode c = om.createObjectNode();
                     c.put("inicio", quando(p.get("quando")));
                     if (p.has("prof")) c.put("profissionalId", profs.get(p.get("prof").asText()));
+                    if (p.has("status")) c.put("status", p.get("status").asText());
                     ultimo = enviar(put("/api/agendamentos/" + alvo(p.get("alvo").asText(), ids) + "/remarcar"), alanToken, c.toString());
                 } else if (op.equals("status")) {
                     ultimo = enviar(put("/api/agendamentos/" + alvo(p.get("alvo").asText(), ids) + "/status"), alanToken, "{\"status\":\"" + p.get("status").asText() + "\"}");

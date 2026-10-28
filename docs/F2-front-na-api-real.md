@@ -75,3 +75,5 @@ O motor do navegador (`domain/engine.js`, 838 linhas, mais `api.js`) tem muito m
 Decisão sem confirmação: o `tick` do servidor roda por `@Scheduled` (por loja, dentro de `naLoja`) e não a cada leitura, para a leitura continuar sem efeito colateral.
 
 **Achado ao começar a 5a (28/10):** no simulador a **antecedência mínima do serviço só vale para quem agenda sozinho** (`origem` `whatsapp` ou `link`, mais o limite de 60 dias); o painel não a aplica. Por isso ela sai da 5a e vai para a 5e (link do cliente). O servidor ainda não tem `origem` no agendamento: entra na V13.
+
+**Progresso 5a (28/10):** servidor com V13, histórico, status manual, automação por minuto e contrato `equivalencia/agenda.json` (46 casos), CI verde. Remarcar já segue a regra v84 nos dois lados. Falta portar o lançamento atrasado (`motivoRetroativo`, `comissaoEm`) e o cancelamento de comissão, junto com a fatia 5d.
