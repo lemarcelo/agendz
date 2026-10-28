@@ -1,0 +1,326 @@
+diff --git a/backend/src/main/java/br/com/agendz/auth/AuthController.java b/backend/src/main/java/br/com/agendz/auth/AuthController.java
+index 2aaaea9..4314cb9 100644
+--- a/backend/src/main/java/br/com/agendz/auth/AuthController.java
++++ b/backend/src/main/java/br/com/agendz/auth/AuthController.java
+@@ -16,11 +16,12 @@ import org.springframework.web.bind.annotation.PostMapping;
+ import org.springframework.web.bind.annotation.RequestBody;
+ import org.springframework.web.bind.annotation.RestController;
+ 
+-/** POST /api/auth/login: a loja vem do Host (nunca do corpo). Erro de usuário e de senha dão a MESMA resposta (não revela quem existe). */
++/** POST /api/auth/login (corpo: identificador, senha, captcha opcional): a loja vem do Host (nunca do corpo). Erro de usuário e de senha dão a MESMA resposta (não revela quem existe). */
+ @RestController
+ public class AuthController {
+ 
+-    public record LoginRequest(@NotBlank @Size(max = 60) String identificador, @NotBlank @Size(max = 100) String senha) {
++    public record LoginRequest(@NotBlank @Size(max = 60) String identificador, @NotBlank @Size(max = 100) String senha,
++            @Size(max = 4096) String captcha) {
+     }
+ 
+     private record Usuario(UUID id, String nome, String papel, String senhaHash, boolean ativo, boolean deveTrocarSenha) {
+@@ -33,12 +34,14 @@ public class AuthController {
+     private final PasswordEncoder encoder;
+     private final SessaoService sessao;
+     private final LimiteDeLogin limite;
++    private final Recaptcha recaptcha;
+ 
+-    public AuthController(LojaJdbc banco, PasswordEncoder encoder, SessaoService sessao, LimiteDeLogin limite) {
++    public AuthController(LojaJdbc banco, PasswordEncoder encoder, SessaoService sessao, LimiteDeLogin limite, Recaptcha recaptcha) {
+         this.banco = banco;
+         this.encoder = encoder;
+         this.sessao = sessao;
+         this.limite = limite;
++        this.recaptcha = recaptcha;
+     }
+ 
+     @PostMapping("/api/auth/login")
+@@ -46,9 +49,13 @@ public class AuthController {
+         Loja loja = LojaContext.exigir();
+         String login = req.identificador().trim().toLowerCase(Locale.ROOT);
+         String chave = loja.id() + "|" + login;
+-        if (limite.bloqueado(chave)) {
++        if (limite.bloqueadoNoLogin(chave, recaptcha.ativo())) {
+             throw new ErroDeNegocio(HttpStatus.TOO_MANY_REQUESTS, "Muitas tentativas. Aguarde alguns minutos e tente de novo.");
+         }
++        // Depois de erros seguidos a senha sozinha não basta: 428 faz a tela mostrar o reCAPTCHA. A recusa não conta como erro de senha.
++        if (recaptcha.ativo() && limite.exigeCaptcha(chave) && !recaptcha.valido(req.captcha())) {
++            throw new ErroDeNegocio(HttpStatus.PRECONDITION_REQUIRED, "Confirme que você não é um robô para continuar.");
++        }
+         List<Usuario> achados = banco.naLoja(jdbc -> jdbc.query(
+                 "select id, nome, papel, senha_hash, ativo, deve_trocar_senha from usuario where identificador = ?",
+                 (rs, i) -> new Usuario(rs.getObject("id", UUID.class), rs.getString("nome"), rs.getString("papel"),
+diff --git a/backend/src/main/java/br/com/agendz/auth/LimiteDeLogin.java b/backend/src/main/java/br/com/agendz/auth/LimiteDeLogin.java
+index a20b03e..4da32ea 100644
+--- a/backend/src/main/java/br/com/agendz/auth/LimiteDeLogin.java
++++ b/backend/src/main/java/br/com/agendz/auth/LimiteDeLogin.java
+@@ -9,11 +9,16 @@ import java.util.Map;
+ import java.util.concurrent.ConcurrentHashMap;
+ import org.springframework.stereotype.Component;
+ 
+-/** Trava de força bruta: 5 erros em 15 minutos para o mesmo login na mesma loja bloqueiam novas tentativas (429) até a janela passar. Em memória (uma API). */
++/**
++ * Trava de força bruta: 5 erros em 15 minutos para o mesmo login na mesma loja bloqueiam novas tentativas (429) até a janela passar. Em memória (uma API).
++ * Login com reCAPTCHA ativo: a partir do 6º erro seguido (a 7ª tentativa) o servidor exige a prova do reCAPTCHA e só bloqueia no 12º.
++ */
+ @Component
+ public class LimiteDeLogin {
+ 
+     static final int MAX_ERROS = 5;
++    static final int CAPTCHA_APOS = 6;
++    static final int MAX_ERROS_COM_CAPTCHA = 12;
+     static final Duration JANELA = Duration.ofMinutes(15);
+ 
+     private final Map<String, Deque<Instant>> erros = new ConcurrentHashMap<>();
+@@ -37,6 +42,22 @@ public class LimiteDeLogin {
+         }
+     }
+ 
++    /** Login: sem reCAPTCHA configurado vale o limite de sempre (5); com ele, só o limite maior (12). */
++    public boolean bloqueadoNoLogin(String chave, boolean captchaAtivo) {
++        Deque<Instant> fila = recentes(chave);
++        synchronized (fila) {
++            return fila.size() >= (captchaAtivo ? MAX_ERROS_COM_CAPTCHA : MAX_ERROS);
++        }
++    }
++
++    /** Já houve erros demais para seguir só com a senha: a próxima tentativa precisa do reCAPTCHA. */
++    public boolean exigeCaptcha(String chave) {
++        Deque<Instant> fila = recentes(chave);
++        synchronized (fila) {
++            return fila.size() >= CAPTCHA_APOS;
++        }
++    }
++
+     public void registrarErro(String chave) {
+         Deque<Instant> fila = recentes(chave);
+         synchronized (fila) {
+diff --git a/backend/src/main/java/br/com/agendz/auth/Recaptcha.java b/backend/src/main/java/br/com/agendz/auth/Recaptcha.java
+new file mode 100644
+index 0000000..5f966dc
+--- /dev/null
++++ b/backend/src/main/java/br/com/agendz/auth/Recaptcha.java
+@@ -0,0 +1,76 @@
++package br.com.agendz.auth;
++
++import com.fasterxml.jackson.databind.JsonNode;
++import com.fasterxml.jackson.databind.ObjectMapper;
++import java.net.URI;
++import java.net.URLEncoder;
++import java.net.http.HttpClient;
++import java.net.http.HttpRequest;
++import java.net.http.HttpResponse;
++import java.nio.charset.StandardCharsets;
++import java.time.Duration;
++import java.util.function.Predicate;
++import org.springframework.beans.factory.annotation.Value;
++import org.springframework.stereotype.Component;
++
++/**
++ * Prova de "não sou um robô" (Google reCAPTCHA v2) pedida no login depois de erros seguidos.
++ * Ligado só com as duas chaves no ambiente (RECAPTCHA_CHAVE_SITE e RECAPTCHA_SEGREDO); sem elas o login segue com o bloqueio de sempre.
++ * O segredo nunca sai do servidor; a chave do site é pública (vai para o navegador). Falha de rede com o Google = prova recusada (nunca libera).
++ */
++@Component
++public class Recaptcha {
++
++    private static final String VERIFICAR = "https://www.google.com/recaptcha/api/siteverify";
++
++    private final ObjectMapper json = new ObjectMapper();
++    private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(4)).build();
++    private volatile String chaveSite;
++    private final String segredo;
++    private volatile Predicate<String> trocaDeTeste; // só os testes usam
++
++    public Recaptcha(@Value("${agendz.recaptcha.chave-site:}") String chaveSite, @Value("${agendz.recaptcha.segredo:}") String segredo) {
++        this.chaveSite = chaveSite == null ? "" : chaveSite.trim();
++        this.segredo = segredo == null ? "" : segredo.trim();
++    }
++
++    public boolean ativo() {
++        return !chaveSite.isEmpty() && (trocaDeTeste != null || !segredo.isEmpty());
++    }
++
++    /** Chave pública para o navegador; nula quando o reCAPTCHA está desligado. */
++    public String chaveSite() {
++        return ativo() ? chaveSite : null;
++    }
++
++    public boolean valido(String resposta) {
++        if (!ativo() || resposta == null || resposta.isBlank() || resposta.length() > 4096) return false;
++        if (trocaDeTeste != null) return trocaDeTeste.test(resposta);
++        try {
++            String corpo = "secret=" + URLEncoder.encode(segredo, StandardCharsets.UTF_8) + "&response=" + URLEncoder.encode(resposta, StandardCharsets.UTF_8);
++            HttpRequest req = HttpRequest.newBuilder(URI.create(VERIFICAR)).timeout(Duration.ofSeconds(5))
++                    .header("Content-Type", "application/x-www-form-urlencoded").POST(HttpRequest.BodyPublishers.ofString(corpo)).build();
++            HttpResponse<String> r = http.send(req, HttpResponse.BodyHandlers.ofString());
++            if (r.statusCode() != 200) return false;
++            JsonNode n = json.readTree(r.body());
++            return n.path("success").asBoolean(false);
++        } catch (InterruptedException e) {
++            Thread.currentThread().interrupt();
++            return false;
++        } catch (Exception e) {
++            return false;
++        }
++    }
++
++    /** Só para testes: liga o reCAPTCHA com uma chave de mentira e uma regra no lugar da chamada ao Google. */
++    public void ligarParaTeste(String chave, Predicate<String> regra) {
++        this.chaveSite = chave;
++        this.trocaDeTeste = regra;
++    }
++
++    /** Só para testes: volta ao que o ambiente configurou. */
++    public void desligarTeste(String chaveOriginal) {
++        this.chaveSite = chaveOriginal == null ? "" : chaveOriginal;
++        this.trocaDeTeste = null;
++    }
++}
+diff --git a/backend/src/main/java/br/com/agendz/publico/LojaPublicaController.java b/backend/src/main/java/br/com/agendz/publico/LojaPublicaController.java
+index 28b0183..616dd77 100644
+--- a/backend/src/main/java/br/com/agendz/publico/LojaPublicaController.java
++++ b/backend/src/main/java/br/com/agendz/publico/LojaPublicaController.java
+@@ -1,5 +1,6 @@
+ package br.com.agendz.publico;
+ 
++import br.com.agendz.auth.Recaptcha;
+ import br.com.agendz.tenant.Loja;
+ import br.com.agendz.tenant.LojaContext;
+ import org.springframework.web.bind.annotation.GetMapping;
+@@ -9,12 +10,18 @@ import org.springframework.web.bind.annotation.RestController;
+ @RestController
+ public class LojaPublicaController {
+ 
+-    public record LojaPublica(String slug, String nome, String tipo, String logo, String temaCor, String temaCor2) {
++    private final Recaptcha recaptcha;
++
++    public LojaPublicaController(Recaptcha recaptcha) {
++        this.recaptcha = recaptcha;
++    }
++
++    public record LojaPublica(String slug, String nome, String tipo, String logo, String temaCor, String temaCor2, String captchaChave) {
+     }
+ 
+     @GetMapping("/api/publico/loja")
+     public LojaPublica loja() {
+         Loja l = LojaContext.exigir();
+-        return new LojaPublica(l.slug(), l.nome(), l.tipo(), l.logo(), l.temaCor(), l.temaCor2());
++        return new LojaPublica(l.slug(), l.nome(), l.tipo(), l.logo(), l.temaCor(), l.temaCor2(), recaptcha.chaveSite());
+     }
+ }
+diff --git a/backend/src/main/resources/application.yml b/backend/src/main/resources/application.yml
+index 01ec42b..1cfc8c8 100644
+--- a/backend/src/main/resources/application.yml
++++ b/backend/src/main/resources/application.yml
+@@ -27,6 +27,10 @@ agendz:
+   dominios-base: ${AGENDZ_DOMINIOS_BASE:agendz.io,localhost}
+   # ?loja=slug: só demonstração e desenvolvimento. Em produção fica false.
+   permitir-query: ${AGENDZ_PERMITIR_QUERY:false}
++  # reCAPTCHA v2 (caixa "Não sou um robô") no login, a partir do 7º erro seguido. Só liga com as DUAS chaves; sem elas vale o bloqueio de sempre (5 erros).
++  recaptcha:
++    chave-site: ${RECAPTCHA_CHAVE_SITE:}
++    segredo: ${RECAPTCHA_SEGREDO:}
+   jwt:
+     # OBRIGATÓRIO em produção (env JWT_SEGREDO, mínimo 32 caracteres, aleatório). Sem ele a API não sobe.
+     segredo: ${JWT_SEGREDO:}
+diff --git a/backend/src/test/java/br/com/agendz/auth/CaptchaLoginTest.java b/backend/src/test/java/br/com/agendz/auth/CaptchaLoginTest.java
+new file mode 100644
+index 0000000..94c9e25
+--- /dev/null
++++ b/backend/src/test/java/br/com/agendz/auth/CaptchaLoginTest.java
+@@ -0,0 +1,82 @@
++package br.com.agendz.auth;
++
++import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
++import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
++import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
++import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
++
++import br.com.agendz.BaseApi;
++import org.junit.jupiter.api.AfterEach;
++import org.junit.jupiter.api.BeforeEach;
++import org.junit.jupiter.api.Test;
++import org.springframework.beans.factory.annotation.Autowired;
++import org.springframework.http.MediaType;
++import org.springframework.test.web.servlet.ResultActions;
++
++/** reCAPTCHA do login: a partir do 7º erro seguido a senha sozinha não basta (428); só com a prova válida a tentativa segue. */
++class CaptchaLoginTest extends BaseApi {
++
++    @Autowired
++    private Recaptcha recaptcha;
++
++    @BeforeEach
++    void ligar() {
++        recaptcha.ligarParaTeste("chave-publica-de-teste", "prova-boa"::equals);
++    }
++
++    @AfterEach
++    void desligar() {
++        recaptcha.desligarTeste("");
++    }
++
++    private ResultActions entrar(String login, String senha, String captcha) throws Exception {
++        String corpo = captcha == null ? corpoLogin(login, senha)
++                : "{\"identificador\":\"" + login + "\",\"senha\":\"" + senha + "\",\"captcha\":\"" + captcha + "\"}";
++        return mvc.perform(post("/api/auth/login").with(host(APEX)).contentType(MediaType.APPLICATION_JSON).content(corpo));
++    }
++
++    @Test
++    void ateSeisErrosSoComSenhaEDepoisPedeCaptcha() throws Exception {
++        // só este teste usa apex/captcha-fulano (o limite é em memória e compartilhado entre testes)
++        for (int i = 0; i < 6; i++) entrar("captcha-fulano", "errada" + i, null).andExpect(status().isUnauthorized());
++        entrar("captcha-fulano", "errada", null).andExpect(status().isPreconditionRequired())
++                .andExpect(jsonPath("$.mensagem").value("Confirme que você não é um robô para continuar."));
++        entrar("captcha-fulano", "errada", "prova-ruim").andExpect(status().isPreconditionRequired());
++        entrar("captcha-fulano", "errada", "prova-boa").andExpect(status().isUnauthorized()); // prova válida: a senha é conferida e erra
++    }
++
++    @Test
++    void comProvaValidaASenhaCertaEntraEZeraOContador() throws Exception {
++        for (int i = 0; i < 6; i++) entrar("marcelo", "errada" + i, null).andExpect(status().isUnauthorized());
++        entrar("marcelo", "1234", null).andExpect(status().isPreconditionRequired());   // senha certa sem prova não entra
++        entrar("marcelo", "1234", "prova-ruim").andExpect(status().isPreconditionRequired());
++        entrar("marcelo", "1234", "prova-boa").andExpect(status().isOk());
++        entrar("marcelo", "1234", null).andExpect(status().isOk());                      // o contador voltou a zero
++    }
++
++    @Test
++    void recusaDoCaptchaNaoContaComoErroDeSenha() throws Exception {
++        for (int i = 0; i < 6; i++) entrar("captcha-sicrano", "errada" + i, null).andExpect(status().isUnauthorized());
++        for (int i = 0; i < 20; i++) entrar("captcha-sicrano", "errada", null).andExpect(status().isPreconditionRequired()); // nunca vira 429 sozinho
++    }
++
++    @Test
++    void comCaptchaOBloqueioDuroSoVemNoDecimoSegundoErro() throws Exception {
++        for (int i = 0; i < 6; i++) entrar("captcha-beltrano", "errada" + i, null).andExpect(status().isUnauthorized());
++        for (int i = 6; i < 12; i++) entrar("captcha-beltrano", "errada" + i, "prova-boa").andExpect(status().isUnauthorized());
++        entrar("captcha-beltrano", "errada", "prova-boa").andExpect(status().isTooManyRequests());
++    }
++
++    @Test
++    void lojaPublicaMostraAChaveDoSiteSoQuandoLigado() throws Exception {
++        mvc.perform(get("/api/publico/loja").with(host(APEX))).andExpect(status().isOk()).andExpect(jsonPath("$.captchaChave").value("chave-publica-de-teste"));
++        recaptcha.desligarTeste("");
++        mvc.perform(get("/api/publico/loja").with(host(APEX))).andExpect(status().isOk()).andExpect(jsonPath("$.captchaChave").doesNotExist());
++    }
++
++    @Test
++    void semAsChavesNadaMudaECampoCaptchaDoCorpoEhIgnorado() throws Exception {
++        recaptcha.desligarTeste("");
++        entrar("captcha-ciclano", "errada", "qualquer").andExpect(status().isUnauthorized());
++    }
++}
+diff --git a/deploy/docker-compose.api.yml b/deploy/docker-compose.api.yml
+index c0853fc..a2d8971 100644
+--- a/deploy/docker-compose.api.yml
++++ b/deploy/docker-compose.api.yml
+@@ -33,6 +33,9 @@ services:
+       CIFRA_PEPPER: ${CIFRA_PEPPER:?defina CIFRA_PEPPER no .env (rode preparar-api.sh)}
+       AGENDZ_DOMINIOS_BASE: ${DOMINIO}
+       AGENDZ_PERMITIR_QUERY: "false"
++      # opcionais: reCAPTCHA do login (chaves do Google em /opt/agendz/.env; sem elas o login só bloqueia após 5 erros)
++      RECAPTCHA_CHAVE_SITE: ${RECAPTCHA_CHAVE_SITE:-}
++      RECAPTCHA_SEGREDO: ${RECAPTCHA_SEGREDO:-}
+     # sem ports: só o Caddy fala com a API (reverse_proxy api:8080)
+ 
+ volumes:
