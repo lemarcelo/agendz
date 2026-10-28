@@ -857,3 +857,15 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
 .cal-real-dia.hoje .cal-real-num { background: var(--ink); color: var(--ink-fg); border-radius: 50%; width: 24px; height: 24px; display: inline-grid; place-items: center; }
 .cal-real-num { font-weight: 700; font-variant-numeric: tabular-nums; }
 .cal-real-cont { background: var(--azul-bg); color: var(--azul); border-radius: 999px; padding: 0 7px; font-size: 11px; font-weight: 700; }
+
+/* Atender no site real (v89 / F2 5c): painel em linha acima da agenda; classes com sufixo -real para não colidir com a tela simulada. */
+.atender-real { display: grid; gap: 12px; padding: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+.atender-real-topo { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.atender-real-titulo { margin: 0; font-size: 16px; }
+.atender-real-bloco { display: grid; gap: 8px; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; min-width: 0; margin: 0; }
+.atender-real-bloco > legend { font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--muted); padding: 0 6px; }
+.atender-real-servicos, .atender-real-achados { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 220px; overflow-y: auto; }
+.atender-real-achado { width: 100%; text-align: left; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; cursor: pointer; color: inherit; font: inherit; overflow-wrap: anywhere; }
+.atender-real-achado:hover { background: var(--surface); }
+.atender-real .check-linha { display: flex; align-items: flex-start; gap: 8px; overflow-wrap: anywhere; }
+.agenda-barra .btn-primario { margin-left: auto; }

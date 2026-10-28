@@ -176,7 +176,7 @@ public class ClienteService {
                         nascFinal = novo;
                     }
                 }
-                jdbc.update("update cliente set nome = ?, apelido = ?, telefone_cif = ?, telefone_hash = ?, cpf_cif = ?, cpf_hash = ?, nascimento_cif = ?, atualizado_em = now() where id = ?",
+                jdbc.update("update cliente set sem_nome = false, nome = ?, apelido = ?, telefone_cif = ?, telefone_hash = ?, cpf_cif = ?, cpf_hash = ?, nascimento_cif = ?, atualizado_em = now() where id = ?",
                         nome != null ? nome : atual.nome(), apelido != null ? apelido : atual.apelido(), novoTelCif, novoTelHash,
                         cpfFinal == null ? null : (cpfFinal.equals(cpfAtual) ? atual.cpfCif() : cifra.cifrar(cpfFinal)),
                         cpfFinal == null ? null : cifra.hash(loja.id(), "cpf", cpfFinal),
@@ -310,6 +310,113 @@ public class ClienteService {
                 inserirVeiculo(jdbc, loja, clienteId, v, i);
             }
         }
+    }
+
+    // ---------- cliente de um atendimento (Atender) ----------
+
+    /** Resultado: cadastro escolhido/achado/criado (`clienteId`) ou, sem telefone, só o nome digitado (`nomeAvulso`, sem cadastro). */
+    public record DoAtendimento(UUID clienteId, String nomeAvulso) {
+    }
+
+    private record Candidato(UUID id, String nome, String apelido, boolean semNome, String telefoneHash) {
+    }
+
+    /**
+     * Espelho de `resolverClienteDoAtendimento` (src/domain/engine.js). Roda dentro da transação do chamador (`jdbc` já na loja):
+     * - telefone que já tem cadastro vale mais que o cliente escolhido na lista (com vários no mesmo número: o de mesmo nome ou apelido; senão o primeiro);
+     * - telefone novo cria o cadastro (sem nome, o nome fica igual ao telefone até alguém informar um);
+     * - só nome, sem telefone: não cria cadastro.
+     * Nome digitado MAIS COMPLETO que o do cadastro atualiza o cadastro; cadastro sem nome recebe o digitado.
+     */
+    public DoAtendimento resolverDoAtendimento(JdbcTemplate jdbc, String nomeBruto, String telefoneBruto, UUID clienteId) {
+        Loja loja = LojaContext.exigir();
+        String tel = null;
+        if (telefoneBruto != null && !telefoneBruto.isBlank()) {
+            tel = Documentos.telefone(telefoneBruto);
+            if (tel == null) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Telefone com DDD e número (10 ou 11 dígitos).");
+        }
+        String nomeInf = nomeBruto == null ? "" : Texto.limpar(nomeBruto);
+        if (nomeInf.length() > 60) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "O nome pode ter até 60 letras.");
+        String hash = tel == null ? null : cifra.hash(loja.id(), "tel", tel);
+        if (clienteId != null) {
+            List<Candidato> achados = jdbc.query("select id, nome, apelido, sem_nome, telefone_hash from cliente where id = ? for update", (rs, i) -> candidato(rs), clienteId);
+            if (achados.isEmpty()) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, "Cliente não encontrado.");
+            Candidato c = achados.get(0);
+            // telefone digitado de OUTRO cadastro sobrescreve a escolha da lista; vazio ou do próprio cliente mantém a escolha
+            if (tel == null || c.telefoneHash().equals(hash)) {
+                atualizarNome(jdbc, c, nomeInf);
+                return new DoAtendimento(c.id(), null);
+            }
+        }
+        if (tel == null) return new DoAtendimento(null, nomeInf);
+        List<Candidato> doNumero = jdbc.query("select id, nome, apelido, sem_nome, telefone_hash from cliente where telefone_hash = ? order by criado_em, id for update",
+                (rs, i) -> candidato(rs), hash);
+        Candidato achado = null;
+        if (!nomeInf.isEmpty()) {
+            String n = nomeInf.toLowerCase(Locale.ROOT);
+            for (Candidato c : doNumero) {
+                if (c.nome().toLowerCase(Locale.ROOT).equals(n) || c.apelido().toLowerCase(Locale.ROOT).equals(n)) { achado = c; break; }
+            }
+            if (achado == null) {
+                for (Candidato c : doNumero) {
+                    if (nomeMaisCompleto(c.nome(), nomeInf)) { achado = c; break; }
+                }
+            }
+        }
+        if (achado == null && !doNumero.isEmpty()) achado = doNumero.get(0);
+        if (achado != null) {
+            atualizarNome(jdbc, achado, nomeInf);
+            return new DoAtendimento(achado.id(), null);
+        }
+        try {
+            UUID novo = jdbc.queryForObject(
+                    "insert into cliente (loja_id, nome, telefone_cif, telefone_hash, sem_nome, origem_cadastro) values (?::uuid, ?, ?, ?, ?, 'atendimento') returning id",
+                    UUID.class, loja.id().toString(), nomeInf.isEmpty() ? telefoneFormatado(tel) : nomeInf, cifra.cifrar(tel), hash, nomeInf.isEmpty());
+            return new DoAtendimento(novo, null);
+        } catch (DuplicateKeyException ex) {
+            throw duplicado(ex);
+        }
+    }
+
+    private static Candidato candidato(java.sql.ResultSet rs) throws java.sql.SQLException {
+        return new Candidato(rs.getObject("id", UUID.class), rs.getString("nome"), rs.getString("apelido"), rs.getBoolean("sem_nome"), rs.getString("telefone_hash"));
+    }
+
+    private static void atualizarNome(JdbcTemplate jdbc, Candidato c, String nomeInf) {
+        if (nomeInf.isEmpty()) return;
+        if (c.semNome()) {
+            jdbc.update("update cliente set nome = ?, sem_nome = false, atualizado_em = now() where id = ?", nomeInf, c.id());
+        } else if (nomeMaisCompleto(c.nome(), nomeInf)) {
+            jdbc.update("update cliente set nome = ?, atualizado_em = now() where id = ?", nomeInf, c.id());
+        }
+    }
+
+    private static String semAcento(String x) {
+        String n = java.text.Normalizer.normalize(x == null ? "" : x, java.text.Normalizer.Form.NFD).replaceAll("\\p{M}", "");
+        return n.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ").trim();
+    }
+
+    /** "João" → "João Silva": o novo é mais longo e cada palavra do antigo começa alguma palavra do novo. */
+    static boolean nomeMaisCompleto(String antigo, String novo) {
+        String a = semAcento(antigo), n = semAcento(novo);
+        if (a.isEmpty() || n.length() <= a.length()) return false;
+        String[] palavrasNovo = n.split(" ");
+        for (String w : a.split(" ")) {
+            boolean achou = false;
+            for (String x : palavrasNovo) {
+                if (x.startsWith(w)) { achou = true; break; }
+            }
+            if (!achou) return false;
+        }
+        return true;
+    }
+
+    /** "5553999000001" → "(53) 99900-0001". */
+    static String telefoneFormatado(String tel55) {
+        String r = tel55.substring(2);
+        String ddd = r.substring(0, 2), num = r.substring(2);
+        int corte = num.length() - 4;
+        return "(" + ddd + ") " + num.substring(0, corte) + "-" + num.substring(corte);
     }
 
     // ---------- campos ----------

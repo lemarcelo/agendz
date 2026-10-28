@@ -31,3 +31,9 @@ Lista simples. Cada item está no histórico do `prompt-agendz-regras.md` (v84 a
 - **Decidi:** o seletor de profissional é uma fila de botões (Todos + um por pessoa), sem a seleção múltipla por gesto da tela simulada; só aparece com mais de um profissional que atende.
 - **Decidi:** cancelar pede confirmação na própria tela; o servidor grava o motivo "profissional" (motivo escolhido pelo dono entra junto com a 5d).
 - **Decidi:** escala por profissional na tela fica depois da 5c (a rota já existe); a prioridade é o Atender, que libera os logins dos donos.
+
+## v89 (28/10): Atender no site real (5c)
+- **Decidi:** o botão Atender do site real vale só para tipos sem veículo/porte (barbearia). A estética não mostra o botão até o veículo e o porte entrarem no Atender real. Isso não atrasa Alan e Kiko; só o Davi espera.
+- **Decidi:** campos obrigatórios fixos nos padrões do simulador (agendar pede nome e telefone; atendimento de agora não pede nada). A configuração por loja vem com a 5d.
+- **Decidi:** o painel do Atender abre em linha, acima da agenda, em vez de janela; ao salvar, a agenda vai para o dia do novo atendimento.
+- **Dúvida (não bloqueia):** o cliente criado só com telefone fica com o telefone como nome até alguém informar um nome (igual ao simulador).

@@ -86,3 +86,5 @@ Tipo imutável; loja pelo endereço; um código só com pastas por tipo; capacid
 - **28/10 (v87):** painel Admin no ar em `admin.agendz.io` com login real (repositório `agendz-admin`); o Caddy de `admin.<domínio>` repassa tudo à Admin API. Site real e Admin: sem internet a ação espera e segue ao voltar a conexão (`tests/e2e45.mjs`, `tests/api-real-offline.test.mjs`).
 
 - **28/10 (v88):** agenda no site real (Horários, Calendário, status, remarcar, cancelar). Falta o Atender real (5c) para liberar os logins dos donos; depois produtos/comissão (5d) e link do cliente/WhatsApp/Pix (5e).
+
+- **28/10 (v89):** Atender no site real para barbearia (agora, passado com motivo e futuro; cliente por telefone). Donos da barbearia (Alan, Kiko) já podem receber o login; Davi só depois de veículo/porte/box. Falta: produtos, pagamento e comissão (5d); link do cliente, WhatsApp e Pix (5e).

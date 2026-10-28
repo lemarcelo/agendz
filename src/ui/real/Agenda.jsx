@@ -1,15 +1,17 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
 // Agenda do site real (F2 parte 5b): Horários (cartões do dia + próximos agendamentos por dia) e Calendário (mês), troca de profissional, status e remarcar.
 // Toda a regra (conflito, expediente, reativar, confirmar cancela "a confirmar" que cobrem, concluído nunca remarca) está no servidor: a tela mostra o que ele
-// devolve, com as mensagens dele. O profissional só recebe os próprios agendamentos (o servidor filtra). Atender (novo agendamento) chega na parte 5c.
+// devolve, com as mensagens dele. O profissional só recebe os próprios agendamentos (o servidor filtra). Atender (atendimento local e novo agendamento) é o `Atender.jsx` (5c);
+// nas lojas com veículo/porte (estética) o botão ainda não aparece: veículo e porte no Atender real são da fatia 5a restante.
 // Não importa `api.js`, `hooks.js` nem `common.jsx` (tests/estatico.test.mjs).
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { agenda as api, clientes as apiClientes, profissionais as apiProf } from '../../services/api-real.js';
 import { DIAS_CURTOS, addDays, addMonths, fmtDateTime, fmtDayLong, fmtHM, fmtMoney, fmtMonthYear, monthStart, sameDay, startOfDay, weekStart, ymd } from '../../domain/time.js';
 import { ATIVOS, ROTULO_STATUS } from '../../domain/rules.js';
 import { agruparPorDia } from '../../domain/agenda-grupos.js';
-import { Rot } from '../../domain/tipos.js';
+import { Rot, capAtiva } from '../../domain/tipos.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
+import Atender from './Atender.jsx';
 
 const CHAVE_COR = { a_confirmar: 'amarelo', confirmado: 'azul', concluido: 'verde', cancelado: 'cinza' };
 // "Cliente agendou": pediu pelo link e aguarda o estabelecimento confirmar (só visual, sobre "a confirmar").
@@ -150,7 +152,7 @@ function Calendario({ cursor, lista, aoEscolherDia }) {
   );
 }
 
-export default function Agenda({ ehProprio = false, ehDono = false }) {
+export default function Agenda({ ehProprio = false, ehDono = false, meuId = '' }) {
   const [modo, setModo] = useState('horarios');
   const [cursor, setCursor] = useState(() => startOfDay(Date.now()));
   const [diasAdiante, setDiasAdiante] = useState(7);
@@ -160,6 +162,7 @@ export default function Agenda({ ehProprio = false, ehDono = false }) {
   const [aviso, setAviso] = useState('');
   const [versao, setVersao] = useState(0);
   const [aberto, setAberto] = useState(null);
+  const [atendendo, setAtendendo] = useState(false);
   const [clientes, setClientes] = useState(new Map());
   const [profs, setProfs] = useState([]);
   const ultima = useRef(0);
@@ -195,8 +198,15 @@ export default function Agenda({ ehProprio = false, ehDono = false }) {
     setAviso(novo && novo.conflitosPendentes && novo.conflitosPendentes.length ? `${texto} Há ${novo.conflitosPendentes.length} agendamento(s) a confirmar no mesmo horário.` : texto);
     setVersao((v) => v + 1);
   };
+  const atendeu = (texto, ag) => {
+    setAtendendo(false);
+    apiClientes.listar().then((r) => { if (r.ok) setClientes(new Map(r.clientes.map((c) => [c.id, c.apelido || c.nome]))); });
+    setModo('horarios'); setCursor(startOfDay(ag.inicio)); setDiasAdiante(7); setAberto(null);
+    alterou(texto, ag);
+  };
   const irPara = (ts) => { setCursor(startOfDay(ts)); setAberto(null); setAviso(''); setDiasAdiante(7); };
   const passo = (n) => (modo === 'horarios' ? irPara(addDays(cursor, n)) : irPara(addMonths(cursor, n)));
+  const podeAtender = !capAtiva('usaVeiculo');
   const mostrarSeletor = !ehProprio && atendem.length > 1;
   const titulo = modo === 'horarios' ? fmtDayLong(cursor) : fmtMonthYear(cursor);
 
@@ -218,7 +228,9 @@ export default function Agenda({ ehProprio = false, ehDono = false }) {
         <Btn tamanho="sm" onClick={() => irPara(Date.now())} data-testid="agenda-hoje">Hoje</Btn>
         <Btn tamanho="sm" onClick={() => passo(1)} aria-label={modo === 'horarios' ? 'Próximo dia' : 'Próximo mês'} data-testid="agenda-proximo"><Icone n="right" size={15} /></Btn>
         <h2 className="agenda-titulo-real" data-testid="agenda-titulo">{titulo}</h2>
+        {podeAtender && <Btn variante="primario" tamanho="sm" onClick={() => { setAtendendo(true); setAviso(''); }} disabled={atendendo || atendem.length === 0} data-testid="atender-abrir"><Icone n="plus" size={15} />Atender</Btn>}
       </div>
+      {atendendo && <Atender profissionais={atendem} meuId={meuId} ehProprio={ehProprio} aoSalvar={atendeu} aoFechar={() => setAtendendo(false)} />}
       {mostrarSeletor && (
         <div className="seletor-chips" role="group" aria-label={Rot('profissional')} data-testid="seletor-profissionais">
           <button type="button" className={`chip${selecionado === 'todos' ? ' on' : ''}`} aria-pressed={selecionado === 'todos'} onClick={() => setSelecionado('todos')} data-testid="sel-todos">Todos</button>

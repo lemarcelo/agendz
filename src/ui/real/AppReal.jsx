@@ -152,7 +152,7 @@ function Painel({ loja, sessao, aoSair }) {
               {sessao.papel === 'dono' && <Btn onClick={() => setReconfigurando(true)} data-testid="reconfigurar-abrir">Reconfigurar estabelecimento</Btn>}
             </section>
           )}
-          {aba === 'agenda' && <Agenda ehProprio={sessao.papel === 'profissional'} ehDono={dono || sessao.papel === 'admin' || sessao.papel === 'atendente'} />}
+          {aba === 'agenda' && <Agenda meuId={sessao.id} ehProprio={sessao.papel === 'profissional'} ehDono={dono || sessao.papel === 'admin' || sessao.papel === 'atendente'} />}
           {aba === 'clientes' && <Clientes />}
           {aba === 'servicos' && <Servicos ehDono={dono || (sessao.secoes || []).includes('servicos')} />}
           {aba === 'equipe' && dono && <Equipe meuId={sessao.id} />}

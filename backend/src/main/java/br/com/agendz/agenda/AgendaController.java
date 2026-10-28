@@ -1,5 +1,6 @@
 package br.com.agendz.agenda;
 
+import br.com.agendz.clientes.ClienteService;
 import br.com.agendz.erro.ErroDeNegocio;
 import br.com.agendz.escala.EscalaService;
 import br.com.agendz.tenant.Loja;
@@ -64,13 +65,14 @@ public class AgendaController {
 
     public record Agendamento(UUID id, UUID clienteId, UUID profissionalId, Instant inicio, Instant fim, Instant fimOcupado,
                               String status, boolean encaixe, BigDecimal total, List<Item> servicos, List<UUID> conflitosPendentes,
-                              String origem, boolean reagendado, String motivoCancelamento, boolean statusManual, List<Evento> historico) {
+                              String origem, boolean reagendado, String motivoCancelamento, boolean statusManual, String nomeAvulso, String motivoRetroativo,
+                              List<Evento> historico) {
         Agendamento comAvisos(List<UUID> pendentes) {
-            return new Agendamento(id, clienteId, profissionalId, inicio, fim, fimOcupado, status, encaixe, total, servicos, pendentes, origem, reagendado, motivoCancelamento, statusManual, historico);
+            return new Agendamento(id, clienteId, profissionalId, inicio, fim, fimOcupado, status, encaixe, total, servicos, pendentes, origem, reagendado, motivoCancelamento, statusManual, nomeAvulso, motivoRetroativo, historico);
         }
 
         Agendamento comHistorico(List<Evento> eventos) {
-            return new Agendamento(id, clienteId, profissionalId, inicio, fim, fimOcupado, status, encaixe, total, servicos, conflitosPendentes, origem, reagendado, motivoCancelamento, statusManual, eventos);
+            return new Agendamento(id, clienteId, profissionalId, inicio, fim, fimOcupado, status, encaixe, total, servicos, conflitosPendentes, origem, reagendado, motivoCancelamento, statusManual, nomeAvulso, motivoRetroativo, eventos);
         }
     }
 
@@ -81,6 +83,19 @@ public class AgendaController {
             @NotNull Instant inicio,
             @Size(max = 30) String status,
             Boolean encaixe) {
+    }
+
+    /** Atender (POST /api/atendimentos): data futura = agendamento; sem data ou agora/passado = atendimento local, já concluído. */
+    public record NovoAtendimento(
+            UUID clienteId,
+            UUID profissionalId,
+            @Size(max = 50) List<UUID> servicoIds,
+            @Size(max = 100) String nome,
+            @Size(max = 30) String telefone,
+            Instant inicio,
+            @Size(max = 30) String status,
+            Boolean encaixe,
+            @Size(max = 300) String motivoRetroativo) {
     }
 
     public record Remarcacao(@NotNull Instant inicio, UUID profissionalId, Boolean encaixe, @Size(max = 30) String status) {
@@ -101,11 +116,13 @@ public class AgendaController {
     private final LojaJdbc banco;
     private final Clock relogio;
     private final EscalaService escalas;
+    private final ClienteService clientes;
 
-    public AgendaController(LojaJdbc banco, Clock relogio, EscalaService escalas) {
+    public AgendaController(LojaJdbc banco, Clock relogio, EscalaService escalas, ClienteService clientes) {
         this.banco = banco;
         this.relogio = relogio;
         this.escalas = escalas;
+        this.clientes = clientes;
     }
 
     // ---------------------------------------------------------------- leitura
@@ -124,7 +141,7 @@ public class AgendaController {
                 args.add(so);
             }
             List<Agendamento> base = jdbc.query(
-                    "select a.id, a.cliente_id, a.profissional_id, a.inicio, a.fim_servico, a.fim_ocupado, a.status, a.encaixe, a.total, a.origem, a.reagendado, a.motivo_cancelamento, "
+                    "select a.id, a.cliente_id, a.profissional_id, a.inicio, a.fim_servico, a.fim_ocupado, a.status, a.encaixe, a.total, a.origem, a.reagendado, a.motivo_cancelamento, a.nome_avulso, a.motivo_retroativo, "
                             + "(a.status_manual_inicio is not null and a.status_manual_inicio = a.inicio) as status_manual from agendamento a "
                             + "where a.inicio < ? and a.fim_ocupado > ?" + filtro + " order by a.inicio limit 1000",
                     (rs, i) -> linha(rs), args.toArray());
@@ -162,37 +179,139 @@ public class AgendaController {
         if (new HashSet<>(servicoIds).size() != servicoIds.size()) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "O mesmo serviço aparece duas vezes.");
         boolean encaixe = Boolean.TRUE.equals(d.encaixe());
         Agendamento criado = banco.naLoja(jdbc -> {
-            List<ServicoLinha> servicos = carregarServicos(jdbc, servicoIds);
-            if (d.clienteId() == null) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha o cliente.");
-            Integer clientes = jdbc.queryForObject("select count(*) from cliente where id = ?", Integer.class, d.clienteId());
-            if (clientes == null || clientes == 0) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, "Escolha o cliente.");
-            travarProfissional(jdbc, d.profissionalId());
-            Instant inicio = conferirInicio(d.inicio());
-            int minutos = 0;
-            BigDecimal total = BigDecimal.ZERO;
-            for (ServicoLinha s : servicos) {
-                minutos += s.duracaoMin();
-                total = total.add(s.preco());
-            }
-            Instant fimServico = inicio.plus(minutos, ChronoUnit.MINUTES);
-            Instant fimOcupado = fimServico.plus(servicos.get(servicos.size() - 1).intervaloMin(), ChronoUnit.MINUTES);
-            conferirExpediente(jdbc, d.profissionalId(), inicio, fimServico, servicos.stream().anyMatch(ServicoLinha::multiDia));
-            List<UUID> pendentes = conferirConflitos(jdbc, d.profissionalId(), new UUID(0, 0), inicio, fimOcupado, encaixe);
-            UUID id = jdbc.queryForObject(
-                    "insert into agendamento (loja_id, cliente_id, profissional_id, inicio, fim_servico, fim_ocupado, status, encaixe, total) "
-                            + "values (?::uuid, ?, ?, ?, ?, ?, ?, ?, ?) returning id",
-                    UUID.class, loja.id().toString(), d.clienteId(), d.profissionalId(), utc(inicio), utc(fimServico), utc(fimOcupado), status, encaixe, total);
-            short ordem = 0;
-            for (ServicoLinha s : servicos) {
-                jdbc.update("insert into agendamento_servico (loja_id, agendamento_id, servico_id, ordem, nome, preco, duracao_min, intervalo_min) "
-                                + "values (?::uuid, ?, ?, ?, ?, ?, ?, ?)",
-                        loja.id().toString(), id, s.id(), ordem++, s.nome(), s.preco(), s.duracaoMin(), s.intervaloMin());
-            }
-            registrar(jdbc, loja.id(), id, jwt, "criação", null, servicos.stream().map(ServicoLinha::nome).collect(java.util.stream.Collectors.joining(" + ")) + " em " + dataHora(inicio));
-            if (CONFIRMADO.equals(status)) cancelarPendentesQueCobrem(jdbc, loja.id(), d.profissionalId(), id, inicio, fimOcupado);
-            return buscar(jdbc, id, null).comAvisos(CONFIRMADO.equals(status) || pendentes.isEmpty() ? null : pendentes);
+            return inserirAgendamento(jdbc, loja, jwt, d.clienteId(), d.profissionalId(), servicoIds, d.inicio(), status, encaixe);
         });
         return ResponseEntity.status(HttpStatus.CREATED).body(criado);
+    }
+
+    /** Agendamento futuro (usado por criar e por atender). Dentro da transação da loja; a mesma ordem de validações do simulador. */
+    private Agendamento inserirAgendamento(JdbcTemplate jdbc, Loja loja, Jwt jwt, UUID clienteId, UUID profissionalId, List<UUID> servicoIds, Instant inicioBruto, String status, boolean encaixe) {
+        List<ServicoLinha> servicos = carregarServicos(jdbc, servicoIds);
+        if (clienteId == null) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha o cliente.");
+        Integer clientesAchados = jdbc.queryForObject("select count(*) from cliente where id = ?", Integer.class, clienteId);
+        if (clientesAchados == null || clientesAchados == 0) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, "Escolha o cliente.");
+        travarProfissional(jdbc, profissionalId);
+        Instant inicio = conferirInicio(inicioBruto);
+        int minutos = 0;
+        BigDecimal total = BigDecimal.ZERO;
+        for (ServicoLinha s : servicos) {
+            minutos += s.duracaoMin();
+            total = total.add(s.preco());
+        }
+        Instant fimServico = inicio.plus(minutos, ChronoUnit.MINUTES);
+        Instant fimOcupado = fimServico.plus(servicos.get(servicos.size() - 1).intervaloMin(), ChronoUnit.MINUTES);
+        conferirExpediente(jdbc, profissionalId, inicio, fimServico, servicos.stream().anyMatch(ServicoLinha::multiDia));
+        List<UUID> pendentes = conferirConflitos(jdbc, profissionalId, new UUID(0, 0), inicio, fimOcupado, encaixe);
+        UUID id = jdbc.queryForObject(
+                "insert into agendamento (loja_id, cliente_id, profissional_id, inicio, fim_servico, fim_ocupado, status, encaixe, total) "
+                        + "values (?::uuid, ?, ?, ?, ?, ?, ?, ?, ?) returning id",
+                UUID.class, loja.id().toString(), clienteId, profissionalId, utc(inicio), utc(fimServico), utc(fimOcupado), status, encaixe, total);
+        gravarServicos(jdbc, loja, id, servicos);
+        registrar(jdbc, loja.id(), id, jwt, "criação", null, servicos.stream().map(ServicoLinha::nome).collect(java.util.stream.Collectors.joining(" + ")) + " em " + dataHora(inicio));
+        if (CONFIRMADO.equals(status)) cancelarPendentesQueCobrem(jdbc, loja.id(), profissionalId, id, inicio, fimOcupado);
+        return buscar(jdbc, id, null).comAvisos(CONFIRMADO.equals(status) || pendentes.isEmpty() ? null : pendentes);
+    }
+
+    private void gravarServicos(JdbcTemplate jdbc, Loja loja, UUID agendamentoId, List<ServicoLinha> servicos) {
+        short ordem = 0;
+        for (ServicoLinha s : servicos) {
+            jdbc.update("insert into agendamento_servico (loja_id, agendamento_id, servico_id, ordem, nome, preco, duracao_min, intervalo_min) "
+                            + "values (?::uuid, ?, ?, ?, ?, ?, ?, ?)",
+                    loja.id().toString(), agendamentoId, s.id(), ordem++, s.nome(), s.preco(), s.duracaoMin(), s.intervaloMin());
+        }
+    }
+
+    // ---------------------------------------------------------------- atender
+
+    /**
+     * Botão Atender (espelho de `atender`/`registrarAtendimentoLocal` em src/domain/engine.js):
+     * - data futura (mais de 1 min à frente) = agendamento a confirmar ou confirmado, com o cliente achado/criado por nome+telefone;
+     * - sem data, agora ou passado = atendimento local, já CONCLUÍDO, sem conflito de horário (já aconteceu), sem mensagem ao cliente;
+     * - dia anterior a hoje exige o motivo (5 a 300 letras) e é só da recepção/dono; o profissional atende e lança sempre como ele mesmo.
+     * Campos obrigatórios: os padrões (futuro: nome e telefone; local: nenhum). Produto, forma de pagamento e comissão entram na fatia 5d.
+     */
+    @PostMapping("/api/atendimentos")
+    public ResponseEntity<Agendamento> atender(@Valid @RequestBody NovoAtendimento d, @AuthenticationPrincipal Jwt jwt) {
+        Loja loja = LojaContext.exigir();
+        boolean veTudo = ehDono(jwt);
+        Instant agora = relogio.instant();
+        Instant agoraMinuto = agora.truncatedTo(ChronoUnit.MINUTES);
+        // profissional atende e lança sempre como ele mesmo; dia anterior é com o dono ou a recepção (senão poderia inventar comissão)
+        UUID profissionalId = veTudo ? d.profissionalId() : UUID.fromString(jwt.getSubject());
+        if (!veTudo && d.inicio() != null && d.inicio().isBefore(inicioDoDia(agora))) {
+            throw new ErroDeNegocio(HttpStatus.FORBIDDEN, "Lançar um dia anterior é com o proprietário ou a recepção. Peça a eles para registrar.");
+        }
+        List<UUID> servicoIds = d.servicoIds() == null ? List.of() : d.servicoIds();
+        if (servicoIds.isEmpty()) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha ao menos um serviço.");
+        if (servicoIds.size() > 10) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "No máximo 10 serviços por agendamento.");
+        if (new HashSet<>(servicoIds).size() != servicoIds.size()) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "O mesmo serviço aparece duas vezes.");
+        boolean futuro = d.inicio() != null && d.inicio().isAfter(agora.plusSeconds(60));
+        String nomeInf = d.nome() == null ? "" : br.com.agendz.validacao.Texto.limpar(d.nome());
+        Agendamento feito = banco.naLoja(jdbc -> {
+            Boolean semNome = null;
+            if (d.clienteId() != null) {
+                List<Boolean> achado = jdbc.query("select sem_nome from cliente where id = ?", (rs, i) -> rs.getBoolean(1), d.clienteId());
+                if (achado.isEmpty()) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, "Cliente não encontrado.");
+                semNome = achado.get(0);
+            }
+            if (futuro) {
+                List<String> faltam = new ArrayList<>();
+                if (nomeInf.isEmpty() && (semNome == null || semNome)) faltam.add("nome");
+                if (br.com.agendz.validacao.Documentos.telefone(d.telefone()) == null && semNome == null) faltam.add("telefone");
+                if (!faltam.isEmpty()) {
+                    throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Preencha " + (faltam.size() == 1 ? "o campo obrigatório" : "os campos obrigatórios") + ": " + String.join(", ", faltam) + ".");
+                }
+                String status = d.status() == null || d.status().isBlank() ? A_CONFIRMAR : d.status();
+                if (!A_CONFIRMAR.equals(status) && !CONFIRMADO.equals(status)) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Agendamento futuro nasce a confirmar ou confirmado.");
+                if (profissionalId == null) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha o profissional.");
+                ClienteService.DoAtendimento quem = clientes.resolverDoAtendimento(jdbc, d.nome(), d.telefone(), d.clienteId());
+                return inserirAgendamento(jdbc, loja, jwt, quem.clienteId(), profissionalId, servicoIds, d.inicio(), status, Boolean.TRUE.equals(d.encaixe()));
+            }
+            return inserirLocal(jdbc, loja, jwt, d, profissionalId, servicoIds, agoraMinuto);
+        });
+        return ResponseEntity.status(HttpStatus.CREATED).body(feito);
+    }
+
+    private Agendamento inserirLocal(JdbcTemplate jdbc, Loja loja, Jwt jwt, NovoAtendimento d, UUID profissionalId, List<UUID> servicoIds, Instant agoraMinuto) {
+        List<ServicoLinha> servicos = carregarServicos(jdbc, servicoIds);
+        List<Boolean> atende = profissionalId == null ? List.of() : jdbc.query("select atende from usuario where id = ? and ativo", (rs, i) -> rs.getBoolean(1), profissionalId);
+        if (atende.isEmpty() || !atende.get(0)) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha o profissional que atendeu.");
+        Instant quando = d.inicio() == null ? agoraMinuto : d.inicio().truncatedTo(ChronoUnit.MINUTES);
+        if (quando.isBefore(agoraMinuto.minus(400, ChronoUnit.DAYS))) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "A data do atendimento é antiga demais (máximo de 400 dias atrás).");
+        // lançamento de um dia anterior ("esqueci de registrar"): exige o motivo, que fica no histórico; hoje, mesmo em hora anterior, é atendimento comum
+        boolean retro = quando.isBefore(inicioDoDia(agoraMinuto));
+        String motivo = retro ? br.com.agendz.validacao.Texto.limpar(d.motivoRetroativo() == null ? "" : d.motivoRetroativo()) : null;
+        if (retro && motivo.length() < 5) {
+            throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe o motivo do lançamento de um dia anterior (por que não foi registrado na hora).");
+        }
+        ClienteService.DoAtendimento quem = clientes.resolverDoAtendimento(jdbc, d.nome(), d.telefone(), d.clienteId());
+        Instant inicio = quando.isAfter(agoraMinuto) ? agoraMinuto : quando;
+        int minutos = 0;
+        BigDecimal total = BigDecimal.ZERO;
+        for (ServicoLinha s : servicos) {
+            minutos += s.duracaoMin();
+            total = total.add(s.preco());
+        }
+        Instant fimServico = inicio.plus(minutos, ChronoUnit.MINUTES);
+        Instant fimOcupado = fimServico.plus(servicos.get(servicos.size() - 1).intervaloMin(), ChronoUnit.MINUTES);
+        String avulso = quem.clienteId() == null && quem.nomeAvulso() != null && !quem.nomeAvulso().isEmpty() ? quem.nomeAvulso() : null;
+        UUID id = jdbc.queryForObject(
+                "insert into agendamento (loja_id, cliente_id, profissional_id, inicio, fim_servico, fim_ocupado, status, encaixe, total, origem, nome_avulso, motivo_retroativo) "
+                        + "values (?::uuid, ?, ?, ?, ?, ?, 'concluido', false, ?, 'atendimento', ?, ?) returning id",
+                UUID.class, loja.id().toString(), quem.clienteId(), profissionalId, utc(inicio), utc(fimServico), utc(fimOcupado), total, avulso, motivo);
+        gravarServicos(jdbc, loja, id, servicos);
+        String nomes = servicos.stream().map(ServicoLinha::nome).collect(java.util.stream.Collectors.joining(" + "));
+        String de = quem.clienteId() != null
+                ? " (cliente " + jdbc.queryForObject("select coalesce(nullif(apelido, ''), nome) from cliente where id = ?", String.class, quem.clienteId()) + ")"
+                : avulso != null ? " (" + avulso + ")" : "";
+        registrar(jdbc, loja.id(), id, jwt, "criação", null, "Atendimento local: " + nomes + de);
+        if (retro) registrar(jdbc, loja.id(), id, jwt, "lançamento retroativo", null, motivo);
+        return buscar(jdbc, id, null);
+    }
+
+    /** 00:00 de hoje no fuso da loja (como `startOfDay` do simulador). */
+    private static Instant inicioDoDia(Instant quando) {
+        return quando.atZone(br.com.agendz.escala.Fuso.BRASIL).toLocalDate().atStartOfDay(br.com.agendz.escala.Fuso.BRASIL).toInstant();
     }
 
     // ---------------------------------------------------------------- status
@@ -392,7 +511,7 @@ public class AgendaController {
     }
 
     private Agendamento buscar(JdbcTemplate jdbc, UUID id, UUID so) {
-        String sql = "select id, cliente_id, profissional_id, inicio, fim_servico, fim_ocupado, status, encaixe, total, origem, reagendado, motivo_cancelamento, "
+        String sql = "select id, cliente_id, profissional_id, inicio, fim_servico, fim_ocupado, status, encaixe, total, origem, reagendado, motivo_cancelamento, nome_avulso, motivo_retroativo, "
                 + "(status_manual_inicio is not null and status_manual_inicio = inicio) as status_manual from agendamento where id = ?"
                 + (so == null ? "" : " and profissional_id = ?");
         Object[] args = so == null ? new Object[]{id} : new Object[]{id, so};
@@ -408,12 +527,13 @@ public class AgendaController {
                 rs.getObject("inicio", OffsetDateTime.class).toInstant(), rs.getObject("fim_servico", OffsetDateTime.class).toInstant(),
                 rs.getObject("fim_ocupado", OffsetDateTime.class).toInstant(), rs.getString("status"), rs.getBoolean("encaixe"),
                 rs.getBigDecimal("total"), List.of(), null,
-                rs.getString("origem"), rs.getBoolean("reagendado"), rs.getString("motivo_cancelamento"), rs.getBoolean("status_manual"), null);
+                rs.getString("origem"), rs.getBoolean("reagendado"), rs.getString("motivo_cancelamento"), rs.getBoolean("status_manual"),
+                rs.getString("nome_avulso"), rs.getString("motivo_retroativo"), null);
     }
 
     private static Agendamento comItens(Agendamento a, List<Item> itens) {
         return new Agendamento(a.id(), a.clienteId(), a.profissionalId(), a.inicio(), a.fim(), a.fimOcupado(), a.status(), a.encaixe(), a.total(), itens, a.conflitosPendentes(),
-                a.origem(), a.reagendado(), a.motivoCancelamento(), a.statusManual(), a.historico());
+                a.origem(), a.reagendado(), a.motivoCancelamento(), a.statusManual(), a.nomeAvulso(), a.motivoRetroativo(), a.historico());
     }
 
     private static OffsetDateTime utc(Instant i) {

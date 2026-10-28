@@ -359,6 +359,7 @@ function lerAgendamento(d) {
     servicos: listaDe(d.servicos, 20).map((i) => ({ servicoId: texto(i && i.servicoId, 40), nome: texto(i && i.nome, 100), preco: numeroOuNulo(i && i.preco) ?? 0, duracaoMin: numeroOuNulo(i && i.duracaoMin) ?? 0 })),
     conflitosPendentes: listaDe(d.conflitosPendentes, 50).map((c) => texto(c, 40)).filter((c) => ID.test(c)),
     origem: texto(d.origem, 20), reagendado: d.reagendado === true, motivoCancelamento: d.motivoCancelamento ? texto(d.motivoCancelamento, 30) : '', statusManual: d.statusManual === true,
+    nomeAvulso: d.nomeAvulso ? texto(d.nomeAvulso, 100) : '', motivoRetroativo: d.motivoRetroativo ? texto(d.motivoRetroativo, 300) : '',
     historico: listaDe(d.historico, 100).map((e) => ({ em: instante(e && e.em), autor: texto(e && e.autor, 80), campo: texto(e && e.campo, 40), de: e && e.de ? texto(e.de, 120) : '', para: e && e.para ? texto(e.para, 200) : '' })),
   };
 }
@@ -375,6 +376,26 @@ export const agenda = {
   async obter(id) {
     if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Agendamento não encontrado.' };
     const r = await chamar('GET', `/api/agendamentos/${id}`);
+    return r.ok ? { ok: true, agendamento: lerAgendamento(r.dados) } : r;
+  },
+  // POST /api/atendimentos  (botão Atender: data futura = agendamento a confirmar/confirmado; sem data, agora ou passado = atendimento local já concluído.
+  // Telefone acha ou cria o cadastro do cliente; só o nome não cria. Dia anterior exige `motivoRetroativo`. Produto, pagamento e comissão: parte 5d.)
+  async atender(d) {
+    d = d && typeof d === 'object' ? d : {};
+    if (!Array.isArray(d.servicoIds) || d.servicoIds.length === 0) return { ok: false, status: 0, erro: 'Escolha ao menos um serviço.' };
+    const ids = d.servicoIds.slice(0, 10).map((x) => String(x ?? ''));
+    if (!ids.every((x) => ID.test(x))) return { ok: false, status: 0, erro: 'Serviço não encontrado.' };
+    const corpo = { servicoIds: ids };
+    for (const [k, max] of [['nome', 100], ['telefone', 30], ['motivoRetroativo', 300]]) if (typeof d[k] === 'string' && d[k].trim()) corpo[k] = d[k].slice(0, max);
+    for (const k of ['clienteId', 'profissionalId']) {
+      if (d[k] === undefined || d[k] === null || d[k] === '') continue;
+      if (!ID.test(String(d[k]))) return { ok: false, status: 0, erro: k === 'clienteId' ? 'Cliente não encontrado.' : 'Profissional não encontrado.' };
+      corpo[k] = d[k];
+    }
+    if (d.inicio !== undefined && d.inicio !== null) { const i = soDia(d.inicio); if (!i) return { ok: false, status: 0, erro: 'Data e hora inválidas.' }; corpo.inicio = i; }
+    if (d.status !== undefined && d.status !== null && d.status !== '') { if (!['a_confirmar', 'confirmado'].includes(d.status)) return { ok: false, status: 0, erro: 'Agendamento futuro nasce a confirmar ou confirmado.' }; corpo.status = d.status; }
+    if (typeof d.encaixe === 'boolean') corpo.encaixe = d.encaixe;
+    const r = await chamar('POST', '/api/atendimentos', corpo);
     return r.ok ? { ok: true, agendamento: lerAgendamento(r.dados) } : r;
   },
   // PUT /api/agendamentos/{id}/status  { status }   (reativar confere o horário; confirmar cancela os "a confirmar" que o cobrem)

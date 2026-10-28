@@ -65,3 +65,26 @@ test('agruparPorDia junta por dia mantendo a ordem', () => {
   const g = agruparPorDia([{ inicio: dia }, { inicio: dia + 3600000 }, { inicio: dia + 86400000 }]);
   assert.equal(g.length, 2); assert.equal(g[0].lista.length, 2);
 });
+
+test('atender: rota e corpo certos, só o que o servidor aceita; entrada ruim nem sai do cliente', async () => {
+  servidor({ id: ID, clienteId: null, profissionalId: PROF, inicio: '2026-10-28T13:00:00Z', status: 'concluido', origem: 'atendimento', nomeAvulso: 'Balcão', motivoRetroativo: 'Esqueci de lançar' });
+  const SRV = '00000000-0000-4000-8000-000000000050';
+  const r = await agenda.atender({ servicoIds: [SRV], nome: 'Ana', telefone: '(11) 97777-6666', clienteId: ID, profissionalId: PROF, inicio: Date.parse('2026-10-26T15:00:00-03:00'), motivoRetroativo: 'Esqueci de lançar', status: 'confirmado', encaixe: false, produtos: [{ x: 1 }], formaPagamento: 'pix' });
+  assert.equal(r.ok, true);
+  assert.equal(r.agendamento.origem, 'atendimento'); assert.equal(r.agendamento.nomeAvulso, 'Balcão'); assert.equal(r.agendamento.motivoRetroativo, 'Esqueci de lançar');
+  assert.deepEqual(chamadas[0], { url: 'https://loja.teste/api/atendimentos', metodo: 'POST', corpo: { servicoIds: [SRV], nome: 'Ana', telefone: '(11) 97777-6666', motivoRetroativo: 'Esqueci de lançar', clienteId: ID, profissionalId: PROF, inicio: '2026-10-26T18:00:00.000Z', status: 'confirmado', encaixe: false } });
+  await agenda.atender({ servicoIds: [SRV], nome: '  ', telefone: '' });
+  assert.deepEqual(chamadas[1].corpo, { servicoIds: [SRV] }, 'texto em branco não vai; sem data o servidor decide "agora"');
+  const antes = chamadas.length;
+  for (const x of [await agenda.atender({ servicoIds: [] }), await agenda.atender({}), await agenda.atender({ servicoIds: ['1; drop'] }), await agenda.atender({ servicoIds: [SRV], clienteId: 'x' }),
+    await agenda.atender({ servicoIds: [SRV], profissionalId: 'x' }), await agenda.atender({ servicoIds: [SRV], inicio: 'amanhã' }), await agenda.atender({ servicoIds: [SRV], status: 'concluido' })]) assert.equal(x.ok, false);
+  assert.equal(chamadas.length, antes);
+  assert.equal((await agenda.atender({ servicoIds: [] })).erro, 'Escolha ao menos um serviço.');
+});
+
+test('atender: mensagem do servidor chega inteira à tela', async () => {
+  servidor({ mensagem: 'Informe o motivo do lançamento de um dia anterior (por que não foi registrado na hora).' }, 400);
+  const r = await agenda.atender({ servicoIds: ['00000000-0000-4000-8000-000000000050'], inicio: Date.parse('2026-10-26T15:00:00-03:00') });
+  assert.equal(r.ok, false);
+  assert.match(r.erro, /Informe o motivo do lançamento de um dia anterior/);
+});
