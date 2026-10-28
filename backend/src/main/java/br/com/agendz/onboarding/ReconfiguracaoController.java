@@ -49,11 +49,17 @@ public class ReconfiguracaoController {
     public record Autorizacao(String id, Instant autorizadaAte) {
     }
 
-    public record Item(String id, Instant criadaEm, String por, int servicosCriados, int pessoasCriadas, boolean expedienteTrocado, Instant desfeitaEm,
-                       boolean podeDesfazer, boolean podeRefazer) {
+    public record Item(String id, Instant criadaEm, String por, int servicosCriados, int pessoasCriadas, int produtosCriados, boolean expedienteTrocado, boolean comissaoTrocada,
+                       Instant desfeitaEm, boolean podeDesfazer, boolean podeRefazer) {
     }
 
     public record Lista(List<Item> itens) {
+    }
+
+    /** O que conta como "esta reconfiguração mudou algo". */
+    private static String mudou(String t) {
+        return "(jsonb_array_length(" + t + ".servicos_criados) + jsonb_array_length(" + t + ".usuarios_criados) + jsonb_array_length(" + t + ".produtos_criados) > 0 or "
+                + t + ".expediente_trocado or " + t + ".comissao_trocada)";
     }
 
     private final LojaJdbc banco;
@@ -114,11 +120,12 @@ public class ReconfiguracaoController {
     @GetMapping("/api/onboarding/reconfiguracoes")
     public Lista listar() {
         List<Item> itens = banco.naLoja(jdbc -> jdbc.query(
-                "select r.id, r.criada_em, u.nome, jsonb_array_length(r.servicos_criados) as sc, jsonb_array_length(r.usuarios_criados) as uc, r.expediente_trocado, r.desfeita_em, "
-                        + "(select count(*) from reconfiguracao n where n.criada_em > r.criada_em and n.desfeita_em is null and (jsonb_array_length(n.servicos_criados) + jsonb_array_length(n.usuarios_criados) > 0 or n.expediente_trocado)) as novas_ativas, "
-                        + "(select count(*) from reconfiguracao n where n.criada_em > r.criada_em and (jsonb_array_length(n.servicos_criados) + jsonb_array_length(n.usuarios_criados) > 0 or n.expediente_trocado)) as novas "
+                "select r.id, r.criada_em, u.nome, jsonb_array_length(r.servicos_criados) as sc, jsonb_array_length(r.usuarios_criados) as uc, jsonb_array_length(r.produtos_criados) as pc, "
+                        + "r.expediente_trocado, r.comissao_trocada, r.desfeita_em, "
+                        + "(select count(*) from reconfiguracao n where n.criada_em > r.criada_em and n.desfeita_em is null and " + mudou("n") + ") as novas_ativas, "
+                        + "(select count(*) from reconfiguracao n where n.criada_em > r.criada_em and " + mudou("n") + ") as novas "
                         + "from reconfiguracao r left join usuario u on u.id = r.usuario_id "
-                        + "where jsonb_array_length(r.servicos_criados) + jsonb_array_length(r.usuarios_criados) > 0 or r.expediente_trocado "
+                        + "where " + mudou("r") + " "
                         + "order by r.criada_em desc limit 20",
                 (rs, i) -> {
                     Instant criada = rs.getObject("criada_em", OffsetDateTime.class).toInstant();
@@ -126,8 +133,8 @@ public class ReconfiguracaoController {
                     boolean noPrazo = criada.plus(PRAZO).isAfter(Instant.now());
                     long ativasNovas = rs.getLong("novas_ativas");
                     long novas = rs.getLong("novas");
-                    return new Item(rs.getObject("id", UUID.class).toString(), criada, rs.getString("nome"), rs.getInt("sc"), rs.getInt("uc"), rs.getBoolean("expediente_trocado"),
-                            desfeita == null ? null : desfeita.toInstant(), noPrazo && desfeita == null && ativasNovas == 0, noPrazo && desfeita != null && novas == 0);
+                    return new Item(rs.getObject("id", UUID.class).toString(), criada, rs.getString("nome"), rs.getInt("sc"), rs.getInt("uc"), rs.getInt("pc"), rs.getBoolean("expediente_trocado"),
+                            rs.getBoolean("comissao_trocada"), desfeita == null ? null : desfeita.toInstant(), noPrazo && desfeita == null && ativasNovas == 0, noPrazo && desfeita != null && novas == 0);
                 }));
         return new Lista(itens);
     }
@@ -151,8 +158,10 @@ public class ReconfiguracaoController {
         banco.naLoja(jdbc -> {
             List<Item> estado = listar().itens();
             Item item = estado.stream().filter((x) -> x.id().equals(id.toString())).findFirst().orElse(null);
-            List<String[]> dados = jdbc.query("select servicos_criados::text, usuarios_criados::text, expediente_antes::text, expediente_depois::text, expediente_trocado, desfeita_em is not null from reconfiguracao where id = ?",
-                    (rs, i) -> new String[]{rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5), rs.getString(6)}, id);
+            List<String[]> dados = jdbc.query("select servicos_criados::text, usuarios_criados::text, expediente_antes::text, expediente_depois::text, expediente_trocado, desfeita_em is not null, "
+                            + "produtos_criados::text, comissao_trocada, comissao_antes, comissao_depois from reconfiguracao where id = ?",
+                    (rs, i) -> new String[]{rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5), rs.getString(6), rs.getString(7), rs.getString(8),
+                            rs.getString(9), rs.getString(10)}, id);
             if (dados.isEmpty()) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, "Reconfiguração não encontrada");
             String[] d = dados.get(0);
             boolean jaDesfeita = "t".equals(d[5]) || "true".equals(d[5]);
@@ -171,6 +180,12 @@ public class ReconfiguracaoController {
                 servico.restaurarExpediente(jdbc, loja.id(), desfazer ? d[2] : d[3]);
                 jdbc.update("update reconfiguracao set expediente_depois = cast(? as jsonb) where id = ?", desfazer ? atual : d[3], id);
             }
+            // Comissão geral: desfazer devolve o valor de antes (sem valor = volta a valer 50%); refazer põe de novo o que a sessão tinha gravado.
+            if ("t".equals(d[7]) || "true".equals(d[7])) {
+                String valor = desfazer ? d[8] : d[9];
+                servico.gravarComissaoGeral(jdbc, loja.id(), valor == null ? null : new java.math.BigDecimal(valor));
+            }
+            for (String p : lista(d[6])) jdbc.update("update material set ativo = ? where id = ?::uuid and tipo = 'produto'", !desfazer, p);
             for (String s : servicos) jdbc.update("update servico set ativo = ? where id = ?::uuid", !desfazer, s);
             for (String p : pessoas) jdbc.update("update usuario set ativo = ? where id = ?::uuid and papel = 'profissional'", !desfazer, p);
             if (desfazer) jdbc.update("update reconfiguracao set desfeita_em = now(), desfeita_por = ? where id = ?", usuario, id);

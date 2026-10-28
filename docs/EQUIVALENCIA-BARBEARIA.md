@@ -57,3 +57,5 @@ O teste estático importado da v64 proíbe `fetch` em todo `src/`. Na v74 `src/s
 - Dados: a v64 só tem dados de exemplo; sem migração necessária hoje. Se houver cliente real antes da F1, definir migração antes de congelar.
 - Skills: consolidar em um conjunto `agendz-*` (pendente; os antigos `apex-*`, `estetica-automotiva-*` e `barbearia-*` ficam para você apagar).
 - Arquivo morto: `agenda-barbearia-v64.zip`; histórico e notas em `docs/barbearia-v64/`. O Artifact antigo da barbearia só é apagado se você pedir.
+
+**Nota (v91/v92):** a ordem da comissão mudou para serviço > profissional > geral da loja também na barbearia; a suíte `tests-barbearia/comissao.test.mjs` foi reescrita para a nova regra (decisão do Marcelo em 28/10). O restante do comportamento da v64 segue igual.

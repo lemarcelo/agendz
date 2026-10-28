@@ -1,5 +1,7 @@
 package br.com.agendz.onboarding;
 
+import br.com.agendz.comissao.Comissao;
+import br.com.agendz.configuracao.ComissaoGeralController;
 import br.com.agendz.erro.ErroDeNegocio;
 import br.com.agendz.escala.EscalaService;
 import br.com.agendz.escala.EscalaService.Dia;
@@ -7,6 +9,7 @@ import br.com.agendz.escala.EscalaService.Escala;
 import br.com.agendz.escala.EscalaService.Faixa;
 import br.com.agendz.onboarding.CatalogoDeServicos.Catalogo;
 import br.com.agendz.onboarding.CatalogoDeServicos.Item;
+import br.com.agendz.produtos.ProdutoService;
 import br.com.agendz.tenant.Loja;
 import br.com.agendz.tenant.LojaContext;
 import br.com.agendz.tenant.LojaJdbc;
@@ -57,7 +60,8 @@ import org.springframework.web.bind.annotation.RestController;
 public class OnboardingController {
 
 
-    public record Estado(String tipo, String passo, boolean concluido, List<Item> servicos, List<String> jaCadastrados, Escala expedienteSugerido, Escala expediente) {
+    public record Estado(String tipo, String passo, boolean concluido, List<Item> servicos, List<String> jaCadastrados, Escala expedienteSugerido, Escala expediente,
+                         BigDecimal comissaoPadrao, List<String> produtosCadastrados) {
     }
 
     public record ItemEscolhido(
@@ -80,10 +84,22 @@ public class OnboardingController {
     public record Resultado(int criados, int jaExistiam) {
     }
 
-    public record NovaPessoa(@NotBlank @Size(max = 80) String nome, Boolean atende) {
+    public record NovaPessoa(@NotBlank @Size(max = 80) String nome, Boolean atende, @DecimalMin("0") @DecimalMax("100") BigDecimal comissaoPct) {
     }
 
     public record Equipe(@NotNull @Size(max = 10) List<@Valid @NotNull NovaPessoa> pessoas) {
+    }
+
+    /** Comissão geral da loja (a última da ordem serviço > funcionário > estabelecimento). `padrao` ausente = pular (nada é gravado). */
+    public record ComissaoGeral(@DecimalMin("0") @DecimalMax("100") BigDecimal padrao) {
+    }
+
+    /** Produto à venda que o dono cadastra no assistente. Comissão ausente ou 0 = sem comissão; estoque ausente = 0. */
+    public record ProdutoNovo(@NotBlank @Size(max = 100) String nome, @NotNull @DecimalMin("0") @DecimalMax("100000") BigDecimal preco,
+                              @DecimalMin("0") @DecimalMax("100") BigDecimal comissaoPct, @DecimalMin("0") @DecimalMax("1000000000") BigDecimal estoque) {
+    }
+
+    public record Produtos(@NotNull @Size(max = 30) List<@Valid @NotNull ProdutoNovo> itens) {
     }
 
     public record PessoaCriada(String nome, String login, String senhaTemporaria, boolean atende) {
@@ -105,9 +121,12 @@ public class OnboardingController {
     private final ObjectMapper json;
     private final EscalaService escalas;
     private final ReconfiguracaoService reconfiguracoes;
+    private final ProdutoService produtosDaLoja;
 
-    public OnboardingController(LojaJdbc banco, CatalogoDeServicos catalogos, PasswordEncoder encoder, ObjectMapper json, EscalaService escalas, ReconfiguracaoService reconfiguracoes) {
+    public OnboardingController(LojaJdbc banco, CatalogoDeServicos catalogos, PasswordEncoder encoder, ObjectMapper json, EscalaService escalas, ReconfiguracaoService reconfiguracoes,
+                                ProdutoService produtosDaLoja) {
         this.reconfiguracoes = reconfiguracoes;
+        this.produtosDaLoja = produtosDaLoja;
         this.banco = banco;
         this.catalogos = catalogos;
         this.encoder = encoder;
@@ -123,7 +142,9 @@ public class OnboardingController {
         Set<String> nomes = new HashSet<>(banco.naLoja(jdbc -> jdbc.queryForList("select lower(nome) from servico", String.class)));
         List<String> ja = c.servicos().stream().filter((s) -> nomes.contains(s.nome().toLowerCase(Locale.ROOT))).map(Item::chave).toList();
         Map<Integer, List<Faixa>> atual = banco.naLoja((jdbc) -> escalas.ler(jdbc, null));
-        return new Estado(loja.tipo(), l.passo(), l.concluido(), c.servicos(), ja, c.expediente(), EscalaService.temFaixa(atual) ? EscalaService.paraJson(atual) : null);
+        List<String> produtos = banco.naLoja(jdbc -> jdbc.queryForList("select nome from material where tipo = 'produto' and ativo order by lower(nome) limit 200", String.class));
+        return new Estado(loja.tipo(), l.passo(), l.concluido(), c.servicos(), ja, c.expediente(), EscalaService.temFaixa(atual) ? EscalaService.paraJson(atual) : null,
+                ComissaoGeralController.efetiva(banco), produtos);
     }
 
     @PostMapping("/api/onboarding/servicos")
@@ -211,8 +232,10 @@ public class OnboardingController {
                 logins.add(login);
                 String senha = senhaTemporaria();
                 boolean atende = p.atende() == null || p.atende();
-                UUID novo = jdbc.queryForObject("insert into usuario (loja_id, identificador, nome, papel, senha_hash, atende, deve_trocar_senha) values (?::uuid, ?, ?, 'profissional', ?, ?, true) returning id",
-                        UUID.class, loja.id().toString(), login, nome, encoder.encode(senha), atende);
+                if (p.comissaoPct() != null && !Comissao.valido(p.comissaoPct())) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "A comissão vai de 0 a 100%.");
+                BigDecimal comissao = p.comissaoPct() == null ? null : p.comissaoPct().setScale(2, RoundingMode.HALF_UP); // null = usa a comissão geral da loja
+                UUID novo = jdbc.queryForObject("insert into usuario (loja_id, identificador, nome, papel, senha_hash, atende, deve_trocar_senha, comissao_pct) values (?::uuid, ?, ?, 'profissional', ?, ?, true, ?) returning id",
+                        UUID.class, loja.id().toString(), login, nome, encoder.encode(senha), atende, comissao);
                 reconfiguracoes.anotarPessoa(jdbc, reconf, novo);
                 saida.add(new PessoaCriada(nome, login, senha, atende));
             }
@@ -221,6 +244,48 @@ public class OnboardingController {
         });
         // A resposta traz senhas: nada de cache no navegador nem em proxy.
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(new EquipeCriada(criadas));
+    }
+
+    /** Comissão geral no assistente (ou no Reconfigurar, com a senha). Sem `padrao` = pular. Dentro de uma reconfiguração guarda o valor de antes para o Desfazer. */
+    @PostMapping("/api/onboarding/comissao")
+    public ResponseEntity<ComissaoGeral> comissao(@Valid @RequestBody ComissaoGeral corpo, @AuthenticationPrincipal Jwt jwt) {
+        Loja loja = LojaContext.exigir();
+        linha(); // 404 se a loja não tem o assistente
+        UUID quem = UUID.fromString(jwt.getSubject());
+        BigDecimal novo = corpo.padrao() == null ? null : corpo.padrao().setScale(2, RoundingMode.HALF_UP);
+        banco.naLoja(jdbc -> {
+            UUID reconf = reconfiguracoes.autorizada(jdbc, quem);
+            if (novo != null) {
+                List<BigDecimal> atual = jdbc.query("select comissao_padrao from configuracao_loja", (rs, i) -> rs.getBigDecimal(1));
+                reconfiguracoes.anotarComissao(jdbc, reconf, atual.isEmpty() ? null : atual.get(0), novo);
+                reconfiguracoes.gravarComissaoGeral(jdbc, loja.id(), novo);
+            }
+            return null;
+        });
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(new ComissaoGeral(ComissaoGeralController.efetiva(banco)));
+    }
+
+    /** Produtos à venda no assistente. Nome que já existe na loja não é recriado (conta em `jaExistiam`); vale para o Reconfigurar com a senha. */
+    @PostMapping("/api/onboarding/produtos")
+    public Resultado produtos(@Valid @RequestBody Produtos corpo, @AuthenticationPrincipal Jwt jwt) {
+        linha(); // 404 se a loja não tem o assistente
+        UUID quem = UUID.fromString(jwt.getSubject());
+        int[] contagem = banco.naLoja(jdbc -> {
+            UUID reconf = reconfiguracoes.autorizada(jdbc, quem);
+            int criados = 0;
+            int jaExistiam = 0;
+            for (ProdutoNovo p : corpo.itens()) {
+                ProdutoService.Produto feito = produtosDaLoja.criarSeNovo(jdbc, new ProdutoService.Dados(p.nome(), null, null, p.preco(), p.comissaoPct(), p.estoque(), null, null, null));
+                if (feito == null) {
+                    jaExistiam++;
+                } else {
+                    criados++;
+                    reconfiguracoes.anotarProduto(jdbc, reconf, feito.id());
+                }
+            }
+            return new int[]{criados, jaExistiam};
+        });
+        return new Resultado(contagem[0], contagem[1]);
     }
 
     @PostMapping("/api/onboarding/expediente")

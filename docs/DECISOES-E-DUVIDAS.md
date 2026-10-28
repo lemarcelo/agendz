@@ -43,3 +43,12 @@ Lista simples. Cada item está no histórico do `prompt-agendz-regras.md` (v84 a
 - **Decidi:** a chave vale 7 dias e só existe nas duas rotas que criam atendimento/agendamento; as outras escritas seguem sem reenvio automático.
 - **Decidi:** continua sem fila no aparelho: a espera pela internet (v87) mais a chave já evitam perda e duplicação sem guardar nada no aparelho.
 - v91: o "canto tampado pelo botão" foi entendido como a lista Serviços realizados da ficha (caixa sem raio e botão colado). Atender (modal e site real) conferidos e sem o problema. Se for outra tela, o Marcelo avisa.
+
+## v92 (28/10): comissão em três níveis e produtos no assistente
+- **Decidi (D1):** o assistente sugere produtos do tipo (seis por tipo), tudo desmarcado; o dono marca, ajusta e descreve os próprios.
+- **Decidi (D2):** a comissão do funcionário não vale para produtos; o produto tem o percentual dele (vazio = sem comissão), como já era.
+- **Decidi:** a etapa Comissão fica antes da Equipe, para a equipe já mostrar "usar a geral (X%)"; Pular não grava nada.
+- **Decidi:** o percentual da pessoa é opcional na criação; dá para mudar depois em Equipe.
+- **Decidi:** Desfazer devolve a comissão geral de antes (sem valor anterior volta a valer 50%) e desativa os produtos criados, sem excluir.
+- **Dúvida (não bloqueia):** produto desativado por um Desfazer pode ser reativado em Estoque; se preferir que Refazer seja o único caminho, é só avisar.
+

@@ -56,6 +56,8 @@ class ReconfiguracaoTest extends BaseApi {
 
     private void limpar() {
         jdbc.update("delete from reconfiguracao");
+        jdbc.update("delete from material");
+        jdbc.update("delete from configuracao_loja");
         jdbc.update("delete from onboarding");
         jdbc.update("delete from escala_faixa");
         jdbc.update("delete from servico_componente");
@@ -161,6 +163,47 @@ class ReconfiguracaoTest extends BaseApi {
         assertEquals(0, contar("select count(*) from servico where ativo = false"));
         assertEquals(1, contar("select count(*) from usuario where identificador = 'zeferino' and ativo = true"));
         enviar(DALFORNO, t, "/api/onboarding/reconfiguracoes/" + id + "/refazer", SENHA).andExpect(status().isConflict());
+    }
+
+    @Test
+    void comissaoGeralEProdutosDesfazemERefazemSemExcluirNada() throws Exception {
+        jdbc.update("insert into configuracao_loja (loja_id, comissao_padrao) values (?::uuid, 60)", LOJA_DALFORNO);
+        String t = lojaConcluida();
+        // sem a senha confirmada nada muda
+        enviar(DALFORNO, t, "/api/onboarding/comissao", "{\"padrao\":40}").andExpect(status().isForbidden());
+        enviar(DALFORNO, t, "/api/onboarding/produtos", "{\"itens\":[{\"nome\":\"Pomada\",\"preco\":30}]}").andExpect(status().isForbidden());
+        assertEquals(0, contar("select count(*) from material"));
+        assertEquals(60, contar("select comissao_padrao::int from configuracao_loja"));
+
+        String id = abrir(t);
+        enviar(DALFORNO, t, "/api/onboarding/comissao", "{\"padrao\":40}").andExpect(status().isOk());
+        enviar(DALFORNO, t, "/api/onboarding/comissao", "{\"padrao\":35}").andExpect(status().isOk()); // segunda troca da mesma sessão: o "antes" continua sendo 60
+        enviar(DALFORNO, t, "/api/onboarding/produtos", "{\"itens\":[{\"nome\":\"Pomada\",\"preco\":30,\"comissaoPct\":10}]}").andExpect(status().isOk()).andExpect(jsonPath("$.criados").value(1));
+        assertEquals(35, contar("select comissao_padrao::int from configuracao_loja"));
+        pegar(DALFORNO, t, "/api/onboarding/reconfiguracoes").andExpect(jsonPath("$.itens[0].produtosCriados").value(1)).andExpect(jsonPath("$.itens[0].comissaoTrocada").value(true))
+                .andExpect(jsonPath("$.itens[0].servicosCriados").value(0)).andExpect(jsonPath("$.itens[0].podeDesfazer").value(true));
+
+        enviar(DALFORNO, t, "/api/onboarding/reconfiguracoes/" + id + "/desfazer", "{\"senha\":\"errada\"}").andExpect(status().isForbidden());
+        assertEquals(35, contar("select comissao_padrao::int from configuracao_loja"));
+        enviar(DALFORNO, t, "/api/onboarding/reconfiguracoes/" + id + "/desfazer", SENHA).andExpect(status().isOk()).andExpect(jsonPath("$.itens[0].podeRefazer").value(true));
+        assertEquals(60, contar("select comissao_padrao::int from configuracao_loja"), "a comissão geral volta ao valor de antes");
+        assertEquals(1, contar("select count(*) from material where nome = 'Pomada' and ativo = false"), "o produto fica desativado, não é excluído");
+
+        enviar(DALFORNO, t, "/api/onboarding/reconfiguracoes/" + id + "/refazer", SENHA).andExpect(status().isOk());
+        assertEquals(35, contar("select comissao_padrao::int from configuracao_loja"));
+        assertEquals(1, contar("select count(*) from material where nome = 'Pomada' and ativo = true"));
+    }
+
+    @Test
+    void desfazerComissaoSemValorAnteriorVoltaAoPadraoDe50() throws Exception {
+        String t = lojaConcluida();
+        String id = abrir(t);
+        enviar(DALFORNO, t, "/api/onboarding/comissao", "{\"padrao\":20}").andExpect(status().isOk());
+        pegar(DALFORNO, t, "/api/estabelecimento/comissao").andExpect(jsonPath("$.comissaoPadrao").value(20.0));
+        enviar(DALFORNO, t, "/api/onboarding/reconfiguracoes/" + id + "/desfazer", SENHA).andExpect(status().isOk());
+        pegar(DALFORNO, t, "/api/estabelecimento/comissao").andExpect(jsonPath("$.comissaoPadrao").value(50.0));
+        enviar(DALFORNO, t, "/api/onboarding/reconfiguracoes/" + id + "/refazer", SENHA).andExpect(status().isOk());
+        pegar(DALFORNO, t, "/api/estabelecimento/comissao").andExpect(jsonPath("$.comissaoPadrao").value(20.0));
     }
 
     @Test

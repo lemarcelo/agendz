@@ -51,6 +51,8 @@ class OnboardingTest extends BaseApi {
 
     private void limpar() {
         jdbc.update("delete from reconfiguracao");
+        jdbc.update("delete from material");
+        jdbc.update("delete from configuracao_loja");
         jdbc.update("delete from onboarding");
         jdbc.update("delete from escala_faixa");
         jdbc.update("delete from servico_componente");
@@ -138,6 +140,57 @@ class OnboardingTest extends BaseApi {
         pegar(DALFORNO, t, "/api/onboarding").andExpect(jsonPath("$.passo").value("equipe")).andExpect(jsonPath("$.jaCadastrados[*]", hasItem("s-barba")));
         // pular = lista vazia (válido, não cria nada)
         enviar(DALFORNO, t, "/api/onboarding/servicos", "{\"itens\":[]}").andExpect(status().isOk()).andExpect(jsonPath("$.criados").value(0));
+    }
+
+    @Test
+    void comissaoGeralPorPessoaEProdutosNoPrimeiroAcesso() throws Exception {
+        abrirAssistente(LOJA_DALFORNO);
+        String t = token(DALFORNO, "alan");
+        pegar(DALFORNO, t, "/api/onboarding").andExpect(status().isOk()).andExpect(jsonPath("$.comissaoPadrao").value(50.0)).andExpect(jsonPath("$.produtosCadastrados").isEmpty());
+
+        // comissão geral: de 0 a 100; sem valor = pular (nada é gravado)
+        enviar(DALFORNO, t, "/api/onboarding/comissao", "{\"padrao\":101}").andExpect(status().isBadRequest());
+        enviar(DALFORNO, t, "/api/onboarding/comissao", "{\"padrao\":-1}").andExpect(status().isBadRequest());
+        enviar(DALFORNO, t, "/api/onboarding/comissao", "{\"padrao\":40,\"lojaId\":\"x\"}").andExpect(status().isBadRequest());
+        enviar(DALFORNO, t, "/api/onboarding/comissao", "{}").andExpect(status().isOk()).andExpect(jsonPath("$.padrao").value(50.0));
+        assertEquals(0, jdbc.queryForObject("select count(*) from configuracao_loja", Integer.class));
+        enviar(DALFORNO, t, "/api/onboarding/comissao", "{\"padrao\":40}").andExpect(status().isOk()).andExpect(jsonPath("$.padrao").value(40.0));
+        assertEquals(1, jdbc.queryForObject("select count(*) from configuracao_loja where comissao_padrao = 40", Integer.class));
+
+        // por pessoa: vazio = usa a geral; número = valor próprio (0 = sem comissão); fora de 0 a 100 é recusado e nada é criado
+        enviar(DALFORNO, t, "/api/onboarding/equipe", "{\"pessoas\":[{\"nome\":\"Zeferino\",\"comissaoPct\":120}]}").andExpect(status().isBadRequest());
+        assertEquals(0, jdbc.queryForObject("select count(*) from usuario where identificador like 'zeferino%'", Integer.class));
+        enviar(DALFORNO, t, "/api/onboarding/equipe", "{\"pessoas\":[{\"nome\":\"Zeferino\",\"comissaoPct\":30},{\"nome\":\"Zulmira\"}]}").andExpect(status().isOk());
+        assertEquals(30.0, jdbc.queryForObject("select comissao_pct::float8 from usuario where identificador = 'zeferino'", Double.class));
+        assertEquals(null, jdbc.queryForObject("select comissao_pct from usuario where identificador = 'zulmira'", java.math.BigDecimal.class));
+
+        // produtos: nome, preço de 0 a 100.000, comissão de 0 a 100, estoque inicial; campo desconhecido é recusado
+        enviar(DALFORNO, t, "/api/onboarding/produtos", "{\"itens\":[{\"nome\":\"\",\"preco\":10}]}").andExpect(status().isBadRequest());
+        enviar(DALFORNO, t, "/api/onboarding/produtos", "{\"itens\":[{\"nome\":\"Pomada\",\"preco\":-1}]}").andExpect(status().isBadRequest());
+        enviar(DALFORNO, t, "/api/onboarding/produtos", "{\"itens\":[{\"nome\":\"Pomada\",\"preco\":10,\"comissaoPct\":101}]}").andExpect(status().isBadRequest());
+        enviar(DALFORNO, t, "/api/onboarding/produtos", "{\"itens\":[{\"nome\":\"Pomada\",\"preco\":10,\"lojaId\":\"x\"}]}").andExpect(status().isBadRequest());
+        assertEquals(0, jdbc.queryForObject("select count(*) from material", Integer.class));
+        enviar(DALFORNO, t, "/api/onboarding/produtos", "{\"itens\":[{\"nome\":\"  Pomada modeladora \",\"preco\":35,\"comissaoPct\":10,\"estoque\":5},{\"nome\":\"Shampoo\",\"preco\":20}]}")
+                .andExpect(status().isOk()).andExpect(jsonPath("$.criados").value(2)).andExpect(jsonPath("$.jaExistiam").value(0));
+        assertEquals(10.0, jdbc.queryForObject("select comissao_pct::float8 from material where nome = 'Pomada modeladora'", Double.class));
+        assertEquals(5.0, jdbc.queryForObject("select estoque::float8 from material where nome = 'Pomada modeladora'", Double.class));
+        assertEquals(null, jdbc.queryForObject("select comissao_pct from material where nome = 'Shampoo'", java.math.BigDecimal.class));
+        assertEquals("1", jdbc.queryForObject("select codigo from material where nome = 'Pomada modeladora'", String.class));
+        assertEquals("2", jdbc.queryForObject("select codigo from material where nome = 'Shampoo'", String.class));
+        // mesmo nome (sem diferenciar maiúsculas) não duplica
+        enviar(DALFORNO, t, "/api/onboarding/produtos", "{\"itens\":[{\"nome\":\"POMADA MODELADORA\",\"preco\":1}]}")
+                .andExpect(status().isOk()).andExpect(jsonPath("$.criados").value(0)).andExpect(jsonPath("$.jaExistiam").value(1));
+        assertEquals(2, jdbc.queryForObject("select count(*) from material", Integer.class));
+        pegar(DALFORNO, t, "/api/onboarding").andExpect(jsonPath("$.comissaoPadrao").value(40.0)).andExpect(jsonPath("$.produtosCadastrados[0]").value("Pomada modeladora"));
+    }
+
+    @Test
+    void comissaoEProdutosDoAssistenteSoOProprietario() throws Exception {
+        String pablo = token(APEX, "pablo"); // profissional
+        enviar(APEX, pablo, "/api/onboarding/comissao", "{\"padrao\":40}").andExpect(status().isForbidden());
+        enviar(APEX, pablo, "/api/onboarding/produtos", "{\"itens\":[{\"nome\":\"Cera\",\"preco\":10}]}").andExpect(status().isForbidden());
+        assertEquals(0, jdbc.queryForObject("select count(*) from material", Integer.class));
+        assertEquals(0, jdbc.queryForObject("select count(*) from configuracao_loja", Integer.class));
     }
 
     @Test

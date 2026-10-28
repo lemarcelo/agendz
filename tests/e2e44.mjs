@@ -4,6 +4,9 @@
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 
+// Depois dos serviços o assistente passa por Produtos e Comissão (opcionais): estes testes só querem chegar à Equipe.
+const passarProdutosEComissao = async (p) => { await p.getByTestId('pa-pular-produtos').click(); await p.getByTestId('pa-pular-comissao').click(); };
+
 const ok = (m) => console.log('✓', m);
 const base = new URL('../dist/index.html', import.meta.url).href;
 const b = await chromium.launch();
@@ -44,7 +47,7 @@ for (const vp of [{ width: 1280, height: 800 }, { width: 390, height: 780 }]) {
   await T('pa-proprio-0').waitFor();
   assert.equal(await p.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1), false, `sem rolagem lateral (${vp.width}px)`);
   await T('pa-continuar-servicos').click();
-  await T('pa-equipe').waitFor();
+  await passarProdutosEComissao(p); await T('pa-equipe').waitFor();
   assert.match(await T('pa-aviso').innerText(), /1 serviço criado/);
   ok(`${vp.width}px: serviço próprio descrito na hora segue para a equipe`);
   await ctx.close();

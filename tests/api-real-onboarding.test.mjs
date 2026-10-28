@@ -1,0 +1,48 @@
+/* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
+// Assistente de início no site real (src/services/api-real.js, `onboarding`): corpos enviados de produtos, comissão geral e comissão por pessoa
+// (só os campos que o servidor conhece: ele recusa campo desconhecido), leitura defensiva do estado e do histórico. 5d-3.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { configurar, onboarding } from '../src/services/api-real.js';
+
+let chamadas;
+function servidor(resposta, status = 200) {
+  chamadas = [];
+  globalThis.fetch = async (url, init) => { chamadas.push({ url: String(url), metodo: init.method, corpo: init.body ? JSON.parse(init.body) : undefined }); return { ok: status < 400, status, json: async () => resposta }; };
+}
+test.beforeEach(() => configurar({ base: 'https://loja.teste' }));
+
+test('produtos: manda só nome, preço, comissão e estoque; sem comissão/estoque os campos nem vão', async () => {
+  servidor({ criados: 2, jaExistiam: 1 });
+  const r = await onboarding.produtos([{ nome: 'Pomada', preco: 45, comissaoPct: 10, estoque: 5, lojaId: 'x' }, { nome: 'Cera', preco: 30, comissaoPct: null }]);
+  assert.deepEqual(r, { ok: true, resultado: { criados: 2, jaExistiam: 1 } });
+  assert.equal(chamadas[0].url, 'https://loja.teste/api/onboarding/produtos');
+  assert.deepEqual(chamadas[0].corpo, { itens: [{ nome: 'Pomada', preco: 45, comissaoPct: 10, estoque: 5 }, { nome: 'Cera', preco: 30 }] });
+});
+
+test('comissão geral: POST com o número; a resposta vira o padrão vigente', async () => {
+  servidor({ padrao: 40 });
+  assert.deepEqual(await onboarding.comissao(40), { ok: true, padrao: 40 });
+  assert.equal(chamadas[0].url, 'https://loja.teste/api/onboarding/comissao');
+  assert.deepEqual(chamadas[0].corpo, { padrao: 40 });
+});
+
+test('equipe: comissaoPct só vai quando a pessoa tem percentual próprio (vazio = usa a geral)', async () => {
+  servidor({ pessoas: [] });
+  await onboarding.equipe([{ nome: 'Zé', atende: true, comissaoPct: 30, senha: 'x' }, { nome: 'Ana', atende: false }]);
+  assert.deepEqual(chamadas[0].corpo, { pessoas: [{ nome: 'Zé', atende: true, comissaoPct: 30 }, { nome: 'Ana', atende: false }] });
+});
+
+test('estado e histórico: leitura defensiva dos campos novos', async () => {
+  servidor({ tipo: 'barbearia', passo: 'servicos', concluido: false, servicos: [], jaCadastrados: [], comissaoPadrao: 35, produtosCadastrados: ['Pomada', 7, null] });
+  let r = await onboarding.carregar();
+  assert.equal(r.estado.comissaoPadrao, 35);
+  assert.deepEqual(r.estado.produtosCadastrados.slice(0, 1), ['Pomada']);
+  servidor({ tipo: 'barbearia', passo: 'servicos', concluido: false, servicos: [] });
+  r = await onboarding.carregar();
+  assert.equal(r.estado.comissaoPadrao, 50, 'sem valor, vale o padrão de 50%');
+  assert.deepEqual(r.estado.produtosCadastrados, []);
+  servidor({ itens: [{ id: '00000000-0000-4000-8000-000000000001', criadaEm: '2026-10-28T12:00:00Z', por: 'Alan', servicosCriados: 1, pessoasCriadas: 0, produtosCriados: 2, expedienteTrocado: false, comissaoTrocada: true, podeDesfazer: true }] });
+  const h = await onboarding.historico();
+  assert.equal(h.itens[0].produtosCriados, 2); assert.equal(h.itens[0].comissaoTrocada, true);
+});

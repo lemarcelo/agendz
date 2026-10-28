@@ -55,6 +55,26 @@ public class ReconfiguracaoService {
         }
     }
 
+    public void anotarProduto(JdbcTemplate jdbc, UUID reconfiguracao, UUID produtoId) {
+        if (reconfiguracao != null) {
+            jdbc.update("update reconfiguracao set produtos_criados = produtos_criados || jsonb_build_array(?::text) where id = ?", produtoId.toString(), reconfiguracao);
+        }
+    }
+
+    /** Guarda a comissão geral de antes (só na primeira troca da sessão) e a nova; {@code antes} nulo = a loja não tinha valor gravado. */
+    public void anotarComissao(JdbcTemplate jdbc, UUID reconfiguracao, java.math.BigDecimal antes, java.math.BigDecimal depois) {
+        if (reconfiguracao != null) {
+            jdbc.update("update reconfiguracao set comissao_antes = case when comissao_trocada then comissao_antes else ? end, comissao_depois = ?, comissao_trocada = true where id = ?",
+                    antes, depois, reconfiguracao);
+        }
+    }
+
+    /** Grava a comissão geral (null = apaga o valor: vale o padrão de 50%). */
+    public void gravarComissaoGeral(JdbcTemplate jdbc, UUID lojaId, java.math.BigDecimal valor) {
+        jdbc.update("insert into configuracao_loja (loja_id, comissao_padrao) values (?::uuid, ?) on conflict (loja_id) do update set comissao_padrao = excluded.comissao_padrao, atualizado_em = now()",
+                lojaId.toString(), valor);
+    }
+
     public void anotarExpediente(JdbcTemplate jdbc, UUID reconfiguracao) {
         if (reconfiguracao != null) jdbc.update("update reconfiguracao set expediente_trocado = true where id = ?", reconfiguracao);
     }

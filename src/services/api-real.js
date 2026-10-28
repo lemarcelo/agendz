@@ -167,6 +167,8 @@ function lerEstado(d) {
       precos: s && s.precos && typeof s.precos === 'object' ? s.precos : null, duracoes: s && s.duracoes && typeof s.duracoes === 'object' ? s.duracoes : null,
     })),
     jaCadastrados: listaDe(d.jaCadastrados, 60).map((c) => texto(c, 40)),
+    comissaoPadrao: Number.isFinite(Number(d.comissaoPadrao)) && d.comissaoPadrao !== null ? Number(d.comissaoPadrao) : 50,
+    produtosCadastrados: listaDe(d.produtosCadastrados, 200).map((n) => texto(n, 100)),
   };
 }
 export const onboarding = {
@@ -177,11 +179,23 @@ export const onboarding = {
     const r = await chamar('POST', '/api/onboarding/servicos', { itens: listaDe(itens, 40), proprios: listaDe(proprios, 20) });
     return r.ok ? { ok: true, resultado: { criados: Number(r.dados && r.dados.criados) || 0, jaExistiam: Number(r.dados && r.dados.jaExistiam) || 0 } } : r;
   },
-  // POST /api/onboarding/equipe  { pessoas: [{ nome, atende }] }  → logins e senhas temporárias (aparecem UMA vez)
+  // POST /api/onboarding/equipe  { pessoas: [{ nome, atende, comissaoPct? }] }  (comissaoPct ausente = usa a comissão geral)  → logins e senhas temporárias (aparecem UMA vez)
   async equipe(pessoas) {
-    const r = await chamar('POST', '/api/onboarding/equipe', { pessoas: listaDe(pessoas, 10) });
+    const lista = listaDe(pessoas, 10).map((p) => ({ nome: texto(p && p.nome, 80), atende: !(p && p.atende === false), ...(p && p.comissaoPct != null ? { comissaoPct: Number(p.comissaoPct) } : {}) }));
+    const r = await chamar('POST', '/api/onboarding/equipe', { pessoas: lista });
     if (!r.ok) return r;
     return { ok: true, pessoas: listaDe(r.dados && r.dados.pessoas, 10).map((p) => ({ nome: texto(p && p.nome, 80), login: texto(p && p.login, 60), senhaTemporaria: texto(p && p.senhaTemporaria, 40), atende: !(p && p.atende === false) })) };
+  },
+  // POST /api/onboarding/produtos  { itens: [{ nome, preco, comissaoPct?, estoque? }] }  (nome que já existe na loja não é recriado)
+  async produtos(itens) {
+    const lista = listaDe(itens, 30).map((p) => ({ nome: texto(p && p.nome, 100), preco: Number(p && p.preco) || 0, ...(p && p.comissaoPct != null ? { comissaoPct: Number(p.comissaoPct) } : {}), ...(p && p.estoque != null ? { estoque: Number(p.estoque) } : {}) }));
+    const r = await chamar('POST', '/api/onboarding/produtos', { itens: lista });
+    return r.ok ? { ok: true, resultado: { criados: Number(r.dados && r.dados.criados) || 0, jaExistiam: Number(r.dados && r.dados.jaExistiam) || 0 } } : r;
+  },
+  // POST /api/onboarding/comissao  { padrao }  → comissão geral da loja (0 a 100)
+  async comissao(padrao) {
+    const r = await chamar('POST', '/api/onboarding/comissao', { padrao: Number(padrao) });
+    return r.ok ? { ok: true, padrao: Number(r.dados && r.dados.padrao) } : r;
   },
   // POST /api/onboarding/expediente  { semana: { 0..6: { aberto, faixas: [['09:00','12:00']] } } }  (semana vazia = pular)
   async expediente(semana) {
@@ -201,8 +215,8 @@ export const onboarding = {
   async refazer(id, senha) { return trocarReconfiguracao(id, 'refazer', senha); },
 };
 const lerHistorico = (d) => listaDe(d && d.itens, 20).map((i) => ({
-  id: texto(i && i.id, 40), criadaEm: texto(i && i.criadaEm, 40), por: texto(i && i.por, 120), servicosCriados: Number(i && i.servicosCriados) || 0, pessoasCriadas: Number(i && i.pessoasCriadas) || 0,
-  expedienteTrocado: !!(i && i.expedienteTrocado === true), desfeitaEm: i && i.desfeitaEm ? texto(i.desfeitaEm, 40) : '', podeDesfazer: !!(i && i.podeDesfazer === true), podeRefazer: !!(i && i.podeRefazer === true),
+  id: texto(i && i.id, 40), criadaEm: texto(i && i.criadaEm, 40), por: texto(i && i.por, 120), servicosCriados: Number(i && i.servicosCriados) || 0, pessoasCriadas: Number(i && i.pessoasCriadas) || 0, produtosCriados: Number(i && i.produtosCriados) || 0,
+  expedienteTrocado: !!(i && i.expedienteTrocado === true), comissaoTrocada: !!(i && i.comissaoTrocada === true), desfeitaEm: i && i.desfeitaEm ? texto(i.desfeitaEm, 40) : '', podeDesfazer: !!(i && i.podeDesfazer === true), podeRefazer: !!(i && i.podeRefazer === true),
 }));
 async function trocarReconfiguracao(id, acao, senha) {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id))) return { ok: false, erro: 'Reconfiguração inválida' };

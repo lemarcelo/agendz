@@ -91,6 +91,23 @@ public class ProdutoService {
         }
     }
 
+    /**
+     * Cria dentro de uma transação já aberta (assistente de início, 5d-3). Mesmas regras de {@link #criar}, com o dono definindo a comissão.
+     * Nome que já existe na loja (sem diferenciar maiúsculas) não é erro: devolve {@code null} e nada é criado.
+     */
+    public Produto criarSeNovo(JdbcTemplate jdbc, Dados d) {
+        Loja loja = LojaContext.exigir();
+        Validado v = validar(d, true);
+        Integer repetidos = jdbc.queryForObject("select count(*) from material where lower(nome) = lower(?)", Integer.class, v.nome);
+        if (repetidos != null && repetidos > 0) return null;
+        String codigo = codigoFinal(jdbc, v.codigo, null);
+        UUID id = jdbc.queryForObject(
+                "insert into material (loja_id, tipo, codigo, nome, unidade, preco, comissao_pct, estoque, minimo, custo, ativo) "
+                        + "values (?::uuid, 'produto', ?, ?, ?, ?, ?, ?, ?, ?, true) returning id",
+                UUID.class, loja.id().toString(), codigo, v.nome, v.unidade, v.preco, v.comissao, v.estoque, v.minimo, v.custo);
+        return buscar(jdbc, id);
+    }
+
     public Produto alterar(UUID id, Dados d, boolean donoDefine) {
         Validado v = validar(d, false);
         try {

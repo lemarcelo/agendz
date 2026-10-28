@@ -23,7 +23,7 @@ const loginDe = (nome, usados) => {
 // (apagou um serviço? ele volta a aparecer para marcar); o expediente atual é o da loja. Continua sem gravar nada.
 // Histórico da pré-visualização (vive só nesta página). Só a mais recente com mudança se desfaz; refazer só se nada mais novo mudou.
 const HIST = [];
-const mudou = (h) => h.servicosCriados + h.pessoasCriadas > 0 || h.expedienteTrocado;
+const mudou = (h) => h.servicosCriados + h.pessoasCriadas + h.produtosCriados > 0 || h.expedienteTrocado || h.comissaoTrocada;
 const visiveis = () => HIST.filter(mudou).map((h, i, l) => ({
   ...h, podeDesfazer: !h.desfeitaEm && !l.slice(0, i).some((n) => !n.desfeitaEm), podeRefazer: !!h.desfeitaEm && i === 0,
 }));
@@ -33,10 +33,12 @@ export function criarAdaptadorDemo({ reconfigurar = false } = {}) {
   const catalogo = () => { const t = tipoDe(atual().estabelecimento); return catalogoDoTipo(t, reconfigurar && SEEDS[t] ? SEEDS[t]() : atual()); };
   const nomesDaLoja = () => new Set((atual().servicos || []).map((x) => String(x.nome).toLowerCase()));
   const feitos = new Set(reconfigurar ? catalogo().filter((x) => nomesDaLoja().has(x.nome.toLowerCase())).map((x) => x.chave) : []);
+  const nomesProdutos = () => new Set((atual().materiais || []).filter((m) => m.tipo === 'produto' && m.ativo !== false).map((m) => String(m.nome).toLowerCase()));
+  const feitosProd = new Set(); let comissao = null; // pré-visualização: o que foi "criado" nesta página
   const usados = new Set(); let expediente = reconfigurar ? expedienteDeEstado(atual()) : null;
   // Histórico só em memória (pré-visualização: nada é gravado). Em pré-visualização qualquer senha preenchida vale.
   let abertaId = null;
-  const nova = () => { if (!abertaId) { abertaId = 'r-' + (HIST.length + 1); HIST.unshift({ id: abertaId, criadaEm: new Date().toISOString(), por: 'Você', servicosCriados: 0, pessoasCriadas: 0, expedienteTrocado: false, desfeitaEm: '' }); } return HIST.find((h) => h.id === abertaId); };
+  const nova = () => { if (!abertaId) { abertaId = 'r-' + (HIST.length + 1); HIST.unshift({ id: abertaId, criadaEm: new Date().toISOString(), por: 'Você', servicosCriados: 0, pessoasCriadas: 0, produtosCriados: 0, expedienteTrocado: false, comissaoTrocada: false, desfeitaEm: '' }); } return HIST.find((h) => h.id === abertaId); };
   return {
     async confirmarSenha(senha) { if (typeof senha !== 'string' || !senha) return { ok: false, erro: 'Senha incorreta' }; abertaId = null; return { ok: true }; },
     async historico() { return { ok: true, itens: visiveis() }; },
@@ -54,7 +56,36 @@ export function criarAdaptadorDemo({ reconfigurar = false } = {}) {
       h.desfeitaEm = '';
       return { ok: true, itens: visiveis() };
     },
-    async carregar() { return { ok: true, estado: { tipo: tipoDe(store.getState().estabelecimento), passo, concluido, servicos: catalogo(), jaCadastrados: [...feitos], expedienteSugerido: expedienteDeEstado(store.getState()), expediente } }; },
+    async carregar() {
+      const pc = Number(atual().estabelecimento?.comissaoPadrao);
+      const geral = comissao ?? (reconfigurar && Number.isFinite(pc) ? pc : 50);
+      return { ok: true, estado: { tipo: tipoDe(store.getState().estabelecimento), passo, concluido, servicos: catalogo(), jaCadastrados: [...feitos], expedienteSugerido: expedienteDeEstado(store.getState()), expediente,
+        comissaoPadrao: geral, produtosCadastrados: [...(reconfigurar ? [...nomesProdutos()] : []), ...feitosProd] } };
+    },
+    async produtos(itens) {
+      if (!Array.isArray(itens) || itens.length > 30) return { ok: false, erro: 'No máximo 30 produtos por vez' };
+      for (const p of itens) {
+        const nome = String((p && p.nome) || '').trim();
+        if (nome.length < 1 || nome.length > 100) return { ok: false, erro: 'Informe o nome do produto' };
+        if (!(Number(p.preco) >= 0 && Number(p.preco) <= 100000)) return { ok: false, erro: 'Informe o preço de venda do produto.' };
+        if (p.comissaoPct != null && !(Number(p.comissaoPct) >= 0 && Number(p.comissaoPct) <= 100)) return { ok: false, erro: 'A comissão vai de 0 a 100%.' };
+        if (p.estoque != null && !(Number(p.estoque) >= 0 && Number(p.estoque) <= 1000000000)) return { ok: false, erro: 'Valores de estoque e custo não podem ser negativos nem inválidos.' };
+      }
+      const base = reconfigurar ? nomesProdutos() : new Set();
+      let criados = 0; let jaExistiam = 0;
+      for (const p of itens) {
+        const k = String(p.nome).trim().replace(/\s+/g, ' ').toLowerCase();
+        if (base.has(k) || feitosProd.has(k)) jaExistiam++; else { feitosProd.add(k); criados++; }
+      }
+      if (reconfigurar && criados) nova().produtosCriados += criados;
+      return { ok: true, resultado: { criados, jaExistiam } };
+    },
+    async comissao(padrao) {
+      if (!(Number(padrao) >= 0 && Number(padrao) <= 100)) return { ok: false, erro: 'A comissão vai de 0 a 100%.' };
+      comissao = Math.round(Number(padrao) * 100) / 100;
+      if (reconfigurar) nova().comissaoTrocada = true;
+      return { ok: true, padrao: comissao };
+    },
     async servicos(itens, proprios = []) {
       const chaves = new Set(catalogo().map((s) => s.chave));
       if (!Array.isArray(itens) || itens.some((i) => !i || !chaves.has(i.chave))) return { ok: false, erro: 'Serviço de exemplo desconhecido' };
@@ -74,6 +105,7 @@ export function criarAdaptadorDemo({ reconfigurar = false } = {}) {
     },
     async equipe(pessoas) {
       if (!Array.isArray(pessoas) || pessoas.length > 10) return { ok: false, erro: 'No máximo 10 pessoas por vez' };
+      if (pessoas.some((p) => p && p.comissaoPct != null && !(Number(p.comissaoPct) >= 0 && Number(p.comissaoPct) <= 100))) return { ok: false, erro: 'A comissão vai de 0 a 100%.' };
       const saida = pessoas.map((p) => { const login = loginDe(String(p.nome || ''), usados); usados.add(login); return { nome: String(p.nome || '').slice(0, 80), login, senhaTemporaria: senha(), atende: p.atende !== false }; });
       passo = 'expediente';
       if (reconfigurar && saida.length) nova().pessoasCriadas += saida.length;

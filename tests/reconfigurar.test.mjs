@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { store, auth, servicos } from '../src/services/api.js';
 import { reiniciar } from './helpers.mjs';
 import { criarAdaptadorDemo } from '../src/services/onboarding-demo.js';
+import { produtosDoTipo } from '../src/domain/catalogo.js';
 
 const st = () => store.getState();
 
@@ -73,4 +74,41 @@ test('senha e desfazer (pré-visualização): senha vazia recusada; desfazer só
   const f = await b.refazer(itens[0].id, 'x');
   assert.equal(f.ok, true); assert.equal(f.itens[0].desfeitaEm, ''); assert.equal(f.itens[0].podeDesfazer, true);
   assert.equal((await b.refazer(itens[0].id, 'x')).ok, false);
+});
+
+test('produtos e comissão geral (pré-visualização): validam como o servidor, não duplicam nome e entram no histórico com Desfazer', async () => {
+  reiniciar();
+  assert.ok(auth.login({ identificador: 'davi', senha: '1234' }).ok);
+  const antes = JSON.stringify({ m: st().materiais, e: st().estabelecimento });
+  const a = criarAdaptadorDemo({ reconfigurar: true });
+  await a.confirmarSenha('x');
+  let { estado } = await a.carregar();
+  assert.equal(estado.comissaoPadrao, st().estabelecimento.comissaoPadrao ?? 50);
+  assert.ok(estado.produtosCadastrados.length >= 1, 'os produtos da loja aparecem como já cadastrados');
+  assert.equal((await a.comissao(101)).ok, false); assert.equal((await a.comissao(-1)).ok, false);
+  assert.equal((await a.produtos([{ nome: '', preco: 1 }])).ok, false);
+  assert.equal((await a.produtos([{ nome: 'X', preco: -1 }])).ok, false);
+  assert.equal((await a.produtos([{ nome: 'X', preco: 1, comissaoPct: 101 }])).ok, false);
+  assert.equal((await a.equipe([{ nome: 'Ana', comissaoPct: 120 }])).ok, false);
+  const existente = estado.produtosCadastrados[0];
+  const r = await a.produtos([{ nome: 'Produto Novo', preco: 20, comissaoPct: 10, estoque: 3 }, { nome: existente.toUpperCase(), preco: 1 }, { nome: ' produto   novo ', preco: 2 }]);
+  assert.deepEqual(r.resultado, { criados: 1, jaExistiam: 2 });
+  assert.deepEqual(await a.comissao(35), { ok: true, padrao: 35 });
+  ({ estado } = await a.carregar());
+  assert.equal(estado.comissaoPadrao, 35); assert.ok(estado.produtosCadastrados.includes('produto novo'));
+  const { itens } = await a.historico();
+  assert.equal(itens[0].produtosCriados, 1); assert.equal(itens[0].comissaoTrocada, true); assert.equal(itens[0].podeDesfazer, true);
+  assert.equal(JSON.stringify({ m: st().materiais, e: st().estabelecimento }), antes, 'a pré-visualização não grava nada');
+});
+
+test('sugestões de produtos por tipo: nomes únicos, preços válidos, sem comissão marcada e cópia nova a cada chamada', () => {
+  for (const tipo of ['barbearia', 'estetica_automotiva']) {
+    const l = produtosDoTipo(tipo);
+    assert.ok(l.length >= 4, tipo);
+    assert.equal(new Set(l.map((p) => p.nome.toLowerCase())).size, l.length, 'nome único');
+    assert.equal(new Set(l.map((p) => p.chave)).size, l.length, 'chave única');
+    for (const p of l) { assert.ok(p.nome.length >= 2 && p.nome.length <= 100); assert.ok(p.preco >= 0 && p.preco <= 100000); assert.equal(p.comissaoPct, undefined); }
+    l[0].nome = 'mexi'; assert.notEqual(produtosDoTipo(tipo)[0].nome, 'mexi');
+  }
+  assert.deepEqual(produtosDoTipo('tipo-inexistente'), []);
 });

@@ -5,6 +5,9 @@
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+
+// Depois dos serviços o assistente passa por Produtos e Comissão (opcionais): estes testes só querem chegar à Equipe.
+const passarProdutosEComissao = async (p) => { await p.getByTestId('pa-pular-produtos').click(); await p.getByTestId('pa-pular-comissao').click(); };
 import { readFileSync } from 'node:fs';
 
 const ok = (m) => console.log('✓', m);
@@ -43,7 +46,7 @@ const semRolagem = async (p, nome) => assert.ok(await p.evaluate(() => document.
   assert.match(await p.getByTestId('pa-erro').innerText(), /preço de “Barba”/);
   await p.getByTestId('pa-preco-s-barba').fill('37,5');
   await p.getByTestId('pa-continuar-servicos').click();
-  await p.getByTestId('pa-equipe').waitFor();
+  await passarProdutosEComissao(p); await p.getByTestId('pa-equipe').waitFor();
   assert.match(await p.getByTestId('pa-aviso').innerText(), /serviços criados/);
   // equipe: nomes com acento e repetidos viram logins distintos; senha de 12 caracteres sem ambíguos
   await p.getByTestId('pa-nome-0').fill('Zé Maria');
@@ -82,7 +85,7 @@ const semRolagem = async (p, nome) => assert.ok(await p.evaluate(() => document.
   assert.equal(await m.p.getByTestId('pa-preco-s-lav-simples').count(), 0);
   await semRolagem(m.p, 'serviços');
   await m.p.getByTestId('pa-pular-servicos').click();
-  await m.p.getByTestId('pa-equipe').waitFor();
+  await passarProdutosEComissao(m.p); await m.p.getByTestId('pa-equipe').waitFor();
   assert.match(await m.p.getByTestId('pa-equipe').innerText(), /Profissionais|esteticistas/i);
   await semRolagem(m.p, 'equipe');
   await m.p.getByTestId('pa-pular-equipe').click();
@@ -114,7 +117,7 @@ const semRolagem = async (p, nome) => assert.ok(await p.evaluate(() => document.
   assert.match(await r.p.getByTestId('pa-item-s-lav-simples').innerText(), /já está na sua loja/);
   assert.equal(await r.p.getByTestId('pa-continuar-servicos').isDisabled(), true);
   await r.p.getByTestId('pa-pular-servicos').click();
-  await r.p.getByTestId('pa-equipe').waitFor();
+  await passarProdutosEComissao(r.p); await r.p.getByTestId('pa-equipe').waitFor();
   assert.match(await r.p.getByTestId('pa-equipe').innerText(), /ninguém|não é alterado/);
   await r.p.getByTestId('pa-nome-0').fill('Zeca Novo');
   await r.p.getByTestId('pa-criar-acessos').click();
@@ -244,7 +247,7 @@ const url = `http://127.0.0.1:${servidor.address().port}/`;
   assert.ok(!/detalhe interno|trace/.test(msg), 'detalhe técnico na tela');
   assert.match(msg, /servidor não respondeu/);
   await p.getByTestId('pa-continuar-servicos').click();
-  await p.getByTestId('pa-equipe').waitFor();
+  await passarProdutosEComissao(p); await p.getByTestId('pa-equipe').waitFor();
   const envio = chamadas.filter((c) => c.u === '/api/onboarding/servicos').at(-1);
   assert.deepEqual(envio.c, { itens: [{ chave: 's-barba', preco: 37.5, duracaoMin: 40 }], proprios: [] });
   assert.equal(envio.auth, 'Bearer tok-ok');
@@ -253,7 +256,7 @@ const url = `http://127.0.0.1:${servidor.address().port}/`;
   // recarregar no meio: o login traz de volta ao passo da Equipe (o servidor guardou), com o serviço já marcado como existente
   await p.reload();
   await p.getByTestId('login-id').fill('alan'); await p.getByTestId('login-senha').fill('Minha-senha-nova'); await p.getByTestId('login-entrar').click();
-  await p.getByTestId('pa-equipe').waitFor();
+  await passarProdutosEComissao(p); await p.getByTestId('pa-equipe').waitFor();
   ok('B: recarregar no meio retoma do passo da Equipe');
 
   await p.getByTestId('pa-nome-0').fill('Marcos Silva');
@@ -299,7 +302,7 @@ const url = `http://127.0.0.1:${servidor.address().port}/`;
   assert.match(await n.p.getByTestId('pa-erro').innerText(), /Senha incorreta/);
   assert.equal(await n.p.getByTestId('pa-servicos').count(), 0);
   // o histórico vem do servidor; desfazer manda a senha e o id; senha errada não muda nada
-  assert.match(await n.p.getByTestId('pa-reconf-historico').innerText(), /1 serviço, 1 pessoa/);
+  assert.match(await n.p.getByTestId('pa-reconf-historico').innerText(), /1 serviço, 0 produtos, 1 pessoa/);
   await n.p.getByTestId('pa-reconf-senha').fill('errada');
   await n.p.getByTestId('pa-reconf-desfazer-11111111-1111-1111-1111-111111111111').click();
   assert.match(await n.p.getByTestId('pa-erro').innerText(), /Senha incorreta/);
@@ -324,7 +327,7 @@ const url = `http://127.0.0.1:${servidor.address().port}/`;
   await n.p.getByTestId('pa-marcar-s-corte').waitFor();
   await n.p.getByTestId('pa-marcar-s-corte').check();
   await n.p.getByTestId('pa-continuar-servicos').click();
-  await n.p.getByTestId('pa-equipe').waitFor();
+  await passarProdutosEComissao(n.p); await n.p.getByTestId('pa-equipe').waitFor();
   await n.p.getByTestId('pa-nome-0').fill('Zeca Novo');
   await n.p.getByTestId('pa-criar-acessos').click();
   await n.p.getByTestId('pa-acessos').waitFor();

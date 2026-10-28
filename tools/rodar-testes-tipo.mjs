@@ -21,7 +21,7 @@ if (etapa === 'tudo' || etapa === 'build') {
 }
 if (etapa === 'tudo' || etapa === 'e2e') {
   const todos = arquivos.filter((f) => /^e2e\d*\.mjs$/.test(f)).sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
-  const e2e = fatiar(todos); // E2E_FRACAO=i/n e E2E_PARALELO=k: veja tools/lote-e2e.mjs
+  const e2e = fatiar(todos, process.env.E2E_FRACAO, pasta); // E2E_FRACAO=i/n e E2E_PARALELO=k: veja tools/lote-e2e.mjs
   if (process.env.E2E_FRACAO) console.log(`Fatia ${process.env.E2E_FRACAO}: ${e2e.length} de ${todos.length} testes`);
   falhas += await rodarLote(e2e.map((f) => ({ nome: f, caminho: `${pasta}/${f}` })), { env });
 }
