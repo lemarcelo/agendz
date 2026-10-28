@@ -55,11 +55,11 @@ function mensagemPadrao(status) {
 // `chave` (opcional) vai no cabeçalho Idempotency-Key; com ela, resposta perdida com o aparelho online é reenviada sozinha (até 3 tentativas).
 const ESPERAS_REENVIO_MS = [1500, 4000];
 const pausa = (ms) => new Promise((r) => setTimeout(r, ms));
-async function chamar(metodo, caminho, corpo, chave) {
+async function chamar(metodo, caminho, corpo, chave, opcoes) {
   let reenvios = 0;
   for (;;) {
     if (semRede() && !(await esperarRede())) return { ok: false, status: 0, erro: 'Sem conexão com o servidor. Confira a internet e tente de novo.' };
-    const r = await tentar(metodo, caminho, corpo, chave);
+    const r = await tentar(metodo, caminho, corpo, chave, opcoes);
     if (r.status === 0 && semRede()) continue; // caiu a rede durante o envio: espera voltar e manda de novo (a requisição não chegou ao servidor)
     if (r.status === 0 && chave && reenvios < ESPERAS_REENVIO_MS.length) { await pausa(ESPERAS_REENVIO_MS[reenvios++]); continue; } // resposta perdida: a chave torna o reenvio seguro
     return r;
@@ -75,20 +75,22 @@ function novaChave() {
   return Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
 }
 
-async function tentar(metodo, caminho, corpo, chave) {
+// `opcoes.publico`: rota do cliente final (sem login): nunca leva o Authorization, mesmo que o painel esteja aberto no mesmo navegador. `opcoes.cabecalhos`: cabeçalhos extras.
+async function tentar(metodo, caminho, corpo, chave, opcoes = {}) {
   const ctl = typeof AbortController === 'function' ? new AbortController() : null;
   const t = ctl ? setTimeout(() => ctl.abort(), TEMPO_MAX_MS) : null;
   try {
     const cab = { Accept: 'application/json' };
     if (corpo !== undefined) cab['Content-Type'] = 'application/json';
-    if (token) cab.Authorization = `Bearer ${token}`;
+    if (token && !opcoes.publico) cab.Authorization = `Bearer ${token}`;
     if (chave) cab['Idempotency-Key'] = chave;
+    if (opcoes.cabecalhos) Object.assign(cab, opcoes.cabecalhos);
     const r = await fetch(`${base}${caminho}`, { method: metodo, headers: cab, body: corpo === undefined ? undefined : JSON.stringify(corpo), credentials: 'omit', cache: 'no-store', signal: ctl ? ctl.signal : undefined });
     let dados = null;
     try { dados = await r.json(); } catch { dados = null; }
     if (r.ok) return { ok: true, status: r.status, dados };
     // 401 com token = sessão vencida: some com o token (a tela volta ao login). No login o 401 é senha errada e não há token ainda.
-    if (r.status === 401 && token) sair();
+    if (r.status === 401 && token && !opcoes.publico) sair();
     const msg = dados && typeof dados.mensagem === 'string' && dados.mensagem.length <= 200 ? dados.mensagem : mensagemPadrao(r.status);
     return { ok: false, status: r.status, erro: msg };
   } catch {
@@ -664,3 +666,99 @@ export const regras = {
     return r.ok ? { ok: true, regras: lerRegras(r.dados) } : r;
   },
 };
+
+// ---------- link de agendamento do cliente (5e-1) ----------
+// Config do link (só o proprietário): liga/desliga e quantos dias à frente oferece horário.
+const lerLink = (d) => {
+  d = d && typeof d === 'object' ? d : {};
+  const dm = Number.isInteger(d.diasMax) ? Math.min(60, Math.max(1, d.diasMax)) : 30;
+  return { ativo: d.ativo !== false, diasMax: dm, disponivel: d.disponivel !== false };
+};
+export const linkAgendamento = {
+  // GET /api/estabelecimento/link-agendamento
+  async obter() {
+    const r = await chamar('GET', '/api/estabelecimento/link-agendamento');
+    return r.ok ? { ok: true, link: lerLink(r.dados) } : r;
+  },
+  // PUT /api/estabelecimento/link-agendamento  { ativo?, diasMax? }
+  async gravar({ ativo, diasMax } = {}) {
+    const corpo = {};
+    if (ativo !== undefined) corpo.ativo = ativo === true;
+    if (diasMax !== undefined) {
+      if (!Number.isInteger(diasMax) || diasMax < 1 || diasMax > 60) return { ok: false, status: 0, erro: 'Informe de 1 a 60 dias.' };
+      corpo.diasMax = diasMax;
+    }
+    const r = await chamar('PUT', '/api/estabelecimento/link-agendamento', corpo);
+    return r.ok ? { ok: true, link: lerLink(r.dados) } : r;
+  },
+};
+
+// Rotas do cliente final (SEM login; a loja vem do endereço). O token de acesso a um horário vem na resposta do pedido, UMA vez; quem guarda é a página
+// (localStorage do aparelho do cliente, dentro de try/catch). Nada aqui usa o token do painel.
+const PUB = { publico: true };
+const IDV = (v) => (ID.test(String(v)) ? String(v) : '');
+const inteiroOuZero = (v) => (Number.isInteger(v) && v >= 0 ? v : 0);
+function lerPaginaPublica(d) {
+  d = d && typeof d === 'object' ? d : {};
+  return {
+    ativo: d.ativo === true, aviso: texto(d.aviso, 200), diasMax: Number.isInteger(d.diasMax) ? Math.min(60, Math.max(1, d.diasMax)) : 30,
+    servicos: listaDe(d.servicos, 200).filter((x) => x && IDV(x.id)).map((x) => ({ id: x.id, nome: texto(x.nome, 120), duracao: inteiroOuZero(x.duracao), preco: dinheiroOuZero(x.preco), antecedenciaH: inteiroOuZero(x.antecedenciaH) })),
+    profissionais: listaDe(d.profissionais, 100).filter((x) => x && IDV(x.id)).map((x) => ({ id: x.id, nome: texto(x.nome, 80), foto: typeof x.foto === 'string' && x.foto.startsWith('data:image/') ? x.foto : null })),
+  };
+}
+function lerResumoPublico(d) {
+  d = d && typeof d === 'object' ? d : {};
+  return {
+    id: IDV(d.id), inicio: instante(d.inicio), fim: instante(d.fim), status: STATUS_AGENDA.includes(d.status) ? d.status : 'a_confirmar', rotulo: texto(d.rotulo, 40),
+    servicos: listaDe(d.servicos, 20).map((x) => texto(x, 120)), duracao: inteiroOuZero(d.duracao), total: dinheiroOuZero(d.total), desconto: dinheiroOuZero(d.desconto),
+    cupom: d.cupom ? texto(d.cupom, 60) : '', profissional: texto(d.profissional, 80), ativo: d.ativo === true, podeCancelar: d.podeCancelar === true,
+  };
+}
+const consultaServicos = (ids) => (Array.isArray(ids) ? ids.filter((x) => ID.test(String(x))).slice(0, 5).join(',') : '');
+export const publico = {
+  // GET /api/publico/agendar
+  async pagina() {
+    const r = await chamar('GET', '/api/publico/agendar', undefined, undefined, PUB);
+    return r.ok ? { ok: true, pagina: lerPaginaPublica(r.dados) } : r;
+  },
+  // GET /api/publico/dias?de=AAAA-MM-DD&dias=14&servicos=id,id&profissionalId=   → ['AAAA-MM-DD', ...]
+  async dias({ de, dias, servicoIds, profissionalId }) {
+    if (!DIA_ISO.test(String(de)) || !consultaServicos(servicoIds)) return { ok: true, dias: [] };
+    const q = `de=${de}&dias=${Math.min(31, Math.max(1, Number(dias) || 1))}&servicos=${consultaServicos(servicoIds)}${ID.test(String(profissionalId)) ? `&profissionalId=${profissionalId}` : ''}`;
+    const r = await chamar('GET', `/api/publico/dias?${q}`, undefined, undefined, PUB);
+    return r.ok ? { ok: true, dias: listaDe(r.dados, 62).filter((x) => DIA_ISO.test(String(x))) } : r;
+  },
+  // GET /api/publico/horarios?data=AAAA-MM-DD&servicos=id,id&profissionalId=   → [{ inicio, profissionalId }]
+  async horarios({ data, servicoIds, profissionalId }) {
+    if (!DIA_ISO.test(String(data)) || !consultaServicos(servicoIds)) return { ok: true, horarios: [] };
+    const q = `data=${data}&servicos=${consultaServicos(servicoIds)}${ID.test(String(profissionalId)) ? `&profissionalId=${profissionalId}` : ''}`;
+    const r = await chamar('GET', `/api/publico/horarios?${q}`, undefined, undefined, PUB);
+    return r.ok ? { ok: true, horarios: listaDe(r.dados, 100).filter((x) => x && instante(x.inicio) !== null && IDV(x.profissionalId)).map((x) => ({ inicio: instante(x.inicio), profissionalId: x.profissionalId })) } : r;
+  },
+  // POST /api/publico/agendamentos  { nome, telefone, servicoIds, inicio, profissionalId?, cupomChave?, site }  → { agendamento, token }
+  async agendar({ nome, telefone, servicoIds, inicio, profissionalId, cupomChave, site }) {
+    if (!Number.isFinite(inicio)) return { ok: false, status: 0, erro: 'Escolha um dia e um horário.' };
+    const corpo = { nome: texto(nome, 100), telefone: texto(telefone, 30), servicoIds: Array.isArray(servicoIds) ? servicoIds.filter((x) => ID.test(String(x))).slice(0, 10) : [], inicio: new Date(inicio).toISOString() };
+    if (ID.test(String(profissionalId))) corpo.profissionalId = profissionalId;
+    if (typeof cupomChave === 'string' && cupomChave.trim()) corpo.cupomChave = texto(cupomChave.trim(), 40);
+    if (typeof site === 'string' && site) corpo.site = texto(site, 100);
+    const r = await chamar('POST', '/api/publico/agendamentos', corpo, undefined, PUB);
+    if (!r.ok) return r;
+    const token = r.dados && typeof r.dados.token === 'string' && /^[0-9a-f]{48}$/.test(r.dados.token) ? r.dados.token : '';
+    return { ok: true, agendamento: lerResumoPublico(r.dados && r.dados.agendamento), token };
+  },
+  // POST /api/publico/meus  { tokens }  → [resumo]   (o token vai no corpo, nunca na URL)
+  async meus(tokens) {
+    const lista = (Array.isArray(tokens) ? tokens : []).filter((t) => /^[0-9a-f]{48}$/.test(String(t))).slice(0, 10);
+    if (!lista.length) return { ok: true, agendamentos: [] };
+    const r = await chamar('POST', '/api/publico/meus', { tokens: lista }, undefined, PUB);
+    return r.ok ? { ok: true, agendamentos: listaDe(r.dados, 20).map(lerResumoPublico).filter((a) => a.id && a.inicio !== null) } : r;
+  },
+  // POST /api/publico/agendamentos/{id}/cancelar  (cabeçalho X-Acesso: o token DESTE horário)
+  async cancelar(id, token) {
+    if (!ID.test(String(id)) || !/^[0-9a-f]{48}$/.test(String(token))) return { ok: false, status: 0, erro: 'Agendamento não encontrado.' };
+    const r = await chamar('POST', `/api/publico/agendamentos/${id}/cancelar`, undefined, undefined, { publico: true, cabecalhos: { 'X-Acesso': token } });
+    return r.ok ? { ok: true, agendamento: lerResumoPublico(r.dados) } : r;
+  },
+};
+

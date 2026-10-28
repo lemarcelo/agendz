@@ -265,6 +265,19 @@ O catálogo (`backend/src/main/resources/catalogo/<tipo>.json`) é gerado dos se
 | `POST /api/atendimentos` `cupomChave?` | quem já tinha | agendamento futuro nasce com o cupom | chave errada = nada é criado; atendimento feito com cupom = 400 |
 Agenda: `desconto`, `cupom {nome, tipo, servicoIds, percentual, valor}` (nunca a chave) e `servicos[].desconto`. Comissão: base = preço − desconto.
 
+## 10j. Link do cliente no servidor (v97, 5e-1; `LinkPublicoTest`) — o que já existe do 10b
+Rotas **sem login** (a loja vem do Host; `SegurancaConfig` libera só estas). Limites em memória por loja (`LimitePublico`): 5 pedidos/min por telefone, 20/10 min por IP, 120/10 min por loja, consultas 240/min por IP; excedeu = 429.
+| Rota | O que faz | Regras |
+|---|---|---|
+| `GET /api/publico/agendar` | serviços e profissionais que a página mostra | só ativos e de um dia só; sem custo, comissão ou dado de cliente; link desligado ou tipo sem suporte = `ativo:false` e lista vazia |
+| `GET /api/publico/horarios?data&servicos&profissionalId` | horários livres do dia | `[{inicio, profissionalId}]`; passo de 30 min dentro do expediente; pendente também ocupa; antecedência do serviço; loja sem expediente = nada |
+| `GET /api/publico/dias?de&dias&servicos&profissionalId` | dias com horário livre | até 31 dias por consulta, limitado a `diasMax` |
+| `POST /api/publico/agendamentos` | pede um horário | nome 2 a 60, telefone BR, 1 a 5 serviços, isca `site` vazia, até `diasMax`; entra a confirmar (`origem` link); máx. 3 abertos por cliente; `cupomChave` opcional (errada = pedido inteiro recusado e tentativa gravada); devolve `{agendamento, token}` (token uma vez) |
+| `POST /api/publico/meus {tokens}` | os horários dos tokens | até 10 tokens; inválido some; nunca telefone nem id de cliente |
+| `POST /api/publico/agendamentos/{id}/cancelar` (`X-Acesso`) | cancela o próprio horário | token precisa ser DESTE horário; ativo e 24 h ou mais; motivo `cliente` |
+| `GET/PUT /api/estabelecimento/link-agendamento` | liga/desliga e `diasMax` (1 a 60) | só o proprietário |
+Ainda não existe no servidor (continua no 10b): remarcar, código por telefone, lembretes, aviso à loja e estética (veículo e porte).
+
 ## 11. Pontos do protótipo que **não** existem no real (tratar como pendência)
 
 `MODO_DEMO` (código de recuperação na resposta), `bancoSimulado`, `store.avancar`/`reiniciar`, snapshot com senhas e CPFs, sessão em variável do navegador, contadores de login na memória, chave de autoria no front. Todos substituídos pelas camadas das seções 0 a 10.

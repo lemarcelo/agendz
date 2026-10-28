@@ -13,6 +13,8 @@ import Comissoes from './Comissoes.jsx';
 import Ganhos from './Ganhos.jsx';
 import RegrasAtendimento from './RegrasAtendimento.jsx';
 import Cupons from './Cupons.jsx';
+import AgendarPublico from './AgendarPublico.jsx';
+import LinkAgendamento from './LinkAgendamento.jsx';
 import { TIPOS, definirTipoAtivo, rotulo, tipoValido } from '../../domain/tipos.js';
 import { cssDaMarca, logoValida } from '../../domain/tema.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
@@ -158,6 +160,7 @@ function Painel({ loja, sessao, aoSair }) {
               <Aviso>Sua conta está pronta e o acesso é seguro. Clientes, serviços, equipe, a agenda (horários, calendário, status, remarcar e o botão Atender) e as comissões já estão aqui.</Aviso>
               {sessao.papel === 'dono' && <Btn onClick={() => setReconfigurando(true)} data-testid="reconfigurar-abrir">Reconfigurar estabelecimento</Btn>}
               {sessao.papel === 'dono' && <RegrasAtendimento />}
+              {sessao.papel === 'dono' && <LinkAgendamento />}
             </section>
           )}
           {aba === 'agenda' && <Agenda meuId={sessao.id} ehProprio={sessao.papel === 'profissional'} ehDono={dono || sessao.papel === 'admin' || sessao.papel === 'atendente'} />}
@@ -173,8 +176,21 @@ function Painel({ loja, sessao, aoSair }) {
   );
 }
 
+// Link do cliente: #agendar (qualquer profissional) ou #agendar-<id do profissional>. Só letras, números e hífen. Vale sem login.
+const PUBLICA = /^#agendar(-[\w-]{1,40})?$/;
+function useHash() {
+  const [hash, setHash] = useState(() => (globalThis.location ? globalThis.location.hash : ''));
+  useEffect(() => {
+    const f = () => setHash(globalThis.location.hash);
+    globalThis.addEventListener('hashchange', f);
+    return () => globalThis.removeEventListener('hashchange', f);
+  }, []);
+  return hash;
+}
+
 // Estados do início: carregando → loja (ou erro). Loja inexistente (404) nunca cai numa loja padrão.
 export default function AppReal() {
+  const hash = useHash();
   const [estado, setEstado] = useState({ fase: 'carregando' });
   const [sessao, setSessao] = useState(() => sessaoAtual());
   const carregar = async () => {
@@ -194,6 +210,16 @@ export default function AppReal() {
   if (estado.fase === 'carregando') return <><AvisoRede /><main className="login"><div className="login-cartao" role="status" data-testid="carregando"><p className="muted">Carregando…</p></div></main></>;
   if (estado.fase === 'sem-loja') return <Cartao><h1>Loja não encontrada</h1><p className="muted" data-testid="loja-nao-encontrada">O endereço usado não aponta para nenhuma loja do Agendz. Confira o link com o estabelecimento.</p></Cartao>;
   if (estado.fase === 'erro') return <Cartao><h1>Não foi possível abrir</h1><Aviso tipo="erro" data-testid="erro-carga">{estado.erro}</Aviso><Btn variante="primario" onClick={carregar} data-testid="tentar-de-novo">Tentar de novo</Btn></Cartao>;
+  const publica = PUBLICA.exec(hash);
+  if (publica) {
+    return (
+      <>
+        <AvisoRede />
+        {css && <style id="tema-marca">{css}</style>}
+        <AgendarPublico loja={loja} profissionalInicial={publica[1] ? publica[1].slice(1) : ''} logado={!!sessao} aoVoltar={() => { globalThis.location.hash = ''; }} />
+      </>
+    );
+  }
   return (
     <>
       <AvisoRede />

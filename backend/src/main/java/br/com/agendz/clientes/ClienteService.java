@@ -378,6 +378,47 @@ public class ClienteService {
         }
     }
 
+    public record DoLink(UUID clienteId, boolean criado) {
+    }
+
+    /**
+     * Cliente de quem agenda pelo link (sem login). Telefone existente manda: acha o cadastro do número (nome igual, ou nome mais completo, ou o mais antigo)
+     * e NÃO altera nada nele, porque quem digita no link não é conferido (outra pessoa não pode renomear um cliente). Número novo cria o cadastro com `origem_cadastro = 'link'`.
+     * Chamar dentro de `naLoja` e depois de travar os profissionais (a trava serializa os pedidos da loja, então dois pedidos iguais não criam o cadastro duas vezes).
+     */
+    public DoLink resolverDoLink(JdbcTemplate jdbc, String nomeBruto, String telefoneBruto) {
+        Loja loja = LojaContext.exigir();
+        String tel = Documentos.telefone(telefoneBruto);
+        if (tel == null) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe o telefone com DDD.");
+        String nome = nomeBruto == null ? "" : Texto.limpar(nomeBruto).trim();
+        if (nome.length() < 2) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe o seu nome.");
+        if (nome.length() > 60) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "O nome pode ter até 60 letras.");
+        String hash = cifra.hash(loja.id(), "tel", tel);
+        List<Candidato> doNumero = jdbc.query("select id, nome, apelido, sem_nome, telefone_hash from cliente where telefone_hash = ? order by criado_em, id",
+                (rs, i) -> candidato(rs), hash);
+        if (!doNumero.isEmpty()) {
+            String n = nome.toLowerCase(Locale.ROOT);
+            Candidato achado = null;
+            for (Candidato c : doNumero) {
+                if (c.nome().toLowerCase(Locale.ROOT).equals(n) || c.apelido().toLowerCase(Locale.ROOT).equals(n)) { achado = c; break; }
+            }
+            if (achado == null) {
+                for (Candidato c : doNumero) {
+                    if (nomeMaisCompleto(c.nome(), nome)) { achado = c; break; }
+                }
+            }
+            return new DoLink((achado == null ? doNumero.get(0) : achado).id(), false);
+        }
+        try {
+            UUID novo = jdbc.queryForObject(
+                    "insert into cliente (loja_id, nome, telefone_cif, telefone_hash, sem_nome, origem_cadastro) values (?::uuid, ?, ?, ?, false, 'link') returning id",
+                    UUID.class, loja.id().toString(), nome, cifra.cifrar(tel), hash);
+            return new DoLink(novo, true);
+        } catch (DuplicateKeyException ex) {
+            throw duplicado(ex);
+        }
+    }
+
     private static Candidato candidato(java.sql.ResultSet rs) throws java.sql.SQLException {
         return new Candidato(rs.getObject("id", UUID.class), rs.getString("nome"), rs.getString("apelido"), rs.getBoolean("sem_nome"), rs.getString("telefone_hash"));
     }

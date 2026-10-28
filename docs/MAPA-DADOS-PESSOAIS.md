@@ -89,6 +89,11 @@ Snapshot do estado com senhas e CPFs em texto puro no navegador; senha comparada
 - Tentativas erradas de chave ficam por telefone (`cuponsTentativas`) com validade curta; é dado pessoal (telefone): apagar após o bloqueio expirar.
 - A **cor** de cada pessoa da equipe (`cor`, número de 0 a 35) não é dado pessoal sensível.
 
+## Link do cliente no servidor (v97)
+- Quem agenda pelo link informa **nome e telefone**: o telefone é cifrado como qualquer outro (`telefone_cif` + `telefone_hash`) e o cadastro nasce com `origem_cadastro = 'link'`. Se o número já tem cadastro, **nada do cadastro é alterado** pelo link.
+- O **token de acesso** a um horário (48 caracteres) é segredo de acesso: no banco só o SHA-256 (`acesso_publico.token_hash`), 90 dias, apagado junto com o agendamento; nunca em URL, log nem resposta que não seja a do próprio pedido. No aparelho do cliente fica em `localStorage` (por loja).
+- As respostas públicas nunca trazem telefone, CPF, id de cliente nem quem ocupa os outros horários. O IP de quem pede entra só no limite de uso e na tentativa de cupom (`cupom_tentativa.quem = link:<IP>`), em memória e na tabela de tentativas; some com a limpeza das tentativas.
+
 ## Implementado no servidor real (v81)
 - `cliente`: `telefone_cif`/`telefone_hash`, `cpf_cif`/`cpf_hash`, `nascimento_cif` (AES-256-GCM `v1:iv:texto:tag`; hash HMAC-SHA256 com pepper e id da loja). Nome e apelido em texto puro. `cliente_telefone_anterior` guarda o número antigo cifrado e quem trocou. Chave e pepper: `CIFRA_CHAVE` e `CIFRA_PEPPER` no `.env` da VPS (gerados por `deploy/preparar-api.sh`); sem eles a API não sobe. **Perder a chave = perder os dados cifrados**: copie para fora da VPS e fora do backup do banco.
 - Lista: CPF só mascarado, sem nascimento. Ficha: CPF completo e nascimento só para dono, profissional que atende o cliente ou cadastro sem horários. Nenhum log da API grava telefone ou CPF. Testes: `ClientesTest.cpfTelefoneENascimentoFicamCifradosNoBancoENomeEmTextoPuro` e vizinhos.

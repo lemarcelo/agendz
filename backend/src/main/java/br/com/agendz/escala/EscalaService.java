@@ -135,6 +135,22 @@ public class EscalaService {
         return naLoja && noProfissional;
     }
 
+    /**
+     * Mesma regra de {@link #atende}, para quem já leu as escalas (o link do cliente testa dezenas de horários por dia sem reler o banco):
+     * `dia` 0 = domingo; minutos desde 00:00. Loja sem expediente cadastrado = não restringe (quem chama decide se isso oferece horário).
+     */
+    public static boolean cabeNoDia(Map<Integer, List<Faixa>> loja, Map<Integer, List<Faixa>> prof, int dia, int ini, int fim) {
+        if (!temFaixa(loja)) return true;
+        boolean naLoja = cabe(loja.get(dia), ini, fim);
+        boolean noProfissional = !temFaixa(prof) || cabe(prof.get(dia), ini, fim);
+        return naLoja && noProfissional;
+    }
+
+    /** Faixas em que o profissional trabalha no dia: as dele, ou as da loja se ele não tem escala própria. */
+    public static List<Faixa> faixasDoDia(Map<Integer, List<Faixa>> loja, Map<Integer, List<Faixa>> prof, int dia) {
+        return temFaixa(prof) ? prof.get(dia) : loja.get(dia);
+    }
+
     private static boolean cabe(List<Faixa> faixas, int ini, int fim) {
         return faixas.stream().anyMatch((f) -> f.ini() <= ini && fim <= f.fim());
     }

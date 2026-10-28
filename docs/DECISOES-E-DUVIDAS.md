@@ -44,6 +44,17 @@ Lista simples. Cada item está no histórico do `prompt-agendz-regras.md` (v84 a
 - **Decidi:** continua sem fila no aparelho: a espera pela internet (v87) mais a chave já evitam perda e duplicação sem guardar nada no aparelho.
 - v91: o "canto tampado pelo botão" foi entendido como a lista Serviços realizados da ficha (caixa sem raio e botão colado). Atender (modal e site real) conferidos e sem o problema. Se for outra tela, o Marcelo avisa.
 
+## v97 (28/10): link do cliente no site real (5e-1)
+- **Decidi:** o token de acesso vale para **um agendamento** (não para o cliente todo, como no simulador): quem tem o token de um horário não enxerga os outros do mesmo cliente. A página guarda a lista de tokens no aparelho do cliente (`localStorage`, só neste navegador).
+- **Decidi:** nesta fatia **não há código por telefone, lembretes, aviso no painel/WhatsApp nem remarcar**: tudo isso depende do canal de WhatsApp (5e-2/5e-3). Quem perde o aparelho fala com a loja.
+- **Decidi:** telefone que já tem cadastro manda e **nenhum dado do cadastro muda** (nem o nome); quem digita no link não é conferido. Número novo vira cliente com origem `link`.
+- **Decidi:** loja sem expediente cadastrado **não oferece horário** pelo link (o painel sem expediente não restringe, mas expor a agenda 24 h ao público seria pior).
+- **Decidi:** o bloqueio de 5 chaves de cupom erradas é por IP no link (telefone se troca de graça); a lista de limites (telefone, IP, loja) é em memória: reiniciar a API zera as contagens.
+- **Decidi:** a estética automotiva fica fora do ar no link real até o servidor pedir veículo e porte; o cartão do dono avisa.
+- **Decidi:** o DDD fora da área de atendimento não é conferido (o servidor não guarda os DDDs); entra se o Marcelo quiser.
+- **Dúvida (D1):** se o pedido do link deve avisar a loja no WhatsApp assim que existir o canal (hoje a loja vê o pedido "a confirmar" na agenda, origem Link).
+- **Resolvida a D3 da v96:** o cliente já aplica cupom pelo link (campo opcional no último passo).
+
 ## v96 (28/10): cupom no site real (5d-4c-2)
 - **Decidi:** a chave do cupom fica em texto na coluna `cupom.chave`: o proprietário precisa vê-la e reenviá-la; só a seção Estabelecimento a lê e ela nunca vai à agenda, ao histórico ou ao log. O agendamento guarda só a cópia do que o cupom valia.
 - **Decidi:** o bloqueio de 5 chaves erradas é por usuário logado (15 min), não por IP; a tentativa errada é gravada em transação independente para sobreviver à recusa.
