@@ -46,7 +46,7 @@ import org.springframework.web.bind.annotation.RestController;
  * Fica para as próximas fatias: escala e exceções de expediente, box, serviço de vários dias, plano de mensagens, porte do veículo, cupom e Pix.
  */
 @RestController
-@PreAuthorize("hasAnyRole('DONO','PROFISSIONAL')")
+@PreAuthorize("hasAnyRole('DONO','ADMIN','ATENDENTE','PROFISSIONAL') and @perm.pode(authentication, 'agenda')")
 public class AgendaController {
 
     private static final String A_CONFIRMAR = "a_confirmar";
@@ -351,7 +351,7 @@ public class AgendaController {
     }
 
     private static boolean ehDono(Jwt jwt) {
-        return "dono".equals(jwt.getClaimAsString("papel"));
+        return br.com.agendz.seguranca.Permissoes.veTudo(jwt.getClaimAsString("papel"));
     }
 
     /** null = vê tudo (dono); senão, só os agendamentos desse profissional (o próprio usuário logado). */

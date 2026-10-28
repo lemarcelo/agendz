@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
  * Escrita: só o dono. A loja é a do Host; o banco filtra por RLS; serviço de outra loja responde 404.
  */
 @RestController
-@PreAuthorize("hasAnyRole('DONO','PROFISSIONAL')")
+@PreAuthorize("hasAnyRole('DONO','ADMIN','ATENDENTE','PROFISSIONAL')")
 public class ServicoController {
 
     private final ServicoService servico;
@@ -34,7 +34,14 @@ public class ServicoController {
     }
 
     private static boolean dono(Jwt jwt) {
-        return "dono".equals(jwt.getClaimAsString("papel"));
+        return br.com.agendz.seguranca.Permissoes.veTudo(jwt.getClaimAsString("papel")); // quem gerencia vê também os desativados
+    }
+
+    /** Só o proprietário define a comissão do serviço; para os outros perfis o campo é ignorado (como na API simulada). */
+    private static Dados semComissaoSeNaoForDono(Dados d, Jwt jwt) {
+        if ("dono".equals(jwt.getClaimAsString("papel")) || d.comissaoPct() == null) return d;
+        return new Dados(d.nome(), d.codigo(), d.categoria(), d.preco(), d.duracaoMin(), d.precos(), d.duracoes(), d.multiDia(), d.combo(), d.componentes(), d.intervaloMin(),
+                d.antecedenciaH(), null, d.ativo());
     }
 
     @GetMapping("/api/servicos")
@@ -48,20 +55,20 @@ public class ServicoController {
     }
 
     @PostMapping("/api/servicos")
-    @PreAuthorize("hasRole('DONO')")
-    public ResponseEntity<Servico> criar(@Valid @RequestBody Dados d) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(servico.criar(d));
+    @PreAuthorize("@perm.pode(authentication, 'servicos')")
+    public ResponseEntity<Servico> criar(@Valid @RequestBody Dados d, @AuthenticationPrincipal Jwt jwt) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(servico.criar(semComissaoSeNaoForDono(d, jwt)));
     }
 
     @PutMapping("/api/servicos/{id}")
-    @PreAuthorize("hasRole('DONO')")
-    public Servico alterar(@PathVariable UUID id, @Valid @RequestBody Dados d) {
-        return servico.alterar(id, d);
+    @PreAuthorize("@perm.pode(authentication, 'servicos')")
+    public Servico alterar(@PathVariable UUID id, @Valid @RequestBody Dados d, @AuthenticationPrincipal Jwt jwt) {
+        return servico.alterar(id, semComissaoSeNaoForDono(d, jwt));
     }
 
     /** Nunca usado: apaga (204). Com histórico de agendamento ou dentro de um combo: só desativa (200 com `desativado: true`). */
     @DeleteMapping("/api/servicos/{id}")
-    @PreAuthorize("hasRole('DONO')")
+    @PreAuthorize("@perm.pode(authentication, 'servicos')")
     public ResponseEntity<?> remover(@PathVariable UUID id) {
         return servico.remover(id).desativado() ? ResponseEntity.ok(Map.of("desativado", true)) : ResponseEntity.noContent().build();
     }

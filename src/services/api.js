@@ -853,7 +853,7 @@ export const equipe = {
     if ('comissaoPct' in u) { const c = lerPct(u.comissaoPct); if (!c.ok) return erro('A comissão vai de 0 a 100%.'); u.comissaoPct = c.v; }
     if ('foto' in u && u.foto !== null && !fotoValida(u.foto)) return erro('Foto inválida: use uma imagem PNG, JPEG ou WebP pequena.');
     for (const k of ['nome', 'apelido', 'cpf', 'nascimento', 'email', 'telefone', 'senha']) if (k in u && !texto(u[k], 150)) return erro('Texto inválido ou grande demais em ' + k + '.');
-    if (('papel' in u || !u.id) && !['dono', 'admin', 'atendente', 'profissional'].includes(u.papel)) return erro(`Escolha o perfil: proprietário, admin, atendente ou ${rot('profissional')}.`);
+    if (('papel' in u || !u.id) && !['dono', 'admin', 'atendente', 'profissional'].includes(u.papel)) return erro('Escolha o perfil da pessoa.');
     if ('permissoes' in u) u.permissoes = R.limparPermissoes(u.permissoes);
     return mutate((s) => {
       if (!String(u.nome || '').trim() || !String(u.apelido || '').trim()) return erro('Informe o nome e o apelido.');

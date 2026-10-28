@@ -1,0 +1,482 @@
+{
+ "descricao": "Casos de validação do cadastro da equipe executados na API simulada (tests/equipe-equivalencia.test.mjs) e no servidor (EquipeEquivalenciaTest). Passos em ordem; só o último é conferido, os anteriores precisam dar certo. '@n' = id da pessoa criada no passo n. A senha não entra aqui: no servidor ela é gerada e devolvida uma vez; a simulada recebe uma senha fixa do executor. Regras só do servidor (CPF com dígito verificador, telefone com DDD, senha temporária, refazer senha) ficam em UsuariosTest.",
+ "casos": [
+  {
+   "nome": "nome vazio",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "",
+      "apelido": "Eq0",
+      "cpf": "52998224725",
+      "email": "eq0@teste.com",
+      "papel": "profissional"
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Informe o nome e o apelido."
+   }
+  },
+  {
+   "nome": "apelido vazio",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Pessoa Eq0",
+      "apelido": "",
+      "cpf": "52998224725",
+      "email": "eq0@teste.com",
+      "papel": "profissional"
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Informe o nome e o apelido."
+   }
+  },
+  {
+   "nome": "CPF incompleto",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Pessoa Eq0",
+      "apelido": "Eq0",
+      "cpf": "123",
+      "email": "eq0@teste.com",
+      "papel": "profissional"
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Informe o CPF completo."
+   }
+  },
+  {
+   "nome": "e-mail sem arroba",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Pessoa Eq0",
+      "apelido": "Eq0",
+      "cpf": "52998224725",
+      "email": "semarroba",
+      "papel": "profissional"
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Informe um e-mail válido."
+   }
+  },
+  {
+   "nome": "comissão acima de 100%",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Pessoa Eq0",
+      "apelido": "Eq0",
+      "cpf": "52998224725",
+      "email": "eq0@teste.com",
+      "papel": "profissional",
+      "comissaoPct": 101
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "A comissão vai de 0 a 100%."
+   }
+  },
+  {
+   "nome": "perfil que não existe",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Pessoa Eq0",
+      "apelido": "Eq0",
+      "cpf": "52998224725",
+      "email": "eq0@teste.com",
+      "papel": "chefe"
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Escolha o perfil da pessoa."
+   }
+  },
+  {
+   "nome": "foto que não é imagem",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Pessoa Eq0",
+      "apelido": "Eq0",
+      "cpf": "52998224725",
+      "email": "eq0@teste.com",
+      "papel": "profissional",
+      "foto": "data:image/svg+xml;base64,AAAA"
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Foto inválida: use uma imagem PNG, JPEG ou WebP pequena."
+   }
+  },
+  {
+   "nome": "nome grande demais",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "apelido": "Eq0",
+      "cpf": "52998224725",
+      "email": "eq0@teste.com",
+      "papel": "profissional"
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Texto inválido ou grande demais em nome."
+   }
+  },
+  {
+   "nome": "cadastro válido: dono",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Pessoa Eq0",
+      "apelido": "Eq0",
+      "cpf": "52998224725",
+      "email": "eq0@teste.com",
+      "papel": "dono"
+     }
+    }
+   ],
+   "esperado": {
+    "ok": true
+   }
+  },
+  {
+   "nome": "cadastro válido: admin",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Pessoa Eq0",
+      "apelido": "Eq0",
+      "cpf": "52998224725",
+      "email": "eq0@teste.com",
+      "papel": "admin"
+     }
+    }
+   ],
+   "esperado": {
+    "ok": true
+   }
+  },
+  {
+   "nome": "cadastro válido: atendente",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Pessoa Eq0",
+      "apelido": "Eq0",
+      "cpf": "52998224725",
+      "email": "eq0@teste.com",
+      "papel": "atendente"
+     }
+    }
+   ],
+   "esperado": {
+    "ok": true
+   }
+  },
+  {
+   "nome": "cadastro válido: profissional",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Pessoa Eq0",
+      "apelido": "Eq0",
+      "cpf": "52998224725",
+      "email": "eq0@teste.com",
+      "papel": "profissional"
+     }
+    }
+   ],
+   "esperado": {
+    "ok": true
+   }
+  },
+  {
+   "nome": "cadastro com comissão e permissões",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Pessoa Eq0",
+      "apelido": "Eq0",
+      "cpf": "52998224725",
+      "email": "eq0@teste.com",
+      "papel": "profissional",
+      "comissaoPct": 12.5,
+      "permissoes": {
+       "clientes": true,
+       "relatorios": true,
+       "servicos": false
+      },
+      "podeVender": false
+     }
+    }
+   ],
+   "esperado": {
+    "ok": true
+   }
+  },
+  {
+   "nome": "CPF repetido",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Pessoa Eq0",
+      "apelido": "Eq0",
+      "cpf": "52998224725",
+      "email": "eq0@teste.com",
+      "papel": "profissional"
+     }
+    },
+    {
+     "corpo": {
+      "nome": "Pessoa Eq1",
+      "apelido": "Eq1",
+      "cpf": "52998224725",
+      "email": "eq1@teste.com",
+      "papel": "profissional"
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Já existe alguém com esse CPF."
+   }
+  },
+  {
+   "nome": "apelido repetido (maiúsculas não contam)",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Pessoa Eq0",
+      "apelido": "Eq0",
+      "cpf": "52998224725",
+      "email": "eq0@teste.com",
+      "papel": "profissional"
+     }
+    },
+    {
+     "corpo": {
+      "nome": "Pessoa Eq1",
+      "apelido": "EQ0",
+      "cpf": "11144477735",
+      "email": "eq1@teste.com",
+      "papel": "profissional"
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Já existe alguém com esse apelido."
+   }
+  },
+  {
+   "nome": "e-mail repetido (maiúsculas não contam)",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Pessoa Eq0",
+      "apelido": "Eq0",
+      "cpf": "52998224725",
+      "email": "eq0@teste.com",
+      "papel": "profissional"
+     }
+    },
+    {
+     "corpo": {
+      "nome": "Pessoa Eq1",
+      "apelido": "Eq1",
+      "cpf": "11144477735",
+      "email": "EQ0@TESTE.COM",
+      "papel": "profissional"
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Já existe alguém com esse e-mail."
+   }
+  },
+  {
+   "nome": "editar mantendo CPF, apelido e e-mail",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Pessoa Eq0",
+      "apelido": "Eq0",
+      "cpf": "52998224725",
+      "email": "eq0@teste.com",
+      "papel": "profissional"
+     }
+    },
+    {
+     "editar": "@1",
+     "corpo": {
+      "nome": "Pessoa Eq0 Nova",
+      "apelido": "Eq0",
+      "cpf": "52998224725",
+      "email": "eq0@teste.com",
+      "papel": "profissional",
+      "comissaoPct": 10
+     }
+    }
+   ],
+   "esperado": {
+    "ok": true
+   }
+  },
+  {
+   "nome": "editar para o apelido de outra pessoa",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Pessoa Eq0",
+      "apelido": "Eq0",
+      "cpf": "52998224725",
+      "email": "eq0@teste.com",
+      "papel": "profissional"
+     }
+    },
+    {
+     "corpo": {
+      "nome": "Pessoa Eq1",
+      "apelido": "Eq1",
+      "cpf": "11144477735",
+      "email": "eq1@teste.com",
+      "papel": "profissional"
+     }
+    },
+    {
+     "editar": "@2",
+     "corpo": {
+      "nome": "Pessoa Eq1",
+      "apelido": "eq0",
+      "cpf": "11144477735",
+      "email": "eq1@teste.com",
+      "papel": "profissional"
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Já existe alguém com esse apelido."
+   }
+  },
+  {
+   "nome": "editar para o CPF de outra pessoa",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Pessoa Eq0",
+      "apelido": "Eq0",
+      "cpf": "52998224725",
+      "email": "eq0@teste.com",
+      "papel": "profissional"
+     }
+    },
+    {
+     "corpo": {
+      "nome": "Pessoa Eq1",
+      "apelido": "Eq1",
+      "cpf": "11144477735",
+      "email": "eq1@teste.com",
+      "papel": "profissional"
+     }
+    },
+    {
+     "editar": "@2",
+     "corpo": {
+      "nome": "Pessoa Eq1",
+      "apelido": "Eq1",
+      "cpf": "52998224725",
+      "email": "eq1@teste.com",
+      "papel": "profissional"
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Já existe alguém com esse CPF."
+   }
+  },
+  {
+   "nome": "editar com comissão inválida",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Pessoa Eq0",
+      "apelido": "Eq0",
+      "cpf": "52998224725",
+      "email": "eq0@teste.com",
+      "papel": "profissional"
+     }
+    },
+    {
+     "editar": "@1",
+     "corpo": {
+      "nome": "Pessoa Eq0",
+      "apelido": "Eq0",
+      "cpf": "52998224725",
+      "email": "eq0@teste.com",
+      "papel": "profissional",
+      "comissaoPct": -1
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "A comissão vai de 0 a 100%."
+   }
+  },
+  {
+   "nome": "trocar o perfil de quem foi cadastrado",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Pessoa Eq0",
+      "apelido": "Eq0",
+      "cpf": "52998224725",
+      "email": "eq0@teste.com",
+      "papel": "profissional"
+     }
+    },
+    {
+     "editar": "@1",
+     "corpo": {
+      "nome": "Pessoa Eq0",
+      "apelido": "Eq0",
+      "cpf": "52998224725",
+      "email": "eq0@teste.com",
+      "papel": "atendente"
+     }
+    }
+   ],
+   "esperado": {
+    "ok": true
+   }
+  }
+ ]
+}

@@ -28,7 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
  * A escala do profissional vazia (nenhum dia aberto) APAGA a escala própria: ele volta a seguir o expediente da loja.
  */
 @RestController
-@PreAuthorize("hasAnyRole('DONO','PROFISSIONAL')")
+@PreAuthorize("hasAnyRole('DONO','ADMIN','ATENDENTE','PROFISSIONAL') and @perm.pode(authentication, 'agenda')")
 public class EscalaController {
 
     public record CorpoEscala(@NotNull Map<Integer, @Valid Dia> semana) {
@@ -48,7 +48,7 @@ public class EscalaController {
     }
 
     @PutMapping("/api/estabelecimento/escala")
-    @PreAuthorize("hasRole('DONO')")
+    @PreAuthorize("@perm.pode(authentication, 'estabelecimento')")
     public Escala gravarLoja(@Valid @RequestBody CorpoEscala corpo) {
         Loja loja = LojaContext.exigir();
         Map<Integer, List<Faixa>> semana = EscalaService.validar(new Escala(corpo.semana()));
@@ -82,7 +82,7 @@ public class EscalaController {
 
     /** Dono mexe em qualquer profissional; profissional só na própria escala (a de outro responde 404, como se não existisse). */
     private static void exigirAcesso(UUID id, Jwt jwt) {
-        boolean dono = "dono".equals(jwt.getClaimAsString("papel"));
+        boolean dono = br.com.agendz.seguranca.Permissoes.veTudo(jwt.getClaimAsString("papel"));
         if (!dono && !id.toString().equals(jwt.getSubject())) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, "Profissional não encontrado");
     }
 

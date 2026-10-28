@@ -29,7 +29,7 @@ import org.springframework.web.bind.annotation.RestController;
  * único dentro da loja, nunca entre lojas). Sem `usuario`, o login não muda. A conferência da senha atual e a loja do endereço valem como antes.
  */
 @RestController
-@PreAuthorize("hasAnyRole('DONO','PROFISSIONAL')")
+@PreAuthorize("hasAnyRole('DONO','ADMIN','ATENDENTE','PROFISSIONAL')")
 public class SenhaController {
 
     public record TrocaDeSenha(

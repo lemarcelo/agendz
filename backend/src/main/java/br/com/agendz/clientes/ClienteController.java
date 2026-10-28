@@ -26,7 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
  * Cliente de outra loja responde 404 (não revela que existe). Regras em {@link ClienteService}.
  */
 @RestController
-@PreAuthorize("hasAnyRole('DONO','PROFISSIONAL')")
+@PreAuthorize("hasAnyRole('DONO','ADMIN','ATENDENTE','PROFISSIONAL') and @perm.pode(authentication, 'clientes')")
 public class ClienteController {
 
     public record NovoCliente(@Size(max = 100) String nome, @Size(max = 100) String apelido, @Size(max = 30) String telefone,
@@ -49,7 +49,7 @@ public class ClienteController {
     }
 
     private static Ator ator(Jwt jwt) {
-        return new Ator(UUID.fromString(jwt.getSubject()), "dono".equals(jwt.getClaimAsString("papel")));
+        return new Ator(UUID.fromString(jwt.getSubject()), br.com.agendz.seguranca.Permissoes.veTudo(jwt.getClaimAsString("papel")));
     }
 
     /** `q` busca por nome, apelido, telefone (DDD + número), CPF, placa ou modelo. Até 500 resultados. */

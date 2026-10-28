@@ -33,7 +33,7 @@ import org.springframework.web.bind.annotation.RestController;
  * Limite conhecido: o token já emitido de quem foi desativado vale até expirar (JWT_VALIDADE_MINUTOS); o login novo é recusado.
  */
 @RestController
-@PreAuthorize("hasAnyRole('DONO','PROFISSIONAL')")
+@PreAuthorize("hasAnyRole('DONO','ADMIN','ATENDENTE','PROFISSIONAL')")
 public class ProfissionalController {
 
     public record Pessoa(UUID id, String nome, String papel, boolean atende) {

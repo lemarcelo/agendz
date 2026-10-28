@@ -60,7 +60,7 @@ test('loja inexistente = status 404 e mensagem fixa; servidor fora não vaza det
 test('login: manda usuário e senha, guarda o token só na memória e não devolve o token à tela', async () => {
   const r = await entrar({ identificador: '  Alan ', senha: 'x' });
   assert.equal(r.ok, true);
-  assert.deepEqual(r.sessao, { nome: 'Alan', papel: 'dono', deveTrocarSenha: true, onboardingPendente: true });
+  assert.deepEqual(r.sessao, { id: '', nome: 'Alan', papel: 'dono', deveTrocarSenha: true, onboardingPendente: true, secoes: [] });
   assert.ok(!JSON.stringify(r).includes('tok-1'), 'o token não sai do módulo');
   assert.deepEqual(chamadas[0].corpo, { identificador: 'Alan', senha: 'x' });
   assert.deepEqual(sessaoAtual(), r.sessao);

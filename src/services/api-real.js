@@ -4,7 +4,7 @@
 //
 // Regras: a loja vem do endereço (Host), nunca de um campo; o token fica SÓ em memória (nunca localStorage/sessionStorage/cookie: recarregar a
 // página pede o login de novo); nenhuma função lança erro: devolve { ok, ... } com mensagem em português; erro técnico nunca vira texto cru na tela.
-// Docs: docs/F2-front-na-api-real.md. Rotas: POST /api/auth/login, PUT /api/usuarios/me/senha, GET /api/publico/loja, /api/onboarding/*, /api/clientes, /api/servicos.
+// Docs: docs/F2-front-na-api-real.md. Rotas: POST /api/auth/login, PUT /api/usuarios/me/senha, GET /api/publico/loja, /api/onboarding/*, /api/clientes, /api/servicos, /api/usuarios.
 
 let base = ''; // '' = mesmo endereço do site (o Caddy manda /api/* para a API); os testes apontam para um servidor falso
 let token = null;
@@ -63,7 +63,7 @@ export async function carregarLoja() {
 function guardarSessao(d) {
   if (!d || typeof d.token !== 'string' || !d.token) return false;
   token = d.token;
-  sessao = { nome: texto(d.nome, 120), papel: texto(d.papel, 20), deveTrocarSenha: d.deveTrocarSenha === true, onboardingPendente: d.onboardingPendente === true };
+  sessao = { id: ID.test(String(d.id)) ? d.id : '', nome: texto(d.nome, 120), papel: texto(d.papel, 20), deveTrocarSenha: d.deveTrocarSenha === true, onboardingPendente: d.onboardingPendente === true, secoes: listaDe(d.secoes, 20).filter((x) => typeof x === 'string' && /^[a-z]{1,20}$/.test(x)) };
   return true;
 }
 
@@ -232,5 +232,68 @@ export const servicos = {
     if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Serviço não encontrado.' };
     const r = await chamar('DELETE', `/api/servicos/${id}`);
     return r.ok ? { ok: true, desativado: !!(r.dados && r.dados.desativado === true) } : r;
+  },
+};
+
+// ---------- equipe (F2 parte 4; regras no servidor: UsuarioService; só o proprietário) ----------
+const PAPEIS = ['dono', 'admin', 'atendente', 'profissional'];
+const SECOES_API = ['clientes', 'servicos', 'estabelecimento', 'agenda', 'estoque', 'financeiro'];
+function lerUsuario(d) {
+  d = d || {};
+  const perm = {};
+  if (d.permissoes && typeof d.permissoes === 'object') for (const k of SECOES_API) if (typeof d.permissoes[k] === 'boolean') perm[k] = d.permissoes[k];
+  return {
+    id: texto(d.id, 40), nome: texto(d.nome, 150), apelido: d.apelido ? texto(d.apelido, 60) : '', usuario: texto(d.usuario, 60), papel: PAPEIS.includes(d.papel) ? d.papel : 'profissional',
+    atende: d.atende === true, podeVender: d.podeVender !== false, comissaoPct: numeroOuNulo(d.comissaoPct), permissoes: perm, corSlot: Number.isInteger(d.corSlot) ? d.corSlot : null,
+    foto: typeof d.foto === 'string' && d.foto.length <= 30000 ? d.foto : null, email: d.email ? texto(d.email, 150) : '', telefone: d.telefone ? texto(d.telefone, 20) : '',
+    cpfMascarado: d.cpfMascarado ? texto(d.cpfMascarado, 14) : '', cpf: d.cpf ? texto(d.cpf, 11) : '', nascimento: d.nascimento ? texto(d.nascimento, 10) : '', deveTrocarSenha: d.deveTrocarSenha === true,
+  };
+}
+// A senha temporária só existe na resposta de criar e de refazer: a tela a mostra uma vez e a joga fora.
+const comSenha = (r) => ({ ok: true, usuario: lerUsuario(r.dados && r.dados.usuario), senhaTemporaria: texto(r.dados && r.dados.senhaTemporaria, 40) });
+export const equipe = {
+  // GET /api/usuarios  (só o proprietário; CPF só mascarado)
+  async listar() {
+    const r = await chamar('GET', '/api/usuarios');
+    return r.ok ? { ok: true, usuarios: listaDe(r.dados, 200).map(lerUsuario) } : r;
+  },
+  // GET /api/usuarios/{id}  (ficha com CPF completo e nascimento)
+  async obter(id) {
+    if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Usuário não encontrado.' };
+    const r = await chamar('GET', `/api/usuarios/${id}`);
+    return r.ok ? { ok: true, usuario: lerUsuario(r.dados) } : r;
+  },
+  // POST /api/usuarios (devolve `senhaTemporaria` uma vez)  |  PUT /api/usuarios/{id}   (campo ausente não muda; texto vazio apaga CPF, e-mail, telefone, nascimento)
+  async salvar(d) {
+    d = d && typeof d === 'object' ? d : {};
+    const corpo = {};
+    for (const [k, max] of [['nome', 150], ['apelido', 60], ['usuario', 60], ['cpf', 20], ['nascimento', 10], ['email', 150], ['telefone', 30], ['papel', 20]]) if (typeof d[k] === 'string') corpo[k] = d[k].slice(0, max);
+    if (typeof d.atende === 'boolean') corpo.atende = d.atende;
+    if (typeof d.podeVender === 'boolean') corpo.podeVender = d.podeVender;
+    if (typeof d.comissaoPct === 'number' && Number.isFinite(d.comissaoPct)) corpo.comissaoPct = d.comissaoPct;
+    if (d.permissoes && typeof d.permissoes === 'object') corpo.permissoes = Object.fromEntries(SECOES_API.filter((k) => typeof d.permissoes[k] === 'boolean').map((k) => [k, d.permissoes[k]]));
+    const edicao = d.id !== undefined && d.id !== null && d.id !== '';
+    if (edicao && !ID.test(String(d.id))) return { ok: false, status: 0, erro: 'Usuário não encontrado.' };
+    const r = await chamar(edicao ? 'PUT' : 'POST', edicao ? `/api/usuarios/${d.id}` : '/api/usuarios', corpo);
+    if (!r.ok) return r;
+    return edicao ? { ok: true, usuario: lerUsuario(r.dados) } : comSenha(r);
+  },
+  // PUT /api/usuarios/{id}/atendimento
+  async definirAtendimento(id, atende) {
+    if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Usuário não encontrado.' };
+    const r = await chamar('PUT', `/api/usuarios/${id}/atendimento`, { atende: atende === true });
+    return r.ok ? { ok: true, usuario: lerUsuario(r.dados) } : r;
+  },
+  // POST /api/usuarios/{id}/senha-temporaria  (nova senha temporária, uma vez; a pessoa troca no próximo acesso)
+  async refazerSenha(id) {
+    if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Usuário não encontrado.' };
+    const r = await chamar('POST', `/api/usuarios/${id}/senha-temporaria`, {});
+    return r.ok ? comSenha(r) : r;
+  },
+  // DELETE /api/usuarios/{id}  (só quem nunca teve agendamento; a tela oferece "parar de atender" no lugar)
+  async remover(id) {
+    if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Usuário não encontrado.' };
+    const r = await chamar('DELETE', `/api/usuarios/${id}`);
+    return r.ok ? { ok: true } : r;
   },
 };

@@ -26,7 +26,7 @@ const servidor = http.createServer((req, res) => {
     const c = corpo ? JSON.parse(corpo) : null;
     chamadas.push({ m: req.method, u: req.url, auth: req.headers.authorization || null, corpo: c });
     if (req.url === '/api/publico/loja') return json(200, loja);
-    if (req.url === '/api/auth/login') return json(200, { token: 'tok-login', nome: papel === 'dono' ? 'Davi' : 'Pablo', papel, deveTrocarSenha: false, onboardingPendente: false });
+    if (req.url === '/api/auth/login') return json(200, { token: 'tok-login', id: '00000000-0000-4000-8000-0000000000aa', nome: papel === 'dono' ? 'Davi' : 'Pablo', papel, deveTrocarSenha: false, onboardingPendente: false, secoes: papel === 'dono' ? ['clientes', 'servicos', 'estabelecimento', 'agenda', 'estoque', 'financeiro'] : ['agenda', 'clientes'] });
     if (req.headers.authorization !== 'Bearer tok-login') return json(401, { mensagem: 'Sessão inválida' });
     const url = new URL(req.url, 'http://x');
     const dono = papel === 'dono';

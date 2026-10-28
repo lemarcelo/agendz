@@ -24,8 +24,6 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.security.SecureRandom;
-import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -56,9 +54,6 @@ import org.springframework.web.bind.annotation.RestController;
 @PreAuthorize("hasRole('DONO')")
 public class OnboardingController {
 
-    private static final String ALFABETO = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"; // sem 0/O, 1/l/I
-    private static final int TAMANHO_SENHA = 12;
-    private static final SecureRandom ALEATORIO = new SecureRandom();
 
     public record Estado(String tipo, String passo, boolean concluido, List<Item> servicos, List<String> jaCadastrados, Escala expedienteSugerido, Escala expediente) {
     }
@@ -222,17 +217,10 @@ public class OnboardingController {
 
     /** Primeiro nome, sem acento nem símbolo, minúsculo (2 a 20 letras/números); se já existir, acrescenta 2, 3... */
     static String loginLivre(String nome, Set<String> existentes) {
-        String primeiro = Normalizer.normalize(nome.trim().split("\\s+")[0], Normalizer.Form.NFD).replaceAll("\\p{M}", "").toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", "");
-        if (primeiro.length() > 20) primeiro = primeiro.substring(0, 20);
-        if (primeiro.length() < 2) primeiro = "pro";
-        String login = primeiro;
-        for (int n = 2; existentes.contains(login); n++) login = primeiro + n;
-        return login;
+        return br.com.agendz.auth.Temporarias.loginLivre(nome, existentes);
     }
 
     static String senhaTemporaria() {
-        StringBuilder sb = new StringBuilder(TAMANHO_SENHA);
-        for (int i = 0; i < TAMANHO_SENHA; i++) sb.append(ALFABETO.charAt(ALEATORIO.nextInt(ALFABETO.length())));
-        return sb.toString();
+        return br.com.agendz.auth.Temporarias.senha();
     }
 }
