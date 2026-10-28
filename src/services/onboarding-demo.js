@@ -55,11 +55,19 @@ export function criarAdaptadorDemo({ reconfigurar = false } = {}) {
       return { ok: true, itens: visiveis() };
     },
     async carregar() { return { ok: true, estado: { tipo: tipoDe(store.getState().estabelecimento), passo, concluido, servicos: catalogo(), jaCadastrados: [...feitos], expedienteSugerido: expedienteDeEstado(store.getState()), expediente } }; },
-    async servicos(itens) {
+    async servicos(itens, proprios = []) {
       const chaves = new Set(catalogo().map((s) => s.chave));
       if (!Array.isArray(itens) || itens.some((i) => !i || !chaves.has(i.chave))) return { ok: false, erro: 'Serviço de exemplo desconhecido' };
+      if (!Array.isArray(proprios) || proprios.length > 20) return { ok: false, erro: 'No máximo 20 serviços próprios por vez' };
+      for (const p of proprios) {
+        const nome = String((p && p.nome) || '').trim();
+        if (nome.length < 2 || nome.length > 80) return { ok: false, erro: 'Informe o nome do serviço (de 2 a 80 letras)' };
+        if (!(Number(p.preco) >= 0 && Number(p.preco) <= 100000)) return { ok: false, erro: 'Confira o preço do serviço' };
+        if (!(Number.isInteger(Number(p.duracaoMin)) && p.duracaoMin >= 1 && p.duracaoMin <= 14400)) return { ok: false, erro: 'Confira a duração do serviço' };
+      }
       let criados = 0; let jaExistiam = 0;
       for (const i of itens) { if (feitos.has(i.chave)) jaExistiam++; else { feitos.add(i.chave); criados++; } }
+      for (const p of proprios) { const k = `proprio:${String(p.nome).trim().toLowerCase()}`; if (feitos.has(k)) jaExistiam++; else { feitos.add(k); criados++; } }
       if (reconfigurar && criados) nova().servicosCriados += criados;
       passo = 'equipe';
       return { ok: true, resultado: { criados, jaExistiam } };

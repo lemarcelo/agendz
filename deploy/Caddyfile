@@ -42,6 +42,19 @@
 	}
 }
 
+# Painel da plataforma (repositório agendz-admin): API própria, banco próprio, outro compose (/opt/agendz/admin). Só /api/* chega à API do Admin;
+# o resto ainda é um aviso (a tela do painel entra na próxima fatia). Sem o compose do Admin no ar, /api/* responde 502 e o resto do site segue normal.
+admin.{$DOMINIO} {
+	import seguranca
+	handle /api/* {
+		reverse_proxy admin-api:8080
+	}
+	handle {
+		header Cache-Control "no-cache"
+		respond "Agendz Admin" 200
+	}
+}
+
 # Qualquer outra loja (subdomínio novo ou domínio próprio verificado): mesmo comportamento, certificado sob demanda.
 # Host desconhecido não ganha certificado (o `ask` responde 404); host de loja inexistente ainda assim recebe "Loja não encontrada" da API.
 https:// {

@@ -66,7 +66,15 @@ public class OnboardingController {
             @Min(1) @Max(14400) Integer duracaoMin) {
     }
 
-    public record Servicos(@NotNull @Size(max = 40) List<@Valid @NotNull ItemEscolhido> itens) {
+    /** Serviço que o dono descreve na hora (fora do catálogo de exemplos). Nos tipos com preço por porte, o mesmo preço e a mesma duração valem para todos os portes (ajuste fino em Serviços). */
+    public record ItemProprio(
+            @NotBlank @Size(min = 2, max = 80) String nome,
+            @Size(max = 60) String categoria,
+            @NotNull @DecimalMin("0") @DecimalMax("100000") BigDecimal preco,
+            @NotNull @Min(1) @Max(14400) Integer duracaoMin) {
+    }
+
+    public record Servicos(@NotNull @Size(max = 40) List<@Valid @NotNull ItemEscolhido> itens, @Size(max = 20) List<@Valid @NotNull ItemProprio> proprios) {
     }
 
     public record Resultado(int criados, int jaExistiam) {
@@ -130,6 +138,9 @@ public class OnboardingController {
             if (!porChave.containsKey(e.chave())) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Serviço de exemplo desconhecido: " + Texto.limpar(e.chave()));
             escolhidos.putIfAbsent(e.chave(), e);
         }
+        List<ItemProprio> proprios = corpo.proprios() == null ? List.of() : corpo.proprios();
+        // portes e prazos do tipo (se o catálogo tem preço por porte): o serviço próprio repete o mesmo preço e a mesma duração em todos
+        Item modeloPorte = c.servicos().stream().filter((x) -> x.precos() != null && x.duracoes() != null).findFirst().orElse(null);
         int[] contagem = new int[2];
         UUID quem = UUID.fromString(jwt.getSubject());
         banco.naLoja(jdbc -> {
@@ -149,6 +160,32 @@ public class OnboardingController {
                                 + "?, nullif(?, ''), ?, ?, ?, ?, true, cast(? as jsonb), cast(? as jsonb)) returning id", UUID.class,
                         loja.id().toString(), s.nome(), s.categoria() == null ? "" : s.categoria(), preco.setScale(2, RoundingMode.HALF_UP), duracao, s.intervaloMin(), s.multiDia(),
                         escrever(s.precos()), escrever(s.duracoes()));
+                reconfiguracoes.anotarServico(jdbc, reconf, novo);
+                contagem[0]++;
+            }
+            for (ItemProprio p : proprios) {
+                String nome = Texto.limpar(p.nome()).trim();
+                String categoria = p.categoria() == null ? "" : Texto.limpar(p.categoria()).trim();
+                if (nome.length() < 2) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe o nome do serviço (de 2 a 80 letras)");
+                if (!nomes.add(nome.toLowerCase(Locale.ROOT))) {
+                    contagem[1]++;
+                    continue;
+                }
+                BigDecimal preco = p.preco().setScale(2, RoundingMode.HALF_UP);
+                Map<String, BigDecimal> precos = null;
+                Map<String, Integer> duracoes = null;
+                if (modeloPorte != null) {
+                    precos = new LinkedHashMap<>();
+                    duracoes = new LinkedHashMap<>();
+                    for (String porte : modeloPorte.precos().keySet()) {
+                        precos.put(porte, preco);
+                        duracoes.put(porte, p.duracaoMin());
+                    }
+                }
+                UUID novo = jdbc.queryForObject("insert into servico (loja_id, codigo, nome, categoria, preco, duracao_min, intervalo_min, multi_dia, ativo, precos, duracoes) "
+                                + "values (?::uuid, (select (coalesce(max(case when codigo ~ '^[0-9]{1,9}$' then codigo::int end), 0) + 1)::text from servico), "
+                                + "?, nullif(?, ''), ?, ?, 0, false, true, cast(? as jsonb), cast(? as jsonb)) returning id", UUID.class,
+                        loja.id().toString(), nome, categoria, preco, p.duracaoMin(), escrever(precos), escrever(duracoes));
                 reconfiguracoes.anotarServico(jdbc, reconf, novo);
                 contagem[0]++;
             }

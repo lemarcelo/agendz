@@ -31,6 +31,8 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
   const [estado, setEstado] = useState(null);
   const [etapa, setEtapa] = useState('servicos');
   const [marcas, setMarcas] = useState({}); // chave → { on, preco, duracao } (textos dos campos)
+  const [proprios, setProprios] = useState([]); // serviços que o dono descreve na hora: { nome, categoria, preco, duracao } (textos)
+  const [novo, setNovo] = useState({ nome: '', categoria: '', preco: '', duracao: '' });
   const [linhas, setLinhas] = useState([{ nome: '', atende: true }]);
   const [criadas, setCriadas] = useState(null);
   const [aviso, setAviso] = useState('');
@@ -85,6 +87,21 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
   const todosMarcados = estado ? estado.servicos.filter((s) => !ja.has(s.chave)).every((s) => marcas[s.chave]?.on) : false;
   const marcarTodos = () => setMarcas((m) => Object.fromEntries(Object.entries(m).map(([k, v]) => [k, { ...v, on: !ja.has(k) && !todosMarcados }])));
 
+  const mudarNovo = (campo, valor) => { setNovo((n) => ({ ...n, [campo]: valor })); setErro(''); };
+  // Confere o serviço descrito na hora e põe na lista (nada vai ao servidor antes do Continuar).
+  const adicionarProprio = () => {
+    const nome = novo.nome.trim().replace(/\s+/g, ' ');
+    const preco = lerNumero(novo.preco); const dur = lerNumero(novo.duracao);
+    if (nome.length < 2 || nome.length > 80) { setErro('Informe o nome do serviço (de 2 a 80 letras).'); return; }
+    if (novo.categoria.trim().length > 60) { setErro('A categoria pode ter até 60 letras.'); return; }
+    if (!(preco >= 0 && preco <= 100000)) { setErro('Confira o preço (de R$ 0 a R$ 100.000).'); return; }
+    if (!(Number.isInteger(dur) && dur >= 1 && dur <= 14400)) { setErro('Confira a duração (minutos inteiros, a partir de 1).'); return; }
+    const chave = nome.toLowerCase();
+    if (proprios.some((p) => p.nome.toLowerCase() === chave) || (estado && estado.servicos.some((s) => s.nome.toLowerCase() === chave))) { setErro('Já existe um serviço com esse nome na lista.'); return; }
+    if (proprios.length >= 20) { setErro('No máximo 20 serviços próprios por vez.'); return; }
+    setProprios((l) => [...l, { nome, categoria: novo.categoria.trim(), preco: Math.round(preco * 100) / 100, duracao: dur }]);
+    setNovo({ nome: '', categoria: '', preco: '', duracao: '' }); setErro('');
+  };
   const enviarServicos = async () => {
     if (enviando) return;
     const itens = [];
@@ -100,10 +117,11 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
       itens.push(item);
     }
     setEnviando(true); setErro('');
-    const r = await adaptador.servicos(itens);
+    const r = await adaptador.servicos(itens, proprios.map((p) => ({ nome: p.nome, ...(p.categoria ? { categoria: p.categoria } : {}), preco: p.preco, duracaoMin: p.duracao })));
     setEnviando(false);
     if (!r.ok) { falha(r); return; }
-    setAviso(itens.length ? `${r.resultado.criados} ${r.resultado.criados === 1 ? 'serviço criado' : 'serviços criados'}.` : '');
+    setProprios([]);
+    setAviso(itens.length || proprios.length ? `${r.resultado.criados} ${r.resultado.criados === 1 ? 'serviço criado' : 'serviços criados'}.` : '');
     setEtapa('equipe');
   };
 
@@ -233,10 +251,31 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
                 );
               })}
             </ul>
+            <div className="pa-proprio" data-testid="pa-proprio">
+              <h3>Não achou o seu? Descreva o serviço</h3>
+              {proprios.length > 0 && (
+                <ul className="pa-lista" data-testid="pa-proprios-lista">
+                  {proprios.map((p, i) => (
+                    <li className="pa-item marcado" key={p.nome} data-testid={`pa-proprio-${i}`}>
+                      <span><b>{p.nome}</b>{p.categoria ? <small className="muted"> · {p.categoria}</small> : null}<small className="muted"> · {dinheiro(p.preco)} · {p.duracao} min</small></span>
+                      <Btn tamanho="sm" onClick={() => setProprios((l) => l.filter((_, j) => j !== i))} aria-label={`Remover ${p.nome}`} data-testid={`pa-proprio-remover-${i}`}>Remover</Btn>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="pa-campos">
+                <Campo rotulo="Nome do serviço"><input value={novo.nome} onChange={(e) => mudarNovo('nome', e.target.value)} maxLength={80} data-testid="pa-proprio-nome" /></Campo>
+                <Campo rotulo="Categoria (opcional)"><input value={novo.categoria} onChange={(e) => mudarNovo('categoria', e.target.value)} maxLength={60} data-testid="pa-proprio-categoria" /></Campo>
+                <Campo rotulo="Preço (R$)"><input inputMode="decimal" value={novo.preco} onChange={(e) => mudarNovo('preco', e.target.value)} maxLength={9} data-testid="pa-proprio-preco" /></Campo>
+                <Campo rotulo="Duração (min)"><input inputMode="numeric" value={novo.duracao} onChange={(e) => mudarNovo('duracao', e.target.value)} maxLength={5} data-testid="pa-proprio-duracao" /></Campo>
+              </div>
+              <div className="acoes"><Btn tamanho="sm" onClick={adicionarProprio} data-testid="pa-proprio-adicionar">Adicionar à lista</Btn></div>
+              {estado.servicos.some((s) => s.precos) && <p className="muted">Neste tipo de loja o preço vale para todos os portes; ajuste cada porte depois, em Serviços.</p>}
+            </div>
             {erro && <Aviso tipo="erro" data-testid="pa-erro">{erro}</Aviso>}
             <div className="acoes pa-acoes">
               <Btn onClick={() => { setAviso(''); setEtapa('equipe'); }} data-testid="pa-pular-servicos">Pular</Btn>
-              <Btn variante="primario" disabled={enviando || !escolhidos.length} onClick={enviarServicos} data-testid="pa-continuar-servicos">{enviando ? 'Salvando…' : `Continuar${escolhidos.length ? ` (${escolhidos.length})` : ''}`}</Btn>
+              <Btn variante="primario" disabled={enviando || !(escolhidos.length + proprios.length)} onClick={enviarServicos} data-testid="pa-continuar-servicos">{enviando ? 'Salvando…' : `Continuar${escolhidos.length + proprios.length ? ` (${escolhidos.length + proprios.length})` : ''}`}</Btn>
             </div>
           </section>
         )}

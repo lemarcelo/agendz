@@ -22,16 +22,28 @@ import { rot } from '../domain/tipos.js';
 
 const ordem = (a, b) => a.inicio - b.inicio;
 
+// Agrupa (já ordenados) por dia: [{ dia, lista }]. Rótulo do grupo: "Amanhã · terça-feira, 29 de outubro" ou só a data por extenso.
+function agruparPorDia(lista) {
+  const grupos = [];
+  for (const a of lista) {
+    const dia = startOfDay(a.inicio);
+    const g = grupos[grupos.length - 1];
+    if (g && g.dia === dia) g.lista.push(a); else grupos.push({ dia, lista: [a] });
+  }
+  return grupos;
+}
+const rotuloDoGrupo = (dia, agora) => (sameDay(dia, addDays(startOfDay(agora), 1)) ? `Amanhã · ${fmtDayLong(dia)}` : sameDay(dia, agora) ? `Hoje · ${fmtDayLong(dia)}` : fmtDayLong(dia));
+
 // Miniatura redonda do profissional (foto, ou inicial com cor própria) para os eventos do calendário.
 function FotoProfissional({ u }) {
   if (!u) return null;
   return <span className="ev-foto" title={u.apelido || u.nome}><Avatar mini nome={u.apelido || u.nome} foto={u.foto} chave={u.id} /></span>;
 }
 
-function CartaoAgendamento({ a, st, agora, onClick, mostraBarb }) {
+function CartaoAgendamento({ a, st, agora, onClick, mostraBarb, testid = 'cartao' }) {
   const v = visualDoCartao(a, agora);
   return (
-    <button type="button" className={`cartao st-${v.chave}`} onClick={onClick} data-testid="cartao" data-status={v.chave}
+    <button type="button" className={`cartao st-${v.chave}`} onClick={onClick} data-testid={testid} data-status={v.chave}
       title={`${fmtHM(a.inicio)} ${nomeCliente(st, a)} · ${nomeServicos(st, a)}${a.veiculo ? ` · ${textoVeiculo(a)}` : ''} · ${v.rotulo}`}>
       <div className="cartao-topo">
         <strong className="cartao-hora">{fmtHM(a.inicio)}</strong>
@@ -163,6 +175,13 @@ export default function Agenda({ user, onAbrir, onNovo }) {
   const noBox = viewEfetiva === 'dia' ? exibidos.filter((a) => a.status === STATUS.CONFIRMADO && !a.local && a.inicio < startOfDay(cursor) && (retiradaDe(st, a) ?? 0) > startOfDay(cursor)).sort(ordem) : [];
   const exDia = viewEfetiva === 'dia' ? excecaoDoDia(st.estabelecimento.escala, cursor) : null;
   const listaDia = exibidos.filter((a) => sameDay(a.inicio, cursor)).sort(ordem);
+  // Próximos agendamentos (v86): depois do dia que está na tela, os dias seguintes com agendamento, agrupados por dia (a partir de amanhã, 7 dias por vez).
+  // Sem filtro de marcador, cancelados e faltas não entram (o que já passou do prazo é histórico, não "próximo").
+  const [diasAdiante, setDiasAdiante] = useState(7);
+  const fimProximos = addDays(startOfDay(cursor), 1 + diasAdiante);
+  const futuros = viewEfetiva === 'dia' ? exibidos.filter((a) => a.inicio >= addDays(startOfDay(cursor), 1) && (marcados.length > 0 || ATIVOS.includes(a.status))).sort(ordem) : [];
+  const gruposProximos = agruparPorDia(futuros.filter((a) => a.inicio < fimProximos));
+  const temMaisAdiante = futuros.some((a) => a.inicio >= fimProximos);
   // Total de cada marcador da legenda no período que está na tela (dia ou mês), respeitando o filtro de profissionais.
   const [pIni, pFim] = viewEfetiva === 'dia' ? [startOfDay(cursor), addDays(startOfDay(cursor), 1)] : [monthStart(cursor), addMonths(monthStart(cursor), 1)];
   const contagem = contarMarcadores(todos.filter((x) => x.inicio >= pIni && x.inicio < pFim), agora);
@@ -271,6 +290,18 @@ export default function Agenda({ user, onAbrir, onNovo }) {
           <div className="cartoes agenda-cartoes" data-testid="agenda-cartoes">
             {listaDia.map((a) => <CartaoAgendamento key={a.id} a={a} st={st} agora={agora} mostraBarb={ativosSel.length > 1} onClick={() => onAbrir(a.id)} />)}
           </div>
+          {gruposProximos.length > 0 && (
+            <div className="agenda-proximos" data-testid="agenda-proximos">
+              <h3 className="agenda-titulo-proximos">Próximos agendamentos <span className="chip chip-p">{gruposProximos.reduce((n, g) => n + g.lista.length, 0)}</span></h3>
+              {gruposProximos.map((g) => (
+                <section key={g.dia} className="agenda-grupo-dia" aria-label={rotuloDoGrupo(g.dia, agora)} data-testid="proximo-dia">
+                  <h4 className="agenda-dia-grupo"><button type="button" className="link-dia" onClick={() => setCursor(g.dia)} title="Ir para este dia">{rotuloDoGrupo(g.dia, agora)}</button> <span className="chip chip-p">{g.lista.length}</span></h4>
+                  <div className="cartoes agenda-cartoes">{g.lista.map((a) => <CartaoAgendamento key={a.id} a={a} st={st} agora={agora} testid="cartao-proximo" mostraBarb={ativosSel.length > 1} onClick={() => onAbrir(a.id)} />)}</div>
+                </section>
+              ))}
+            </div>
+          )}
+          {temMaisAdiante && <Btn onClick={() => setDiasAdiante(diasAdiante + 7)} data-testid="proximos-mais">Ver mais 7 dias</Btn>}
         </div>
       )}
     </section>

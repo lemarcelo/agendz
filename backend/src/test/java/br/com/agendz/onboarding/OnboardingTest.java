@@ -141,6 +141,39 @@ class OnboardingTest extends BaseApi {
     }
 
     @Test
+    void servicoPropriodescritoNaHoraEValidadoEIdempotente() throws Exception {
+        abrirAssistente(LOJA_DALFORNO);
+        String t = token(DALFORNO, "alan");
+        // inválidos: sem nome, nome curto, preço negativo, duração zero, campo desconhecido
+        enviar(DALFORNO, t, "/api/onboarding/servicos", "{\"itens\":[],\"proprios\":[{\"nome\":\"\",\"preco\":10,\"duracaoMin\":20}]}").andExpect(status().isBadRequest());
+        enviar(DALFORNO, t, "/api/onboarding/servicos", "{\"itens\":[],\"proprios\":[{\"nome\":\"A\",\"preco\":10,\"duracaoMin\":20}]}").andExpect(status().isBadRequest());
+        enviar(DALFORNO, t, "/api/onboarding/servicos", "{\"itens\":[],\"proprios\":[{\"nome\":\"Sobrancelha\",\"preco\":-1,\"duracaoMin\":20}]}").andExpect(status().isBadRequest());
+        enviar(DALFORNO, t, "/api/onboarding/servicos", "{\"itens\":[],\"proprios\":[{\"nome\":\"Sobrancelha\",\"preco\":10,\"duracaoMin\":0}]}").andExpect(status().isBadRequest());
+        enviar(DALFORNO, t, "/api/onboarding/servicos", "{\"itens\":[],\"proprios\":[{\"nome\":\"Sobrancelha\",\"preco\":10,\"duracaoMin\":20,\"lojaId\":\"x\"}]}").andExpect(status().isBadRequest());
+        assertEquals(0, jdbc.queryForObject("select count(*) from servico", Integer.class));
+
+        enviar(DALFORNO, t, "/api/onboarding/servicos", "{\"itens\":[{\"chave\":\"s-barba\"}],\"proprios\":[{\"nome\":\"  Sobrancelha na linha \",\"categoria\":\"Estética\",\"preco\":25.5,\"duracaoMin\":15}]}")
+                .andExpect(status().isOk()).andExpect(jsonPath("$.criados").value(2));
+        pegar(DALFORNO, t, "/api/servicos").andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.nome=='Sobrancelha na linha')].preco").value(25.5))
+                .andExpect(jsonPath("$[?(@.nome=='Sobrancelha na linha')].duracaoMin").value(15))
+                .andExpect(jsonPath("$[?(@.nome=='Sobrancelha na linha')].codigo").exists());
+        // mesmo nome (sem diferenciar maiúsculas) ou nome de um serviço do catálogo já criado: não duplica
+        enviar(DALFORNO, t, "/api/onboarding/servicos", "{\"itens\":[],\"proprios\":[{\"nome\":\"SOBRANCELHA NA LINHA\",\"preco\":1,\"duracaoMin\":1},{\"nome\":\"Barba\",\"preco\":1,\"duracaoMin\":1}]}")
+                .andExpect(status().isOk()).andExpect(jsonPath("$.criados").value(0)).andExpect(jsonPath("$.jaExistiam").value(2));
+        assertEquals(2, jdbc.queryForObject("select count(*) from servico where loja_id = ?::uuid", Integer.class, LOJA_DALFORNO));
+    }
+
+    @Test
+    void servicoPropriodoTipoComPorteRepeteOPrecoEmTodosOsPortes() throws Exception {
+        abrirAssistente(LOJA_APEX);
+        String t = token(APEX, "davi");
+        enviar(APEX, t, "/api/onboarding/servicos", "{\"itens\":[],\"proprios\":[{\"nome\":\"Película de farol\",\"preco\":120,\"duracaoMin\":90}]}").andExpect(status().isOk()).andExpect(jsonPath("$.criados").value(1));
+        pegar(APEX, t, "/api/servicos").andExpect(jsonPath("$[0].precos.pequeno").value(120)).andExpect(jsonPath("$[0].precos.pickup").value(120))
+                .andExpect(jsonPath("$[0].duracoes.medio").value(90));
+    }
+
+    @Test
     void servicoComPrecoPorPorteIgnoraPrecoEditadoEGuardaATabela() throws Exception {
         abrirAssistente(LOJA_APEX);
         String t = token(APEX, "davi");

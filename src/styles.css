@@ -781,7 +781,10 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
 .agenda-modos { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
 .agenda-modos button { min-height: 44px; font-size: 15px; }
 .agenda-horarios { display: grid; gap: 10px; }
-.agenda-titulo-dia { display: flex; align-items: center; gap: 8px; margin: 4px 0 0; font-size: 15px; }
+.agenda-titulo-dia, .agenda-titulo-proximos { display: flex; align-items: center; gap: 8px; margin: 4px 0 0; font-size: 15px; }
+.agenda-proximos { display: grid; gap: 10px; margin-top: 8px; } .agenda-grupo-dia { display: grid; gap: 8px; }
+.agenda-dia-grupo { display: flex; align-items: center; gap: 8px; margin: 4px 0 0; font-size: 13px; color: var(--muted); text-transform: capitalize; }
+.agenda-dia-grupo .link-dia { background: none; border: 0; padding: 4px 0; font: inherit; color: inherit; text-transform: inherit; cursor: pointer; text-align: left; } .agenda-dia-grupo .link-dia:hover { color: var(--ink); text-decoration: underline; }
 .agenda-cartoes { grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
 @media (min-width: 761px) { .agenda-modos { width: min(100%, 360px); } }
 

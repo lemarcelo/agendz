@@ -126,9 +126,9 @@ function lerEstado(d) {
 export const onboarding = {
   // GET /api/onboarding
   async carregar() { const r = await chamar('GET', '/api/onboarding'); return r.ok ? { ok: true, estado: lerEstado(r.dados) } : r; },
-  // POST /api/onboarding/servicos  { itens: [{ chave, preco?, duracaoMin? }] }  (lista vazia = pular)
-  async servicos(itens) {
-    const r = await chamar('POST', '/api/onboarding/servicos', { itens: listaDe(itens, 40) });
+  // POST /api/onboarding/servicos  { itens: [{ chave, preco?, duracaoMin? }], proprios: [{ nome, categoria?, preco, duracaoMin }] }  (tudo vazio = pular)
+  async servicos(itens, proprios = []) {
+    const r = await chamar('POST', '/api/onboarding/servicos', { itens: listaDe(itens, 40), proprios: listaDe(proprios, 20) });
     return r.ok ? { ok: true, resultado: { criados: Number(r.dados && r.dados.criados) || 0, jaExistiam: Number(r.dados && r.dados.jaExistiam) || 0 } } : r;
   },
   // POST /api/onboarding/equipe  { pessoas: [{ nome, atende }] }  → logins e senhas temporárias (aparecem UMA vez)

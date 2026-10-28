@@ -53,6 +53,11 @@ Você trabalha no Agendz (repositório `lemarcelo/agendz`, pasta `agendz`). Leia
 11. F2 partes seguintes (clientes, serviços, equipe, agenda no front real), cada uma só quando o servidor tem **toda** a regra daquele recurso e o teste de equivalência passa.
 12. Gate 3 (e): arquivos por loja, quando existir upload.
 
+13. **[Final de todos os projetos, pedido do Marcelo em 28/10]** Montar `docs/FUNCOES-POR-TIPO.md`: lista simples das funções de cada aplicação (Agendz: estética automotiva, barbearia, psicologia; Agendz Admin), **agrupadas por tipo de aplicação** e, dentro de cada uma, por área (agenda, clientes, financeiro, equipe, estoque, mensagens, configurações). Uma linha por função, sem jargão. Gerar só quando a fila acabar.
+14. **Respostas ao Marcelo: curtas** (pedido de 28/10: "tenho falado muito"); decisões e dúvidas vão em `docs/DECISOES-E-DUVIDAS.md`.
+
+15. **[Pedido do Marcelo em 28/10] AVISAR quando os proprietários puderem receber o login** e usar de verdade (entrar, usar e salvar, com acesso a Serviços), e o assistente de início deve deixar **descrever serviços próprios na hora** (FEITO na v86). O aviso vem quando a agenda real (5c) estiver no ar: Alan (Dalforno) e Kiko (Offbox) primeiro; Davi só depois da agenda da estética. Quando chegar, dizer no relato final em uma linha: "pode mandar o login para X".
+
 ## Segredos e senhas (inegociável)
 Nunca escreva senha, token ou chave em chat, arquivo, commit, log ou saída do CI. Senha de usuário real nasce no servidor e só o Marcelo a vê, uma vez. O que o CI usa de produção são só endpoints públicos.
 

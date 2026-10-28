@@ -246,7 +246,7 @@ const url = `http://127.0.0.1:${servidor.address().port}/`;
   await p.getByTestId('pa-continuar-servicos').click();
   await p.getByTestId('pa-equipe').waitFor();
   const envio = chamadas.filter((c) => c.u === '/api/onboarding/servicos').at(-1);
-  assert.deepEqual(envio.c, { itens: [{ chave: 's-barba', preco: 37.5, duracaoMin: 40 }] });
+  assert.deepEqual(envio.c, { itens: [{ chave: 's-barba', preco: 37.5, duracaoMin: 40 }], proprios: [] });
   assert.equal(envio.auth, 'Bearer tok-ok');
   ok('B: dono novo troca a senha, cai no assistente, envia só chave+números, erro do servidor não derruba a tela');
 
