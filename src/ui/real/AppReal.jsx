@@ -12,6 +12,7 @@ import Equipe from './Equipe.jsx';
 import Comissoes from './Comissoes.jsx';
 import Ganhos from './Ganhos.jsx';
 import RegrasAtendimento from './RegrasAtendimento.jsx';
+import Cupons from './Cupons.jsx';
 import { TIPOS, definirTipoAtivo, rotulo, tipoValido } from '../../domain/tipos.js';
 import { cssDaMarca, logoValida } from '../../domain/tema.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
@@ -131,6 +132,7 @@ function Painel({ loja, sessao, aoSair }) {
   if (dono || (sessao.secoes || []).includes('clientes')) itens.push(['clientes', 'Clientes', 'users']);
   itens.push(['servicos', 'Serviços', 'scissors']);
   if (dono) itens.push(['equipe', 'Equipe', 'team']);
+  if (dono || (sessao.secoes || []).includes('estabelecimento')) itens.push(['cupons', 'Cupons', 'key']);
   if (dono) itens.push(['comissoes', 'Comissões', 'wallet']);
   else itens.push(['ganhos', 'Meus ganhos', 'wallet']);
   return (
@@ -162,6 +164,7 @@ function Painel({ loja, sessao, aoSair }) {
           {aba === 'clientes' && <Clientes />}
           {aba === 'servicos' && <Servicos ehDono={dono || (sessao.secoes || []).includes('servicos')} />}
           {aba === 'equipe' && dono && <Equipe meuId={sessao.id} />}
+          {aba === 'cupons' && (dono || (sessao.secoes || []).includes('estabelecimento')) && <Cupons />}
           {aba === 'comissoes' && dono && <Comissoes />}
           {aba === 'ganhos' && !dono && <Ganhos />}
         </main>

@@ -44,6 +44,14 @@ Lista simples. Cada item está no histórico do `prompt-agendz-regras.md` (v84 a
 - **Decidi:** continua sem fila no aparelho: a espera pela internet (v87) mais a chave já evitam perda e duplicação sem guardar nada no aparelho.
 - v91: o "canto tampado pelo botão" foi entendido como a lista Serviços realizados da ficha (caixa sem raio e botão colado). Atender (modal e site real) conferidos e sem o problema. Se for outra tela, o Marcelo avisa.
 
+## v96 (28/10): cupom no site real (5d-4c-2)
+- **Decidi:** a chave do cupom fica em texto na coluna `cupom.chave`: o proprietário precisa vê-la e reenviá-la; só a seção Estabelecimento a lê e ela nunca vai à agenda, ao histórico ou ao log. O agendamento guarda só a cópia do que o cupom valia.
+- **Decidi:** o bloqueio de 5 chaves erradas é por usuário logado (15 min), não por IP; a tentativa errada é gravada em transação independente para sobreviver à recusa.
+- **Decidi:** cupom só em agendamento futuro (a confirmar ou confirmado); atendimento feito, concluído ou cancelado não usa. No Atender, chave errada desfaz o agendamento inteiro.
+- **Decidi:** `total` da API continua o bruto dos serviços; o líquido é `total − desconto` (+ produtos). A comissão usa `preço − desconto`.
+- **Decidi:** cupom já usado não se apaga: "remover" o encerra e ele vai para o histórico (imutável, só serve de modelo).
+- **Dúvida (D3):** o cliente aplicar cupom pelo link/WhatsApp depende da porta pública no servidor (ainda não existe); o simulador já tem. Entra junto com ela.
+
 ## v95 (28/10): forma de pagamento e regras do Atender (5d-4c-1)
 - **Decidi:** a forma de pagamento só fica registrada no atendimento feito; sem financeiro no servidor não há lançamento de receita (entra quando o financeiro real existir).
 - **Decidi:** as regras ficam em `configuracao_loja` e a tela delas é um cartão no Início do dono, não uma tela nova.

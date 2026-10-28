@@ -252,6 +252,19 @@ O catálogo (`backend/src/main/resources/catalogo/<tipo>.json`) é gerado dos se
 | `PUT /api/estabelecimento/regras-atendimento` `{formaPagamentoPadrao?, camposObrigatorios?: {futuro, local}}` | dono | grava; o que não vem fica como estava | forma: pix, dinheiro, cartao ou vazio (sem padrão); campos: nome, telefone, profissional, vendedor, formaPagamento (esta só no local), sem repetir, até 5 |
 | `POST /api/atendimentos` `formaPagamento?` | quem já tinha | atendimento feito guarda a forma (escolhida ou padrão); campos obrigatórios das regras valem nos dois tipos | sem padrão e nada escolhido = 400 "Escolha a forma de pagamento."; futuro ignora a forma |
 
+## 10i. Cupons e vales (v96, 5d-4c-2; `CupomTest`, `CupomEquivalenciaTest`, `equivalencia/cupons.json`)
+| Rota | Quem | O que faz | Regras |
+|---|---|---|---|
+| `GET /api/cupons` | seção Estabelecimento | lista com chave, `situacao` (vigente, futuro, esgotado, expirado, inativo) e `usos` | uso derivado dos agendamentos não cancelados |
+| `POST /api/cupons` `{nome, tipo, servicoIds?, percentual?, valor?, inicio, fim, usosMax?, usosPorCliente?}` | idem | cria e devolve a chave **gerada no servidor** | corpo com `chave` = 400; tipo servico/percentual/valor; vale exige serviço; % de 1 a 100; R$ de 0,01 a 10000; fim >= início; usos 1 a 10000 e 1 a 100; até 200 |
+| `PUT /api/cupons/{id}` | idem | altera (a chave não muda) | histórico (venceu ou encerrado) = 400 |
+| `POST /api/cupons/{id}/chave` | idem | nova chave; a antiga deixa de valer | histórico = 400; quem já usou mantém o desconto |
+| `DELETE /api/cupons/{id}` | idem | nunca usado: apaga; usado: encerra → `{desativado: true}` | outra loja = 404 |
+| `POST /api/agendamentos/{id}/cupom` `{chave}` | seção agenda (profissional só no próprio horário) | aplica o desconto por serviço | só a confirmar/confirmado; um por horário; chave inexistente = "Cupom inválido ou indisponível." e conta tentativa; 5 erradas = 429 por 15 min; vigência, esgotado e limite por cliente com mensagem própria |
+| `DELETE /api/agendamentos/{id}/cupom` | idem | retira e devolve o uso | só a confirmar/confirmado |
+| `POST /api/atendimentos` `cupomChave?` | quem já tinha | agendamento futuro nasce com o cupom | chave errada = nada é criado; atendimento feito com cupom = 400 |
+Agenda: `desconto`, `cupom {nome, tipo, servicoIds, percentual, valor}` (nunca a chave) e `servicos[].desconto`. Comissão: base = preço − desconto.
+
 ## 11. Pontos do protótipo que **não** existem no real (tratar como pendência)
 
 `MODO_DEMO` (código de recuperação na resposta), `bancoSimulado`, `store.avancar`/`reiniciar`, snapshot com senhas e CPFs, sessão em variável do navegador, contadores de login na memória, chave de autoria no front. Todos substituídos pelas camadas das seções 0 a 10.

@@ -36,6 +36,7 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
   const [formaEscolhida, setFormaEscolhida] = useState('');
   const [status, setStatus] = useState('a_confirmar');
   const [encaixe, setEncaixe] = useState(false);
+  const [cupomChave, setCupomChave] = useState('');
   const [motivo, setMotivo] = useState('');
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
@@ -84,7 +85,7 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
     const r = await api.atender({
       servicoIds: ids, ...(itens.length ? { produtos: itens, vendedorId: vendedor } : {}), nome, telefone, ...(cliente ? { clienteId: cliente.id } : {}), profissionalId: profId,
       ...(personalizar ? { inicio } : {}), ...(retro ? { motivoRetroativo: motivo } : {}),
-      ...(tipo === 'futuro' ? { status, encaixe } : { formaPagamento: forma }),
+      ...(tipo === 'futuro' ? { status, encaixe, ...(cupomChave.trim() ? { cupomChave } : {}) } : { formaPagamento: forma }),
     });
     setEnviando(false);
     if (!r.ok) { setErro(r.erro); return; }
@@ -204,6 +205,11 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
           </div>
           <p className="muted">Só fica registrado (a cobrança e o financeiro vêm depois).</p>
         </fieldset>
+      )}
+      {tipo === 'futuro' && (
+        <Campo rotulo="Cupom (chave, opcional)">
+          <input value={cupomChave} maxLength={40} autoComplete="off" autoCapitalize="characters" spellCheck={false} onChange={(e) => { setCupomChave(e.target.value); setErro(''); }} placeholder="XXXX-XXXX-XXXX" data-testid="atender-cupom" />
+        </Campo>
       )}
       {tipo === 'futuro' && <label className="check-linha"><input type="checkbox" checked={encaixe} onChange={(e) => setEncaixe(e.target.checked)} data-testid="atender-encaixe" /><span>Encaixe (pode ficar sobre um horário já confirmado)</span></label>}
 

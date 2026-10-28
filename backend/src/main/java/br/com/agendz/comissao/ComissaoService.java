@@ -156,7 +156,7 @@ public class ComissaoService {
         congelarPendentes(jdbc);
         Map<UUID, Atendimento> porId = new LinkedHashMap<>();
         String cab = "a.id, a.inicio, a.comissao_em, a.status, a.cliente_id, a.nome_avulso, a.profissional_id, a.origem";
-        jdbc.query("select " + cab + ", s.nome, 1 as qtd, s.preco as base, s.comissao_pct as pct, s.comissao_pagamento_id, cp.em as paga_em, s.comissao_cancelada_motivo as canc, "
+        jdbc.query("select " + cab + ", s.nome, 1 as qtd, (s.preco - s.desconto) as base, s.comissao_pct as pct, s.comissao_pagamento_id, cp.em as paga_em, s.comissao_cancelada_motivo as canc, "
                         + "a.profissional_id as beneficiario, false as produto from agendamento_servico s join agendamento a on a.id = s.agendamento_id "
                         + "left join comissao_pagamento cp on cp.id = s.comissao_pagamento_id where " + onde + " order by a.inicio, a.id, s.ordem",
                 rs -> { guardar(rs, porId, quem); }, args);

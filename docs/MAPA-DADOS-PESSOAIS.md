@@ -84,6 +84,7 @@ Snapshot do estado com senhas e CPFs em texto puro no navegador; senha comparada
 
 ## Cupons e vales (v46)
 - A **chave do cupom** é segredo de acesso (quem a tem usa o desconto): nunca em log, em URL ou em resposta a quem não tem o menu Estabelecimento; ao cliente só vai a chave que ele próprio recebeu. Guardar cifrada ou como hash (ver `cupons.listar` no mapa da API).
+- No servidor real (v96) a chave fica em texto em `cupom.chave` (o proprietário precisa vê-la); só a seção Estabelecimento a lê. Tentativas erradas ficam em `cupom_tentativa` ligadas ao id do usuário logado (nunca à chave digitada).
 - O agendamento guarda só uma **cópia do que o cupom valia** (nome, tipo, serviços, % ou R$), nunca a chave.
 - Tentativas erradas de chave ficam por telefone (`cuponsTentativas`) com validade curta; é dado pessoal (telefone): apagar após o bloqueio expirar.
 - A **cor** de cada pessoa da equipe (`cor`, número de 0 a 35) não é dado pessoal sensível.

@@ -35,7 +35,7 @@ function Cartao({ a, nomeCliente, nomeProf, mostraProf, aberto, aoAbrir, testid,
         </div>
         <div className="cartao-corpo">
           <span>{servicos}</span>
-          <span className="muted cartao-com">{mostraProf ? `com ${nomeProf} · ` : ''}{fmtMoney(a.total + a.totalProdutos)}</span>
+          <span className="muted cartao-com">{mostraProf ? `com ${nomeProf} · ` : ''}{fmtMoney(a.total - a.desconto + a.totalProdutos)}</span>
         </div>
         <div className="cartao-rodape">
           {a.encaixe && <span className="chip chip-p chip-encaixe">Encaixe</span>}
@@ -57,6 +57,8 @@ function Detalhe({ a, nomeProf, nomeDe, profissionais, ehDono, aoAlterar }) {
   const [remarcando, setRemarcando] = useState(false);
   const [quando, setQuando] = useState(() => aoLocal(a.inicio));
   const [prof, setProf] = useState(a.profissionalId);
+  const [cupomAberto, setCupomAberto] = useState(false);
+  const [chave, setChave] = useState('');
   useEffect(() => { let vivo = true; api.obter(a.id).then((r) => { if (vivo && r.ok) setHist(r.agendamento.historico); }); return () => { vivo = false; }; }, [a.id, a.status, a.inicio]);
   const executar = async (fn, aviso) => {
     if (ocupado) return;
@@ -64,7 +66,7 @@ function Detalhe({ a, nomeProf, nomeDe, profissionais, ehDono, aoAlterar }) {
     const r = await fn();
     setOcupado(false);
     if (!r.ok) { setErro(r.erro); return; }
-    setCancelando(false); setRemarcando(false);
+    setCancelando(false); setRemarcando(false); setCupomAberto(false); setChave('');
     aoAlterar(aviso, r.agendamento);
   };
   const mudar = (status, aviso) => () => executar(() => api.mudarStatus(a.id, status), aviso);
@@ -75,14 +77,27 @@ function Detalhe({ a, nomeProf, nomeDe, profissionais, ehDono, aoAlterar }) {
     executar(() => api.remarcar(a.id, { inicio: ts, ...(ehDono && prof !== a.profissionalId ? { profissionalId: prof } : {}) }), 'Agendamento remarcado.');
   };
   const ativoStatus = a.status;
+  const podeCupom = (ativoStatus === 'a_confirmar' || ativoStatus === 'confirmado') && a.origem !== 'atendimento'; // atendimento local nunca usa cupom
   return (
     <div className="cartao-detalhe" data-testid="agendamento-detalhe">
       <ul className="detalhe-itens">
-        {a.servicos.map((s, i) => <li key={`${s.servicoId}-${i}`}>{s.nome} · {s.duracaoMin} min · {fmtMoney(s.preco)}</li>)}
+        {a.servicos.map((s, i) => <li key={`${s.servicoId}-${i}`}>{s.nome} · {s.duracaoMin} min · {fmtMoney(s.preco)}{s.desconto > 0 ? ` (cupom −${fmtMoney(s.desconto)})` : ''}</li>)}
         {a.produtos.map((p) => <li key={p.materialId} data-testid="detalhe-produto">{p.qtd}× {p.nome} · {fmtMoney(p.preco * p.qtd)}{p.vendedorId && p.vendedorId !== a.profissionalId ? ` · vendeu ${nomeDe(p.vendedorId)}` : ''}</li>)}
       </ul>
       <p className="muted">{fmtDateTime(a.inicio)} até {fmtHM(a.fim ?? a.inicio)} · com {nomeProf}{a.motivoCancelamento ? ` · cancelado (${a.motivoCancelamento})` : ''}</p>
       {erro && <Aviso tipo="erro" data-testid="agendamento-erro">{erro}</Aviso>}
+      {a.cupom && <p data-testid="detalhe-cupom"><Icone n="key" size={14} /> Cupom {a.cupom.nome}: −{fmtMoney(a.desconto)} · a pagar {fmtMoney(a.total - a.desconto + a.totalProdutos)}</p>}
+      {podeCupom && !a.cupom && !cupomAberto && !cancelando && !remarcando && <div className="acoes"><Btn tamanho="sm" onClick={() => { setCupomAberto(true); setErro(''); }} data-testid="acao-cupom">Aplicar cupom</Btn></div>}
+      {podeCupom && a.cupom && !cancelando && !remarcando && <div className="acoes"><Btn tamanho="sm" disabled={ocupado} onClick={() => executar(() => api.retirarCupom(a.id), 'Cupom retirado.')} data-testid="acao-retirar-cupom">Retirar cupom</Btn></div>}
+      {cupomAberto && (
+        <form className="form-grade" onSubmit={(e) => { e.preventDefault(); executar(() => api.aplicarCupom(a.id, chave), 'Cupom aplicado.'); }} data-testid="cupom-form-agenda">
+          <Campo rotulo="Chave do cupom"><input value={chave} maxLength={40} autoComplete="off" autoCapitalize="characters" spellCheck={false} onChange={(e) => { setChave(e.target.value); setErro(''); }} placeholder="XXXX-XXXX-XXXX" data-testid="cupom-chave-agenda" /></Campo>
+          <div className="acoes">
+            <Btn tamanho="sm" onClick={() => { setCupomAberto(false); setChave(''); setErro(''); }} data-testid="cupom-voltar">Voltar</Btn>
+            <Btn variante="primario" tamanho="sm" type="submit" disabled={ocupado} data-testid="cupom-aplicar">{ocupado ? 'Aplicando…' : 'Aplicar'}</Btn>
+          </div>
+        </form>
+      )}
       {!cancelando && !remarcando && (
         <div className="acoes">
           {ativoStatus === 'a_confirmar' && <Btn variante="primario" tamanho="sm" disabled={ocupado} onClick={mudar('confirmado', 'Agendamento confirmado.')} data-testid="acao-confirmar">Confirmar</Btn>}

@@ -1,0 +1,33 @@
+{
+  "descricao": "Cupons (5d-4c-2): quanto cada serviço desconta e como a chave é lida. Roda em tests/cupons-equivalencia.test.mjs (src/domain/cupons.js) e em CupomEquivalenciaTest (cupom/CupomRegras).",
+  "descontos": [
+    { "nome": "10% em todos os serviços", "tipo": "percentual", "servicoIds": [], "percentual": 10, "valor": null, "itens": [{ "id": "a", "valor": 45 }, { "id": "b", "valor": 35 }], "esperado": { "a": 4.5, "b": 3.5 } },
+    { "nome": "100% = de graça, nunca passa do preço", "tipo": "percentual", "servicoIds": [], "percentual": 100, "valor": null, "itens": [{ "id": "a", "valor": 45 }], "esperado": { "a": 45 } },
+    { "nome": "percentual acima de 100 vale 100", "tipo": "percentual", "servicoIds": [], "percentual": 250, "valor": null, "itens": [{ "id": "a", "valor": 45 }], "esperado": { "a": 45 } },
+    { "nome": "33,33% arredonda em centavos", "tipo": "percentual", "servicoIds": [], "percentual": 33.33, "valor": null, "itens": [{ "id": "a", "valor": 45 }], "esperado": { "a": 15 } },
+    { "nome": "12,5% de 45 = 5,625 sobe para 5,63", "tipo": "percentual", "servicoIds": [], "percentual": 12.5, "valor": null, "itens": [{ "id": "a", "valor": 45 }], "esperado": { "a": 5.63 } },
+    { "nome": "percentual só nos serviços escolhidos", "tipo": "percentual", "servicoIds": ["b"], "percentual": 50, "valor": null, "itens": [{ "id": "a", "valor": 45 }, { "id": "b", "valor": 35 }], "esperado": { "b": 17.5 } },
+    { "nome": "serviço de valor zero não recebe desconto", "tipo": "percentual", "servicoIds": [], "percentual": 50, "valor": null, "itens": [{ "id": "a", "valor": 0 }, { "id": "b", "valor": 35 }], "esperado": { "b": 17.5 } },
+    { "nome": "R$ 50 abate do mais caro para o mais barato", "tipo": "valor", "servicoIds": [], "percentual": null, "valor": 50, "itens": [{ "id": "a", "valor": 45 }, { "id": "b", "valor": 35 }], "esperado": { "a": 45, "b": 5 } },
+    { "nome": "R$ 20 cabe todo no serviço mais caro", "tipo": "valor", "servicoIds": [], "percentual": null, "valor": 20, "itens": [{ "id": "a", "valor": 45 }, { "id": "b", "valor": 35 }], "esperado": { "a": 20 } },
+    { "nome": "R$ 100 não passa do valor dos serviços", "tipo": "valor", "servicoIds": [], "percentual": null, "valor": 100, "itens": [{ "id": "a", "valor": 45 }, { "id": "b", "valor": 35 }], "esperado": { "a": 45, "b": 35 } },
+    { "nome": "empate de preço mantém a ordem do agendamento", "tipo": "valor", "servicoIds": [], "percentual": null, "valor": 40, "itens": [{ "id": "a", "valor": 30 }, { "id": "b", "valor": 30 }], "esperado": { "a": 30, "b": 10 } },
+    { "nome": "R$ só nos serviços escolhidos", "tipo": "valor", "servicoIds": ["b"], "percentual": null, "valor": 10, "itens": [{ "id": "a", "valor": 45 }, { "id": "b", "valor": 35 }], "esperado": { "b": 10 } },
+    { "nome": "vale serviço: o serviço sai de graça", "tipo": "servico", "servicoIds": ["b"], "percentual": null, "valor": null, "itens": [{ "id": "a", "valor": 45 }, { "id": "b", "valor": 35 }], "esperado": { "b": 35 } },
+    { "nome": "vale que cobre dois: só o mais caro, um por vale", "tipo": "servico", "servicoIds": ["a", "b"], "percentual": null, "valor": null, "itens": [{ "id": "b", "valor": 35 }, { "id": "a", "valor": 45 }], "esperado": { "a": 45 } },
+    { "nome": "vale de um serviço que não está no horário não desconta nada", "tipo": "servico", "servicoIds": ["c"], "percentual": null, "valor": null, "itens": [{ "id": "a", "valor": 45 }, { "id": "b", "valor": 35 }], "esperado": {} }
+  ],
+  "chaves": [
+    { "entrada": "abcd-efgh-jkmn", "esperado": "ABCD-EFGH-JKMN" },
+    { "entrada": "abcdefghjkmn", "esperado": "ABCD-EFGH-JKMN" },
+    { "entrada": "  ab cd-efgh  jkmn ", "esperado": "ABCD-EFGH-JKMN" },
+    { "entrada": "ABCD-EFGH-JKM0", "esperado": null },
+    { "entrada": "ABCD-EFGH-JKMO", "esperado": null },
+    { "entrada": "ABCD-EFGH-JKM1", "esperado": null },
+    { "entrada": "ABCD-EFGH-JKMI", "esperado": null },
+    { "entrada": "ABCD-EFGH-JKM", "esperado": null },
+    { "entrada": "ABCD-EFGH-JKMNP", "esperado": null },
+    { "entrada": "", "esperado": null },
+    { "entrada": null, "esperado": null }
+  ]
+}

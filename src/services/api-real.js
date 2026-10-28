@@ -395,7 +395,7 @@ function lerAgendamento(d) {
     id: texto(d.id, 40), clienteId: ID.test(String(d.clienteId)) ? d.clienteId : null, profissionalId: texto(d.profissionalId, 40),
     inicio, fim: instante(d.fim), fimOcupado: instante(d.fimOcupado), status: STATUS_AGENDA.includes(d.status) ? d.status : 'a_confirmar',
     encaixe: d.encaixe === true, total: numeroOuNulo(d.total) ?? 0,
-    servicos: listaDe(d.servicos, 20).map((i) => ({ servicoId: texto(i && i.servicoId, 40), nome: texto(i && i.nome, 100), preco: numeroOuNulo(i && i.preco) ?? 0, duracaoMin: numeroOuNulo(i && i.duracaoMin) ?? 0 })),
+    servicos: listaDe(d.servicos, 20).map((i) => ({ servicoId: texto(i && i.servicoId, 40), nome: texto(i && i.nome, 100), preco: numeroOuNulo(i && i.preco) ?? 0, duracaoMin: numeroOuNulo(i && i.duracaoMin) ?? 0, desconto: numeroOuNulo(i && i.desconto) ?? 0 })),
     conflitosPendentes: listaDe(d.conflitosPendentes, 50).map((c) => texto(c, 40)).filter((c) => ID.test(c)),
     origem: texto(d.origem, 20), reagendado: d.reagendado === true, motivoCancelamento: d.motivoCancelamento ? texto(d.motivoCancelamento, 30) : '', statusManual: d.statusManual === true,
     nomeAvulso: d.nomeAvulso ? texto(d.nomeAvulso, 100) : '', motivoRetroativo: d.motivoRetroativo ? texto(d.motivoRetroativo, 300) : '',
@@ -404,6 +404,9 @@ function lerAgendamento(d) {
     produtos: listaDe(d.produtos, 20).map((p) => ({ materialId: texto(p && p.materialId, 40), nome: texto(p && p.nome, 100), qtd: numeroOuNulo(p && p.qtd) ?? 0, preco: numeroOuNulo(p && p.preco) ?? 0, vendedorId: texto(p && p.vendedorId, 40) })),
     totalProdutos: numeroOuNulo(d.totalProdutos) ?? 0,
     formaPagamento: ['pix', 'dinheiro', 'cartao'].includes(d.formaPagamento) ? d.formaPagamento : '',
+    // cupom (5d-4c-2): só o nome e o tipo; a chave nunca volta na agenda. `total` é o bruto dos serviços; o que o cliente paga é total − desconto (+ produtos).
+    cupom: d.cupom && typeof d.cupom === 'object' ? { nome: texto(d.cupom.nome, 60), tipo: ['servico', 'percentual', 'valor'].includes(d.cupom.tipo) ? d.cupom.tipo : 'percentual' } : null,
+    desconto: numeroOuNulo(d.desconto) ?? 0,
   };
 }
 const soDia = (ts) => (Number.isFinite(ts) ? new Date(ts).toISOString() : null);
@@ -455,6 +458,7 @@ export const agenda = {
       if (!['pix', 'dinheiro', 'cartao'].includes(d.formaPagamento)) return { ok: false, status: 0, erro: 'Forma de pagamento inválida.' };
       corpo.formaPagamento = d.formaPagamento; // só vale no atendimento local (o servidor guarda; no agendamento futuro é ignorada)
     }
+    if (typeof d.cupomChave === 'string' && d.cupomChave.trim()) corpo.cupomChave = d.cupomChave.trim().slice(0, 40); // só no agendamento futuro; chave errada = nada é criado
     // Mesmo pedido de novo (clique repetido depois de um erro de rede) usa a mesma chave: o servidor devolve o que já fez e não grava duas vezes.
     // Pedido diferente, ou depois de um sucesso, ganha chave nova (dois atendimentos iguais de propósito continuam possíveis).
     const assinatura = JSON.stringify(corpo);
@@ -470,6 +474,20 @@ export const agenda = {
     const r = await chamar('PUT', `/api/agendamentos/${id}/status`, { status });
     return r.ok ? { ok: true, agendamento: lerAgendamento(r.dados) } : r;
   },
+  // POST /api/agendamentos/{id}/cupom  { chave }  (só a confirmar ou confirmado; um cupom por horário; chave errada responde sempre a mesma mensagem e 5 seguidas bloqueiam por 15 min)
+  async aplicarCupom(id, chave) {
+    if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Agendamento não encontrado.' };
+    const c = typeof chave === 'string' ? chave.trim().slice(0, 40) : '';
+    if (!c) return { ok: false, status: 0, erro: 'Informe a chave do cupom.' };
+    const r = await chamar('POST', `/api/agendamentos/${id}/cupom`, { chave: c });
+    return r.ok ? { ok: true, agendamento: lerAgendamento(r.dados) } : r;
+  },
+  // DELETE /api/agendamentos/{id}/cupom  (retira o cupom e devolve o uso)
+  async retirarCupom(id) {
+    if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Agendamento não encontrado.' };
+    const r = await chamar('DELETE', `/api/agendamentos/${id}/cupom`);
+    return r.ok ? { ok: true, agendamento: lerAgendamento(r.dados) } : r;
+  },
   // PUT /api/agendamentos/{id}/remarcar  { inicio, profissionalId?, encaixe?, status? }   (concluído nunca; cancelado só junto com um status não cancelado)
   async remarcar(id, { inicio, profissionalId, encaixe, status } = {}) {
     if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Agendamento não encontrado.' };
@@ -481,6 +499,58 @@ export const agenda = {
     if (status !== undefined) { if (!STATUS_AGENDA.includes(status)) return { ok: false, status: 0, erro: 'Status inválido.' }; corpo.status = status; }
     const r = await chamar('PUT', `/api/agendamentos/${id}/remarcar`, corpo);
     return r.ok ? { ok: true, agendamento: lerAgendamento(r.dados) } : r;
+  },
+};
+
+// ---------- cupons (5d-4c-2; regras no servidor: CupomService; só quem tem a seção Estabelecimento) ----------
+const SITUACOES_CUPOM = ['inativo', 'futuro', 'expirado', 'esgotado', 'vigente'];
+const diaIso = (v) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : '');
+function lerCupom(d) {
+  d = d || {};
+  return {
+    id: texto(d.id, 40), nome: texto(d.nome, 60), tipo: ['servico', 'percentual', 'valor'].includes(d.tipo) ? d.tipo : 'percentual',
+    servicoIds: listaDe(d.servicoIds, 10).map((x) => texto(x, 40)).filter((x) => ID.test(x)), percentual: numeroOuNulo(d.percentual), valor: numeroOuNulo(d.valor),
+    inicio: diaIso(d.inicio), fim: diaIso(d.fim), usosMax: numeroOuNulo(d.usosMax) ?? 1, usosPorCliente: numeroOuNulo(d.usosPorCliente) ?? 1,
+    chave: texto(d.chave, 20), ativo: d.ativo !== false, situacao: SITUACOES_CUPOM.includes(d.situacao) ? d.situacao : 'inativo', usos: numeroOuNulo(d.usos) ?? 0,
+  };
+}
+const numeroDoCampo = (v) => (v === '' || v === null || v === undefined ? null : Number(v));
+export const cupons = {
+  // GET /api/cupons  (com a chave: é do estabelecimento; ela nunca vai para a agenda nem para o cliente)
+  async listar() {
+    const r = await chamar('GET', '/api/cupons');
+    return r.ok ? { ok: true, cupons: listaDe(r.dados, 200).map(lerCupom) } : r;
+  },
+  // POST /api/cupons  |  PUT /api/cupons/{id}   (a chave nasce no servidor: nunca é enviada; cupom do histórico não se altera)
+  async salvar(d) {
+    d = d && typeof d === 'object' ? d : {};
+    if (!['servico', 'percentual', 'valor'].includes(d.tipo)) return { ok: false, status: 0, erro: 'Escolha o tipo: vale serviço, desconto em % ou em R$.' };
+    const ids = listaDe(d.servicoIds, 10).map((x) => String(x ?? ''));
+    if (!ids.every((x) => ID.test(x))) return { ok: false, status: 0, erro: 'Serviço não encontrado.' };
+    const inicio = diaIso(d.inicio), fim = diaIso(d.fim);
+    if (!inicio || !fim) return { ok: false, status: 0, erro: 'Informe o começo e o fim da vigência.' };
+    const corpo = { nome: texto(d.nome, 60), tipo: d.tipo, servicoIds: ids, inicio, fim };
+    for (const [k, campo] of [['percentual', d.percentual], ['valor', d.valor], ['usosMax', d.usosMax], ['usosPorCliente', d.usosPorCliente]]) {
+      const n = numeroDoCampo(campo);
+      if (n !== null && !Number.isFinite(n)) return { ok: false, status: 0, erro: 'Informe só números nos valores e nos limites.' };
+      if (n !== null && (k === 'usosMax' || k === 'usosPorCliente' || (k === 'percentual' && d.tipo === 'percentual') || (k === 'valor' && d.tipo === 'valor'))) corpo[k] = n;
+    }
+    const edicao = d.id !== undefined && d.id !== null && d.id !== '';
+    if (edicao && !ID.test(String(d.id))) return { ok: false, status: 0, erro: 'Cupom não encontrado.' };
+    const r = await chamar(edicao ? 'PUT' : 'POST', edicao ? `/api/cupons/${d.id}` : '/api/cupons', corpo);
+    return r.ok ? { ok: true, cupom: lerCupom(r.dados) } : r;
+  },
+  // POST /api/cupons/{id}/chave  (a chave antiga deixa de valer na hora; quem já usou mantém o desconto)
+  async novaChave(id) {
+    if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Cupom não encontrado.' };
+    const r = await chamar('POST', `/api/cupons/${id}/chave`);
+    return r.ok ? { ok: true, cupom: lerCupom(r.dados) } : r;
+  },
+  // DELETE /api/cupons/{id}  (nunca usado: apaga; já usado: só encerra e vai para o histórico → { desativado: true })
+  async remover(id) {
+    if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Cupom não encontrado.' };
+    const r = await chamar('DELETE', `/api/cupons/${id}`);
+    return r.ok ? { ok: true, desativado: !!(r.dados && r.dados.desativado === true) } : r;
   },
 };
 
