@@ -61,3 +61,15 @@ O site real só tinha login, primeiro acesso e Reconfigurar; os donos não conse
 
 ## O que preciso de você (histórico: confirmado em 27/10)
 Confirmar: (1) o Artifact fica simulado e sem rede; (2) o site publicado vira real por partes, na ordem acima. Se concordar, começo por `auth` + bootstrap.
+
+## Parte 5 — agenda no site real (plano em fatias, 27/10/2026)
+
+O motor do navegador (`domain/engine.js`, 838 linhas, mais `api.js`) tem muito mais regra do que o núcleo que já existe no servidor (`AgendaController`: criar, status, remarcar, conflito, expediente, `cancelarPendentesQueCobrem`). Para não entregar uma agenda pela metade, a parte 5 sai em fatias, cada uma com a regra inteira no servidor, tela em `src/ui/real/`, equivalência (`equivalencia/agenda.json`) e CI verde. **As senhas dos donos continuam retidas até a 5c.**
+
+- **5a — núcleo completo no servidor (sem tela):** migração V13 (veículo e porte congelados no agendamento, `origem`, `motivo_cancelamento`, log de eventos `agendamento_evento` com autor/campo/de/para, `status_manual`, `nome_avulso`); antecedência mínima do serviço; expansão do combo (`componentes`); preço/duração por porte (`servicoNoPorte`); veículo do cliente validado (trava "veículo com agendamento ativo não sai" em `ClienteService`); cancelar com motivo; reativar confere horário; `tick` (concluir ao fim, cancelar pendente sem confirmação) como tarefa agendada no servidor; tudo com equivalência contra `engine.js`.
+- **5b — telas Horários e Calendário** (somente leitura + status + remarcar + cancelar), `SeletorProfissionais`, escala por profissional.
+- **5c — Atender** (agendamento futuro e atendimento local), cliente por nome+telefone (`resolverClienteDoAtendimento`), veículo/porte na tela. Aqui a agenda real "existe": **liberar as senhas dos donos**.
+- **5d — produtos, comissão, pagamento local** (`domain/comissao.js`, `pagamento.js`).
+- **5e — link do cliente (`#agendar`), mensagens/WhatsApp, lembretes, Pix.**
+
+Decisão sem confirmação: o `tick` do servidor roda por `@Scheduled` (por loja, dentro de `naLoja`) e não a cada leitura, para a leitura continuar sem efeito colateral.
