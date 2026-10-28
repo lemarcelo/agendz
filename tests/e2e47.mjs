@@ -17,6 +17,8 @@ const chamadas = [];
 let papel = 'dono';
 let tipoLoja = 'barbearia';
 let seq = 0;
+let derrubar = 0; // quantas respostas de POST /api/atendimentos o servidor falso "perde" (grava e derruba a conexão)
+const porChave = new Map(); // Idempotency-Key → agendamento já gravado
 const servidor = http.createServer((req, res) => {
   let corpo = '';
   req.on('data', (c) => { corpo += c; });
@@ -45,7 +47,11 @@ const servidor = http.createServer((req, res) => {
       const futuro = quando > AGORA.getTime() + 60000;
       if (!futuro && quando < INICIO_DO_DIA && !(c.motivoRetroativo && c.motivoRetroativo.length >= 5)) return json(400, { mensagem: 'Informe o motivo do lançamento de um dia anterior (por que não foi registrado na hora).' });
       const a = { id: id(300 + (seq += 1)), clienteId: c.clienteId || NOVO, profissionalId: papel === 'profissional' ? KIKO : (c.profissionalId || ALAN), inicio: new Date(quando).toISOString(), fim: new Date(quando + 45 * 60000).toISOString(), fimOcupado: new Date(quando + 45 * 60000).toISOString(), status: futuro ? (c.status || 'a_confirmar') : 'concluido', encaixe: !!c.encaixe, total: 45, servicos: [{ servicoId: SRV_CORTE, nome: 'Corte', preco: 45, duracaoMin: 45 }], conflitosPendentes: [], origem: futuro ? 'painel' : 'atendimento', reagendado: false, statusManual: false, motivoRetroativo: c.motivoRetroativo || null, historico: [] };
+      const chave = req.headers['idempotency-key'];
+      if (chave && porChave.has(chave)) return json(201, porChave.get(chave)); // repetição: devolve o que já gravou
       banco.push(a);
+      if (chave) porChave.set(chave, a);
+      if (derrubar > 0) { derrubar -= 1; return req.socket.destroy(); } // gravou, mas a resposta se perde
       return json(201, a);
     }
     if (u.pathname === '/api/agendamentos' && req.method === 'GET') {
@@ -192,6 +198,24 @@ const textoDe = (p, t) => p.getByTestId(t).innerText();
   await p.getByTestId('atender-data').fill('2026-11-03T10:00');
   await semRolagem('atender futuro');
   ok('390 px com fonte larga: sem rolagem lateral');
+  await ctx.close();
+}
+
+// 8. resposta perdida com o aparelho online: o site reenvia sozinho com a MESMA chave e o servidor não grava duas vezes
+{
+  const { ctx, p } = await abrir();
+  const antes = banco.length;
+  derrubar = 1;
+  await p.getByTestId('atender-abrir').click();
+  await p.getByTestId(`atender-srv-${SRV_BARBA}`).check();
+  await p.getByTestId('atender-telefone').fill('(11) 95555-4444');
+  await p.getByTestId('salvar-atender').click();
+  await p.getByTestId('agenda-aviso').waitFor({ timeout: 15000 });
+  assert.match(await textoDe(p, 'agenda-aviso'), /Atendimento registrado/);
+  const envios = chamadas.filter((c) => c.m === 'POST' && c.u === '/api/atendimentos').slice(-2);
+  assert.equal(envios.length, 2, 'duas tentativas: a primeira perdeu a resposta');
+  assert.equal(banco.length, antes + 1, 'gravou uma vez só');
+  ok('resposta perdida: reenvio automático com a mesma chave, sem duplicar');
   await ctx.close();
 }
 

@@ -58,7 +58,7 @@ Você trabalha no Agendz (repositório `lemarcelo/agendz`, pasta `agendz`). Leia
 
 15. **[Pedido do Marcelo em 28/10] AVISAR quando os proprietários puderem receber o login** e usar de verdade (entrar, usar e salvar, com acesso a Serviços), e o assistente de início deve deixar **descrever serviços próprios na hora** (FEITO na v86). O aviso vem quando a agenda real (5c) estiver no ar: Alan (Dalforno) e Kiko (Offbox) primeiro; Davi só depois da agenda da estética. Quando chegar, dizer no relato final em uma linha: "pode mandar o login para X".
 
-16. **Sem internet (feito em parte, v87):** espera + envio único ao voltar a conexão está no site real e no Admin. Falta (depois da 5c): `Idempotency-Key` nas escritas do servidor (guardar a chave por loja e devolver a mesma resposta) e, só para Atender e agenda do profissional, fila no aparelho com aviso de conflito se o horário foi ocupado enquanto estava offline.
+16. **Sem internet (feito em parte, v87 e v90):** `Idempotency-Key` já vale em `POST /api/atendimentos` e `POST /api/agendamentos` (V16) e o site reenvia sozinho resposta perdida só com chave; falta levar a chave às escritas de dinheiro quando existirem (5d). Antes:  espera + envio único ao voltar a conexão está no site real e no Admin. Falta (depois da 5c): `Idempotency-Key` nas escritas do servidor (guardar a chave por loja e devolver a mesma resposta) e, só para Atender e agenda do profissional, fila no aparelho com aviso de conflito se o horário foi ocupado enquanto estava offline.
 
 ## Segredos e senhas (inegociável)
 Nunca escreva senha, token ou chave em chat, arquivo, commit, log ou saída do CI. Senha de usuário real nasce no servidor e só o Marcelo a vê, uma vez. O que o CI usa de produção são só endpoints públicos.

@@ -29,7 +29,8 @@ export function cancelarEspera() { const e = esperas; esperas = []; e.forEach((x
 const semRede = () => typeof navigator !== 'undefined' && navigator.onLine === false;
 // Segura a chamada enquanto o navegador estiver sem internet; volta true quando a rede voltar e false se a pessoa cancelar.
 // Só se espera quando o aparelho SABE que está offline: a requisição não saiu, então reenviar nunca duplica. Queda no meio de uma resposta
-// (aparelho online, resposta perdida) NÃO é reenviada sozinha: o servidor ainda não tem chave de repetição.
+// (aparelho online, resposta perdida) só é reenviada sozinha quando o pedido leva chave de repetição (`Idempotency-Key`): o servidor devolve a mesma
+// resposta e nunca grava duas vezes. Sem a chave, nada é reenviado sozinho.
 function esperarRede() {
   return new Promise((resolve) => {
     const item = {};
@@ -51,22 +52,37 @@ function mensagemPadrao(status) {
 }
 
 // Uma chamada. Devolve { ok: true, status, dados } ou { ok: false, status, erro } (status 0 = sem conexão).
-async function chamar(metodo, caminho, corpo) {
+// `chave` (opcional) vai no cabeçalho Idempotency-Key; com ela, resposta perdida com o aparelho online é reenviada sozinha (até 3 tentativas).
+const ESPERAS_REENVIO_MS = [1500, 4000];
+const pausa = (ms) => new Promise((r) => setTimeout(r, ms));
+async function chamar(metodo, caminho, corpo, chave) {
+  let reenvios = 0;
   for (;;) {
     if (semRede() && !(await esperarRede())) return { ok: false, status: 0, erro: 'Sem conexão com o servidor. Confira a internet e tente de novo.' };
-    const r = await tentar(metodo, caminho, corpo);
+    const r = await tentar(metodo, caminho, corpo, chave);
     if (r.status === 0 && semRede()) continue; // caiu a rede durante o envio: espera voltar e manda de novo (a requisição não chegou ao servidor)
+    if (r.status === 0 && chave && reenvios < ESPERAS_REENVIO_MS.length) { await pausa(ESPERAS_REENVIO_MS[reenvios++]); continue; } // resposta perdida: a chave torna o reenvio seguro
     return r;
   }
 }
 
-async function tentar(metodo, caminho, corpo) {
+// Chave de repetição: 32 caracteres aleatórios (o servidor aceita 16 a 64 de A-Z a-z 0-9 _ -).
+function novaChave() {
+  const c = globalThis.crypto;
+  if (c && typeof c.randomUUID === 'function') return c.randomUUID().replace(/-/g, '');
+  const b = new Uint8Array(16);
+  c.getRandomValues(b);
+  return Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+}
+
+async function tentar(metodo, caminho, corpo, chave) {
   const ctl = typeof AbortController === 'function' ? new AbortController() : null;
   const t = ctl ? setTimeout(() => ctl.abort(), TEMPO_MAX_MS) : null;
   try {
     const cab = { Accept: 'application/json' };
     if (corpo !== undefined) cab['Content-Type'] = 'application/json';
     if (token) cab.Authorization = `Bearer ${token}`;
+    if (chave) cab['Idempotency-Key'] = chave;
     const r = await fetch(`${base}${caminho}`, { method: metodo, headers: cab, body: corpo === undefined ? undefined : JSON.stringify(corpo), credentials: 'omit', cache: 'no-store', signal: ctl ? ctl.signal : undefined });
     let dados = null;
     try { dados = await r.json(); } catch { dados = null; }
@@ -364,6 +380,7 @@ function lerAgendamento(d) {
   };
 }
 const soDia = (ts) => (Number.isFinite(ts) ? new Date(ts).toISOString() : null);
+let ultimaTentativa = { assinatura: '', chave: '' };
 export const agenda = {
   // GET /api/agendamentos?de=&ate=  (até 366 dias, 1000 itens; o profissional só recebe os dele)
   async listar({ de, ate }) {
@@ -395,7 +412,12 @@ export const agenda = {
     if (d.inicio !== undefined && d.inicio !== null) { const i = soDia(d.inicio); if (!i) return { ok: false, status: 0, erro: 'Data e hora inválidas.' }; corpo.inicio = i; }
     if (d.status !== undefined && d.status !== null && d.status !== '') { if (!['a_confirmar', 'confirmado'].includes(d.status)) return { ok: false, status: 0, erro: 'Agendamento futuro nasce a confirmar ou confirmado.' }; corpo.status = d.status; }
     if (typeof d.encaixe === 'boolean') corpo.encaixe = d.encaixe;
-    const r = await chamar('POST', '/api/atendimentos', corpo);
+    // Mesmo pedido de novo (clique repetido depois de um erro de rede) usa a mesma chave: o servidor devolve o que já fez e não grava duas vezes.
+    // Pedido diferente, ou depois de um sucesso, ganha chave nova (dois atendimentos iguais de propósito continuam possíveis).
+    const assinatura = JSON.stringify(corpo);
+    if (ultimaTentativa.assinatura !== assinatura) ultimaTentativa = { assinatura, chave: novaChave() };
+    const r = await chamar('POST', '/api/atendimentos', corpo, ultimaTentativa.chave);
+    if (r.ok) ultimaTentativa = { assinatura: '', chave: '' };
     return r.ok ? { ok: true, agendamento: lerAgendamento(r.dados) } : r;
   },
   // PUT /api/agendamentos/{id}/status  { status }   (reativar confere o horário; confirmar cancela os "a confirmar" que o cobrem)

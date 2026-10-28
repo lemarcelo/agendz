@@ -88,3 +88,5 @@ Tipo imutável; loja pelo endereço; um código só com pastas por tipo; capacid
 - **28/10 (v88):** agenda no site real (Horários, Calendário, status, remarcar, cancelar). Falta o Atender real (5c) para liberar os logins dos donos; depois produtos/comissão (5d) e link do cliente/WhatsApp/Pix (5e).
 
 - **28/10 (v89):** Atender no site real para barbearia (agora, passado com motivo e futuro; cliente por telefone). Donos da barbearia (Alan, Kiko) já podem receber o login; Davi só depois de veículo/porte/box. Falta: produtos, pagamento e comissão (5d); link do cliente, WhatsApp e Pix (5e).
+
+- **28/10 (v90):** chave de repetição (`Idempotency-Key`) no Atender e no agendamento: resposta perdida com internet ligada não duplica nada. Próxima: 5d.

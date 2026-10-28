@@ -88,3 +88,41 @@ test('atender: mensagem do servidor chega inteira à tela', async () => {
   assert.equal(r.ok, false);
   assert.match(r.erro, /Informe o motivo do lançamento de um dia anterior/);
 });
+
+test('atender: leva Idempotency-Key; o mesmo pedido de novo repete a chave, outro pedido ou um sucesso gera chave nova', async () => {
+  const SRV = '00000000-0000-4000-8000-000000000050';
+  chamadas = [];
+  globalThis.fetch = async (url, init) => { chamadas.push({ cab: init.headers }); const passa = chamadas.length === 4; return { ok: passa, status: passa ? 201 : 400, json: async () => ({ id: ID, profissionalId: PROF, inicio: '2026-10-28T13:00:00Z', status: 'concluido', mensagem: 'recusado' }) }; };
+  const chaveDe = (i) => chamadas[i].cab['Idempotency-Key'];
+  await agenda.atender({ servicoIds: [SRV], telefone: '11977776666' }); // 0: pedido A, recusado
+  await agenda.atender({ servicoIds: [SRV], telefone: '11977776666' }); // 1: o mesmo pedido A outra vez
+  await agenda.atender({ servicoIds: [SRV], telefone: '11988887777' }); // 2: pedido B, recusado
+  const ok = await agenda.atender({ servicoIds: [SRV], telefone: '11988887777' }); // 3: o mesmo pedido B, agora passa
+  await agenda.atender({ servicoIds: [SRV], telefone: '11988887777' }); // 4: depois do sucesso, o mesmo pedido de propósito
+  assert.match(chaveDe(0), /^[A-Za-z0-9_-]{16,64}$/);
+  assert.equal(chaveDe(0), chaveDe(1), 'mesmo pedido: mesma chave');
+  assert.notEqual(chaveDe(1), chaveDe(2), 'outro pedido: chave nova');
+  assert.equal(chaveDe(2), chaveDe(3), 'repetição do pedido B: mesma chave');
+  assert.equal(ok.ok, true);
+  assert.notEqual(chaveDe(3), chaveDe(4), 'depois de um sucesso: chave nova');
+});
+
+test('resposta perdida com o aparelho online: com chave, reenvia sozinho a MESMA chave e entrega o resultado; sem chave, não reenvia', async () => {
+  const SRV = '00000000-0000-4000-8000-000000000050';
+  chamadas = [];
+  let queda = 2;
+  globalThis.fetch = async (url, init) => {
+    chamadas.push({ metodo: init.method, cab: init.headers });
+    if (queda-- > 0) throw new TypeError('Failed to fetch');
+    return { ok: true, status: 201, json: async () => ({ id: ID, profissionalId: PROF, inicio: '2026-10-28T13:00:00Z', status: 'concluido' }) };
+  };
+  const r = await agenda.atender({ servicoIds: [SRV], telefone: '11966665555' });
+  assert.equal(r.ok, true);
+  assert.equal(chamadas.length, 3, 'duas quedas e o terceiro envio passou');
+  assert.equal(new Set(chamadas.map((c) => c.cab['Idempotency-Key'])).size, 1, 'a mesma chave nas três tentativas');
+  // sem chave (qualquer outra escrita): uma queda online devolve o erro, nada é reenviado
+  chamadas = []; queda = 1;
+  const s = await agenda.mudarStatus(ID, 'confirmado');
+  assert.equal(s.ok, false); assert.equal(s.status, 0);
+  assert.equal(chamadas.length, 1);
+});

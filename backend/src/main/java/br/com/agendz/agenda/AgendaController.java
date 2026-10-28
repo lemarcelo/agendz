@@ -5,6 +5,7 @@ import br.com.agendz.erro.ErroDeNegocio;
 import br.com.agendz.escala.EscalaService;
 import br.com.agendz.tenant.Loja;
 import br.com.agendz.tenant.LojaContext;
+import br.com.agendz.tenant.Idempotencia;
 import br.com.agendz.tenant.LojaJdbc;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -34,6 +35,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -117,12 +119,14 @@ public class AgendaController {
     private final Clock relogio;
     private final EscalaService escalas;
     private final ClienteService clientes;
+    private final Idempotencia idempotencia;
 
-    public AgendaController(LojaJdbc banco, Clock relogio, EscalaService escalas, ClienteService clientes) {
+    public AgendaController(LojaJdbc banco, Clock relogio, EscalaService escalas, ClienteService clientes, Idempotencia idempotencia) {
         this.banco = banco;
         this.relogio = relogio;
         this.escalas = escalas;
         this.clientes = clientes;
+        this.idempotencia = idempotencia;
     }
 
     // ---------------------------------------------------------------- leitura
@@ -166,7 +170,7 @@ public class AgendaController {
     // ---------------------------------------------------------------- criar
 
     @PostMapping("/api/agendamentos")
-    public ResponseEntity<Agendamento> criar(@Valid @RequestBody NovoAgendamento d, @AuthenticationPrincipal Jwt jwt) {
+    public ResponseEntity<Agendamento> criar(@Valid @RequestBody NovoAgendamento d, @RequestHeader(value = "Idempotency-Key", required = false) String chave, @AuthenticationPrincipal Jwt jwt) {
         Loja loja = LojaContext.exigir();
         if (!ehDono(jwt) && !d.profissionalId().toString().equals(jwt.getSubject())) {
             throw new ErroDeNegocio(HttpStatus.FORBIDDEN, "Você só agenda na sua própria agenda.");
@@ -178,9 +182,9 @@ public class AgendaController {
         if (servicoIds.size() > 10) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "No máximo 10 serviços por agendamento.");
         if (new HashSet<>(servicoIds).size() != servicoIds.size()) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "O mesmo serviço aparece duas vezes.");
         boolean encaixe = Boolean.TRUE.equals(d.encaixe());
-        Agendamento criado = banco.naLoja(jdbc -> {
+        Agendamento criado = idempotencia.executar(chave, UUID.fromString(jwt.getSubject()), "POST /api/agendamentos", d, Agendamento.class, () -> banco.naLoja(jdbc -> {
             return inserirAgendamento(jdbc, loja, jwt, d.clienteId(), d.profissionalId(), servicoIds, d.inicio(), status, encaixe);
-        });
+        }));
         return ResponseEntity.status(HttpStatus.CREATED).body(criado);
     }
 
@@ -231,7 +235,7 @@ public class AgendaController {
      * Campos obrigatórios: os padrões (futuro: nome e telefone; local: nenhum). Produto, forma de pagamento e comissão entram na fatia 5d.
      */
     @PostMapping("/api/atendimentos")
-    public ResponseEntity<Agendamento> atender(@Valid @RequestBody NovoAtendimento d, @AuthenticationPrincipal Jwt jwt) {
+    public ResponseEntity<Agendamento> atender(@Valid @RequestBody NovoAtendimento d, @RequestHeader(value = "Idempotency-Key", required = false) String chave, @AuthenticationPrincipal Jwt jwt) {
         Loja loja = LojaContext.exigir();
         boolean veTudo = ehDono(jwt);
         Instant agora = relogio.instant();
@@ -247,7 +251,7 @@ public class AgendaController {
         if (new HashSet<>(servicoIds).size() != servicoIds.size()) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "O mesmo serviço aparece duas vezes.");
         boolean futuro = d.inicio() != null && d.inicio().isAfter(agora.plusSeconds(60));
         String nomeInf = d.nome() == null ? "" : br.com.agendz.validacao.Texto.limpar(d.nome());
-        Agendamento feito = banco.naLoja(jdbc -> {
+        Agendamento feito = idempotencia.executar(chave, UUID.fromString(jwt.getSubject()), "POST /api/atendimentos", d, Agendamento.class, () -> banco.naLoja(jdbc -> {
             Boolean semNome = null;
             if (d.clienteId() != null) {
                 List<Boolean> achado = jdbc.query("select sem_nome from cliente where id = ?", (rs, i) -> rs.getBoolean(1), d.clienteId());
@@ -268,7 +272,7 @@ public class AgendaController {
                 return inserirAgendamento(jdbc, loja, jwt, quem.clienteId(), profissionalId, servicoIds, d.inicio(), status, Boolean.TRUE.equals(d.encaixe()));
             }
             return inserirLocal(jdbc, loja, jwt, d, profissionalId, servicoIds, agoraMinuto);
-        });
+        }));
         return ResponseEntity.status(HttpStatus.CREATED).body(feito);
     }
 

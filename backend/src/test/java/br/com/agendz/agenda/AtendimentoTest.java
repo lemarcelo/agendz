@@ -50,6 +50,7 @@ class AtendimentoTest extends BaseApi {
 
     @AfterEach
     void limpar() {
+        jdbc.update("delete from idempotencia");
         jdbc.update("delete from agendamento_servico");
         jdbc.update("delete from agendamento");
         jdbc.update("delete from servico_componente");
@@ -178,5 +179,81 @@ class AtendimentoTest extends BaseApi {
     @Test
     void semLoginNaoAtende() throws Exception {
         mvc.perform(post("/api/atendimentos").with(host(APEX)).contentType(MediaType.APPLICATION_JSON).content(corpo(pabloId, ""))).andExpect(status().isUnauthorized());
+    }
+
+    // ---------- chave de repetição (Idempotency-Key) ----------
+
+    private static final String CHAVE = "chave-de-teste-0001-abcdef";
+
+    private ResultActions atenderComChave(String host, String token, String chave, String corpo) throws Exception {
+        return mvc.perform(post("/api/atendimentos").with(host(host)).header(HttpHeaders.AUTHORIZATION, bearer(token)).header("Idempotency-Key", chave)
+                .contentType(MediaType.APPLICATION_JSON).content(corpo));
+    }
+
+    @Test
+    void mesmaChaveDuasVezesGravaUmaSoEDevolveAMesmaResposta() throws Exception {
+        String corpo = corpo(pabloId, ",\"telefone\":\"53999000020\",\"nome\":\"Ana\"");
+        String um = atenderComChave(APEX, davi, CHAVE, corpo).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        String dois = atenderComChave(APEX, davi, CHAVE, corpo).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        assertEquals(id(um), id(dois));
+        assertEquals(1, jdbc.queryForObject("select count(*) from agendamento", Integer.class));
+        assertEquals(1, jdbc.queryForObject("select count(*) from cliente", Integer.class));
+    }
+
+    @Test
+    void semChaveCadaPedidoGravaUm() throws Exception {
+        String corpo = corpo(pabloId, ",\"telefone\":\"53999000021\"");
+        atender(APEX, davi, corpo).andExpect(status().isCreated());
+        atender(APEX, davi, corpo).andExpect(status().isCreated());
+        assertEquals(2, jdbc.queryForObject("select count(*) from agendamento", Integer.class));
+    }
+
+    @Test
+    void mesmaChaveComOutroCorpoOuOutroUsuarioDa409() throws Exception {
+        atenderComChave(APEX, davi, CHAVE, corpo(pabloId, ",\"telefone\":\"53999000022\"")).andExpect(status().isCreated());
+        atenderComChave(APEX, davi, CHAVE, corpo(pabloId, ",\"telefone\":\"53999000023\"")).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.mensagem").value("Essa chave de repetição já foi usada em outro pedido."));
+        // outro usuário, mesmo corpo: nunca recebe a resposta alheia
+        atenderComChave(APEX, pablo, CHAVE, corpo(pabloId, ",\"telefone\":\"53999000022\"")).andExpect(status().isConflict());
+        assertEquals(1, jdbc.queryForObject("select count(*) from agendamento", Integer.class));
+    }
+
+    @Test
+    void chaveForaDoFormatoDa400() throws Exception {
+        atenderComChave(APEX, davi, "curta", corpo(pabloId, "")).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("Chave de repetição inválida."));
+        atenderComChave(APEX, davi, "com espaço e caracteres inválidos!!", corpo(pabloId, "")).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void pedidoQueFalhouNaoDeixaChaveEPodeSerTentadoDeNovo() throws Exception {
+        atenderComChave(APEX, davi, CHAVE, corpo(pabloId, ",\"telefone\":\"123\"")).andExpect(status().isBadRequest());
+        assertEquals(0, jdbc.queryForObject("select count(*) from idempotencia", Integer.class));
+        atenderComChave(APEX, davi, CHAVE, corpo(pabloId, ",\"telefone\":\"53999000024\"")).andExpect(status().isCreated());
+        assertEquals(1, jdbc.queryForObject("select count(*) from agendamento", Integer.class));
+    }
+
+    @Test
+    void agendamentoComChaveTambemNaoDuplica() throws Exception {
+        UUID cliente = jdbc.queryForObject("insert into cliente (loja_id, nome, telefone_cif, telefone_hash) values (?::uuid, 'Ana', 'v1:teste', md5('5553999000030')) returning id", UUID.class, LOJA_APEX);
+        String corpo = "{\"clienteId\":\"" + cliente + "\",\"profissionalId\":\"" + pabloId + "\",\"servicoIds\":[\"" + lavagem + "\"],\"inicio\":\"" + futuro + "\"}";
+        String um = mvc.perform(post("/api/agendamentos").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).header("Idempotency-Key", CHAVE)
+                .contentType(MediaType.APPLICATION_JSON).content(corpo)).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        String dois = mvc.perform(post("/api/agendamentos").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).header("Idempotency-Key", CHAVE)
+                .contentType(MediaType.APPLICATION_JSON).content(corpo)).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        assertEquals(id(um), id(dois));
+        assertEquals(1, jdbc.queryForObject("select count(*) from agendamento", Integer.class));
+    }
+
+    @Test
+    void aMesmaChaveEmOutraLojaEIndependente() throws Exception {
+        String alan = token(DALFORNO, "alan");
+        UUID alanId = jdbc.queryForObject("select id from usuario where loja_id = ?::uuid and identificador = 'alan'", UUID.class, LOJA_DALFORNO);
+        String corte = id(mvc.perform(post("/api/servicos").with(host(DALFORNO)).header(HttpHeaders.AUTHORIZATION, bearer(alan)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"nome\":\"Corte\",\"preco\":45,\"duracaoMin\":45,\"intervaloMin\":0}")).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
+        atenderComChave(APEX, davi, CHAVE, corpo(pabloId, "")).andExpect(status().isCreated());
+        atenderComChave(DALFORNO, alan, CHAVE, "{\"profissionalId\":\"" + alanId + "\",\"servicoIds\":[\"" + corte + "\"]}").andExpect(status().isCreated());
+        assertEquals(2, jdbc.queryForObject("select count(*) from agendamento", Integer.class));
+        assertEquals(2, jdbc.queryForObject("select count(*) from idempotencia", Integer.class));
     }
 }

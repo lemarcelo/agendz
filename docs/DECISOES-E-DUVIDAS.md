@@ -37,3 +37,8 @@ Lista simples. Cada item está no histórico do `prompt-agendz-regras.md` (v84 a
 - **Decidi:** campos obrigatórios fixos nos padrões do simulador (agendar pede nome e telefone; atendimento de agora não pede nada). A configuração por loja vem com a 5d.
 - **Decidi:** o painel do Atender abre em linha, acima da agenda, em vez de janela; ao salvar, a agenda vai para o dia do novo atendimento.
 - **Dúvida (não bloqueia):** o cliente criado só com telefone fica com o telefone como nome até alguém informar um nome (igual ao simulador).
+
+## v90 (28/10): chave de repetição
+- **Decidi:** fazer isso antes da 5d, porque com os donos usando o site real um clique repetido depois de uma queda de rede duplicaria o atendimento (e, depois, o dinheiro).
+- **Decidi:** a chave vale 7 dias e só existe nas duas rotas que criam atendimento/agendamento; as outras escritas seguem sem reenvio automático.
+- **Decidi:** continua sem fila no aparelho: a espera pela internet (v87) mais a chave já evitam perda e duplicação sem guardar nada no aparelho.

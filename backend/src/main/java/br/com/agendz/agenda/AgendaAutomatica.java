@@ -78,6 +78,7 @@ public class AgendaAutomatica {
                         + "insert into agendamento_evento (loja_id, agendamento_id, em, autor_id, autor_nome, campo, de, para) "
                         + "select ?::uuid, id, fim_servico, null, 'Sistema', 'status', 'A confirmar', 'Cancelado (sem confirmação)' from perdidos",
                 ate, loja.toString());
+        jdbc.update("delete from idempotencia where criado_em < now() - interval '7 days'"); // chaves de repetição só valem por alguns dias
         return concluidos + cancelados;
     }
 }
