@@ -23,10 +23,14 @@ public class LojaJdbc {
     }
 
     public <T> T naLoja(Function<JdbcTemplate, T> trabalho) {
-        Loja loja = LojaContext.exigir();
+        return naLoja(LojaContext.exigir().id(), trabalho);
+    }
+
+    /** Para rotinas sem requisição (automação): a loja é dada explicitamente, e a trava do banco (RLS) vale do mesmo jeito. */
+    public <T> T naLoja(java.util.UUID lojaId, Function<JdbcTemplate, T> trabalho) {
         return tx.execute(status -> {
             jdbc.execute("SET LOCAL ROLE agendz_app");
-            jdbc.queryForObject("select set_config('app.loja_id', ?, true)", String.class, loja.id().toString());
+            jdbc.queryForObject("select set_config('app.loja_id', ?, true)", String.class, lojaId.toString());
             return trabalho.apply(jdbc);
         });
     }
