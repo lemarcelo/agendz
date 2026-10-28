@@ -59,9 +59,13 @@ class LinkPublicoTest extends BaseApi {
     String ip;
     int telefone;
 
+    @Autowired
+    private LimitePublico limitePublico;
+
     @BeforeEach
     void preparar() throws Exception {
         limpar();
+        limitePublico.reiniciar();
         dono = token(OFFBOX, "proprietario");
         colaborador = token(OFFBOX, "colaborador1");
         proprietarioId = jdbc.queryForObject("select id from usuario where loja_id = ?::uuid and identificador = 'proprietario'", UUID.class, LOJA_OFFBOX);

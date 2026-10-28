@@ -39,6 +39,11 @@ public class LimitePublico {
         }
     }
 
+    /** Zera todas as contagens (uso dos testes: o limite é compartilhado entre eles). */
+    public void reiniciar() {
+        pedidos.clear();
+    }
+
     /** Descarta as chaves sem pedido recente (evita crescer sem fim com IPs avulsos). */
     private void varrer(Instant agora) {
         Instant corte = agora.minus(Duration.ofHours(1));
