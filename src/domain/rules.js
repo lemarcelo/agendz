@@ -368,13 +368,16 @@ export function podeAlterarTelefone(user, st, clienteId) {
 
 // ---------- comissão do profissional ----------
 // Quanto do que o cliente paga fica com o profissional; o resto é do estabelecimento. Ordem: o acordo do profissional, o do serviço, o padrão do estabelecimento.
-// Proprietário e master que atendem ficam com 100% (não pagam comissão a si mesmos), a menos que se defina outro percentual para eles.
+// Percentual da comissão: serviço > funcionário > estabelecimento (o mais específico vence). Proprietário e master ficam com 100% a menos que se defina outro percentual para eles.
 export const COMISSAO_PADRAO = 50;
 export const pctComissaoValido = (v) => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 100;
 export function pctComissao(st, profissional, servico) {
-  if (profissional && pctComissaoValido(profissional.comissaoPct)) return profissional.comissaoPct;
-  if (profissional && (profissional.papel === 'dono' || profissional.papel === 'master')) return 100;
-  if (servico && pctComissaoValido(servico.comissaoPct)) return servico.comissaoPct;
+  const proprio = profissional && pctComissaoValido(profissional.comissaoPct);
+  // Proprietário e master que atendem não pagam comissão a si mesmos: 100%, a menos que tenham um percentual próprio definido.
+  if (profissional && (profissional.papel === 'dono' || profissional.papel === 'master') && !proprio) return 100;
+  // Ordem (v91, do mais geral ao mais específico, o específico vence): estabelecimento -> funcionário -> serviço.
+  if (servico && pctComissaoValido(servico.comissaoPct)) return servico.comissaoPct; // vazio (null) = herdar; 0 digitado = sem comissão neste serviço
+  if (proprio) return profissional.comissaoPct; // vazio = usar a geral do estabelecimento
   const p = st?.estabelecimento?.comissaoPadrao;
   return pctComissaoValido(p) ? p : COMISSAO_PADRAO;
 }

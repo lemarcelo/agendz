@@ -1,0 +1,257 @@
+{
+ "descricao": "Ordem da comissão (v91): serviço > funcionário > estabelecimento; dono/master sem percentual próprio = 100. Vazio (null) = herdar; 0 = sem comissão. Executado na simulada (tests/comissao-equivalencia.test.mjs, pctComissao) e no servidor (ComissaoEquivalenciaTest, Comissao.percentual). Percentual fora de 0 a 100 é ignorado.",
+ "casos": [
+  {
+   "nome": "só o geral do estabelecimento",
+   "estabelecimento": {
+    "comissaoPadrao": 40
+   },
+   "usuario": {
+    "papel": "profissional",
+    "comissaoPct": null
+   },
+   "servico": {
+    "comissaoPct": null
+   },
+   "esperado": 40
+  },
+  {
+   "nome": "sem nada configurado vale 50",
+   "estabelecimento": {
+    "comissaoPadrao": null
+   },
+   "usuario": {
+    "papel": "profissional",
+    "comissaoPct": null
+   },
+   "servico": {
+    "comissaoPct": null
+   },
+   "esperado": 50
+  },
+  {
+   "nome": "funcionário com percentual próprio vence o geral",
+   "estabelecimento": {
+    "comissaoPadrao": 40
+   },
+   "usuario": {
+    "papel": "profissional",
+    "comissaoPct": 70
+   },
+   "servico": {
+    "comissaoPct": null
+   },
+   "esperado": 70
+  },
+  {
+   "nome": "serviço vence o geral",
+   "estabelecimento": {
+    "comissaoPadrao": 40
+   },
+   "usuario": {
+    "papel": "profissional",
+    "comissaoPct": null
+   },
+   "servico": {
+    "comissaoPct": 30
+   },
+   "esperado": 30
+  },
+  {
+   "nome": "serviço vence o funcionário",
+   "estabelecimento": {
+    "comissaoPadrao": 40
+   },
+   "usuario": {
+    "papel": "profissional",
+    "comissaoPct": 70
+   },
+   "servico": {
+    "comissaoPct": 30
+   },
+   "esperado": 30
+  },
+  {
+   "nome": "serviço com zero = sem comissão (não herda)",
+   "estabelecimento": {
+    "comissaoPadrao": 40
+   },
+   "usuario": {
+    "papel": "profissional",
+    "comissaoPct": 70
+   },
+   "servico": {
+    "comissaoPct": 0
+   },
+   "esperado": 0
+  },
+  {
+   "nome": "funcionário com zero vence o geral",
+   "estabelecimento": {
+    "comissaoPadrao": 40
+   },
+   "usuario": {
+    "papel": "profissional",
+    "comissaoPct": 0
+   },
+   "servico": {
+    "comissaoPct": null
+   },
+   "esperado": 0
+  },
+  {
+   "nome": "serviço vazio herda do funcionário",
+   "estabelecimento": {
+    "comissaoPadrao": 40
+   },
+   "usuario": {
+    "papel": "profissional",
+    "comissaoPct": 25
+   },
+   "servico": {
+    "comissaoPct": null
+   },
+   "esperado": 25
+  },
+  {
+   "nome": "serviço 100",
+   "estabelecimento": {
+    "comissaoPadrao": 40
+   },
+   "usuario": {
+    "papel": "profissional",
+    "comissaoPct": 70
+   },
+   "servico": {
+    "comissaoPct": 100
+   },
+   "esperado": 100
+  },
+  {
+   "nome": "dono sem percentual próprio fica com 100",
+   "estabelecimento": {
+    "comissaoPadrao": 40
+   },
+   "usuario": {
+    "papel": "dono",
+    "comissaoPct": null
+   },
+   "servico": {
+    "comissaoPct": 30
+   },
+   "esperado": 100
+  },
+  {
+   "nome": "master sem percentual próprio fica com 100",
+   "estabelecimento": {
+    "comissaoPadrao": 40
+   },
+   "usuario": {
+    "papel": "master",
+    "comissaoPct": null
+   },
+   "servico": {
+    "comissaoPct": null
+   },
+   "esperado": 100
+  },
+  {
+   "nome": "dono com percentual próprio e sem serviço usa o próprio",
+   "estabelecimento": {
+    "comissaoPadrao": 40
+   },
+   "usuario": {
+    "papel": "dono",
+    "comissaoPct": 20
+   },
+   "servico": {
+    "comissaoPct": null
+   },
+   "esperado": 20
+  },
+  {
+   "nome": "dono com percentual próprio perde para o serviço",
+   "estabelecimento": {
+    "comissaoPadrao": 40
+   },
+   "usuario": {
+    "papel": "dono",
+    "comissaoPct": 20
+   },
+   "servico": {
+    "comissaoPct": 60
+   },
+   "esperado": 60
+  },
+  {
+   "nome": "atendente (não é dono) segue a regra geral",
+   "estabelecimento": {
+    "comissaoPadrao": 40
+   },
+   "usuario": {
+    "papel": "atendente",
+    "comissaoPct": null
+   },
+   "servico": {
+    "comissaoPct": null
+   },
+   "esperado": 40
+  },
+  {
+   "nome": "geral fora da faixa cai em 50",
+   "estabelecimento": {
+    "comissaoPadrao": 150
+   },
+   "usuario": {
+    "papel": "profissional",
+    "comissaoPct": null
+   },
+   "servico": {
+    "comissaoPct": null
+   },
+   "esperado": 50
+  },
+  {
+   "nome": "percentual de funcionário fora da faixa é ignorado",
+   "estabelecimento": {
+    "comissaoPadrao": 40
+   },
+   "usuario": {
+    "papel": "profissional",
+    "comissaoPct": 120
+   },
+   "servico": {
+    "comissaoPct": null
+   },
+   "esperado": 40
+  },
+  {
+   "nome": "percentual de serviço fora da faixa é ignorado",
+   "estabelecimento": {
+    "comissaoPadrao": 40
+   },
+   "usuario": {
+    "papel": "profissional",
+    "comissaoPct": 70
+   },
+   "servico": {
+    "comissaoPct": -5
+   },
+   "esperado": 70
+  },
+  {
+   "nome": "decimal",
+   "estabelecimento": {
+    "comissaoPadrao": 33.5
+   },
+   "usuario": {
+    "papel": "profissional",
+    "comissaoPct": null
+   },
+   "servico": {
+    "comissaoPct": null
+   },
+   "esperado": 33.5
+  }
+ ]
+}

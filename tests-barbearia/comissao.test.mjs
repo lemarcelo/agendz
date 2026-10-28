@@ -14,7 +14,7 @@ test.beforeEach(() => { mock.timers.reset(); mock.timers.enable({ apis: ['Date']
 const dono = () => como('alan');
 const profissional = (ap) => { como(ap.toLowerCase()); return st().usuarios.find((u) => u.apelido === ap); };
 
-test('precedência do percentual: barbeiro > serviço > padrão; proprietário fica com 100%', () => {
+test('precedência do percentual: serviço > barbeiro > padrão do estabelecimento; proprietário fica com 100%', () => {
   dono();
   const s = st();
   const b = s.usuarios.find((u) => u.papel === 'profissional');
@@ -22,10 +22,15 @@ test('precedência do percentual: barbeiro > serviço > padrão; proprietário f
   assert.equal(pctComissao(s, b, sv), 50);
   assert.ok(estabelecimento.salvar({ comissaoPadrao: 40 }).ok);
   assert.equal(pctComissao(st(), b, sv), 40);
-  assert.ok(srv(sv.id, { comissaoPct: 30 }).ok);
-  assert.equal(pctComissao(st(), b, st().servicos.find((x) => x.id === sv.id)), 30);
   assert.ok(eq(b.id, { comissaoPct: 70 }).ok);
-  assert.equal(pctComissao(st(), st().usuarios.find((x) => x.id === b.id), st().servicos.find((x) => x.id === sv.id)), 70);
+  assert.equal(pctComissao(st(), st().usuarios.find((x) => x.id === b.id), st().servicos.find((x) => x.id === sv.id)), 70, 'sem percentual no serviço vale o do funcionário');
+  assert.ok(srv(sv.id, { comissaoPct: 30 }).ok);
+  assert.equal(pctComissao(st(), st().usuarios.find((x) => x.id === b.id), st().servicos.find((x) => x.id === sv.id)), 30, 'o serviço sobrepõe o funcionário');
+  assert.ok(srv(sv.id, { comissaoPct: 0 }).ok);
+  assert.equal(pctComissao(st(), st().usuarios.find((x) => x.id === b.id), st().servicos.find((x) => x.id === sv.id)), 0, '0 no serviço = sem comissão (não herda)');
+  assert.ok(srv(sv.id, { comissaoPct: null }).ok);
+  assert.ok(eq(b.id, { comissaoPct: null }).ok);
+  assert.equal(pctComissao(st(), st().usuarios.find((x) => x.id === b.id), st().servicos.find((x) => x.id === sv.id)), 40, 'sem os dois volta ao geral do estabelecimento');
   assert.equal(pctComissao(st(), st().usuarios.find((u) => u.papel === 'dono'), sv), 100);
 });
 

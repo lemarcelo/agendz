@@ -1,0 +1,422 @@
+{
+ "descricao": "Casos de validação do cadastro de produto executados na API simulada (tests/produtos-equivalencia.test.mjs, estoque.salvarMaterial com tipo produto) e no servidor (ProdutosEquivalenciaTest, POST/PUT /api/produtos) na loja da estética (Apex). Passos em ordem; só o último é conferido, os anteriores precisam dar certo. '@n' = id do produto criado no passo n. O estoque inicial só vale na criação. Regras só do servidor (permissão, comissão só do dono, isolamento) ficam em ProdutosTest.",
+ "casos": [
+  {
+   "nome": "nome vazio",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "",
+      "preco": 10
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Informe o nome do material."
+   }
+  },
+  {
+   "nome": "nome grande demais",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "preco": 10
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Nome ou unidade inválidos."
+   }
+  },
+  {
+   "nome": "unidade grande demais",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Eq A",
+      "preco": 10,
+      "unidade": "uuuuuuuuuuuuuuuuuuuuu"
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Nome ou unidade inválidos."
+   }
+  },
+  {
+   "nome": "sem preço",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Eq A"
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Informe o preço de venda do produto."
+   }
+  },
+  {
+   "nome": "preço negativo",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Eq A",
+      "preco": -1
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Informe o preço de venda do produto."
+   }
+  },
+  {
+   "nome": "preço acima do teto",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Eq A",
+      "preco": 100001
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Informe o preço de venda do produto."
+   }
+  },
+  {
+   "nome": "comissão acima de 100",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Eq A",
+      "preco": 10,
+      "comissaoPct": 101
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "A comissão vai de 0 a 100%."
+   }
+  },
+  {
+   "nome": "comissão negativa",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Eq A",
+      "preco": 10,
+      "comissaoPct": -1
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "A comissão vai de 0 a 100%."
+   }
+  },
+  {
+   "nome": "estoque negativo",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Eq A",
+      "preco": 10,
+      "estoque": -1
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Valores de estoque e custo não podem ser negativos nem inválidos."
+   }
+  },
+  {
+   "nome": "custo negativo",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Eq A",
+      "preco": 10,
+      "custo": -1
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Valores de estoque e custo não podem ser negativos nem inválidos."
+   }
+  },
+  {
+   "nome": "mínimo negativo",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Eq A",
+      "preco": 10,
+      "minimo": -1
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Valores de estoque e custo não podem ser negativos nem inválidos."
+   }
+  },
+  {
+   "nome": "código inválido",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Eq A",
+      "preco": 10,
+      "codigo": "a b"
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Código inválido: use até 20 letras, números, ponto, hífen ou sublinhado."
+   }
+  },
+  {
+   "nome": "código repetido sem diferenciar maiúsculas",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Eq A",
+      "preco": 10,
+      "codigo": "EQX1"
+     }
+    },
+    {
+     "corpo": {
+      "nome": "Eq B",
+      "preco": 10,
+      "codigo": "eqx1"
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Já existe produto com o código eqx1."
+   }
+  },
+  {
+   "nome": "nome repetido sem diferenciar maiúsculas",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Eq Cera",
+      "preco": 10
+     }
+    },
+    {
+     "corpo": {
+      "nome": "EQ CERA",
+      "preco": 12
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Já existe um material com esse nome."
+   }
+  },
+  {
+   "nome": "só nome e preço",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Eq A",
+      "preco": 10
+     }
+    }
+   ],
+   "esperado": {
+    "ok": true
+   }
+  },
+  {
+   "nome": "preço zero",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Eq A",
+      "preco": 0
+     }
+    }
+   ],
+   "esperado": {
+    "ok": true
+   }
+  },
+  {
+   "nome": "cadastro completo",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Eq Completo",
+      "preco": 39.9,
+      "unidade": "ml",
+      "comissaoPct": 10,
+      "estoque": 5,
+      "minimo": 2,
+      "custo": 20,
+      "codigo": "EQ-COMP"
+     }
+    }
+   ],
+   "esperado": {
+    "ok": true
+   }
+  },
+  {
+   "nome": "comissão zero é aceita (vira sem comissão)",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Eq A",
+      "preco": 10,
+      "comissaoPct": 0
+     }
+    }
+   ],
+   "esperado": {
+    "ok": true
+   }
+  },
+  {
+   "nome": "código automático avança de um em um",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Eq A",
+      "preco": 10
+     }
+    },
+    {
+     "corpo": {
+      "nome": "Eq B",
+      "preco": 10
+     }
+    }
+   ],
+   "esperado": {
+    "ok": true,
+    "codigosSeguidos": true
+   }
+  },
+  {
+   "nome": "editar sem mudar nada não conflita consigo mesmo",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Eq A",
+      "preco": 10,
+      "codigo": "EQX2"
+     }
+    },
+    {
+     "editar": "@1",
+     "corpo": {
+      "nome": "Eq A",
+      "preco": 10,
+      "codigo": "EQX2"
+     }
+    }
+   ],
+   "esperado": {
+    "ok": true
+   }
+  },
+  {
+   "nome": "editar para o nome de outro produto",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Eq A",
+      "preco": 10
+     }
+    },
+    {
+     "corpo": {
+      "nome": "Eq B",
+      "preco": 10
+     }
+    },
+    {
+     "editar": "@2",
+     "corpo": {
+      "nome": "eq a",
+      "preco": 10
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Já existe um material com esse nome."
+   }
+  },
+  {
+   "nome": "editar para o código de outro produto",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Eq A",
+      "preco": 10,
+      "codigo": "EQX3"
+     }
+    },
+    {
+     "corpo": {
+      "nome": "Eq B",
+      "preco": 10,
+      "codigo": "EQX4"
+     }
+    },
+    {
+     "editar": "@2",
+     "corpo": {
+      "nome": "Eq B",
+      "preco": 10,
+      "codigo": "EQX3"
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Já existe produto com o código EQX3."
+   }
+  },
+  {
+   "nome": "editar preço e nome",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Eq A",
+      "preco": 10
+     }
+    },
+    {
+     "editar": "@1",
+     "corpo": {
+      "nome": "Eq A2",
+      "preco": 15
+     }
+    }
+   ],
+   "esperado": {
+    "ok": true
+   }
+  }
+ ]
+}
