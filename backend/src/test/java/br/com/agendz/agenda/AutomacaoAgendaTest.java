@@ -67,7 +67,7 @@ class AutomacaoAgendaTest extends BaseApi {
         return id(json);
     }
 
-    private void status(String id, String novo) throws Exception {
+    private void mudarStatus(String id, String novo) throws Exception {
         mvc.perform(put("/api/agendamentos/" + id + "/status").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"status\":\"" + novo + "\"}")).andExpect(status().isOk());
     }
@@ -87,10 +87,10 @@ class AutomacaoAgendaTest extends BaseApi {
         String futuro = marcar(Instant.now().plus(3, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS), "confirmado");
         // status escolhido à mão DEPOIS do horário começar: o sistema não mexe
         String manual = marcar(base.plus(4, ChronoUnit.HOURS), "a_confirmar");
-        status(manual, "confirmado");
+        mudarStatus(manual, "confirmado");
         // ...mas remarcar libera o fluxo automático de novo
         String remarcado = marcar(base.plus(6, ChronoUnit.HOURS), "a_confirmar");
-        status(remarcado, "confirmado");
+        mudarStatus(remarcado, "confirmado");
         mvc.perform(put("/api/agendamentos/" + remarcado + "/remarcar").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"inicio\":\"" + base.plus(8, ChronoUnit.HOURS) + "\"}")).andExpect(status().isOk());
 
