@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import br.com.agendz.BaseApi;
+import br.com.agendz.auth.LimiteDeLogin;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.junit.jupiter.api.AfterEach;
@@ -32,16 +33,25 @@ class ReconfiguracaoTest extends BaseApi {
 
     @Autowired
     JdbcTemplate jdbc;
+    @Autowired
+    LimiteDeLogin limite;
 
     @BeforeEach
     void antes() {
         limpar();
+        destravar();
         jdbc.update("insert into onboarding (loja_id) values (?::uuid)", LOJA_DALFORNO);
     }
 
     @AfterEach
     void depois() {
         limpar();
+        destravar();
+    }
+
+    /** O limitador de tentativas é da aplicação (vive entre os testes): zera o do dono do Dalforno. */
+    private void destravar() {
+        for (String id : jdbc.queryForList("select id::text from usuario where identificador = 'alan'", String.class)) limite.limpar("reconf|" + LOJA_DALFORNO + "|" + id);
     }
 
     private void limpar() {
@@ -86,7 +96,7 @@ class ReconfiguracaoTest extends BaseApi {
         // primeiro acesso (não concluído): os passos não pedem senha
         enviar(DALFORNO, t, "/api/onboarding/servicos", "{\"itens\":[{\"chave\":\"s-barba\"}]}").andExpect(status().isOk());
         enviar(DALFORNO, t, "/api/onboarding/concluir", "{}").andExpect(status().isOk());
-        enviar(DALFORNO, t, "/api/onboarding/servicos", "{\"itens\":[{\"chave\":\"s-corte\"}]}").andExpect(status().isForbidden())
+        enviar(DALFORNO, t, "/api/onboarding/servicos", "{\"itens\":[{\"chave\":\"s-tesoura\"}]}").andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.mensagem").value("Confirme sua senha para reconfigurar a loja"));
         enviar(DALFORNO, t, "/api/onboarding/equipe", "{\"pessoas\":[{\"nome\":\"Zeferino\"}]}").andExpect(status().isForbidden());
         enviar(DALFORNO, t, "/api/onboarding/expediente", SEMANA_B).andExpect(status().isForbidden());
