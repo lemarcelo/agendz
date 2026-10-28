@@ -86,12 +86,12 @@ class IsolamentoEntreLojasTest extends BaseApi {
     }
 
     @Test
-    void mesmoTelefoneEmLojasDiferentesPodeMasNaMesmaLojaDa409() throws Exception {
+    void mesmoTelefoneEmLojasDiferentesPodeEMesmoNomeComMesmoTelefoneNaMesmaLojaDa409() throws Exception {
         String tA = token(APEX, "davi"), tB = token(DALFORNO, "alan");
         criarCliente(APEX, tA, "Ana", "5553999000005");
         criarCliente(DALFORNO, tB, "Ana", "5553999000005");
         mvc.perform(post("/api/clientes").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(tA))
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"nome\":\"Outra Ana\",\"telefone\":\"5553999000005\"}"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"nome\":\"ana\",\"telefone\":\"5553999000005\"}"))
                 .andExpect(status().isConflict());
     }
 

@@ -71,7 +71,7 @@ class AgendaTest extends BaseApi {
     }
 
     private UUID cliente(String loja, String nome, String telefone) {
-        return jdbc.queryForObject("insert into cliente (loja_id, nome, telefone) values (?::uuid, ?, ?) returning id", UUID.class, loja, nome, telefone);
+        return jdbc.queryForObject("insert into cliente (loja_id, nome, telefone_cif, telefone_hash) values (?::uuid, ?, 'v1:teste', md5(?)) returning id", UUID.class, loja, nome, telefone);
     }
 
     private String id(String json) {

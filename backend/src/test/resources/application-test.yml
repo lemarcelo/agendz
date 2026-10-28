@@ -5,5 +5,8 @@ agendz:
   jwt:
     segredo: segredo-so-para-teste-com-mais-de-32-bytes-0123456789
     validade-minutos: 60
+  cifra:
+    chave: chave-de-cifra-so-para-teste-com-mais-de-32-bytes-0123
+    pepper: pepper-so-para-teste-com-mais-de-32-bytes-0123456789
   dominios-base: agendz.io,localhost
   permitir-query: false

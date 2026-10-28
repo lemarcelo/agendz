@@ -1,10 +1,11 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
-// Casca do site publicado (API real), F2 parte 1: carrega a loja do endereço (GET /api/publico/loja), faz o login real, troca a senha
-// temporária e mostra o painel inicial. Os módulos (agenda, clientes, serviços…) entram nas partes seguintes do F2, cada um só quando o
-// servidor tem a regra inteira. Não importa `api.js` (a simulada) nem `hooks.js`: o estado aqui é só o da sessão real, em memória.
+// Casca do site publicado (API real), F2: carrega a loja do endereço (GET /api/publico/loja), faz o login real, troca a senha
+// temporária e mostra o painel com o menu. Os módulos entram um a um (Clientes na parte 2; serviços, equipe e agenda nas seguintes), cada um só
+// quando o servidor tem a regra inteira. Não importa `api.js` (a simulada) nem `hooks.js`: o estado aqui é só o da sessão real, em memória.
 import React, { useEffect, useMemo, useState } from 'react';
 import { carregarLoja, entrar, loginValido, onboarding, sair, sessaoAtual, trocarSenha } from '../../services/api-real.js';
 import PrimeiroAcesso from '../leve/PrimeiroAcesso.jsx';
+import Clientes from './Clientes.jsx';
 import { TIPOS, definirTipoAtivo, rotulo, tipoValido } from '../../domain/tipos.js';
 import { cssDaMarca, logoValida } from '../../domain/tema.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
@@ -88,19 +89,51 @@ function TrocarSenha({ loja, sessao, aoTrocar, aoSair }) {
   );
 }
 
+function LogoPequena({ loja }) {
+  const tipo = TIPOS[loja.tipo];
+  return (
+    <div className="topo-marca">
+      {logoValida(loja.logo) ? <img className="marca-logo" src={loja.logo} alt="" width={32} height={32} /> : <span className="marca-icone"><Icone n={tipo.visual.iconeMarca} size={18} /></span>}
+      <span className="marca-nome">{loja.nome}</span>
+    </div>
+  );
+}
+
+// Área logada: menu com as telas que já existem no site real. Telas que ainda não chegaram não aparecem (nada de botão morto).
 function Painel({ loja, sessao, aoSair }) {
+  const [aba, setAba] = useState('inicio');
   const [reconfigurando, setReconfigurando] = useState(false);
   if (reconfigurando) return <PrimeiroAcesso modo="reconfigurar" tipo={loja.tipo} nomeLoja={loja.nome} adaptador={onboarding} aoConcluir={() => setReconfigurando(false)} aoCancelar={() => setReconfigurando(false)} />;
   const papel = sessao.papel === 'dono' ? 'Proprietário' : rotulo({ tipo: loja.tipo }, 'profissional', { capitalizado: true });
+  const itens = [['inicio', 'Início', 'store'], ['clientes', 'Clientes', 'users']];
   return (
-    <Cartao loja={loja}>
-      <div className="form-grade um" data-testid="painel-real">
-        <p><b data-testid="painel-nome">{sessao.nome}</b> · <span data-testid="painel-papel">{papel}</span></p>
-        <Aviso>Sua conta está pronta e o acesso é seguro. A agenda, os clientes e os serviços chegam ao site nas próximas atualizações.</Aviso>
-        {sessao.papel === 'dono' && <Btn onClick={() => setReconfigurando(true)} data-testid="reconfigurar-abrir">Reconfigurar estabelecimento</Btn>}
-        <Btn onClick={aoSair} data-testid="sair">Sair</Btn>
+    <div className="app">
+      <header className="topo">
+        <LogoPequena loja={loja} />
+        <nav className="nav" aria-label="Seções">
+          {itens.map(([k, r, ic]) => (
+            <button key={k} type="button" className={aba === k ? 'on' : ''} onClick={() => setAba(k)} aria-current={aba === k ? 'page' : undefined} title={r} data-testid={`nav-${k}`}><Icone n={ic} size={17} /><span>{r}</span></button>
+          ))}
+        </nav>
+        <div className="topo-dir">
+          <div className="usuario">
+            <button type="button" className="icone-btn" onClick={aoSair} aria-label="Sair" title="Sair" data-testid="sair"><Icone n="logout" size={17} /></button>
+          </div>
+        </div>
+      </header>
+      <div className="corpo">
+        <main className="principal">
+          {aba === 'inicio' && (
+            <section className="tela" data-testid="painel-real">
+              <p><b data-testid="painel-nome">{sessao.nome}</b> · <span data-testid="painel-papel">{papel}</span></p>
+              <Aviso>Sua conta está pronta e o acesso é seguro. Os clientes já estão aqui; os serviços, a equipe e a agenda chegam ao site nas próximas atualizações.</Aviso>
+              {sessao.papel === 'dono' && <Btn onClick={() => setReconfigurando(true)} data-testid="reconfigurar-abrir">Reconfigurar estabelecimento</Btn>}
+            </section>
+          )}
+          {aba === 'clientes' && <Clientes />}
+        </main>
       </div>
-    </Cartao>
+    </div>
   );
 }
 

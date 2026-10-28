@@ -63,6 +63,8 @@ Convenções: **Perm.** = quem pode. `agenda`, `clientes`, `servicos`, `estoque`
 | `clientes.aprovarVinculo` | `POST /clientes/vinculos/{id}/aprovar` | `podeAutorizarVinculo` (dono ou admin com Clientes; **esteticista não**) | `id` ≤ 50 | troca telefone, guarda `telefonesAnteriores`; pedido já respondido não decide de novo; se o CPF mudou, encerra | `domain`, `security` |
 | `clientes.recusarVinculo` | `POST /clientes/vinculos/{id}/recusar` | idem | idem | mesmo número não gera novo pedido para o cadastro | idem |
 
+**Implementado no servidor real (v81, F2 parte 2):** `GET /api/clientes?q=`, `GET /api/clientes/{id}`, `POST /api/clientes`, `PUT /api/clientes/{id}` com as regras acima (telefone, CPF e nascimento cifrados; CPF completo e troca de telefone só para dono, quem atende ou cadastro sem horários; veículos só no tipo com `usaVeiculo`). Diferenças conhecidas: o servidor só tem os papéis dono e profissional (sem admin com permissão de Clientes); a mensagem de telefone alterado diz "profissional" (a simulada usa o rótulo do tipo); a trava de veículo com agendamento ativo entra com a agenda. Casos compartilhados: `backend/src/test/resources/equivalencia/clientes.json`.
+
 ## 4. Serviços, equipe, estabelecimento, escalas e modelos
 
 | Método JS | Endpoint | Perm. | Validação | Regra | Testes |

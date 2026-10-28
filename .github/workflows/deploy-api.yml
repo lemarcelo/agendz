@@ -1,6 +1,6 @@
 name: Deploy da API
 # Publica a imagem da API no GHCR e atualiza a VPS. Só roda quando a variável de repositório DEPLOY_API for "true" (Settings > Secrets and variables > Actions > Variables)
-# e os segredos VPS_HOST e VPS_SSH_KEY existirem. Nada mais é manual: o passo da VPS roda `preparar-api.sh` (gera POSTGRES_PASSWORD e JWT_SEGREDO sozinho, sem mostrar,
+# e os segredos VPS_HOST e VPS_SSH_KEY existirem. Nada mais é manual: o passo da VPS roda `preparar-api.sh` (gera POSTGRES_PASSWORD, JWT_SEGREDO, CIFRA_CHAVE e CIFRA_PEPPER sozinho, sem mostrar,
 # na primeira vez) e entra no GitHub Packages com o token do próprio job (o pacote pode continuar privado; o login é desfeito no fim).
 on:
   workflow_run:

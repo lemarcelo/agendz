@@ -5,3 +5,6 @@ agendz:
   permitir-query: true
   jwt:
     segredo: segredo-so-de-desenvolvimento-nao-usar-em-producao-0123456789
+  cifra:
+    chave: chave-de-cifra-so-de-desenvolvimento-nao-usar-em-producao-01
+    pepper: pepper-so-de-desenvolvimento-nao-usar-em-producao-0123456789

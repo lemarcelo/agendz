@@ -67,7 +67,7 @@ class EscalaTest extends BaseApi {
     }
 
     private UUID cliente(String loja, String nome, String telefone) {
-        return jdbc.queryForObject("insert into cliente (loja_id, nome, telefone) values (?::uuid, ?, ?) returning id", UUID.class, loja, nome, telefone);
+        return jdbc.queryForObject("insert into cliente (loja_id, nome, telefone_cif, telefone_hash) values (?::uuid, ?, 'v1:teste', md5(?)) returning id", UUID.class, loja, nome, telefone);
     }
 
     private String servico(String host, String token, int minutos, boolean multiDia) throws Exception {

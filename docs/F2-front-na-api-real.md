@@ -1,4 +1,4 @@
-# F2: front na API real (parte 1 pronta em 27/10/2026)
+# F2: front na API real (partes 1 e 2 prontas em 27/10/2026)
 
 **Situação (27/10/2026):** o back-end tem login, clientes, serviços, profissionais e agenda núcleo (CI verde). O front inteiro ainda fala com `src/services/api.js`, uma API **síncrona** que guarda o estado todo em memória e roda o motor de regras (`domain/engine.js`) no navegador.
 
@@ -19,6 +19,21 @@
 - Testes: `tests/api-real.test.mjs` (servidor falso), `tests/estatico.test.mjs`, `tests/e2e36.mjs` (navegador, servidor falso no mesmo endereço, 390 px com fonte larga).
 - **Publicação:** o CI (`ci.yml`, job do site) publica a **demonstração** enquanto a variável do repositório `SITE_REAL` não for `true`. Com `SITE_REAL=true` o `index.html` do site passa a ser `dist/index-real.html`. Ligue **depois** de rodar `deploy/provisionar-loja.sh` das lojas (antes disso o site real não tem usuário para entrar). `deploy/montar-site.sh dominio --real` faz o mesmo à mão.
 - Próximas partes: clientes → serviços → equipe → agenda (cada uma só com a regra inteira no servidor e teste de equivalência).
+
+## Decisão de 27/10/2026 (Marcelo): migrar por partes, já
+O site real só tinha login, primeiro acesso e Reconfigurar; os donos não conseguiam trabalhar nele. Escolha do Marcelo: **migrar clientes → serviços → equipe → agenda, uma por vez**, cada uma com as regras inteiras no servidor, entregue e avisada a cada parte. Descartado: guardar o estado inteiro do app no servidor como piloto (regras e permissões ficariam só no navegador). **As senhas dos donos só são entregues quando a agenda real existir.**
+
+## Parte 2 (feita): clientes (v81)
+- **Servidor** (`backend/.../clientes/ClienteService` + `ClienteController`; migração `V10__cliente_completo.sql`): `GET /api/clientes?q=`, `GET /api/clientes/{id}`, `POST /api/clientes`, `PUT /api/clientes/{id}` (dono e profissional; outra loja = 404). Regras = as de `clientes.salvar` da API simulada, com as mesmas mensagens.
+- **Dados pessoais cifrados** (`cifra/Cifra`: AES-256-GCM, IV aleatório por valor, formato `v1:iv:texto:tag`): telefone, CPF e nascimento. Para achar e impedir duplicidade: `telefone_hash` e `cpf_hash` (HMAC-SHA256 com pepper, **amarrado à loja**). Nome e apelido em texto puro (decisão do proprietário). A chave (`CIFRA_CHAVE`) e o pepper (`CIFRA_PEPPER`) são gerados na VPS pelo `deploy/preparar-api.sh` (nunca no repositório, no log ou no banco). **Trocar a chave depois de ter clientes torna os dados ilegíveis; guarde uma cópia fora da VPS e fora do backup do banco.** A API não sobe sem as duas.
+- **Duplicidade:** telefone + nome (sem diferenciar maiúsculas) = 409 "Já existe um cliente com esse nome e telefone."; o mesmo telefone com nomes diferentes é permitido (família no mesmo número). CPF único por loja = 409 "Esse CPF já está cadastrado." (nunca diz de quem). O mesmo CPF em lojas diferentes é permitido.
+- **Quem vê e altera o quê:** a lista traz só o CPF mascarado e nunca o nascimento. Na ficha, CPF completo e nascimento (e trocar telefone, CPF ou nascimento) são do **dono, do profissional que atende o cliente (tem agendamento com ele) ou de qualquer um quando o cadastro ainda não tem horários**; os demais recebem 403 ao tentar alterar e `dadosCompletos: false` ao ler. Troca de telefone grava o número antigo (cifrado) e quem trocou (`cliente_telefone_anterior`).
+- **Telefone:** aceita com ou sem 55 e com máscara; guarda `55`+DDD+número. Outro tamanho = "Informe o telefone com DDD.".
+- **Veículos** (`cliente_veiculo`, só quando o tipo tem a capacidade `usaVeiculo`; hoje `estetica_automotiva`, em `ClienteService.usaVeiculo`): até 10, placa antiga ou Mercosul só por formato, modelo e porte obrigatórios, placa única por cliente, `id` sempre do servidor (id de outro cliente enviado vira veículo novo). Outros tipos **descartam** `veiculos`. A trava "veículo com agendamento ativo não sai" entra na parte da agenda (o agendamento real ainda não guarda o veículo).
+- **Busca** (`q`): nome, apelido, telefone (DDD + número, parcial), CPF (dígitos), placa e modelo; até 500 resultados. É feita no servidor depois de decifrar (campo cifrado não se consulta no SQL); suficiente para milhares de clientes por loja.
+- **Equivalência simulada × real:** `backend/src/test/resources/equivalencia/clientes.json` (28 casos de validação) roda na API simulada (`tests/clientes-equivalencia.test.mjs`) e no servidor (`ClientesEquivalenciaTest`, CI). A API simulada ganhou as regras que o mapa já prometia e faltavam: CPF válido e único, nascimento real, telefone brasileiro com DDD.
+- **Tela** (`src/ui/real/Clientes.jsx`, menu Início/Clientes em `AppReal.jsx`): lista em cartões, busca, novo, editar, veículos por tipo, dados restritos (CPF mascarado, campos escondidos e fora do `PUT`). Teste de navegador: `tests/e2e39.mjs`.
+- **Fora desta parte (ficam para depois):** pedidos de vínculo de número (`aprovarVinculo`/`recusarVinculo`, nascem do WhatsApp), exportação e anonimização LGPD (`GET /clientes/{id}/exportacao`, `DELETE /clientes/{id}/dados`), último atendimento e crédito na lista (vêm com a agenda e o financeiro), ordem personalizada de colunas (o site real ainda não tem `useOrdem`), admin com permissão de Clientes (o servidor só tem dono e profissional).
 
 ## O que preciso de você (histórico: confirmado em 27/10)
 Confirmar: (1) o Artifact fica simulado e sem rede; (2) o site publicado vira real por partes, na ordem acima. Se concordar, começo por `auth` + bootstrap.

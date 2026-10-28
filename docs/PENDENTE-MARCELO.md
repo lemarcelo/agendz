@@ -17,3 +17,7 @@ bash provisionar-loja.sh offbox "Offbox Barbearia" barbearia kiko "Kiko"
 
 ## Falta o Marcelo
 - Criar o repositório privado `lemarcelo/agendz-admin` (vazio, sem README) para receber o painel (`docs/PROMPT-PAINEL-ADMIN.md`); o ambiente do Claude não consegue criar repositórios.
+
+## Depois do deploy dos clientes reais (F2 parte 2, 27/10)
+- **Guarde uma cópia de `CIFRA_CHAVE` e `CIFRA_PEPPER`** (arquivo `/opt/agendz/.env` na VPS) num gerenciador de senhas, **fora** da VPS e **fora** do backup do banco no R2. Sem a chave, o backup do banco não abre CPF, telefone nem nascimento. Veja só as duas linhas, no terminal da VPS: `grep '^CIFRA_' /opt/agendz/.env` (não cole no chat). Não troque depois de cadastrar clientes.
+- O primeiro deploy depois desta versão gera as duas chaves sozinho (`preparar-api.sh`) e aplica a migração V10. Ela só roda sem clientes cadastrados (hoje não há nenhum no site real).

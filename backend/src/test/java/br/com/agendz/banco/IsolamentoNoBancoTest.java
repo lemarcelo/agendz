@@ -29,8 +29,8 @@ class IsolamentoNoBancoTest extends BaseIntegracao {
     @BeforeEach
     void dados() {
         jdbc.update("delete from cliente"); // conexão do dono: o RLS não a limita
-        jdbc.update("insert into cliente (loja_id, nome, telefone) values (?::uuid, 'Ana', '5511900000001'), (?::uuid, 'Bia', '5511900000002')", LOJA_A, LOJA_A);
-        jdbc.update("insert into cliente (loja_id, nome, telefone) values (?::uuid, 'Caio', '5511900000001')", LOJA_B); // mesmo telefone em outra loja é permitido
+        jdbc.update("insert into cliente (loja_id, nome, telefone_cif, telefone_hash) values (?::uuid, 'Ana', 'v1:teste', md5('5511900000001')), (?::uuid, 'Bia', 'v1:teste', md5('5511900000002'))", LOJA_A, LOJA_A);
+        jdbc.update("insert into cliente (loja_id, nome, telefone_cif, telefone_hash) values (?::uuid, 'Caio', 'v1:teste', md5('5511900000001'))", LOJA_B); // mesmo telefone em outra loja é permitido
     }
 
     private int contarComo(String lojaId) throws SQLException {
@@ -68,7 +68,7 @@ class IsolamentoNoBancoTest extends BaseIntegracao {
                 st.execute("SET LOCAL ROLE agendz_app");
                 st.execute("SELECT set_config('app.loja_id', '" + LOJA_B + "', true)");
                 assertThrows(SQLException.class, () -> st.execute(
-                        "insert into cliente (loja_id, nome, telefone) values ('" + LOJA_A + "', 'Intruso', '5511999999999')"));
+                        "insert into cliente (loja_id, nome, telefone_cif, telefone_hash) values ('" + LOJA_A + "', 'Intruso', 'v1:teste', md5('5511999999999'))"));
             } finally {
                 c.rollback();
             }

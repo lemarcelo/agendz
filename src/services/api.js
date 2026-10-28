@@ -17,7 +17,7 @@ import { LIMITE_VEICULOS, PORTES, ROTULO_PORTE, chavePlaca, limparVeiculo, porte
 import { validarModelo } from '../domain/templates.js';
 import { addDays, fromYmd, startOfDay, ymd } from '../domain/time.js';
 import { itensDoAgendamento } from '../domain/reports.js';
-import { cpfMascarado } from '../domain/pix.js';
+import { cpfMascarado, cpfValido } from '../domain/pix.js';
 import * as PU from '../domain/publico.js';
 import { FERIADOS_NACIONAIS } from '../domain/feriados.js';
 import { LOJAS_DEMO, LOJA_PADRAO, lojaDemo, lojaDoEndereco } from './lojas-demo.js';
@@ -418,7 +418,14 @@ export const clientes = {
     return mutate((s, agora) => {
       if (!String(c.nome || '').trim()) return erro('Informe o nome ou apelido do cliente.');
       const tel = R.telefoneNacional(c.telefone);
-      if (tel.length < 10) return erro('Informe o telefone com DDD.');
+      if (!R.telefoneBrasileiro(c.telefone) || !/^[1-9]\d/.test(tel)) return erro('Informe o telefone com DDD.');
+      // CPF (opcional) válido e único na loja; a mensagem nunca diz de quem é. Nascimento: data real (aaaa-mm-dd) entre 1900 e hoje. Mesmas regras do servidor (F2).
+      if (String(c.cpf || '').trim() && !cpfValido(c.cpf)) return erro('CPF inválido.');
+      if (R.somenteDigitos(c.cpf) && s.clientes.some((x) => x.id !== c.id && R.somenteDigitos(x.cpf) === R.somenteDigitos(c.cpf))) return erro('Esse CPF já está cadastrado.');
+      if (String(c.nascimento || '').trim()) {
+        const d = new Date(`${c.nascimento}T00:00:00`);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(c.nascimento) || Number.isNaN(d.getTime()) || ymd(d.getTime()) !== c.nascimento || d.getFullYear() < 1900 || d.getTime() > agora) return erro('Data de nascimento inválida.');
+      }
       if (s.clientes.some((x) => x.id !== c.id && R.telefoneNacional(x.telefone) === tel && String(x.nome).toLowerCase() === String(c.nome).toLowerCase())) return erro('Já existe um cliente com esse nome e telefone.');
       // Veículos do cliente: placa válida (antiga ou Mercosul) e única por cliente; o id é sempre do servidor; veículo com agendamento ativo não sai da lista.
       let veiculos;

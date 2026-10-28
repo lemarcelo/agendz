@@ -87,3 +87,7 @@ Snapshot do estado com senhas e CPFs em texto puro no navegador; senha comparada
 - O agendamento guarda só uma **cópia do que o cupom valia** (nome, tipo, serviços, % ou R$), nunca a chave.
 - Tentativas erradas de chave ficam por telefone (`cuponsTentativas`) com validade curta; é dado pessoal (telefone): apagar após o bloqueio expirar.
 - A **cor** de cada pessoa da equipe (`cor`, número de 0 a 35) não é dado pessoal sensível.
+
+## Implementado no servidor real (v81)
+- `cliente`: `telefone_cif`/`telefone_hash`, `cpf_cif`/`cpf_hash`, `nascimento_cif` (AES-256-GCM `v1:iv:texto:tag`; hash HMAC-SHA256 com pepper e id da loja). Nome e apelido em texto puro. `cliente_telefone_anterior` guarda o número antigo cifrado e quem trocou. Chave e pepper: `CIFRA_CHAVE` e `CIFRA_PEPPER` no `.env` da VPS (gerados por `deploy/preparar-api.sh`); sem eles a API não sobe. **Perder a chave = perder os dados cifrados**: copie para fora da VPS e fora do backup do banco.
+- Lista: CPF só mascarado, sem nascimento. Ficha: CPF completo e nascimento só para dono, profissional que atende o cliente ou cadastro sem horários. Nenhum log da API grava telefone ou CPF. Testes: `ClientesTest.cpfTelefoneENascimentoFicamCifradosNoBancoENomeEmTextoPuro` e vizinhos.

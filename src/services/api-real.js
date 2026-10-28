@@ -4,7 +4,7 @@
 //
 // Regras: a loja vem do endereço (Host), nunca de um campo; o token fica SÓ em memória (nunca localStorage/sessionStorage/cookie: recarregar a
 // página pede o login de novo); nenhuma função lança erro: devolve { ok, ... } com mensagem em português; erro técnico nunca vira texto cru na tela.
-// Docs: docs/F2-front-na-api-real.md. Rotas: POST /api/auth/login, PUT /api/usuarios/me/senha, GET /api/publico/loja.
+// Docs: docs/F2-front-na-api-real.md. Rotas: POST /api/auth/login, PUT /api/usuarios/me/senha, GET /api/publico/loja, /api/onboarding/*, /api/clientes.
 
 let base = ''; // '' = mesmo endereço do site (o Caddy manda /api/* para a API); os testes apontam para um servidor falso
 let token = null;
@@ -144,4 +144,41 @@ export const onboarding = {
   },
   // POST /api/onboarding/concluir
   async concluir() { const r = await chamar('POST', '/api/onboarding/concluir', {}); return r.ok ? { ok: true } : r; },
+};
+
+// ---------- clientes (F2 parte 2; regras no servidor: ClienteService) ----------
+const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const lerVeiculo = (v) => ({ id: texto(v && v.id, 40), placa: texto(v && v.placa, 8), marca: texto(v && v.marca, 30), modelo: texto(v && v.modelo, 40), cor: texto(v && v.cor, 20), porte: texto(v && v.porte, 16) });
+function lerCliente(d) {
+  d = d || {};
+  return {
+    id: texto(d.id, 40), nome: texto(d.nome, 100), apelido: texto(d.apelido, 100), telefone: texto(d.telefone, 20), telefoneAnterior: d.telefoneAnterior ? texto(d.telefoneAnterior, 20) : '',
+    cpf: d.cpf ? texto(d.cpf, 14) : '', cpfMascarado: d.cpfMascarado ? texto(d.cpfMascarado, 14) : '', nascimento: d.nascimento ? texto(d.nascimento, 10) : '',
+    dadosCompletos: d.dadosCompletos === true, veiculos: listaDe(d.veiculos, 10).map(lerVeiculo),
+  };
+}
+export const clientes = {
+  // GET /api/clientes?q=  (nome, apelido, telefone com DDD, CPF, placa ou modelo; até 500; CPF só mascarado)
+  async listar(busca = '') {
+    const q = String(busca ?? '').trim().slice(0, 60);
+    const r = await chamar('GET', `/api/clientes${q ? `?q=${encodeURIComponent(q)}` : ''}`);
+    return r.ok ? { ok: true, clientes: listaDe(r.dados, 500).map(lerCliente) } : r;
+  },
+  // GET /api/clientes/{id}  (ficha: CPF completo e nascimento só para o dono, quem atende o cliente ou cadastro sem horários)
+  async obter(id) {
+    if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Cliente não encontrado' };
+    const r = await chamar('GET', `/api/clientes/${id}`);
+    return r.ok ? { ok: true, cliente: lerCliente(r.dados) } : r;
+  },
+  // POST /api/clientes  |  PUT /api/clientes/{id}   (campo ausente não muda; cpf/nascimento "" apagam; `veiculos` ausente não mexe na lista)
+  async salvar(d) {
+    d = d && typeof d === 'object' ? d : {};
+    const corpo = {};
+    for (const [k, max] of [['nome', 100], ['apelido', 100], ['telefone', 30], ['cpf', 20], ['nascimento', 10]]) if (typeof d[k] === 'string') corpo[k] = d[k].slice(0, max);
+    if (Array.isArray(d.veiculos)) corpo.veiculos = d.veiculos.slice(0, 50).map((v) => ({ ...(ID.test(String(v && v.id)) ? { id: v.id } : {}), placa: texto(v && v.placa, 16), marca: texto(v && v.marca, 30), modelo: texto(v && v.modelo, 40), cor: texto(v && v.cor, 20), porte: texto(v && v.porte, 16) }));
+    const edicao = d.id !== undefined && d.id !== null && d.id !== '';
+    if (edicao && !ID.test(String(d.id))) return { ok: false, status: 0, erro: 'Cliente não encontrado' };
+    const r = await chamar(edicao ? 'PUT' : 'POST', edicao ? `/api/clientes/${d.id}` : '/api/clientes', corpo);
+    return r.ok ? { ok: true, cliente: lerCliente(r.dados) } : r;
+  },
 };

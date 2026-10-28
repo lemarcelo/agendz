@@ -1,0 +1,537 @@
+{
+ "descricao": "Casos de validação de cliente executados na API simulada (tests/clientes-equivalencia.test.mjs) e no servidor (ClientesEquivalenciaTest). Cada caso roda numa loja da estética automotiva sem clientes; só o último passo é conferido, os anteriores precisam dar certo.",
+ "casos": [
+  {
+   "nome": "nome vazio",
+   "passos": [
+    {
+     "nome": "",
+     "telefone": "(53) 99900-0001"
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Informe o nome ou apelido do cliente."
+   }
+  },
+  {
+   "nome": "nome só com espaços",
+   "passos": [
+    {
+     "nome": "   ",
+     "telefone": "(53) 99900-0001"
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Informe o nome ou apelido do cliente."
+   }
+  },
+  {
+   "nome": "telefone curto",
+   "passos": [
+    {
+     "nome": "Ana",
+     "telefone": "123"
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Informe o telefone com DDD."
+   }
+  },
+  {
+   "nome": "telefone sem DDD",
+   "passos": [
+    {
+     "nome": "Ana",
+     "telefone": "999000001"
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Informe o telefone com DDD."
+   }
+  },
+  {
+   "nome": "telefone longo demais",
+   "passos": [
+    {
+     "nome": "Ana",
+     "telefone": "53999000001234"
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Informe o telefone com DDD."
+   }
+  },
+  {
+   "nome": "telefone ausente",
+   "passos": [
+    {
+     "nome": "Ana"
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Informe o telefone com DDD."
+   }
+  },
+  {
+   "nome": "telefone formatado",
+   "passos": [
+    {
+     "nome": "Ana",
+     "telefone": "(53) 99900-0001"
+    }
+   ],
+   "esperado": {
+    "ok": true
+   }
+  },
+  {
+   "nome": "telefone com 55",
+   "passos": [
+    {
+     "nome": "Ana",
+     "telefone": "+55 53 99900-0001"
+    }
+   ],
+   "esperado": {
+    "ok": true
+   }
+  },
+  {
+   "nome": "telefone fixo de 10 dígitos",
+   "passos": [
+    {
+     "nome": "Ana",
+     "telefone": "(53) 3222-1111"
+    }
+   ],
+   "esperado": {
+    "ok": true
+   }
+  },
+  {
+   "nome": "mesmo nome e telefone (maiúsculas e máscara diferentes)",
+   "passos": [
+    {
+     "nome": "Ana",
+     "telefone": "53999000001"
+    },
+    {
+     "nome": "ANA",
+     "telefone": "+55 (53) 99900-0001"
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Já existe um cliente com esse nome e telefone."
+   }
+  },
+  {
+   "nome": "mesmo telefone com outro nome",
+   "passos": [
+    {
+     "nome": "Ana",
+     "telefone": "53999000001"
+    },
+    {
+     "nome": "Bia",
+     "telefone": "53999000001"
+    }
+   ],
+   "esperado": {
+    "ok": true
+   }
+  },
+  {
+   "nome": "CPF inválido",
+   "passos": [
+    {
+     "nome": "Ana",
+     "telefone": "53999000001",
+     "cpf": "123.456.789-00"
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "CPF inválido."
+   }
+  },
+  {
+   "nome": "CPF com todos os dígitos iguais",
+   "passos": [
+    {
+     "nome": "Ana",
+     "telefone": "53999000001",
+     "cpf": "111.111.111-11"
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "CPF inválido."
+   }
+  },
+  {
+   "nome": "CPF válido",
+   "passos": [
+    {
+     "nome": "Ana",
+     "telefone": "53999000001",
+     "cpf": "529.982.247-25"
+    }
+   ],
+   "esperado": {
+    "ok": true
+   }
+  },
+  {
+   "nome": "CPF repetido em outro cadastro (com ou sem máscara)",
+   "passos": [
+    {
+     "nome": "Ana",
+     "telefone": "53999000001",
+     "cpf": "529.982.247-25"
+    },
+    {
+     "nome": "Carla",
+     "telefone": "53999000002",
+     "cpf": "52998224725"
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Esse CPF já está cadastrado."
+   }
+  },
+  {
+   "nome": "CPF e nascimento em branco",
+   "passos": [
+    {
+     "nome": "Ana",
+     "telefone": "53999000001",
+     "cpf": "",
+     "nascimento": ""
+    }
+   ],
+   "esperado": {
+    "ok": true
+   }
+  },
+  {
+   "nome": "nascimento em formato brasileiro",
+   "passos": [
+    {
+     "nome": "Ana",
+     "telefone": "53999000001",
+     "nascimento": "31/12/1990"
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Data de nascimento inválida."
+   }
+  },
+  {
+   "nome": "nascimento no futuro",
+   "passos": [
+    {
+     "nome": "Ana",
+     "telefone": "53999000001",
+     "nascimento": "2999-01-01"
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Data de nascimento inválida."
+   }
+  },
+  {
+   "nome": "nascimento que não existe",
+   "passos": [
+    {
+     "nome": "Ana",
+     "telefone": "53999000001",
+     "nascimento": "1990-02-31"
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Data de nascimento inválida."
+   }
+  },
+  {
+   "nome": "nascimento antes de 1900",
+   "passos": [
+    {
+     "nome": "Ana",
+     "telefone": "53999000001",
+     "nascimento": "1899-12-31"
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Data de nascimento inválida."
+   }
+  },
+  {
+   "nome": "nascimento válido",
+   "passos": [
+    {
+     "nome": "Ana",
+     "telefone": "53999000001",
+     "nascimento": "1990-05-17"
+    }
+   ],
+   "esperado": {
+    "ok": true
+   }
+  },
+  {
+   "nome": "placa inválida",
+   "passos": [
+    {
+     "nome": "Ana",
+     "telefone": "53999000001",
+     "veiculos": [
+      {
+       "placa": "XX",
+       "modelo": "Civic",
+       "porte": "medio"
+      }
+     ]
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Placa inválida. Use o formato antigo (ABC-1234) ou Mercosul (ABC1D23)."
+   }
+  },
+  {
+   "nome": "modelo curto",
+   "passos": [
+    {
+     "nome": "Ana",
+     "telefone": "53999000001",
+     "veiculos": [
+      {
+       "placa": "ABC1234",
+       "modelo": "C",
+       "porte": "medio"
+      }
+     ]
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Informe o modelo do veículo."
+   }
+  },
+  {
+   "nome": "porte inválido",
+   "passos": [
+    {
+     "nome": "Ana",
+     "telefone": "53999000001",
+     "veiculos": [
+      {
+       "placa": "ABC1234",
+       "modelo": "Civic",
+       "porte": "gigante"
+      }
+     ]
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Escolha o porte do veículo."
+   }
+  },
+  {
+   "nome": "placa repetida no mesmo cliente",
+   "passos": [
+    {
+     "nome": "Ana",
+     "telefone": "53999000001",
+     "veiculos": [
+      {
+       "placa": "ABC-1234",
+       "modelo": "Civic",
+       "porte": "medio"
+      },
+      {
+       "placa": "abc1234",
+       "modelo": "Civic",
+       "porte": "medio"
+      }
+     ]
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "A placa ABC-1234 aparece duas vezes nesse cliente."
+   }
+  },
+  {
+   "nome": "onze veículos",
+   "passos": [
+    {
+     "nome": "Ana",
+     "telefone": "53999000001",
+     "veiculos": [
+      {
+       "placa": "AAA1000",
+       "modelo": "Civic",
+       "porte": "medio"
+      },
+      {
+       "placa": "AAA1001",
+       "modelo": "Civic",
+       "porte": "medio"
+      },
+      {
+       "placa": "AAA1002",
+       "modelo": "Civic",
+       "porte": "medio"
+      },
+      {
+       "placa": "AAA1003",
+       "modelo": "Civic",
+       "porte": "medio"
+      },
+      {
+       "placa": "AAA1004",
+       "modelo": "Civic",
+       "porte": "medio"
+      },
+      {
+       "placa": "AAA1005",
+       "modelo": "Civic",
+       "porte": "medio"
+      },
+      {
+       "placa": "AAA1006",
+       "modelo": "Civic",
+       "porte": "medio"
+      },
+      {
+       "placa": "AAA1007",
+       "modelo": "Civic",
+       "porte": "medio"
+      },
+      {
+       "placa": "AAA1008",
+       "modelo": "Civic",
+       "porte": "medio"
+      },
+      {
+       "placa": "AAA1009",
+       "modelo": "Civic",
+       "porte": "medio"
+      },
+      {
+       "placa": "AAA1010",
+       "modelo": "Civic",
+       "porte": "medio"
+      }
+     ]
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Veículos inválidos: no máximo 10 por cliente."
+   }
+  },
+  {
+   "nome": "dez veículos",
+   "passos": [
+    {
+     "nome": "Ana",
+     "telefone": "53999000001",
+     "veiculos": [
+      {
+       "placa": "AAA1000",
+       "modelo": "Civic",
+       "porte": "medio"
+      },
+      {
+       "placa": "AAA1001",
+       "modelo": "Civic",
+       "porte": "medio"
+      },
+      {
+       "placa": "AAA1002",
+       "modelo": "Civic",
+       "porte": "medio"
+      },
+      {
+       "placa": "AAA1003",
+       "modelo": "Civic",
+       "porte": "medio"
+      },
+      {
+       "placa": "AAA1004",
+       "modelo": "Civic",
+       "porte": "medio"
+      },
+      {
+       "placa": "AAA1005",
+       "modelo": "Civic",
+       "porte": "medio"
+      },
+      {
+       "placa": "AAA1006",
+       "modelo": "Civic",
+       "porte": "medio"
+      },
+      {
+       "placa": "AAA1007",
+       "modelo": "Civic",
+       "porte": "medio"
+      },
+      {
+       "placa": "AAA1008",
+       "modelo": "Civic",
+       "porte": "medio"
+      },
+      {
+       "placa": "AAA1009",
+       "modelo": "Civic",
+       "porte": "medio"
+      }
+     ]
+    }
+   ],
+   "esperado": {
+    "ok": true
+   }
+  },
+  {
+   "nome": "placa antiga e Mercosul",
+   "passos": [
+    {
+     "nome": "Ana",
+     "telefone": "53999000001",
+     "veiculos": [
+      {
+       "placa": "abc-1234",
+       "modelo": "Civic",
+       "porte": "medio"
+      },
+      {
+       "placa": "bra2e19",
+       "modelo": "Strada",
+       "porte": "pickup"
+      }
+     ]
+    }
+   ],
+   "esperado": {
+    "ok": true
+   }
+  }
+ ]
+}
