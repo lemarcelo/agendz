@@ -276,7 +276,7 @@ const url = `http://127.0.0.1:${servidor.address().port}/`;
   assert.deepEqual(exp.c.semana[3], { aberto: true, faixas: [['09:00', '12:00'], ['14:00', '18:00']] });
   await p.getByTestId('pa-concluir').click();
   await p.getByTestId('painel-real').waitFor();
-  assert.equal(chamadas.at(-1).u, '/api/onboarding/concluir');
+  assert.ok(chamadas.some((c) => c.u === '/api/onboarding/concluir'), 'concluir foi chamado'); // o Início também lê as regras do Atender, então a última chamada pode ser outra
   // as senhas não ficaram em nenhum storage
   const guardado = await p.evaluate(() => JSON.stringify([Object.entries(localStorage), Object.entries(sessionStorage)]));
   assert.ok(!/Senha\dFake|tok-/.test(guardado));

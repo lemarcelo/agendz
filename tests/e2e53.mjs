@@ -114,6 +114,7 @@ const abrirAtender = async (p) => { await p.getByTestId('nav-agenda').click(); a
   regras = { formaPagamentoPadrao: 'dinheiro', futuro: ['nome'], local: ['telefone', 'formaPagamento'] };
   const { ctx, p } = await entrar();
   await abrirAtender(p);
+  await p.waitForFunction((t) => document.querySelector(`[data-testid="${t}"]`)?.checked === true, 'atender-forma-dinheiro'); // as regras chegam do servidor logo depois de abrir
   assert.equal(await p.getByTestId('atender-forma-dinheiro').isChecked(), true, 'o padrão vem marcado');
   assert.match(await p.getByTestId('atender-forma-bloco').innerText(), /forma de pagamento \*/i);
   assert.match(await p.locator('label.campo', { has: p.getByTestId('atender-telefone') }).innerText(), /Telefone \*/);
@@ -148,6 +149,7 @@ const abrirAtender = async (p) => { await p.getByTestId('nav-agenda').click(); a
   regras = { formaPagamentoPadrao: '', futuro: ['nome', 'telefone'], local: [] };
   const { ctx, p } = await entrar();
   await abrirAtender(p);
+  await p.waitForFunction(() => document.querySelector('[data-testid="atender-forma-pix"]')?.checked === false); // até as regras chegarem, vale a de fábrica (Pix)
   for (const f of FORMAS) assert.equal(await p.getByTestId(`atender-forma-${f}`).isChecked(), false);
   await p.getByTestId(`atender-srv-${SRV_CORTE}`).check();
   const antes = qtdAtendimentos();
