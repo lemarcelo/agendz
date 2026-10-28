@@ -2,7 +2,7 @@
 // Regras puras do formulário Atender do site real (src/domain/atender-form.js). A decisão final é do servidor; aqui só o que a tela sabe antes de enviar.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { tipoDoAtendimento, ehRetroativo, camposFaltando, resumoDosServicos, filtrarServicos, filtrarProdutos, qtdValida, resumoDosProdutos, vendedorPadrao, faltaItem } from '../src/domain/atender-form.js';
+import { REGRAS_DE_FABRICA, FORMAS_PAGAMENTO, formaEfetiva, exige, tipoDoAtendimento, ehRetroativo, camposFaltando, resumoDosServicos, filtrarServicos, filtrarProdutos, qtdValida, resumoDosProdutos, vendedorPadrao, faltaItem } from '../src/domain/atender-form.js';
 
 const AGORA = new Date('2026-10-28T10:00:00-03:00').getTime();
 const MIN = 60000, DIA = 86400000;
@@ -70,4 +70,30 @@ test('serviço ou produto; horário futuro exige serviço', () => {
   assert.equal(faltaItem('local', [], [{}]), '', 'só produto vale no atendimento de agora');
   assert.match(faltaItem('futuro', [], [{}]), /Produto sozinho só no atendimento de agora/);
   assert.equal(faltaItem('futuro', ['s'], [{}]), '');
+});
+
+// ---------- 5d-4c: forma de pagamento e campos obrigatórios das regras ----------
+test('forma efetiva: a escolhida, senão o padrão; vazio quando não há padrão', () => {
+  assert.equal(formaEfetiva(REGRAS_DE_FABRICA, ''), 'pix');
+  assert.equal(formaEfetiva({ ...REGRAS_DE_FABRICA, formaPagamentoPadrao: 'dinheiro' }, ''), 'dinheiro');
+  assert.equal(formaEfetiva({ ...REGRAS_DE_FABRICA, formaPagamentoPadrao: 'dinheiro' }, 'cartao'), 'cartao');
+  assert.equal(formaEfetiva({ ...REGRAS_DE_FABRICA, formaPagamentoPadrao: '' }, ''), '', 'sem padrão e nada escolhido: precisa escolher');
+  assert.equal(formaEfetiva(REGRAS_DE_FABRICA, 'boleto'), '', 'forma inventada não vale');
+  assert.equal(formaEfetiva(undefined, ''), 'pix', 'sem regras carregadas vale a de fábrica');
+  assert.deepEqual(FORMAS_PAGAMENTO.map(([k]) => k), ['pix', 'dinheiro', 'cartao']);
+});
+
+test('campos obrigatórios seguem as regras, na ordem delas, com o rótulo da tela', () => {
+  const regras = { formaPagamentoPadrao: '', futuro: ['nome'], local: ['formaPagamento', 'telefone', 'vendedor', 'profissional'] };
+  const vazio = { nome: '', telefone: '', cliente: null, profissionalId: '', vendedorId: '', temProdutos: true, forma: '' };
+  assert.deepEqual(camposFaltando('local', vazio, regras), ['forma de pagamento', 'telefone', 'vendedor', 'profissional']);
+  assert.deepEqual(camposFaltando('local', { ...vazio, forma: 'pix', telefone: '(11) 97777-6666', vendedorId: 'v', profissionalId: 'p' }, regras), []);
+  assert.deepEqual(camposFaltando('local', { ...vazio, temProdutos: false }, { ...regras, local: ['vendedor'] }), [], 'sem produto o vendedor não é exigido');
+  assert.deepEqual(camposFaltando('futuro', { ...vazio, telefone: '' }, regras), ['nome'], 'o futuro só exige o que a regra do futuro manda');
+  assert.deepEqual(camposFaltando('futuro', { ...vazio, forma: '' }, { ...regras, futuro: ['formaPagamento'] }), [], 'forma de pagamento não existe no agendamento');
+  assert.deepEqual(camposFaltando('futuro', vazio), ['nome', 'telefone'], 'sem regras: padrão de fábrica');
+  assert.deepEqual(camposFaltando('local', vazio), [], 'sem regras o atendimento feito não exige nada');
+  assert.equal(exige(regras, 'local', 'telefone'), true);
+  assert.equal(exige(regras, 'futuro', 'telefone'), false);
+  assert.equal(exige(undefined, 'futuro', 'telefone'), true);
 });

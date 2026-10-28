@@ -403,6 +403,7 @@ function lerAgendamento(d) {
     // produtos vendidos (5d-4a): nunca trazem a comissão; `total` continua sendo só dos serviços e `totalProdutos` é à parte
     produtos: listaDe(d.produtos, 20).map((p) => ({ materialId: texto(p && p.materialId, 40), nome: texto(p && p.nome, 100), qtd: numeroOuNulo(p && p.qtd) ?? 0, preco: numeroOuNulo(p && p.preco) ?? 0, vendedorId: texto(p && p.vendedorId, 40) })),
     totalProdutos: numeroOuNulo(d.totalProdutos) ?? 0,
+    formaPagamento: ['pix', 'dinheiro', 'cartao'].includes(d.formaPagamento) ? d.formaPagamento : '',
   };
 }
 const soDia = (ts) => (Number.isFinite(ts) ? new Date(ts).toISOString() : null);
@@ -422,7 +423,7 @@ export const agenda = {
     return r.ok ? { ok: true, agendamento: lerAgendamento(r.dados) } : r;
   },
   // POST /api/atendimentos  (botão Atender: data futura = agendamento a confirmar/confirmado; sem data, agora ou passado = atendimento local já concluído.
-  // Telefone acha ou cria o cadastro do cliente; só o nome não cria. Dia anterior exige `motivoRetroativo`. Produtos (`produtos: [{materialId, qtd}]`, `vendedorId`): venda com serviço ou só de produto (só de agora); estoque sai ao concluir. Pagamento e comissão: 5d-4b/4c.)
+  // Telefone acha ou cria o cadastro do cliente; só o nome não cria. Dia anterior exige `motivoRetroativo`. Produtos (`produtos: [{materialId, qtd}]`, `vendedorId`): venda com serviço ou só de produto (só de agora); estoque sai ao concluir. Forma de pagamento (`formaPagamento`: pix, dinheiro ou cartao; sem ela vale o padrão da loja).)
   async atender(d) {
     d = d && typeof d === 'object' ? d : {};
     const servicoIds = Array.isArray(d.servicoIds) ? d.servicoIds : [];
@@ -450,6 +451,10 @@ export const agenda = {
     if (d.inicio !== undefined && d.inicio !== null) { const i = soDia(d.inicio); if (!i) return { ok: false, status: 0, erro: 'Data e hora inválidas.' }; corpo.inicio = i; }
     if (d.status !== undefined && d.status !== null && d.status !== '') { if (!['a_confirmar', 'confirmado'].includes(d.status)) return { ok: false, status: 0, erro: 'Agendamento futuro nasce a confirmar ou confirmado.' }; corpo.status = d.status; }
     if (typeof d.encaixe === 'boolean') corpo.encaixe = d.encaixe;
+    if (d.formaPagamento !== undefined && d.formaPagamento !== null && d.formaPagamento !== '') {
+      if (!['pix', 'dinheiro', 'cartao'].includes(d.formaPagamento)) return { ok: false, status: 0, erro: 'Forma de pagamento inválida.' };
+      corpo.formaPagamento = d.formaPagamento; // só vale no atendimento local (o servidor guarda; no agendamento futuro é ignorada)
+    }
     // Mesmo pedido de novo (clique repetido depois de um erro de rede) usa a mesma chave: o servidor devolve o que já fez e não grava duas vezes.
     // Pedido diferente, ou depois de um sucesso, ganha chave nova (dois atendimentos iguais de propósito continuam possíveis).
     const assinatura = JSON.stringify(corpo);
@@ -556,5 +561,36 @@ export const profissionais = {
   async listar() {
     const r = await chamar('GET', '/api/profissionais');
     return r.ok ? { ok: true, profissionais: listaDe(r.dados, 200).map((p) => ({ id: texto(p && p.id, 40), nome: texto(p && p.nome, 150), papel: PAPEIS.includes(p && p.papel) ? p.papel : 'profissional', atende: !!(p && p.atende === true), podeVender: !(p && p.podeVender === false) })).filter((p) => ID.test(p.id)) } : r;
+  },
+};
+
+// ---------- regras do Atender (5d-4c) ----------
+const CAMPOS_ATENDER = ['nome', 'telefone', 'profissional', 'vendedor', 'formaPagamento'];
+const lerRegras = (d) => {
+  d = d && typeof d === 'object' ? d : {};
+  const campos = (l, futuro) => listaDe(l, 5).map((x) => texto(x, 20)).filter((x) => CAMPOS_ATENDER.includes(x) && !(futuro && x === 'formaPagamento'));
+  return { formaPagamentoPadrao: ['', 'pix', 'dinheiro', 'cartao'].includes(d.formaPagamentoPadrao) ? d.formaPagamentoPadrao : 'pix', futuro: campos(d.futuro, true), local: campos(d.local, false) };
+};
+export const regras = {
+  // GET /api/estabelecimento/regras-atendimento  (quem usa a agenda; o formulário Atender precisa da forma padrão e dos campos obrigatórios)
+  async obter() {
+    const r = await chamar('GET', '/api/estabelecimento/regras-atendimento');
+    return r.ok ? { ok: true, regras: lerRegras(r.dados) } : r;
+  },
+  // PUT /api/estabelecimento/regras-atendimento  { formaPagamentoPadrao?, camposObrigatorios?: { futuro, local } }  (só o proprietário)
+  async gravar({ formaPagamentoPadrao, camposObrigatorios } = {}) {
+    const corpo = {};
+    if (formaPagamentoPadrao !== undefined) {
+      if (!['', 'pix', 'dinheiro', 'cartao'].includes(formaPagamentoPadrao)) return { ok: false, status: 0, erro: 'Forma de pagamento padrão inválida.' };
+      corpo.formaPagamentoPadrao = formaPagamentoPadrao;
+    }
+    if (camposObrigatorios !== undefined) {
+      const c = camposObrigatorios;
+      const ok = c && typeof c === 'object' && ['futuro', 'local'].every((k) => Array.isArray(c[k]) && c[k].length <= 5 && new Set(c[k]).size === c[k].length && c[k].every((x) => CAMPOS_ATENDER.includes(x) && !(k === 'futuro' && x === 'formaPagamento')));
+      if (!ok) return { ok: false, status: 0, erro: 'Campos obrigatórios inválidos.' };
+      corpo.camposObrigatorios = { futuro: [...c.futuro], local: [...c.local] };
+    }
+    const r = await chamar('PUT', '/api/estabelecimento/regras-atendimento', corpo);
+    return r.ok ? { ok: true, regras: lerRegras(r.dados) } : r;
   },
 };

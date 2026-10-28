@@ -2,7 +2,7 @@
 // Agenda do site real (src/services/api-real.js, `agenda` e `profissionais`): rotas e corpos, validação antes da rede, leitura defensiva da resposta.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { agenda, comissoes, configurar, consultaDoPeriodo, produtos, profissionais } from '../src/services/api-real.js';
+import { agenda, comissoes, configurar, consultaDoPeriodo, produtos, profissionais, regras } from '../src/services/api-real.js';
 import { agruparPorDia } from '../src/domain/agenda-grupos.js';
 
 const ID = '00000000-0000-4000-8000-000000000101';
@@ -73,7 +73,7 @@ test('atender: rota e corpo certos, só o que o servidor aceita; entrada ruim ne
   const r = await agenda.atender({ servicoIds: [SRV], nome: 'Ana', telefone: '(11) 97777-6666', clienteId: ID, profissionalId: PROF, inicio: Date.parse('2026-10-26T15:00:00-03:00'), motivoRetroativo: 'Esqueci de lançar', status: 'confirmado', encaixe: false, formaPagamento: 'pix', campoQualquer: 1 });
   assert.equal(r.ok, true);
   assert.equal(r.agendamento.origem, 'atendimento'); assert.equal(r.agendamento.nomeAvulso, 'Balcão'); assert.equal(r.agendamento.motivoRetroativo, 'Esqueci de lançar');
-  assert.deepEqual(chamadas[0], { url: 'https://loja.teste/api/atendimentos', metodo: 'POST', corpo: { servicoIds: [SRV], nome: 'Ana', telefone: '(11) 97777-6666', motivoRetroativo: 'Esqueci de lançar', clienteId: ID, profissionalId: PROF, inicio: '2026-10-26T18:00:00.000Z', status: 'confirmado', encaixe: false } });
+  assert.deepEqual(chamadas[0], { url: 'https://loja.teste/api/atendimentos', metodo: 'POST', corpo: { servicoIds: [SRV], nome: 'Ana', telefone: '(11) 97777-6666', motivoRetroativo: 'Esqueci de lançar', clienteId: ID, profissionalId: PROF, inicio: '2026-10-26T18:00:00.000Z', status: 'confirmado', encaixe: false, formaPagamento: 'pix' } });
   await agenda.atender({ servicoIds: [SRV], nome: '  ', telefone: '' });
   assert.deepEqual(chamadas[1].corpo, { servicoIds: [SRV] }, 'texto em branco não vai; sem data o servidor decide "agora"');
   const antes = chamadas.length;
@@ -187,4 +187,47 @@ test('comissões: pagar leva chave e a repete no mesmo pedido; pedido ruim nem s
   assert.deepEqual(chamadas[0], { url: `https://loja.teste/api/agendamentos/${ID}/comissao/cancelar`, metodo: 'POST', corpo: { quem: PROF, motivo: 'Cortesia da casa' } });
   assert.equal((await comissoes.restaurar(ID)).ok, true);
   assert.deepEqual(chamadas[1].corpo, {});
+});
+
+// ---------- 5d-4c: forma de pagamento e regras do Atender ----------
+test('atender: a forma de pagamento vai no corpo só se for válida; forma inventada nem sai do cliente', async () => {
+  servidor({ id: ID, clienteId: null, profissionalId: PROF, inicio: '2026-10-28T13:00:00Z', status: 'concluido', formaPagamento: 'cartao' });
+  const r = await agenda.atender({ servicoIds: [PROF], profissionalId: PROF, formaPagamento: 'cartao' });
+  assert.equal(chamadas[0].corpo.formaPagamento, 'cartao');
+  assert.equal(r.agendamento.formaPagamento, 'cartao');
+  await agenda.atender({ servicoIds: [PROF], profissionalId: PROF });
+  assert.ok(!('formaPagamento' in chamadas[1].corpo), 'sem forma: o servidor usa o padrão da loja');
+  const antes = chamadas.length;
+  const ruim = await agenda.atender({ servicoIds: [PROF], formaPagamento: 'boleto' });
+  assert.deepEqual([ruim.ok, ruim.erro], [false, 'Forma de pagamento inválida.']);
+  assert.equal(chamadas.length, antes);
+});
+
+test('leitura: forma desconhecida na resposta vira vazio', async () => {
+  servidor([{ id: ID, profissionalId: PROF, inicio: '2026-10-28T13:00:00Z', status: 'concluido', formaPagamento: 'cheque' }]);
+  assert.equal((await agenda.listar({ de: 1, ate: 2 })).agendamentos[0].formaPagamento, '');
+});
+
+test('regras do Atender: rota, corpo certo, leitura defensiva e validação antes da rede', async () => {
+  servidor({ formaPagamentoPadrao: 'dinheiro', futuro: ['nome', 'formaPagamento', 'cpf'], local: ['telefone', 'x'.repeat(50)], lixo: 1 });
+  const lida = await regras.obter();
+  assert.deepEqual(chamadas[0], { url: 'https://loja.teste/api/estabelecimento/regras-atendimento', metodo: 'GET', corpo: undefined });
+  assert.deepEqual(lida, { ok: true, regras: { formaPagamentoPadrao: 'dinheiro', futuro: ['nome'], local: ['telefone'] } }, 'o futuro nunca exige forma; campo desconhecido some');
+  servidor({ formaPagamentoPadrao: 'xx', futuro: [], local: [] });
+  assert.equal((await regras.obter()).regras.formaPagamentoPadrao, 'pix', 'forma desconhecida volta ao padrão de fábrica');
+  servidor({ formaPagamentoPadrao: '', futuro: ['nome'], local: ['formaPagamento'] });
+  const g = await regras.gravar({ formaPagamentoPadrao: '', camposObrigatorios: { futuro: ['nome'], local: ['formaPagamento'], lixo: 1 } });
+  assert.deepEqual(chamadas[0], { url: 'https://loja.teste/api/estabelecimento/regras-atendimento', metodo: 'PUT', corpo: { formaPagamentoPadrao: '', camposObrigatorios: { futuro: ['nome'], local: ['formaPagamento'] } } });
+  assert.deepEqual(g.regras, { formaPagamentoPadrao: '', futuro: ['nome'], local: ['formaPagamento'] });
+  const antes = chamadas.length;
+  for (const ruim of [{ formaPagamentoPadrao: 'boleto' }, { camposObrigatorios: { futuro: ['formaPagamento'], local: [] } }, { camposObrigatorios: { futuro: ['nome', 'nome'], local: [] } }, { camposObrigatorios: { futuro: ['cpf'], local: [] } }, { camposObrigatorios: { futuro: [] } }]) {
+    assert.equal((await regras.gravar(ruim)).ok, false);
+  }
+  assert.equal(chamadas.length, antes, 'nada inválido sai do cliente');
+});
+
+test('regras do Atender: o erro do servidor chega com a mensagem dele (profissional não grava)', async () => {
+  servidor({ mensagem: 'Acesso negado.' }, 403);
+  const r = await regras.gravar({ formaPagamentoPadrao: 'pix' });
+  assert.deepEqual([r.ok, r.status, r.erro], [false, 403, 'Acesso negado.']);
 });

@@ -864,6 +864,8 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
 .atender-real { display: grid; gap: 12px; padding: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
 .atender-real-topo { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .atender-real-titulo { margin: 0; font-size: 16px; }
+.regras-real { display: grid; gap: 10px; margin-top: 12px; min-width: 0; }
+.regras-real > h3 { margin: 0; font-size: 15px; }
 .atender-real-bloco { display: grid; gap: 8px; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; min-width: 0; margin: 0; }
 .atender-real-bloco > legend { font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--muted); padding: 0 6px; }
 .atender-real-servicos, .atender-real-achados { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 220px; overflow-y: auto; }

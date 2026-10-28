@@ -1,13 +1,13 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
 // Atender do site real (F2 parte 5c): um botão só para atendimento já feito (agora ou passado, concluído na hora) e agendamento futuro.
 // A regra toda (cliente por telefone, conflito, expediente, dia anterior com motivo, quem pode lançar) está no servidor (POST /api/atendimentos);
-// a tela mostra as mensagens dele. Produtos (5d-4a): venda com serviço ou só de produto (só no atendimento de agora), com vendedor; forma de pagamento e comissão chegam nas próximas fatias da 5d. Não importa `api.js`, `hooks.js` nem `common.jsx`.
+// a tela mostra as mensagens dele. Produtos (5d-4a): venda com serviço ou só de produto (só no atendimento de agora), com vendedor; forma de pagamento (5d-4c) é a escolhida ou o padrão da loja e os campos obrigatórios vêm das regras da loja. Não importa `api.js`, `hooks.js` nem `common.jsx`.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { agenda as api, clientes as apiClientes, produtos as apiProdutos, servicos as apiServicos } from '../../services/api-real.js';
+import { agenda as api, clientes as apiClientes, produtos as apiProdutos, regras as apiRegras, servicos as apiServicos } from '../../services/api-real.js';
 import { fmtMoney, startOfDay } from '../../domain/time.js';
 import { formatarTelefone, somenteDigitos } from '../../domain/rules.js';
 import { Rot } from '../../domain/tipos.js';
-import { camposFaltando, ehRetroativo, faltaItem, filtrarProdutos, filtrarServicos, qtdValida, resumoDosProdutos, resumoDosServicos, tipoDoAtendimento, vendedorPadrao } from '../../domain/atender-form.js';
+import { REGRAS_DE_FABRICA, FORMAS_PAGAMENTO, camposFaltando, ehRetroativo, exige, faltaItem, formaEfetiva, filtrarProdutos, filtrarServicos, qtdValida, resumoDosProdutos, resumoDosServicos, tipoDoAtendimento, vendedorPadrao } from '../../domain/atender-form.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
 
 const aoLocal = (ts) => { const d = new Date(ts); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
@@ -32,6 +32,8 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
   const [itens, setItens] = useState([]); // produtos escolhidos: [{ materialId, qtd }]
   const [vendedorEscolhido, setVendedorEscolhido] = useState('');
   const vendem = useMemo(() => (equipe || profissionais).filter((p) => p.podeVender !== false), [equipe, profissionais]);
+  const [regras, setRegras] = useState(REGRAS_DE_FABRICA); // Estabelecimento > Regras; o servidor confere de novo
+  const [formaEscolhida, setFormaEscolhida] = useState('');
   const [status, setStatus] = useState('a_confirmar');
   const [encaixe, setEncaixe] = useState(false);
   const [motivo, setMotivo] = useState('');
@@ -40,6 +42,7 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
   const ultima = useRef(0);
 
   useEffect(() => { let vivo = true; apiServicos.listar().then((r) => { if (vivo) { if (r.ok) setServicos(r.servicos.filter((s) => s.ativo !== false)); else { setServicos([]); setErro(r.erro); } } }); return () => { vivo = false; }; }, []);
+  useEffect(() => { let vivo = true; apiRegras.obter().then((r) => { if (vivo && r.ok) setRegras(r.regras); }); return () => { vivo = false; }; }, []);
   useEffect(() => { let vivo = true; apiProdutos.listar().then((r) => { if (vivo) setProdutos(r.ok ? r.produtos : []); }); return () => { vivo = false; }; }, []);
   useEffect(() => {
     const q = busca.trim();
@@ -59,11 +62,13 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
   const bloqueado = retro && ehProprio;
   const lista = useMemo(() => filtrarServicos(servicos || [], buscaSrv), [servicos, buscaSrv]);
   const resumo = resumoDosServicos(servicos || [], ids);
-  const faltam = camposFaltando(tipo, { nome, telefone, cliente });
   const listaProd = useMemo(() => filtrarProdutos(produtos || [], buscaProd), [produtos, buscaProd]);
   const resumoProd = resumoDosProdutos(produtos || [], itens);
   const vendedor = vendem.some((p) => p.id === vendedorEscolhido) ? vendedorEscolhido : vendedorPadrao(vendem, meuId, profId);
   const falta = faltaItem(tipo, ids, itens);
+  const forma = formaEfetiva(regras, formaEscolhida);
+  const faltam = camposFaltando(tipo, { nome, telefone, cliente, profissionalId: profId, vendedorId: itens.length ? vendedor : '', temProdutos: itens.length > 0, forma }, regras);
+  const marca = (campo) => (exige(regras, tipo, campo) ? ' *' : '');
 
   const escolher = (c) => { setCliente(c); setNome(c.apelido || c.nome); setTelefone(c.telefone ? formatarTelefone(telNacional(c.telefone)) : ''); setBusca(''); setAchados([]); setErro(''); };
   const marcar = (id) => setIds((x) => (x.includes(id) ? x.filter((i) => i !== id) : [...x, id]));
@@ -74,11 +79,12 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
     if (enviando) return;
     if (personalizar && inicio === null) { setErro('Informe a data e a hora.'); return; }
     if (falta) { setErro(falta); return; }
+    if (tipo === 'local' && !forma) { setErro('Escolha a forma de pagamento.'); return; }
     setEnviando(true); setErro('');
     const r = await api.atender({
       servicoIds: ids, ...(itens.length ? { produtos: itens, vendedorId: vendedor } : {}), nome, telefone, ...(cliente ? { clienteId: cliente.id } : {}), profissionalId: profId,
       ...(personalizar ? { inicio } : {}), ...(retro ? { motivoRetroativo: motivo } : {}),
-      ...(tipo === 'futuro' ? { status, encaixe } : {}),
+      ...(tipo === 'futuro' ? { status, encaixe } : { formaPagamento: forma }),
     });
     setEnviando(false);
     if (!r.ok) { setErro(r.erro); return; }
@@ -121,8 +127,8 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
           </ul>
         )}
         <div className="form-grade">
-          <Campo rotulo={`Nome${tipo === 'futuro' ? ' *' : ''}`}><input value={nome} onChange={(e) => setNome(e.target.value)} maxLength={60} placeholder="Nome ou apelido" data-testid="atender-nome" /></Campo>
-          <Campo rotulo={`Telefone${tipo === 'futuro' ? ' *' : ''}`}><input value={telefone} inputMode="tel" autoComplete="off" onChange={(e) => setTelefone(e.target.value)} placeholder="(55) 99999-9999" data-testid="atender-telefone" /></Campo>
+          <Campo rotulo={`Nome${marca('nome')}`}><input value={nome} onChange={(e) => setNome(e.target.value)} maxLength={60} placeholder="Nome ou apelido" data-testid="atender-nome" /></Campo>
+          <Campo rotulo={`Telefone${marca('telefone')}`}><input value={telefone} inputMode="tel" autoComplete="off" onChange={(e) => setTelefone(e.target.value)} placeholder="(55) 99999-9999" data-testid="atender-telefone" /></Campo>
         </div>
         <p className="muted">Com telefone, o cadastro é achado ou criado. Só com o nome, nada é cadastrado.</p>
       </fieldset>
@@ -160,7 +166,7 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
           </ul>
           {itens.length > 0 && (
             <>
-              <Campo rotulo="Quem vendeu">
+              <Campo rotulo={`Quem vendeu${marca('vendedor')}`}>
                 <select value={vendedor} onChange={(e) => setVendedorEscolhido(e.target.value)} disabled={ehProprio} data-testid="atender-vendedor">
                   {vendem.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
                 </select>
@@ -172,7 +178,7 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
       )}
 
       <div className="form-grade">
-        <Campo rotulo={Rot('profissional')}>
+        <Campo rotulo={`${Rot('profissional')}${marca('profissional')}`}>
           <select value={profId} onChange={(e) => setProfId(e.target.value)} disabled={ehProprio} data-testid="atender-profissional">
             {profissionais.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
           </select>
@@ -188,6 +194,17 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
           </div>
         )}
       </div>
+      {tipo === 'local' && (
+        <fieldset className="atender-real-bloco" data-testid="atender-forma-bloco">
+          <legend>{`Forma de pagamento${marca('formaPagamento')}`}</legend>
+          <div className="acoes">
+            {FORMAS_PAGAMENTO.map(([k, r]) => (
+              <label key={k} className={`radio-op ${forma === k ? 'on' : ''}`}><input type="radio" name="atender-forma" checked={forma === k} onChange={() => { setFormaEscolhida(k); setErro(''); }} data-testid={`atender-forma-${k}`} />{r}</label>
+            ))}
+          </div>
+          <p className="muted">Só fica registrado (a cobrança e o financeiro vêm depois).</p>
+        </fieldset>
+      )}
       {tipo === 'futuro' && <label className="check-linha"><input type="checkbox" checked={encaixe} onChange={(e) => setEncaixe(e.target.checked)} data-testid="atender-encaixe" /><span>Encaixe (pode ficar sobre um horário já confirmado)</span></label>}
 
       {faltam.length > 0 && <p className="muted" data-testid="atender-faltam">Falta preencher: {faltam.join(', ')}.</p>}

@@ -13,14 +13,36 @@ export function tipoDoAtendimento(inicio, agora) {
 // Lançamento de um dia anterior a hoje: exige o motivo e é só do dono/recepção.
 export const ehRetroativo = (inicio, agora) => Number.isFinite(inicio) && tipoDoAtendimento(inicio, agora) === 'local' && inicio < startOfDay(agora);
 
-// Campos que o servidor exige por padrão: agendamento pede nome e telefone (o aviso do horário vai por telefone); atendimento local não pede nada.
-export function camposFaltando(tipo, { nome, telefone, cliente }) {
-  if (tipo !== 'futuro') return [];
-  const faltam = [];
-  if (!String(nome || '').trim() && !(cliente && !cliente.semNome)) faltam.push('nome');
-  if (String(telefone || '').replace(/\D/g, '').length < 10 && !cliente) faltam.push('telefone');
-  return faltam;
+// Regras do Atender (Estabelecimento > Regras, no servidor: GET /api/estabelecimento/regras-atendimento). De fábrica: agendamento pede nome e telefone
+// (o aviso do horário vai por telefone), atendimento local não pede nada e a forma padrão é Pix.
+export const FORMAS_PAGAMENTO = [['pix', 'Pix'], ['dinheiro', 'Dinheiro'], ['cartao', 'Cartão']];
+export const CAMPOS_DO_ATENDER = { nome: 'nome', telefone: 'telefone', profissional: 'profissional', vendedor: 'vendedor', formaPagamento: 'forma de pagamento' };
+export const REGRAS_DE_FABRICA = { formaPagamentoPadrao: 'pix', futuro: ['nome', 'telefone'], local: [] };
+export const formaValida = (f) => FORMAS_PAGAMENTO.some(([k]) => k === f);
+
+// Forma que vale para o atendimento local: a escolhida ou o padrão. '' = sem padrão e nada escolhido (precisa escolher).
+export function formaEfetiva(regras, escolhida) {
+  if (escolhida) return formaValida(escolhida) ? escolhida : '';
+  const r = regras || REGRAS_DE_FABRICA;
+  return formaValida(r.formaPagamentoPadrao) ? r.formaPagamentoPadrao : '';
 }
+
+// Campos obrigatórios que ainda faltam (na ordem das regras), com o rótulo que a tela mostra. O servidor confere de novo.
+// O que o formulário já traz por padrão (profissional escolhido, vendedor, forma padrão) conta como preenchido.
+export function camposFaltando(tipo, { nome, telefone, cliente, profissionalId, vendedorId, temProdutos, forma }, regras = REGRAS_DE_FABRICA) {
+  const tem = {
+    nome: !!(String(nome || '').trim() || (cliente && !cliente.semNome)),
+    telefone: String(telefone || '').replace(/\D/g, '').length >= 10 || !!cliente,
+    profissional: !!profissionalId,
+    vendedor: !temProdutos || !!vendedorId,
+    formaPagamento: tipo === 'futuro' || !!forma,
+  };
+  const lista = (regras && Array.isArray(regras[tipo]) ? regras[tipo] : REGRAS_DE_FABRICA[tipo]) || [];
+  return lista.filter((k) => tem[k] === false).map((k) => CAMPOS_DO_ATENDER[k]);
+}
+
+// Campos que as regras exigem em cada tipo (para marcar com * no formulário).
+export const exige = (regras, tipo, campo) => ((regras && regras[tipo]) || REGRAS_DE_FABRICA[tipo] || []).includes(campo);
 
 // Soma de preço e minutos dos serviços marcados (só para mostrar; o servidor recalcula).
 export function resumoDosServicos(servicos, ids) {

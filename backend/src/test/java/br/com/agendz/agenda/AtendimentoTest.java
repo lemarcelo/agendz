@@ -62,6 +62,7 @@ class AtendimentoTest extends BaseApi {
         jdbc.update("delete from servico_componente");
         jdbc.update("delete from servico");
         jdbc.update("delete from cliente");
+        jdbc.update("update configuracao_loja set forma_pagamento_padrao = null, campos_futuro = null, campos_local = null");
     }
 
     private static String id(String json) {
@@ -371,5 +372,80 @@ class AtendimentoTest extends BaseApi {
         atenderComChave(DALFORNO, alan, CHAVE, "{\"profissionalId\":\"" + alanId + "\",\"servicoIds\":[\"" + corte + "\"]}").andExpect(status().isCreated());
         assertEquals(2, jdbc.queryForObject("select count(*) from agendamento", Integer.class));
         assertEquals(2, jdbc.queryForObject("select count(*) from idempotencia", Integer.class));
+    }
+
+    // ---------------------------------------------------------------- 5d-4c-1: forma de pagamento e regras do Atender
+
+    private ResultActions regras(String host, String token, String corpo) throws Exception {
+        return mvc.perform(put("/api/estabelecimento/regras-atendimento").with(host(host)).header(HttpHeaders.AUTHORIZATION, bearer(token)).contentType(MediaType.APPLICATION_JSON).content(corpo));
+    }
+
+    @Test
+    void localGuardaAFormaEscolhidaOuAPadraoDeFabricaPix() throws Exception {
+        atender(APEX, davi, corpo(pabloId, "")).andExpect(status().isCreated()).andExpect(jsonPath("$.formaPagamento").value("pix"));
+        atender(APEX, davi, corpo(pabloId, ",\"formaPagamento\":\"dinheiro\"")).andExpect(status().isCreated()).andExpect(jsonPath("$.formaPagamento").value("dinheiro"));
+        atender(APEX, davi, corpo(pabloId, ",\"formaPagamento\":\"boleto\"")).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("Forma de pagamento inválida."));
+        assertEquals(2, jdbc.queryForObject("select count(*) from agendamento", Integer.class));
+        assertEquals("dinheiro", jdbc.queryForObject("select forma_pagamento from agendamento where forma_pagamento = 'dinheiro'", String.class));
+    }
+
+    @Test
+    void semPadraoOAtendimentoLocalObrigaEscolherAForma() throws Exception {
+        regras(APEX, davi, "{\"formaPagamentoPadrao\":\"\"}").andExpect(status().isOk()).andExpect(jsonPath("$.formaPagamentoPadrao").value(""));
+        atender(APEX, davi, corpo(pabloId, "")).andExpect(status().isBadRequest()).andExpect(jsonPath("$.mensagem").value("Escolha a forma de pagamento."));
+        atender(APEX, davi, corpo(pabloId, ",\"formaPagamento\":\"cartao\"")).andExpect(status().isCreated()).andExpect(jsonPath("$.formaPagamento").value("cartao"));
+        regras(APEX, davi, "{\"formaPagamentoPadrao\":\"dinheiro\"}").andExpect(status().isOk());
+        atender(APEX, davi, corpo(pabloId, "")).andExpect(status().isCreated()).andExpect(jsonPath("$.formaPagamento").value("dinheiro"));
+        assertEquals(2, jdbc.queryForObject("select count(*) from agendamento", Integer.class));
+    }
+
+    @Test
+    void agendamentoFuturoNaoGuardaForma() throws Exception {
+        atender(APEX, davi, corpo(pabloId, ",\"telefone\":\"53999000010\",\"nome\":\"Rita\",\"inicio\":\"" + futuro + "\"")).andExpect(status().isCreated())
+                .andExpect(jsonPath("$.formaPagamento").doesNotExist());
+    }
+
+    @Test
+    void camposObrigatoriosDoLocalVemDasRegrasEComBomRotulo() throws Exception {
+        regras(APEX, davi, "{\"camposObrigatorios\":{\"futuro\":[\"nome\",\"telefone\"],\"local\":[\"telefone\",\"formaPagamento\"]}}").andExpect(status().isOk());
+        atender(APEX, davi, corpo(pabloId, "")).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("Preencha o campo obrigatório: telefone."));
+        regras(APEX, davi, "{\"formaPagamentoPadrao\":\"\",\"camposObrigatorios\":{\"futuro\":[\"nome\"],\"local\":[\"telefone\",\"formaPagamento\"]}}").andExpect(status().isOk());
+        atender(APEX, davi, corpo(pabloId, "")).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("Preencha os campos obrigatórios: telefone, forma de pagamento."));
+        atender(APEX, davi, corpo(pabloId, ",\"telefone\":\"53999000011\",\"formaPagamento\":\"pix\"")).andExpect(status().isCreated());
+        // o futuro agora só exige o nome
+        atender(APEX, davi, corpo(pabloId, ",\"telefone\":\"53999000012\",\"inicio\":\"" + futuro + "\"")).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("Preencha o campo obrigatório: nome."));
+        assertEquals(1, jdbc.queryForObject("select count(*) from agendamento", Integer.class));
+    }
+
+    @Test
+    void regrasInvalidasSaoRecusadasESoOProprietarioGrava() throws Exception {
+        regras(APEX, davi, "{\"formaPagamentoPadrao\":\"boleto\"}").andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("Forma de pagamento padrão inválida."));
+        for (String ruim : new String[]{
+                "{\"futuro\":[\"formaPagamento\"],\"local\":[]}", "{\"futuro\":[\"nome\",\"nome\"],\"local\":[]}", "{\"futuro\":[\"cpf\"],\"local\":[]}",
+                "{\"futuro\":[],\"local\":[\"nome\",\"telefone\",\"profissional\",\"vendedor\",\"formaPagamento\",\"nome\"]}", "{\"futuro\":[]}"}) {
+            regras(APEX, davi, "{\"camposObrigatorios\":" + ruim + "}").andExpect(status().isBadRequest()).andExpect(jsonPath("$.mensagem").value("Campos obrigatórios inválidos."));
+        }
+        regras(APEX, pablo, "{\"formaPagamentoPadrao\":\"pix\"}").andExpect(status().isForbidden());
+        // o profissional lê as regras (o formulário precisa do padrão e dos obrigatórios), mas não muda
+        mvc.perform(get("/api/estabelecimento/regras-atendimento").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(pablo))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.formaPagamentoPadrao").value("pix")).andExpect(jsonPath("$.futuro[0]").value("nome")).andExpect(jsonPath("$.futuro[1]").value("telefone"))
+                .andExpect(jsonPath("$.local", hasSize(0)));
+    }
+
+    @Test
+    void asRegrasDeUmaLojaNaoMudamAsDeOutra() throws Exception {
+        regras(APEX, davi, "{\"formaPagamentoPadrao\":\"cartao\",\"camposObrigatorios\":{\"futuro\":[\"nome\"],\"local\":[\"telefone\"]}}").andExpect(status().isOk());
+        String alan = token(DALFORNO, "alan");
+        mvc.perform(get("/api/estabelecimento/regras-atendimento").with(host(DALFORNO)).header(HttpHeaders.AUTHORIZATION, bearer(alan))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.formaPagamentoPadrao").value("pix")).andExpect(jsonPath("$.local", hasSize(0))).andExpect(jsonPath("$.futuro", hasSize(2)));
+        mvc.perform(get("/api/estabelecimento/regras-atendimento").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.formaPagamentoPadrao").value("cartao")).andExpect(jsonPath("$.local[0]").value("telefone"));
+        // gravar só a forma não apaga os campos já escolhidos
+        regras(APEX, davi, "{\"formaPagamentoPadrao\":\"dinheiro\"}").andExpect(status().isOk()).andExpect(jsonPath("$.local[0]").value("telefone")).andExpect(jsonPath("$.futuro[0]").value("nome"));
     }
 }

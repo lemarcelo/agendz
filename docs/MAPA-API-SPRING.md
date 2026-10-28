@@ -245,6 +245,13 @@ O catálogo (`backend/src/main/resources/catalogo/<tipo>.json`) é gerado dos se
 | `POST /api/agendamentos/{id}/comissao/restaurar` `{quem?}` | dono | desfaz o cancelamento | só se estiver cancelada |
 | `POST /api/atendimentos` (retroativo) | quem já tinha | período já pago a alguém do atendimento grava `comissao_em = agora` | comissão entra no próximo pagamento; o histórico informa |
 
+## 10h. Forma de pagamento e regras do Atender (v95, 5d-4c-1; `AtendimentoTest`)
+| Rota | Quem | O que faz | Regras |
+|---|---|---|---|
+| `GET /api/estabelecimento/regras-atendimento` | dono, admin, atendente, profissional (seção agenda) | `{formaPagamentoPadrao, futuro[], local[]}` | sem linha gravada: Pix, futuro = nome e telefone, local = nada |
+| `PUT /api/estabelecimento/regras-atendimento` `{formaPagamentoPadrao?, camposObrigatorios?: {futuro, local}}` | dono | grava; o que não vem fica como estava | forma: pix, dinheiro, cartao ou vazio (sem padrão); campos: nome, telefone, profissional, vendedor, formaPagamento (esta só no local), sem repetir, até 5 |
+| `POST /api/atendimentos` `formaPagamento?` | quem já tinha | atendimento feito guarda a forma (escolhida ou padrão); campos obrigatórios das regras valem nos dois tipos | sem padrão e nada escolhido = 400 "Escolha a forma de pagamento."; futuro ignora a forma |
+
 ## 11. Pontos do protótipo que **não** existem no real (tratar como pendência)
 
 `MODO_DEMO` (código de recuperação na resposta), `bancoSimulado`, `store.avancar`/`reiniciar`, snapshot com senhas e CPFs, sessão em variável do navegador, contadores de login na memória, chave de autoria no front. Todos substituídos pelas camadas das seções 0 a 10.

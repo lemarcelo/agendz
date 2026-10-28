@@ -44,6 +44,13 @@ Lista simples. Cada item está no histórico do `prompt-agendz-regras.md` (v84 a
 - **Decidi:** continua sem fila no aparelho: a espera pela internet (v87) mais a chave já evitam perda e duplicação sem guardar nada no aparelho.
 - v91: o "canto tampado pelo botão" foi entendido como a lista Serviços realizados da ficha (caixa sem raio e botão colado). Atender (modal e site real) conferidos e sem o problema. Se for outra tela, o Marcelo avisa.
 
+## v95 (28/10): forma de pagamento e regras do Atender (5d-4c-1)
+- **Decidi:** a forma de pagamento só fica registrada no atendimento feito; sem financeiro no servidor não há lançamento de receita (entra quando o financeiro real existir).
+- **Decidi:** as regras ficam em `configuracao_loja` e a tela delas é um cartão no Início do dono, não uma tela nova.
+- **Decidi:** o profissional lê as regras (o formulário precisa do padrão e dos obrigatórios), mas só o dono grava.
+- **Decidi:** campo obrigatório vale também para o profissional que lança; o que o formulário já preenche por padrão conta como preenchido.
+- **Decidi:** no agendamento futuro a forma de pagamento é ignorada (ainda não foi pago) e nunca pode ser obrigatória.
+
 ## v94 (28/10): comissão no site real (5d-4b)
 - **Decidi:** sem financeiro no servidor, "pagar comissão" só registra o pagamento (valor, período, quem pagou). A despesa "Comissões" entra quando o financeiro real existir.
 - **Decidi:** a conta é por linha (serviço ou produto) e a parte de uma pessoa é o conjunto das linhas dela; "paga" e "cancelada" só valem quando todas as linhas estão assim.

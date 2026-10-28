@@ -11,6 +11,7 @@ import Servicos from './Servicos.jsx';
 import Equipe from './Equipe.jsx';
 import Comissoes from './Comissoes.jsx';
 import Ganhos from './Ganhos.jsx';
+import RegrasAtendimento from './RegrasAtendimento.jsx';
 import { TIPOS, definirTipoAtivo, rotulo, tipoValido } from '../../domain/tipos.js';
 import { cssDaMarca, logoValida } from '../../domain/tema.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
@@ -154,6 +155,7 @@ function Painel({ loja, sessao, aoSair }) {
               <p><b data-testid="painel-nome">{sessao.nome}</b> · <span data-testid="painel-papel">{papel}</span></p>
               <Aviso>Sua conta está pronta e o acesso é seguro. Clientes, serviços, equipe, a agenda (horários, calendário, status, remarcar e o botão Atender) e as comissões já estão aqui.</Aviso>
               {sessao.papel === 'dono' && <Btn onClick={() => setReconfigurando(true)} data-testid="reconfigurar-abrir">Reconfigurar estabelecimento</Btn>}
+              {sessao.papel === 'dono' && <RegrasAtendimento />}
             </section>
           )}
           {aba === 'agenda' && <Agenda meuId={sessao.id} ehProprio={sessao.papel === 'profissional'} ehDono={dono || sessao.papel === 'admin' || sessao.papel === 'atendente'} />}
