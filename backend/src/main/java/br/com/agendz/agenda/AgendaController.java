@@ -1,6 +1,7 @@
 package br.com.agendz.agenda;
 
 import br.com.agendz.clientes.ClienteService;
+import br.com.agendz.comissao.ComissaoService;
 import br.com.agendz.erro.ErroDeNegocio;
 import br.com.agendz.escala.EscalaService;
 import br.com.agendz.tenant.Loja;
@@ -138,9 +139,11 @@ public class AgendaController {
     private final ClienteService clientes;
     private final Idempotencia idempotencia;
     private final EstoqueDaVenda estoque;
+    private final ComissaoService comissoes;
 
-    public AgendaController(LojaJdbc banco, Clock relogio, EscalaService escalas, ClienteService clientes, Idempotencia idempotencia, EstoqueDaVenda estoque) {
+    public AgendaController(LojaJdbc banco, Clock relogio, EscalaService escalas, ClienteService clientes, Idempotencia idempotencia, EstoqueDaVenda estoque, ComissaoService comissoes) {
         this.estoque = estoque;
+        this.comissoes = comissoes;
         this.banco = banco;
         this.relogio = relogio;
         this.escalas = escalas;
@@ -249,6 +252,7 @@ public class AgendaController {
                             + "values (?::uuid, ?, ?, ?, ?, ?, ?, ?)",
                     loja.id().toString(), agendamentoId, s.id(), ordem++, s.nome(), s.preco(), s.duracaoMin(), s.intervaloMin());
         }
+        comissoes.congelar(jdbc, agendamentoId); // o percentual de cada serviço fica gravado agora (mudar a regra depois não mexe neste atendimento)
     }
 
     // ---------------------------------------------------------------- atender
@@ -358,7 +362,15 @@ public class AgendaController {
                 ? " (cliente " + jdbc.queryForObject("select coalesce(nullif(apelido, ''), nome) from cliente where id = ?", String.class, quem.clienteId()) + ")"
                 : avulso != null ? " (" + avulso + ")" : "";
         registrar(jdbc, loja.id(), id, jwt, "criação", null, "Atendimento local: " + nomes + de);
-        if (retro) registrar(jdbc, loja.id(), id, jwt, "lançamento retroativo", null, motivo);
+        if (retro) {
+            // se o período já foi pago a alguém que participa do atendimento, a comissão entra no PRÓXIMO pagamento (não reabre o mês fechado)
+            List<UUID> participantes = new ArrayList<>();
+            if (!servicos.isEmpty()) participantes.add(profissionalId);
+            if (vendedor != null && !participantes.contains(vendedor)) participantes.add(vendedor);
+            boolean fechado = comissoes.periodoJaPago(jdbc, participantes, inicio);
+            if (fechado) jdbc.update("update agendamento set comissao_em = ? where id = ?", utc(relogio.instant()), id);
+            registrar(jdbc, loja.id(), id, jwt, "lançamento retroativo", null, motivo + (fechado ? " · comissão entra no próximo pagamento (o período já foi pago)" : ""));
+        }
         return buscar(jdbc, id, null);
     }
 
