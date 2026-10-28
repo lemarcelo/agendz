@@ -1,11 +1,12 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
 // Casca do site publicado (API real), F2: carrega a loja do endereço (GET /api/publico/loja), faz o login real, troca a senha
-// temporária e mostra o painel com o menu. Os módulos entram um a um (Clientes na parte 2; serviços, equipe e agenda nas seguintes), cada um só
+// temporária e mostra o painel com o menu. Os módulos entram um a um (Clientes na parte 2, Serviços na 3; equipe e agenda nas seguintes), cada um só
 // quando o servidor tem a regra inteira. Não importa `api.js` (a simulada) nem `hooks.js`: o estado aqui é só o da sessão real, em memória.
 import React, { useEffect, useMemo, useState } from 'react';
 import { carregarLoja, entrar, loginValido, onboarding, sair, sessaoAtual, trocarSenha } from '../../services/api-real.js';
 import PrimeiroAcesso from '../leve/PrimeiroAcesso.jsx';
 import Clientes from './Clientes.jsx';
+import Servicos from './Servicos.jsx';
 import { TIPOS, definirTipoAtivo, rotulo, tipoValido } from '../../domain/tipos.js';
 import { cssDaMarca, logoValida } from '../../domain/tema.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
@@ -105,7 +106,7 @@ function Painel({ loja, sessao, aoSair }) {
   const [reconfigurando, setReconfigurando] = useState(false);
   if (reconfigurando) return <PrimeiroAcesso modo="reconfigurar" tipo={loja.tipo} nomeLoja={loja.nome} adaptador={onboarding} aoConcluir={() => setReconfigurando(false)} aoCancelar={() => setReconfigurando(false)} />;
   const papel = sessao.papel === 'dono' ? 'Proprietário' : rotulo({ tipo: loja.tipo }, 'profissional', { capitalizado: true });
-  const itens = [['inicio', 'Início', 'store'], ['clientes', 'Clientes', 'users']];
+  const itens = [['inicio', 'Início', 'store'], ['clientes', 'Clientes', 'users'], ['servicos', 'Serviços', 'scissors']];
   return (
     <div className="app">
       <header className="topo">
@@ -126,11 +127,12 @@ function Painel({ loja, sessao, aoSair }) {
           {aba === 'inicio' && (
             <section className="tela" data-testid="painel-real">
               <p><b data-testid="painel-nome">{sessao.nome}</b> · <span data-testid="painel-papel">{papel}</span></p>
-              <Aviso>Sua conta está pronta e o acesso é seguro. Os clientes já estão aqui; os serviços, a equipe e a agenda chegam ao site nas próximas atualizações.</Aviso>
+              <Aviso>Sua conta está pronta e o acesso é seguro. Os clientes e os serviços já estão aqui; a equipe e a agenda chegam ao site nas próximas atualizações.</Aviso>
               {sessao.papel === 'dono' && <Btn onClick={() => setReconfigurando(true)} data-testid="reconfigurar-abrir">Reconfigurar estabelecimento</Btn>}
             </section>
           )}
           {aba === 'clientes' && <Clientes />}
+          {aba === 'servicos' && <Servicos ehDono={sessao.papel === 'dono'} />}
         </main>
       </div>
     </div>

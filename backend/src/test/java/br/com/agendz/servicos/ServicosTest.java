@@ -67,14 +67,67 @@ class ServicosTest extends BaseApi {
     }
 
     @Test
-    void removerDesativaEOProfissionalNaoVeMais() throws Exception {
+    void servicoNuncaUsadoEApagadoDeVezEOProfissionalNaoVe() throws Exception {
         String dono = token(APEX, "davi"), prof = token(APEX, "pablo");
         String id = criar(APEX, dono, corpo("Lavagem", "80"));
         mvc.perform(delete("/api/servicos/" + id).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(dono))).andExpect(status().isNoContent());
         mvc.perform(get("/api/servicos").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(prof))).andExpect(jsonPath("$", hasSize(0)));
-        mvc.perform(get("/api/servicos/" + id).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(prof))).andExpect(status().isNotFound());
-        mvc.perform(get("/api/servicos/" + id).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(dono)))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.ativo").value(false));
+        mvc.perform(get("/api/servicos/" + id).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(dono))).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void servicoDentroDeComboSoDesativaEFicaInvisivelParaOProfissional() throws Exception {
+        String dono = token(APEX, "davi"), prof = token(APEX, "pablo");
+        String a = criar(APEX, dono, corpo("Lavagem", "80")), b = criar(APEX, dono, corpo("Cera", "60"));
+        String combo = criar(APEX, dono, "{\"nome\":\"Lavagem + cera\",\"preco\":120,\"duracaoMin\":90,\"combo\":true,\"componentes\":[\"" + a + "\",\"" + b + "\"]}");
+        mvc.perform(get("/api/servicos/" + combo).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(dono)))
+                .andExpect(jsonPath("$.combo").value(true)).andExpect(jsonPath("$.componentes", hasSize(2))).andExpect(jsonPath("$.componentes[0]").value(a));
+        mvc.perform(delete("/api/servicos/" + a).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(dono)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.desativado").value(true));
+        mvc.perform(get("/api/servicos/" + a).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(dono))).andExpect(jsonPath("$.ativo").value(false));
+        mvc.perform(get("/api/servicos/" + a).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(prof))).andExpect(status().isNotFound());
+        // apagar o combo (nunca usado) leva os componentes junto e libera os serviços comuns para serem apagados
+        mvc.perform(delete("/api/servicos/" + combo).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(dono))).andExpect(status().isNoContent());
+        mvc.perform(delete("/api/servicos/" + b).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(dono))).andExpect(status().isNoContent());
+    }
+
+    @Test
+    void comboNaoAceitaComboNemServicoDeOutraLoja() throws Exception {
+        String tA = token(APEX, "davi"), tB = token(DALFORNO, "alan");
+        String a = criar(APEX, tA, corpo("A", "10")), b = criar(APEX, tA, corpo("B", "10"));
+        String combo = criar(APEX, tA, "{\"nome\":\"AB\",\"preco\":15,\"duracaoMin\":60,\"combo\":true,\"componentes\":[\"" + a + "\",\"" + b + "\"]}");
+        String dentro = "{\"nome\":\"Combo de combo\",\"preco\":15,\"duracaoMin\":60,\"combo\":true,\"componentes\":[\"" + a + "\",\"" + combo + "\"]}";
+        mvc.perform(post("/api/servicos").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(tA)).contentType(MediaType.APPLICATION_JSON).content(dentro))
+                .andExpect(status().isBadRequest());
+        String c = criar(DALFORNO, tB, corpo("C", "10")), d = criar(DALFORNO, tB, corpo("D", "10"));
+        String cruzado = "{\"nome\":\"Cruzado\",\"preco\":15,\"duracaoMin\":60,\"combo\":true,\"componentes\":[\"" + a + "\",\"" + c + "\"]}";
+        mvc.perform(post("/api/servicos").with(host(DALFORNO)).header(HttpHeaders.AUTHORIZATION, bearer(tB)).contentType(MediaType.APPLICATION_JSON).content(cruzado))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/servicos").with(host(DALFORNO)).header(HttpHeaders.AUTHORIZATION, bearer(tB))).andExpect(jsonPath("$", hasSize(2)));
+    }
+
+    @Test
+    void antecedenciaEIntervaloSaoGuardadosEMantidosQuandoNaoVem() throws Exception {
+        String t = token(APEX, "davi");
+        String id = criar(APEX, t, "{\"nome\":\"Corte\",\"preco\":40,\"duracaoMin\":30,\"intervaloMin\":10,\"antecedenciaH\":48}");
+        mvc.perform(put("/api/servicos/" + id).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(t)).contentType(MediaType.APPLICATION_JSON).content(corpo("Corte novo", "45")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.intervaloMin").value(10)).andExpect(jsonPath("$.antecedenciaH").value(48));
+    }
+
+    @Test
+    void naBarbeariaOPrecoEUnicoETabelaPorPorteNaoEGuardada() throws Exception {
+        String t = token(DALFORNO, "alan");
+        String id = criar(DALFORNO, t, "{\"nome\":\"Corte\",\"preco\":40,\"duracaoMin\":30,\"precos\":{\"pequeno\":1}}");
+        mvc.perform(get("/api/servicos/" + id).with(host(DALFORNO)).header(HttpHeaders.AUTHORIZATION, bearer(t)))
+                .andExpect(jsonPath("$.preco").value(40)).andExpect(jsonPath("$.precos").doesNotExist());
+    }
+
+    @Test
+    void codigoEUnicoSemDiferenciarMaiusculas() throws Exception {
+        String t = token(APEX, "davi");
+        criar(APEX, t, "{\"nome\":\"A\",\"codigo\":\"EQ-1\",\"preco\":10,\"duracaoMin\":30}");
+        mvc.perform(post("/api/servicos").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(t)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"nome\":\"B\",\"codigo\":\"eq-1\",\"preco\":10,\"duracaoMin\":30}")).andExpect(status().isConflict());
     }
 
     @Test
@@ -128,13 +181,16 @@ class ServicosTest extends BaseApi {
     }
 
     @Test
-    void precoEDuracaoPorPorteSaoGuardados() throws Exception {
+    void precoEDuracaoPorPorteSaoGuardadosEATabelaIncompletaEhRecusada() throws Exception {
         String t = token(APEX, "davi");
         String id = criar(APEX, t, "{\"nome\":\"Vitrificacao\",\"preco\":900,\"duracaoMin\":2880,\"multiDia\":true,"
-                + "\"precos\":{\"pequeno\":900,\"suv\":1400.5},\"duracoes\":{\"pequeno\":2880,\"suv\":4320}}");
+                + "\"precos\":{\"pequeno\":900,\"medio\":1000,\"grande\":1200,\"suv\":1400.5,\"pickup\":1500},"
+                + "\"duracoes\":{\"pequeno\":2880,\"medio\":2880,\"grande\":3600,\"suv\":4320,\"pickup\":4320}}");
         mvc.perform(get("/api/servicos/" + id).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(t)))
                 .andExpect(jsonPath("$.multiDia").value(true)).andExpect(jsonPath("$.precos.suv").value(1400.5))
-                .andExpect(jsonPath("$.duracoes.suv").value(4320));
+                .andExpect(jsonPath("$.duracoes.suv").value(4320)).andExpect(jsonPath("$.preco").value(1000)).andExpect(jsonPath("$.duracaoMin").value(2880));
+        mvc.perform(post("/api/servicos").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(t)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"nome\":\"Parcial\",\"preco\":900,\"duracaoMin\":60,\"precos\":{\"pequeno\":900}}")).andExpect(status().isBadRequest());
     }
 
     @Test

@@ -1,0 +1,783 @@
+{
+ "descricao": "Casos de validação de serviço executados na API simulada (tests/servicos-equivalencia.test.mjs) e no servidor (ServicosEquivalenciaTest) na loja da estética automotiva. Passos em ordem; só o último é conferido, os anteriores precisam dar certo. '@n' = id do serviço criado no passo n. Nomes de campo são os da API real (duracaoMin, intervaloMin); a simulada usa duracao e intervalo.",
+ "casos": [
+  {
+   "nome": "nome vazio",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "",
+      "preco": 50,
+      "duracaoMin": 30
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Informe o nome do serviço."
+   }
+  },
+  {
+   "nome": "nome grande demais",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "preco": 50,
+      "duracaoMin": 30
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "O nome do serviço pode ter até 100 caracteres."
+   }
+  },
+  {
+   "nome": "categoria grande demais",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Serviço",
+      "preco": 50,
+      "duracaoMin": 30,
+      "categoria": "ccccccccccccccccccccccccccccccc"
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "A categoria pode ter até 30 letras."
+   }
+  },
+  {
+   "nome": "sem preço",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "S",
+      "duracaoMin": 30
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Informe o preço."
+   }
+  },
+  {
+   "nome": "preço negativo",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Serviço",
+      "preco": -1,
+      "duracaoMin": 30
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Informe o preço."
+   }
+  },
+  {
+   "nome": "preço acima do teto",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Serviço",
+      "preco": 100001,
+      "duracaoMin": 30
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Informe o preço."
+   }
+  },
+  {
+   "nome": "sem duração",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "S",
+      "preco": 50
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Informe a duração."
+   }
+  },
+  {
+   "nome": "duração zero",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Serviço",
+      "preco": 50,
+      "duracaoMin": 0
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "A duração precisa ser maior que zero e de no máximo 24 horas."
+   }
+  },
+  {
+   "nome": "duração acima de 24 h sem vários dias",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Serviço",
+      "preco": 50,
+      "duracaoMin": 1441
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "A duração precisa ser maior que zero e de no máximo 24 horas."
+   }
+  },
+  {
+   "nome": "duração de 2 dias com vários dias",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Serviço",
+      "preco": 50,
+      "duracaoMin": 2880,
+      "multiDia": true
+     }
+    }
+   ],
+   "esperado": {
+    "ok": true
+   }
+  },
+  {
+   "nome": "duração acima de 10 dias com vários dias",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Serviço",
+      "preco": 50,
+      "duracaoMin": 14401,
+      "multiDia": true
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "A duração precisa ser maior que zero e de no máximo 24 horas."
+   }
+  },
+  {
+   "nome": "tabela de preços incompleta",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Serviço",
+      "preco": 50,
+      "duracaoMin": 30,
+      "precos": {
+       "pequeno": 60
+      }
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Informe o preço para o porte Médio."
+   }
+  },
+  {
+   "nome": "tabela de preços com porte desconhecido",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Serviço",
+      "preco": 50,
+      "duracaoMin": 30,
+      "precos": {
+       "pequeno": 60,
+       "medio": 70,
+       "grande": 80,
+       "suv": 90,
+       "pickup": 95,
+       "gigante": 5
+      }
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Tabela de preços inválida."
+   }
+  },
+  {
+   "nome": "tabela de durações com valor zero",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Serviço",
+      "preco": 50,
+      "duracaoMin": 30,
+      "precos": {
+       "pequeno": 60,
+       "medio": 70,
+       "grande": 80,
+       "suv": 90,
+       "pickup": 95
+      },
+      "duracoes": {
+       "pequeno": 40,
+       "medio": 45,
+       "grande": 50,
+       "suv": 0,
+       "pickup": 60
+      }
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Informe a duração para o porte SUV. A duração precisa ser maior que zero e de no máximo 24 horas."
+   }
+  },
+  {
+   "nome": "tabela de durações acima de 24 h sem vários dias",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Serviço",
+      "preco": 50,
+      "duracaoMin": 30,
+      "precos": {
+       "pequeno": 60,
+       "medio": 70,
+       "grande": 80,
+       "suv": 90,
+       "pickup": 95
+      },
+      "duracoes": {
+       "pequeno": 40,
+       "medio": 45,
+       "grande": 50,
+       "suv": 55,
+       "pickup": 1500
+      }
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Informe a duração para o porte Pickup. A duração precisa ser maior que zero e de no máximo 24 horas."
+   }
+  },
+  {
+   "nome": "tabela completa de preço e duração",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Serviço",
+      "preco": 50,
+      "duracaoMin": 30,
+      "precos": {
+       "pequeno": 60,
+       "medio": 70,
+       "grande": 80,
+       "suv": 90,
+       "pickup": 95
+      },
+      "duracoes": {
+       "pequeno": 40,
+       "medio": 45,
+       "grande": 50,
+       "suv": 55,
+       "pickup": 60
+      }
+     }
+    }
+   ],
+   "esperado": {
+    "ok": true
+   }
+  },
+  {
+   "nome": "código inválido",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Serviço",
+      "preco": 50,
+      "duracaoMin": 30,
+      "codigo": "com espaço"
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Código inválido: use até 20 letras, números, ponto, hífen ou sublinhado."
+   }
+  },
+  {
+   "nome": "código repetido (maiúsculas não contam)",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Serviço",
+      "preco": 50,
+      "duracaoMin": 30,
+      "codigo": "EQ-1"
+     }
+    },
+    {
+     "corpo": {
+      "nome": "Serviço",
+      "preco": 50,
+      "duracaoMin": 30,
+      "codigo": "eq-1"
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Já existe serviço com o código eq-1."
+   }
+  },
+  {
+   "nome": "código automático segue de um em um",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Um",
+      "preco": 50,
+      "duracaoMin": 30
+     }
+    },
+    {
+     "corpo": {
+      "nome": "Dois",
+      "preco": 50,
+      "duracaoMin": 30
+     }
+    }
+   ],
+   "esperado": {
+    "ok": true,
+    "codigosSeguidos": true
+   }
+  },
+  {
+   "nome": "intervalo negativo",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Serviço",
+      "preco": 50,
+      "duracaoMin": 30,
+      "intervaloMin": -1
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Intervalo inválido."
+   }
+  },
+  {
+   "nome": "intervalo acima de 24 h",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Serviço",
+      "preco": 50,
+      "duracaoMin": 30,
+      "intervaloMin": 1441
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Intervalo inválido."
+   }
+  },
+  {
+   "nome": "antecedência acima de um ano",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Serviço",
+      "preco": 50,
+      "duracaoMin": 30,
+      "antecedenciaH": 8761
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Antecedência inválida."
+   }
+  },
+  {
+   "nome": "antecedência e intervalo válidos",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Serviço",
+      "preco": 50,
+      "duracaoMin": 30,
+      "antecedenciaH": 2,
+      "intervaloMin": 10
+     }
+    }
+   ],
+   "esperado": {
+    "ok": true
+   }
+  },
+  {
+   "nome": "comissão acima de 100%",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Serviço",
+      "preco": 50,
+      "duracaoMin": 30,
+      "comissaoPct": 101
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "A comissão vai de 0 a 100%."
+   }
+  },
+  {
+   "nome": "comissão válida",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Serviço",
+      "preco": 50,
+      "duracaoMin": 30,
+      "comissaoPct": 12.5
+     }
+    }
+   ],
+   "esperado": {
+    "ok": true
+   }
+  },
+  {
+   "nome": "combo com um só serviço",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "A",
+      "preco": 50,
+      "duracaoMin": 30
+     }
+    },
+    {
+     "corpo": {
+      "nome": "Combo",
+      "preco": 50,
+      "duracaoMin": 30,
+      "combo": true,
+      "componentes": [
+       "@1"
+      ]
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Um combo junta de 2 a 10 serviços diferentes."
+   }
+  },
+  {
+   "nome": "combo com serviço repetido",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "A",
+      "preco": 50,
+      "duracaoMin": 30
+     }
+    },
+    {
+     "corpo": {
+      "nome": "Combo",
+      "preco": 50,
+      "duracaoMin": 30,
+      "combo": true,
+      "componentes": [
+       "@1",
+       "@1"
+      ]
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Um combo junta de 2 a 10 serviços diferentes."
+   }
+  },
+  {
+   "nome": "combo sem a lista de serviços",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Combo",
+      "preco": 50,
+      "duracaoMin": 30,
+      "combo": true
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Um combo junta de 2 a 10 serviços diferentes."
+   }
+  },
+  {
+   "nome": "combo válido",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "A",
+      "preco": 50,
+      "duracaoMin": 30
+     }
+    },
+    {
+     "corpo": {
+      "nome": "B",
+      "preco": 50,
+      "duracaoMin": 30
+     }
+    },
+    {
+     "corpo": {
+      "nome": "Combo",
+      "preco": 50,
+      "duracaoMin": 30,
+      "combo": true,
+      "componentes": [
+       "@1",
+       "@2"
+      ]
+     }
+    }
+   ],
+   "esperado": {
+    "ok": true
+   }
+  },
+  {
+   "nome": "combo com serviço que não existe",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "A",
+      "preco": 50,
+      "duracaoMin": 30
+     }
+    },
+    {
+     "corpo": {
+      "nome": "Combo",
+      "preco": 50,
+      "duracaoMin": 30,
+      "combo": true,
+      "componentes": [
+       "@1",
+       "00000000-0000-0000-0000-00000000dead"
+      ]
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "O combo só aceita serviços comuns já cadastrados (combo dentro de combo não vale)."
+   }
+  },
+  {
+   "nome": "combo dentro de combo",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "A",
+      "preco": 50,
+      "duracaoMin": 30
+     }
+    },
+    {
+     "corpo": {
+      "nome": "B",
+      "preco": 50,
+      "duracaoMin": 30
+     }
+    },
+    {
+     "corpo": {
+      "nome": "C1",
+      "preco": 50,
+      "duracaoMin": 30,
+      "combo": true,
+      "componentes": [
+       "@1",
+       "@2"
+      ]
+     }
+    },
+    {
+     "corpo": {
+      "nome": "C2",
+      "preco": 50,
+      "duracaoMin": 30,
+      "combo": true,
+      "componentes": [
+       "@1",
+       "@3"
+      ]
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "O combo só aceita serviços comuns já cadastrados (combo dentro de combo não vale)."
+   }
+  },
+  {
+   "nome": "editar serviço que não existe",
+   "passos": [
+    {
+     "editar": "00000000-0000-0000-0000-00000000dead",
+     "corpo": {
+      "nome": "Serviço",
+      "preco": 50,
+      "duracaoMin": 30
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Serviço não encontrado."
+   }
+  },
+  {
+   "nome": "editar preço e nome",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "A",
+      "preco": 50,
+      "duracaoMin": 30
+     }
+    },
+    {
+     "editar": "@1",
+     "corpo": {
+      "nome": "A novo",
+      "preco": 65,
+      "duracaoMin": 30
+     }
+    }
+   ],
+   "esperado": {
+    "ok": true
+   }
+  },
+  {
+   "nome": "editar para o código de outro serviço",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "A",
+      "preco": 50,
+      "duracaoMin": 30,
+      "codigo": "EQ-A"
+     }
+    },
+    {
+     "corpo": {
+      "nome": "B",
+      "preco": 50,
+      "duracaoMin": 30,
+      "codigo": "EQ-B"
+     }
+    },
+    {
+     "editar": "@2",
+     "corpo": {
+      "nome": "B",
+      "preco": 50,
+      "duracaoMin": 30,
+      "codigo": "eq-a"
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Já existe serviço com o código eq-a."
+   }
+  },
+  {
+   "nome": "editar mantendo o próprio código",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "A",
+      "preco": 50,
+      "duracaoMin": 30,
+      "codigo": "EQ-A"
+     }
+    },
+    {
+     "editar": "@1",
+     "corpo": {
+      "nome": "A",
+      "preco": 50,
+      "duracaoMin": 30,
+      "codigo": "eq-a"
+     }
+    }
+   ],
+   "esperado": {
+    "ok": true
+   }
+  },
+  {
+   "nome": "editar validando como na criação",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "A",
+      "preco": 50,
+      "duracaoMin": 30
+     }
+    },
+    {
+     "editar": "@1",
+     "corpo": {
+      "nome": "A",
+      "preco": 50,
+      "duracaoMin": 1441
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "A duração precisa ser maior que zero e de no máximo 24 horas."
+   }
+  }
+ ]
+}

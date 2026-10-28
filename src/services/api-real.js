@@ -4,7 +4,7 @@
 //
 // Regras: a loja vem do endereço (Host), nunca de um campo; o token fica SÓ em memória (nunca localStorage/sessionStorage/cookie: recarregar a
 // página pede o login de novo); nenhuma função lança erro: devolve { ok, ... } com mensagem em português; erro técnico nunca vira texto cru na tela.
-// Docs: docs/F2-front-na-api-real.md. Rotas: POST /api/auth/login, PUT /api/usuarios/me/senha, GET /api/publico/loja, /api/onboarding/*, /api/clientes.
+// Docs: docs/F2-front-na-api-real.md. Rotas: POST /api/auth/login, PUT /api/usuarios/me/senha, GET /api/publico/loja, /api/onboarding/*, /api/clientes, /api/servicos.
 
 let base = ''; // '' = mesmo endereço do site (o Caddy manda /api/* para a API); os testes apontam para um servidor falso
 let token = null;
@@ -180,5 +180,57 @@ export const clientes = {
     if (edicao && !ID.test(String(d.id))) return { ok: false, status: 0, erro: 'Cliente não encontrado' };
     const r = await chamar(edicao ? 'PUT' : 'POST', edicao ? `/api/clientes/${d.id}` : '/api/clientes', corpo);
     return r.ok ? { ok: true, cliente: lerCliente(r.dados) } : r;
+  },
+};
+
+// ---------- serviços (F2 parte 3; regras no servidor: ServicoService) ----------
+const numeroOuNulo = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+const lerMapaNum = (m, max) => {
+  if (!m || typeof m !== 'object' || Array.isArray(m)) return null;
+  const o = {};
+  for (const k of Object.keys(m).slice(0, 20)) { const n = numeroOuNulo(m[k]); if (n !== null && /^[a-z]{1,10}$/.test(k)) o[k] = Math.min(n, max); }
+  return o;
+};
+function lerServico(d) {
+  d = d || {};
+  return {
+    id: texto(d.id, 40), codigo: texto(d.codigo, 20), nome: texto(d.nome, 100), categoria: d.categoria ? texto(d.categoria, 30) : '',
+    preco: numeroOuNulo(d.preco) ?? 0, duracaoMin: numeroOuNulo(d.duracaoMin) ?? 0, intervaloMin: numeroOuNulo(d.intervaloMin) ?? 0, antecedenciaH: numeroOuNulo(d.antecedenciaH) ?? 0,
+    multiDia: d.multiDia === true, combo: d.combo === true, componentes: listaDe(d.componentes, 10).map((c) => texto(c, 40)).filter((c) => ID.test(c)),
+    comissaoPct: numeroOuNulo(d.comissaoPct), ativo: d.ativo !== false, precos: lerMapaNum(d.precos, 100000), duracoes: lerMapaNum(d.duracoes, 14400),
+  };
+}
+export const servicos = {
+  // GET /api/servicos  (dono vê todos; profissional só os ativos)
+  async listar() {
+    const r = await chamar('GET', '/api/servicos');
+    return r.ok ? { ok: true, servicos: listaDe(r.dados, 500).map(lerServico) } : r;
+  },
+  // GET /api/servicos/{id}
+  async obter(id) {
+    if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Serviço não encontrado.' };
+    const r = await chamar('GET', `/api/servicos/${id}`);
+    return r.ok ? { ok: true, servico: lerServico(r.dados) } : r;
+  },
+  // POST /api/servicos  |  PUT /api/servicos/{id}   (só o dono; preço e duração vão sempre; os demais campos ausentes não mudam)
+  async salvar(d) {
+    d = d && typeof d === 'object' ? d : {};
+    const corpo = {};
+    for (const [k, max] of [['nome', 100], ['codigo', 20], ['categoria', 30]]) if (typeof d[k] === 'string') corpo[k] = d[k].slice(0, max);
+    for (const k of ['preco', 'duracaoMin', 'intervaloMin', 'antecedenciaH', 'comissaoPct']) if (typeof d[k] === 'number' && Number.isFinite(d[k])) corpo[k] = d[k];
+    for (const k of ['multiDia', 'combo', 'ativo']) if (typeof d[k] === 'boolean') corpo[k] = d[k];
+    const m = lerMapaNum(d.precos, 100000); if (m && d.precos) corpo.precos = m;
+    const u = lerMapaNum(d.duracoes, 14400); if (u && d.duracoes) corpo.duracoes = u;
+    if (Array.isArray(d.componentes)) corpo.componentes = d.componentes.slice(0, 10).map((c) => texto(c, 60));
+    const edicao = d.id !== undefined && d.id !== null && d.id !== '';
+    if (edicao && !ID.test(String(d.id))) return { ok: false, status: 0, erro: 'Serviço não encontrado.' };
+    const r = await chamar(edicao ? 'PUT' : 'POST', edicao ? `/api/servicos/${d.id}` : '/api/servicos', corpo);
+    return r.ok ? { ok: true, servico: lerServico(r.dados) } : r;
+  },
+  // DELETE /api/servicos/{id}  (nunca usado: apaga; com histórico ou dentro de combo: só desativa → { desativado: true })
+  async remover(id) {
+    if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Serviço não encontrado.' };
+    const r = await chamar('DELETE', `/api/servicos/${id}`);
+    return r.ok ? { ok: true, desativado: !!(r.dados && r.dados.desativado === true) } : r;
   },
 };

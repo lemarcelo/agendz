@@ -522,9 +522,10 @@ export const servicos = {
       if (sv.combo !== undefined && typeof sv.combo !== 'boolean') return erro('Opção de combo inválida.');
       if (sv.categoria !== undefined && sv.categoria !== null && !texto(sv.categoria, 30)) return erro('A categoria pode ter até 30 letras.');
       // Preço e duração por porte. Sem tabela, vale o preço/duração único para todos os portes (compatível com o cadastro simples); com tabela, os 5 portes são obrigatórios.
-      const tabela = (bruto, unico, rotulo, ok) => {
-        if (bruto === undefined || bruto === null) return finito(unico) ? { v: Object.fromEntries(PORTES.map((p) => [p, Number(unico)])) } : { erro: `Informe ${rotulo}.` };
-        if (typeof bruto !== 'object' || Array.isArray(bruto) || Object.keys(bruto).some((k) => !PORTES.includes(k))) return { erro: `Tabela de ${rotulo} inválida.` };
+      const tabela = (bruto, unico, rotulo, ok, plural) => {
+        // Valor único: vale para os 5 portes, mas também passa pelo teto (duração sem "vários dias" = no máximo 24 h).
+        if (bruto === undefined || bruto === null) return finito(unico) ? (ok(Number(unico)) ? { v: Object.fromEntries(PORTES.map((p) => [p, Number(unico)])) } : { erro: `Informe ${rotulo}.`, final: true }) : { erro: `Informe ${rotulo}.`, ausente: true };
+        if (typeof bruto !== 'object' || Array.isArray(bruto) || Object.keys(bruto).some((k) => !PORTES.includes(k))) return { erro: `Tabela de ${plural} inválida.` };
         const v = {};
         for (const p of PORTES) { if (!finito(bruto[p]) || !ok(Number(bruto[p]))) return { erro: `Informe ${rotulo} para o porte ${ROTULO_PORTE[p]}.` }; v[p] = Number(bruto[p]); }
         return { v };
@@ -533,8 +534,8 @@ export const servicos = {
       if (sv.duracao !== undefined && sv.duracao !== null && (!finito(sv.duracao) || !(Number(sv.duracao) > 0) || Number(sv.duracao) > 1440 * 10)) return erro('A duração precisa ser maior que zero e de no máximo 24 horas.');
       const multi = sv.multiDia !== undefined ? sv.multiDia : !!s.servicos.find((x) => x.id === sv.id)?.multiDia;
       const limiteDur = multi ? 24 * 60 * 10 : 1440;
-      const tp = tabela(sv.precos, sv.preco, 'o preço', (x) => x >= 0 && x <= 100000); if (tp.erro) return erro(tp.erro);
-      const td = tabela(sv.duracoes, sv.duracao, 'a duração', (x) => x > 0 && x <= limiteDur); if (td.erro) return erro(multi ? td.erro : `${td.erro} A duração precisa ser maior que zero e de no máximo 24 horas.`);
+      const tp = tabela(sv.precos, sv.preco, 'o preço', (x) => x >= 0 && x <= 100000, 'preços'); if (tp.erro) return erro(tp.erro);
+      const td = tabela(sv.duracoes, sv.duracao, 'a duração', (x) => x > 0 && x <= limiteDur, 'durações'); if (td.erro) return erro(td.ausente ? td.erro : td.final ? 'A duração precisa ser maior que zero e de no máximo 24 horas.' : multi ? td.erro : `${td.erro} A duração precisa ser maior que zero e de no máximo 24 horas.`);
       if (sv.combo) {
         const comp = sv.componentes;
         if (!(Array.isArray(comp) && comp.length >= 2 && comp.length <= 10 && new Set(comp).size === comp.length && comp.every((x) => texto(x, 60)))) return erro('Um combo junta de 2 a 10 serviços diferentes.');
