@@ -44,6 +44,13 @@ Lista simples. Cada item está no histórico do `prompt-agendz-regras.md` (v84 a
 - **Decidi:** continua sem fila no aparelho: a espera pela internet (v87) mais a chave já evitam perda e duplicação sem guardar nada no aparelho.
 - v91: o "canto tampado pelo botão" foi entendido como a lista Serviços realizados da ficha (caixa sem raio e botão colado). Atender (modal e site real) conferidos e sem o problema. Se for outra tela, o Marcelo avisa.
 
+## v93 (28/10): produtos no Atender real (5d-4a)
+- **Decidi:** venda só de produto ocupa 1 minuto na coluna de quem atende (se o vendedor não atende, vai para o primeiro que atende).
+- **Decidi:** o estoque pode ficar negativo ao concluir uma venda antiga; a checagem de "estoque insuficiente" é só ao lançar.
+- **Decidi:** `total` continua só dos serviços; `totalProdutos` vem à parte e o cartão mostra a soma.
+- **Decidi:** produto vendido ou com movimento de estoque nunca é apagado, só desativado.
+- **Decidi:** a comissão do produto fica congelada na linha, mas não sai na API da agenda (aparece só no relatório da 5d-4b).
+
 ## v92 (28/10): comissão em três níveis e produtos no assistente
 - **Decidi (D1):** o assistente sugere produtos do tipo (seis por tipo), tudo desmarcado; o dono marca, ajusta e descreve os próprios.
 - **Decidi (D2):** a comissão do funcionário não vale para produtos; o produto tem o percentual dele (vazio = sem comissão), como já era.

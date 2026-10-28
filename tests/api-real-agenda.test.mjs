@@ -2,11 +2,12 @@
 // Agenda do site real (src/services/api-real.js, `agenda` e `profissionais`): rotas e corpos, validação antes da rede, leitura defensiva da resposta.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { agenda, configurar, profissionais } from '../src/services/api-real.js';
+import { agenda, configurar, produtos, profissionais } from '../src/services/api-real.js';
 import { agruparPorDia } from '../src/domain/agenda-grupos.js';
 
 const ID = '00000000-0000-4000-8000-000000000101';
 const PROF = '00000000-0000-4000-8000-000000000001';
+const MAT = '00000000-0000-4000-8000-000000000077';
 let chamadas;
 function servidor(resposta, status = 200) {
   chamadas = [];
@@ -57,7 +58,7 @@ test('erro do servidor chega com a mensagem dele (conflito, expediente, permiss�
 test('profissionais: só id válido, papel conhecido e atende', async () => {
   servidor([{ id: PROF, nome: 'Alan', papel: 'dono', atende: true }, { id: 'ruim', nome: 'X', papel: 'dono', atende: true }, { id: ID, nome: 'Kiko', papel: 'chefe', atende: false }]);
   const r = await profissionais.listar();
-  assert.deepEqual(r.profissionais, [{ id: PROF, nome: 'Alan', papel: 'dono', atende: true }, { id: ID, nome: 'Kiko', papel: 'profissional', atende: false }]);
+  assert.deepEqual(r.profissionais, [{ id: PROF, nome: 'Alan', papel: 'dono', atende: true, podeVender: true }, { id: ID, nome: 'Kiko', papel: 'profissional', atende: false, podeVender: true }]);
 });
 
 test('agruparPorDia junta por dia mantendo a ordem', () => {
@@ -69,7 +70,7 @@ test('agruparPorDia junta por dia mantendo a ordem', () => {
 test('atender: rota e corpo certos, só o que o servidor aceita; entrada ruim nem sai do cliente', async () => {
   servidor({ id: ID, clienteId: null, profissionalId: PROF, inicio: '2026-10-28T13:00:00Z', status: 'concluido', origem: 'atendimento', nomeAvulso: 'Balcão', motivoRetroativo: 'Esqueci de lançar' });
   const SRV = '00000000-0000-4000-8000-000000000050';
-  const r = await agenda.atender({ servicoIds: [SRV], nome: 'Ana', telefone: '(11) 97777-6666', clienteId: ID, profissionalId: PROF, inicio: Date.parse('2026-10-26T15:00:00-03:00'), motivoRetroativo: 'Esqueci de lançar', status: 'confirmado', encaixe: false, produtos: [{ x: 1 }], formaPagamento: 'pix' });
+  const r = await agenda.atender({ servicoIds: [SRV], nome: 'Ana', telefone: '(11) 97777-6666', clienteId: ID, profissionalId: PROF, inicio: Date.parse('2026-10-26T15:00:00-03:00'), motivoRetroativo: 'Esqueci de lançar', status: 'confirmado', encaixe: false, formaPagamento: 'pix', campoQualquer: 1 });
   assert.equal(r.ok, true);
   assert.equal(r.agendamento.origem, 'atendimento'); assert.equal(r.agendamento.nomeAvulso, 'Balcão'); assert.equal(r.agendamento.motivoRetroativo, 'Esqueci de lançar');
   assert.deepEqual(chamadas[0], { url: 'https://loja.teste/api/atendimentos', metodo: 'POST', corpo: { servicoIds: [SRV], nome: 'Ana', telefone: '(11) 97777-6666', motivoRetroativo: 'Esqueci de lançar', clienteId: ID, profissionalId: PROF, inicio: '2026-10-26T18:00:00.000Z', status: 'confirmado', encaixe: false } });
@@ -79,7 +80,35 @@ test('atender: rota e corpo certos, só o que o servidor aceita; entrada ruim ne
   for (const x of [await agenda.atender({ servicoIds: [] }), await agenda.atender({}), await agenda.atender({ servicoIds: ['1; drop'] }), await agenda.atender({ servicoIds: [SRV], clienteId: 'x' }),
     await agenda.atender({ servicoIds: [SRV], profissionalId: 'x' }), await agenda.atender({ servicoIds: [SRV], inicio: 'amanhã' }), await agenda.atender({ servicoIds: [SRV], status: 'concluido' })]) assert.equal(x.ok, false);
   assert.equal(chamadas.length, antes);
-  assert.equal((await agenda.atender({ servicoIds: [] })).erro, 'Escolha ao menos um serviço.');
+  assert.equal((await agenda.atender({ servicoIds: [] })).erro, 'Escolha ao menos um serviço ou um produto.');
+});
+
+test('atender com produtos: só materialId e qtd inteira de 1 a 999 saem; vendedor entra; produto ruim nem sai do cliente', async () => {
+  servidor({ id: ID, profissionalId: PROF, inicio: '2026-10-28T13:00:00Z', status: 'concluido', origem: 'atendimento',
+    produtos: [{ materialId: MAT, nome: 'Pomada', qtd: 2, preco: 45, vendedorId: PROF, comissaoPct: 10 }], totalProdutos: 90, total: 0 });
+  const r = await agenda.atender({ servicoIds: [], produtos: [{ materialId: MAT, qtd: 2, preco: 1, comissaoPct: 99 }], vendedorId: PROF, profissionalId: PROF });
+  assert.equal(r.ok, true);
+  assert.deepEqual(chamadas[0].corpo, { servicoIds: [], produtos: [{ materialId: MAT, qtd: 2 }], vendedorId: PROF, profissionalId: PROF }, 'preço e comissão do cliente nunca vão: o servidor congela os dele');
+  assert.deepEqual(r.agendamento.produtos, [{ materialId: MAT, nome: 'Pomada', qtd: 2, preco: 45, vendedorId: PROF }], 'a comissão não é lida da resposta');
+  assert.equal(r.agendamento.totalProdutos, 90);
+  const antes = chamadas.length;
+  for (const x of [await agenda.atender({ servicoIds: [], produtos: [{ materialId: 'x', qtd: 1 }] }), await agenda.atender({ servicoIds: [], produtos: [{ materialId: MAT, qtd: 0 }] }),
+    await agenda.atender({ servicoIds: [], produtos: [{ materialId: MAT, qtd: 1.5 }] }), await agenda.atender({ servicoIds: [], produtos: [{ materialId: MAT, qtd: 1000 }] }),
+    await agenda.atender({ servicoIds: [], produtos: Array.from({ length: 11 }, () => ({ materialId: MAT, qtd: 1 })) }), await agenda.atender({ servicoIds: [], produtos: [{ materialId: MAT, qtd: 1 }], vendedorId: 'x' })]) assert.equal(x.ok, false);
+  assert.equal(chamadas.length, antes);
+});
+
+test('produtos.listar: só ativos, sem comissão nem custo, números e texto saneados', async () => {
+  servidor([{ id: MAT, codigo: '7', nome: 'Pomada', preco: 45, estoque: 3, ativo: true, comissaoPct: 10, custo: 22 }, { id: ID, nome: 'Velho', preco: 1, ativo: false }, { id: 'lixo', nome: 'x' }]);
+  const r = await produtos.listar();
+  assert.equal(chamadas[0].url, 'https://loja.teste/api/produtos');
+  assert.deepEqual(r.produtos, [{ id: MAT, codigo: '7', nome: 'Pomada', preco: 45, estoque: 3, ativo: true }]);
+});
+
+test('profissionais.listar: podeVender vem do servidor e, se faltar, vale como pode', async () => {
+  servidor([{ id: PROF, nome: 'Alan', papel: 'dono', atende: true, podeVender: false }, { id: ID, nome: 'Kiko', papel: 'profissional', atende: true }]);
+  const r = await profissionais.listar();
+  assert.deepEqual(r.profissionais.map((p) => p.podeVender), [false, true]);
 });
 
 test('atender: mensagem do servidor chega inteira à tela', async () => {

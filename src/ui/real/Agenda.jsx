@@ -23,7 +23,8 @@ const rotuloDoGrupo = (dia, agora) => (sameDay(dia, addDays(startOfDay(agora), 1
 
 function Cartao({ a, nomeCliente, nomeProf, mostraProf, aberto, aoAbrir, testid, children }) {
   const v = visual(a);
-  const servicos = a.servicos.map((s) => s.nome).join(' + ') || 'Sem serviço';
+  const venda = a.produtos.length ? a.produtos.map((p) => `${p.qtd}× ${p.nome}`).join(', ') : '';
+  const servicos = a.servicos.map((s) => s.nome).join(' + ') || (venda ? 'Venda de produtos' : 'Sem serviço');
   return (
     <div className={`cartao-real st-${v.cor}`} data-testid={testid} data-status={a.status} data-id={a.id}>
       <button type="button" className="cartao" onClick={aoAbrir} aria-expanded={aberto} data-testid={`${testid}-abrir`}>
@@ -34,7 +35,7 @@ function Cartao({ a, nomeCliente, nomeProf, mostraProf, aberto, aoAbrir, testid,
         </div>
         <div className="cartao-corpo">
           <span>{servicos}</span>
-          <span className="muted cartao-com">{mostraProf ? `com ${nomeProf} · ` : ''}{fmtMoney(a.total)}</span>
+          <span className="muted cartao-com">{mostraProf ? `com ${nomeProf} · ` : ''}{fmtMoney(a.total + a.totalProdutos)}</span>
         </div>
         <div className="cartao-rodape">
           {a.encaixe && <span className="chip chip-p chip-encaixe">Encaixe</span>}
@@ -48,7 +49,7 @@ function Cartao({ a, nomeCliente, nomeProf, mostraProf, aberto, aoAbrir, testid,
 }
 
 // Detalhes e ações de um agendamento aberto: status, cancelar com confirmação na tela, remarcar e histórico.
-function Detalhe({ a, nomeProf, profissionais, ehDono, aoAlterar }) {
+function Detalhe({ a, nomeProf, nomeDe, profissionais, ehDono, aoAlterar }) {
   const [hist, setHist] = useState(null);
   const [erro, setErro] = useState('');
   const [ocupado, setOcupado] = useState(false);
@@ -78,6 +79,7 @@ function Detalhe({ a, nomeProf, profissionais, ehDono, aoAlterar }) {
     <div className="cartao-detalhe" data-testid="agendamento-detalhe">
       <ul className="detalhe-itens">
         {a.servicos.map((s, i) => <li key={`${s.servicoId}-${i}`}>{s.nome} · {s.duracaoMin} min · {fmtMoney(s.preco)}</li>)}
+        {a.produtos.map((p) => <li key={p.materialId} data-testid="detalhe-produto">{p.qtd}× {p.nome} · {fmtMoney(p.preco * p.qtd)}{p.vendedorId && p.vendedorId !== a.profissionalId ? ` · vendeu ${nomeDe(p.vendedorId)}` : ''}</li>)}
       </ul>
       <p className="muted">{fmtDateTime(a.inicio)} até {fmtHM(a.fim ?? a.inicio)} · com {nomeProf}{a.motivoCancelamento ? ` · cancelado (${a.motivoCancelamento})` : ''}</p>
       {erro && <Aviso tipo="erro" data-testid="agendamento-erro">{erro}</Aviso>}
@@ -213,7 +215,7 @@ export default function Agenda({ ehProprio = false, ehDono = false, meuId = '' }
   const cartao = (a, testid) => (
     <Cartao key={a.id} a={a} testid={testid} nomeCliente={nomeCliente(a)} nomeProf={nomeProf(a.profissionalId)} mostraProf={selecionado === 'todos' && atendem.length > 1}
       aberto={aberto === a.id} aoAbrir={() => setAberto(aberto === a.id ? null : a.id)}>
-      <Detalhe a={a} nomeProf={nomeProf(a.profissionalId)} profissionais={atendem} ehDono={ehDono} aoAlterar={alterou} />
+      <Detalhe a={a} nomeProf={nomeProf(a.profissionalId)} nomeDe={nomeProf} profissionais={atendem} ehDono={ehDono} aoAlterar={alterou} />
     </Cartao>
   );
 
@@ -230,7 +232,7 @@ export default function Agenda({ ehProprio = false, ehDono = false, meuId = '' }
         <h2 className="agenda-titulo-real" data-testid="agenda-titulo">{titulo}</h2>
         {podeAtender && <Btn variante="primario" tamanho="sm" onClick={() => { setAtendendo(true); setAviso(''); }} disabled={atendendo || atendem.length === 0} data-testid="atender-abrir"><Icone n="plus" size={15} />Atender</Btn>}
       </div>
-      {atendendo && <Atender profissionais={atendem} meuId={meuId} ehProprio={ehProprio} aoSalvar={atendeu} aoFechar={() => setAtendendo(false)} />}
+      {atendendo && <Atender profissionais={atendem} equipe={profs} meuId={meuId} ehProprio={ehProprio} aoSalvar={atendeu} aoFechar={() => setAtendendo(false)} />}
       {mostrarSeletor && (
         <div className="seletor-chips" role="group" aria-label={Rot('profissional')} data-testid="seletor-profissionais">
           <button type="button" className={`chip${selecionado === 'todos' ? ' on' : ''}`} aria-pressed={selecionado === 'todos'} onClick={() => setSelecionado('todos')} data-testid="sel-todos">Todos</button>

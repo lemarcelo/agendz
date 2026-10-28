@@ -128,7 +128,7 @@ public class ProdutoService {
         }
     }
 
-    /** Nunca usado: apaga. Com histórico de venda ou de estoque: só desativa. (Hoje nada usa produto ainda; o Atender e o estoque passam a contar em 5d-4.) */
+    /** Nunca usado: apaga. Com histórico de venda ou de estoque: só desativa (o Atender real e o estoque contam desde a V19). */
     public Remocao remover(UUID id) {
         return banco.naLoja(jdbc -> {
             if (buscar(jdbc, id) == null) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, "Material não encontrado.");
@@ -143,8 +143,10 @@ public class ProdutoService {
 
     // ---------- regras ----------
 
+    /** Produto que já foi vendido ou movimentou o estoque não se apaga (só se desativa): o histórico e a comissão dependem dele. */
     private boolean emUso(JdbcTemplate jdbc, UUID id) {
-        return false;
+        Boolean usado = jdbc.queryForObject("select exists (select 1 from agendamento_produto where material_id = ?) or exists (select 1 from movimento_estoque where material_id = ?)", Boolean.class, id, id);
+        return Boolean.TRUE.equals(usado);
     }
 
     private Validado validar(Dados d, boolean criacao) {

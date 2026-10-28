@@ -91,3 +91,4 @@ Tipo imutável; loja pelo endereço; um código só com pastas por tipo; capacid
 
 - **28/10 (v90):** chave de repetição (`Idempotency-Key`) no Atender e no agendamento: resposta perdida com internet ligada não duplica nada. Próxima: 5d.
 - **28/10 (v92):** comissão em três níveis (serviço > funcionário > geral da loja) nos dois lados; servidor com produtos, comissão geral e reconfiguração com Desfazer (V17, V18); o assistente de início ganhou Produtos, Comissão e percentual por pessoa. Falta a 5d-4 (Atender real com produtos, pagamento e comissão congelada), depois 5e.
+- **28/10 (v93):** 5d-4a no código (CI valida o servidor): produtos no Atender real (serviço + produto ou só produto), vendedor, baixa de estoque ao concluir com estorno e histórico de movimentos (V19). Falta 5d-4b (comissão congelada e relatório) e 5d-4c (forma de pagamento).

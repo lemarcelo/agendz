@@ -226,6 +226,15 @@ O catálogo (`backend/src/main/resources/catalogo/<tipo>.json`) é gerado dos se
 | `POST /api/produtos`, `PUT /api/produtos/{id}`, `DELETE /api/produtos/{id}` | seção `estoque` liberada (dono sempre) | cria (201), altera, apaga (204) ou desativa (200 `{desativado:true}`) | nome único por loja (sem diferenciar maiúsculas), código único por tipo, preço 0–100000; **só o dono define a comissão** do produto; editar não muda estoque; apagar só se nunca usado (hoje `emUso` é sempre falso; passa a contar no Atender, 5d-4) |
 | `GET/PUT /api/estabelecimento/comissao` `{comissaoPadrao}` | dono | lê e grava a comissão geral (sem valor gravado vale 50) | 0–100; ordem de precedência no cálculo: serviço > funcionário > estabelecimento (`Comissao.percentual`, casos compartilhados `equivalencia/comissao.json`) |
 
+## 10f. Produtos no atendimento e baixa de estoque (v93, 5d-4a; `AtendimentoTest`)
+| Rota | Quem | O que faz | Regras |
+|---|---|---|---|
+| `POST /api/atendimentos` com `produtos:[{materialId, qtd}]`, `vendedorId?` | quem já lança | vende produto junto com o serviço ou sozinho (só atendimento de agora) | até 10 produtos, qtd 1–999; preço e % de comissão **congelados** na linha; estoque insuficiente = 400 sem gravar; vendedor ativo, não master, `pode_vender`; profissional vende sempre como ele mesmo; só produto sem vendedor = "Escolha o vendedor."; futuro exige serviço |
+| `PUT /api/agendamentos/{id}/status` e remarcar | quem já tinha | concluir baixa o estoque dos produtos; sair de concluído devolve | `EstoqueDaVenda.sincronizar` move só a diferença (`baixado`), grava `movimento_estoque` (saldo depois); a automação por minuto concilia os pendentes |
+| `GET /api/agendamentos`, `GET /api/agendamentos/{id}` | quem já tinha | passam a trazer `produtos[{materialId, nome, qtd, preco, vendedorId}]` e `totalProdutos` | **nunca** trazem a comissão; `total` segue só dos serviços |
+| `DELETE /api/produtos/{id}` | seção `estoque` | produto com venda ou movimento só desativa (200 `{desativado:true}`) | |
+| `GET /api/profissionais` | quem já tinha | cada pessoa traz `podeVender` | |
+
 ## 11. Pontos do protótipo que **não** existem no real (tratar como pendência)
 
 `MODO_DEMO` (código de recuperação na resposta), `bancoSimulado`, `store.avancar`/`reiniciar`, snapshot com senhas e CPFs, sessão em variável do navegador, contadores de login na memória, chave de autoria no front. Todos substituídos pelas camadas das seções 0 a 10.

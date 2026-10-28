@@ -34,3 +34,38 @@ export function filtrarServicos(servicos, busca) {
   const q = limpo(busca).trim();
   return q ? servicos.filter((s) => limpo(s.nome).includes(q) || limpo(s.codigo).includes(q)) : servicos;
 }
+
+// ---------- produtos (5d-4a) ----------
+// Busca por nome ou código na lista de produtos (mesma regra dos serviços).
+export const filtrarProdutos = (produtos, busca) => {
+  const q = limpo(busca).trim();
+  return q ? produtos.filter((p) => limpo(p.nome).includes(q) || limpo(p.codigo).includes(q)) : produtos;
+};
+
+// Quantidade dentro do que o servidor aceita (1 a 999, inteira); vazio ou inválido volta a 1.
+export const qtdValida = (v) => { const n = Math.floor(Number(v)); return Number.isFinite(n) ? Math.min(999, Math.max(1, n)) : 1; };
+
+// Soma dos produtos escolhidos (`itens` = [{ materialId, qtd }]), só para mostrar: o servidor congela o preço e confere o estoque.
+export function resumoDosProdutos(produtos, itens) {
+  let qtd = 0, total = 0;
+  for (const it of itens) {
+    const p = produtos.find((x) => x.id === it.materialId);
+    if (!p) continue;
+    qtd += it.qtd;
+    total += (Number(p.preco) || 0) * it.qtd;
+  }
+  return { linhas: itens.length, qtd, total: Math.round(total * 100) / 100 };
+}
+
+// Quem vende por padrão: quem está lançando, se pode vender; senão quem atende; senão o primeiro que pode vender. Vazio se ninguém pode.
+export function vendedorPadrao(equipe, meuId, profissionalId) {
+  const pode = equipe.filter((p) => p.podeVender !== false);
+  return (pode.find((p) => p.id === meuId) || pode.find((p) => p.id === profissionalId) || pode[0] || {}).id || '';
+}
+
+// Pode enviar? Serviço ou produto; horário futuro exige serviço (produto sozinho só no atendimento de agora). Devolve o aviso ou ''.
+export function faltaItem(tipo, servicoIds, produtos) {
+  if (servicoIds.length === 0 && produtos.length === 0) return 'Escolha ao menos um serviço ou um produto.';
+  if (tipo === 'futuro' && servicoIds.length === 0) return 'Para agendar um horário futuro, escolha ao menos um serviço. Produto sozinho só no atendimento de agora.';
+  return '';
+}

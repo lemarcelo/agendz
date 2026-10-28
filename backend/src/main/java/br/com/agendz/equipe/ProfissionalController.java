@@ -36,7 +36,11 @@ import org.springframework.web.bind.annotation.RestController;
 @PreAuthorize("hasAnyRole('DONO','ADMIN','ATENDENTE','PROFISSIONAL')")
 public class ProfissionalController {
 
-    public record Pessoa(UUID id, String nome, String papel, boolean atende) {
+    public record Pessoa(UUID id, String nome, String papel, boolean atende, boolean podeVender) {
+        public Pessoa(UUID id, String nome, String papel, boolean atende) {
+            this(id, nome, papel, atende, true); // quem nasce aqui pode vender (padrão da coluna `pode_vender`)
+        }
+
     }
 
     public record NovoProfissional(
@@ -59,8 +63,8 @@ public class ProfissionalController {
     @GetMapping("/api/profissionais")
     public List<Pessoa> listar() {
         return banco.naLoja(jdbc -> jdbc.query(
-                "select id, nome, papel, atende from usuario where ativo order by nome limit 200",
-                (rs, i) -> new Pessoa(rs.getObject("id", UUID.class), rs.getString("nome"), rs.getString("papel"), rs.getBoolean("atende"))));
+                "select id, nome, papel, atende, pode_vender from usuario where ativo order by nome limit 200",
+                (rs, i) -> new Pessoa(rs.getObject("id", UUID.class), rs.getString("nome"), rs.getString("papel"), rs.getBoolean("atende"), rs.getBoolean("pode_vender"))));
     }
 
     @PostMapping("/api/profissionais")
@@ -100,8 +104,8 @@ public class ProfissionalController {
 
     private Pessoa obter(UUID id) {
         List<Pessoa> achados = banco.naLoja(jdbc -> jdbc.query(
-                "select id, nome, papel, atende from usuario where id = ? and ativo",
-                (rs, i) -> new Pessoa(rs.getObject("id", UUID.class), rs.getString("nome"), rs.getString("papel"), rs.getBoolean("atende")), id));
+                "select id, nome, papel, atende, pode_vender from usuario where id = ? and ativo",
+                (rs, i) -> new Pessoa(rs.getObject("id", UUID.class), rs.getString("nome"), rs.getString("papel"), rs.getBoolean("atende"), rs.getBoolean("pode_vender")), id));
         if (achados.isEmpty()) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, "Profissional não encontrado");
         return achados.get(0);
     }

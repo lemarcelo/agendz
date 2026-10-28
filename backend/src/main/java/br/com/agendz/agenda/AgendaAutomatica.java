@@ -32,8 +32,10 @@ public class AgendaAutomatica {
     private final LojaJdbc banco;
     private final Clock relogio;
     private final boolean ativa;
+    private final EstoqueDaVenda estoque;
 
-    public AgendaAutomatica(JdbcTemplate dono, LojaJdbc banco, Clock relogio, @Value("${agendz.automacao.ativa:true}") boolean ativa) {
+    public AgendaAutomatica(JdbcTemplate dono, LojaJdbc banco, Clock relogio, @Value("${agendz.automacao.ativa:true}") boolean ativa, EstoqueDaVenda estoque) {
+        this.estoque = estoque;
         this.dono = dono;
         this.banco = banco;
         this.relogio = relogio;
@@ -78,6 +80,7 @@ public class AgendaAutomatica {
                         + "insert into agendamento_evento (loja_id, agendamento_id, em, autor_id, autor_nome, campo, de, para) "
                         + "select ?::uuid, id, fim_servico, null, 'Sistema', 'status', 'A confirmar', 'Cancelado (sem confirmação)' from perdidos",
                 ate, loja.toString());
+        estoque.sincronizarPendentes(jdbc, loja, agora); // o que a rotina concluiu baixa os produtos vendidos (e quem deixou de estar concluído devolve)
         jdbc.update("delete from idempotencia where criado_em < now() - interval '7 days'"); // chaves de repetição só valem por alguns dias
         return concluidos + cancelados;
     }

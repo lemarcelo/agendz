@@ -376,6 +376,15 @@ export const equipe = {
   },
 };
 
+// ---------- produtos (5d-4a: o vendedor só vê o que precisa para vender; comissão e custo são do dono) ----------
+export const produtos = {
+  // GET /api/produtos  (ativos; sem comissão nem custo para quem não é dono)
+  async listar() {
+    const r = await chamar('GET', '/api/produtos');
+    return r.ok ? { ok: true, produtos: listaDe(r.dados, 500).map((p) => ({ id: texto(p && p.id, 40), codigo: texto(p && p.codigo, 60), nome: texto(p && p.nome, 150), preco: numeroOuNulo(p && p.preco) ?? 0, estoque: numeroOuNulo(p && p.estoque) ?? 0, ativo: !(p && p.ativo === false) })).filter((p) => ID.test(p.id) && p.ativo) } : r;
+  },
+};
+
 // ---------- agenda (F2 parte 5b; regras no servidor: AgendaController) ----------
 const STATUS_AGENDA = ['a_confirmar', 'confirmado', 'concluido', 'cancelado'];
 const instante = (v) => { const t = typeof v === 'string' ? Date.parse(v) : NaN; return Number.isFinite(t) ? t : null; };
@@ -391,6 +400,9 @@ function lerAgendamento(d) {
     origem: texto(d.origem, 20), reagendado: d.reagendado === true, motivoCancelamento: d.motivoCancelamento ? texto(d.motivoCancelamento, 30) : '', statusManual: d.statusManual === true,
     nomeAvulso: d.nomeAvulso ? texto(d.nomeAvulso, 100) : '', motivoRetroativo: d.motivoRetroativo ? texto(d.motivoRetroativo, 300) : '',
     historico: listaDe(d.historico, 100).map((e) => ({ em: instante(e && e.em), autor: texto(e && e.autor, 80), campo: texto(e && e.campo, 40), de: e && e.de ? texto(e.de, 120) : '', para: e && e.para ? texto(e.para, 200) : '' })),
+    // produtos vendidos (5d-4a): nunca trazem a comissão; `total` continua sendo só dos serviços e `totalProdutos` é à parte
+    produtos: listaDe(d.produtos, 20).map((p) => ({ materialId: texto(p && p.materialId, 40), nome: texto(p && p.nome, 100), qtd: numeroOuNulo(p && p.qtd) ?? 0, preco: numeroOuNulo(p && p.preco) ?? 0, vendedorId: texto(p && p.vendedorId, 40) })),
+    totalProdutos: numeroOuNulo(d.totalProdutos) ?? 0,
   };
 }
 const soDia = (ts) => (Number.isFinite(ts) ? new Date(ts).toISOString() : null);
@@ -410,17 +422,29 @@ export const agenda = {
     return r.ok ? { ok: true, agendamento: lerAgendamento(r.dados) } : r;
   },
   // POST /api/atendimentos  (botão Atender: data futura = agendamento a confirmar/confirmado; sem data, agora ou passado = atendimento local já concluído.
-  // Telefone acha ou cria o cadastro do cliente; só o nome não cria. Dia anterior exige `motivoRetroativo`. Produto, pagamento e comissão: parte 5d.)
+  // Telefone acha ou cria o cadastro do cliente; só o nome não cria. Dia anterior exige `motivoRetroativo`. Produtos (`produtos: [{materialId, qtd}]`, `vendedorId`): venda com serviço ou só de produto (só de agora); estoque sai ao concluir. Pagamento e comissão: 5d-4b/4c.)
   async atender(d) {
     d = d && typeof d === 'object' ? d : {};
-    if (!Array.isArray(d.servicoIds) || d.servicoIds.length === 0) return { ok: false, status: 0, erro: 'Escolha ao menos um serviço.' };
-    const ids = d.servicoIds.slice(0, 10).map((x) => String(x ?? ''));
+    const servicoIds = Array.isArray(d.servicoIds) ? d.servicoIds : [];
+    const pedidos = Array.isArray(d.produtos) ? d.produtos : [];
+    if (servicoIds.length === 0 && pedidos.length === 0) return { ok: false, status: 0, erro: 'Escolha ao menos um serviço ou um produto.' };
+    const ids = servicoIds.slice(0, 10).map((x) => String(x ?? ''));
     if (!ids.every((x) => ID.test(x))) return { ok: false, status: 0, erro: 'Serviço não encontrado.' };
+    if (pedidos.length > 10) return { ok: false, status: 0, erro: 'No máximo 10 produtos.' };
+    const produtos = [];
+    for (const p of pedidos) {
+      const materialId = String((p && p.materialId) ?? '');
+      const qtd = Number(p && p.qtd);
+      if (!ID.test(materialId)) return { ok: false, status: 0, erro: 'Produto não encontrado.' };
+      if (!Number.isInteger(qtd) || qtd < 1 || qtd > 999) return { ok: false, status: 0, erro: 'A quantidade vai de 1 a 999.' };
+      produtos.push({ materialId, qtd });
+    }
     const corpo = { servicoIds: ids };
+    if (produtos.length) corpo.produtos = produtos;
     for (const [k, max] of [['nome', 100], ['telefone', 30], ['motivoRetroativo', 300]]) if (typeof d[k] === 'string' && d[k].trim()) corpo[k] = d[k].slice(0, max);
-    for (const k of ['clienteId', 'profissionalId']) {
+    for (const k of ['clienteId', 'profissionalId', 'vendedorId']) {
       if (d[k] === undefined || d[k] === null || d[k] === '') continue;
-      if (!ID.test(String(d[k]))) return { ok: false, status: 0, erro: k === 'clienteId' ? 'Cliente não encontrado.' : 'Profissional não encontrado.' };
+      if (!ID.test(String(d[k]))) return { ok: false, status: 0, erro: k === 'clienteId' ? 'Cliente não encontrado.' : k === 'vendedorId' ? 'Vendedor não encontrado.' : 'Profissional não encontrado.' };
       corpo[k] = d[k];
     }
     if (d.inicio !== undefined && d.inicio !== null) { const i = soDia(d.inicio); if (!i) return { ok: false, status: 0, erro: 'Data e hora inválidas.' }; corpo.inicio = i; }
@@ -459,6 +483,6 @@ export const agenda = {
 export const profissionais = {
   async listar() {
     const r = await chamar('GET', '/api/profissionais');
-    return r.ok ? { ok: true, profissionais: listaDe(r.dados, 200).map((p) => ({ id: texto(p && p.id, 40), nome: texto(p && p.nome, 150), papel: PAPEIS.includes(p && p.papel) ? p.papel : 'profissional', atende: !!(p && p.atende === true) })).filter((p) => ID.test(p.id)) } : r;
+    return r.ok ? { ok: true, profissionais: listaDe(r.dados, 200).map((p) => ({ id: texto(p && p.id, 40), nome: texto(p && p.nome, 150), papel: PAPEIS.includes(p && p.papel) ? p.papel : 'profissional', atende: !!(p && p.atende === true), podeVender: !(p && p.podeVender === false) })).filter((p) => ID.test(p.id)) } : r;
   },
 };

@@ -2,8 +2,10 @@ package br.com.agendz.agenda;
 
 import static org.hamcrest.Matchers.hasSize;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -52,7 +54,11 @@ class AtendimentoTest extends BaseApi {
     void limpar() {
         jdbc.update("delete from idempotencia");
         jdbc.update("delete from agendamento_servico");
+        jdbc.update("delete from agendamento_produto");
         jdbc.update("delete from agendamento");
+        jdbc.update("delete from movimento_estoque");
+        jdbc.update("delete from material");
+        jdbc.update("update usuario set pode_vender = true");
         jdbc.update("delete from servico_componente");
         jdbc.update("delete from servico");
         jdbc.update("delete from cliente");
@@ -114,7 +120,7 @@ class AtendimentoTest extends BaseApi {
         atender(APEX, davi, corpo(pabloId, ",\"telefone\":\"123\"")).andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.mensagem").value("Telefone com DDD e número (10 ou 11 dígitos)."));
         atender(APEX, davi, "{\"profissionalId\":\"" + pabloId + "\",\"servicoIds\":[]}").andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.mensagem").value("Escolha ao menos um serviço."));
+                .andExpect(jsonPath("$.mensagem").value("Escolha ao menos um serviço ou um produto."));
         atender(APEX, davi, corpo(null, "")).andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.mensagem").value("Escolha o profissional que atendeu."));
         assertEquals(0, jdbc.queryForObject("select count(*) from agendamento", Integer.class));
@@ -179,6 +185,116 @@ class AtendimentoTest extends BaseApi {
     @Test
     void semLoginNaoAtende() throws Exception {
         mvc.perform(post("/api/atendimentos").with(host(APEX)).contentType(MediaType.APPLICATION_JSON).content(corpo(pabloId, ""))).andExpect(status().isUnauthorized());
+    }
+
+
+    // ---------- produtos no atendimento (5d-4a) ----------
+
+    private String pomada(int estoque) throws Exception {
+        return id(mvc.perform(post("/api/produtos").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"nome\":\"Pomada\",\"preco\":45,\"comissaoPct\":10,\"custo\":22,\"estoque\":" + estoque + "}")).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
+    }
+
+    private String comProdutos(UUID prof, String servicos, String produtos, String extra) {
+        return "{" + (prof == null ? "" : "\"profissionalId\":\"" + prof + "\",") + "\"servicoIds\":" + servicos + ",\"produtos\":" + produtos + extra + "}";
+    }
+
+    private double estoqueDe(String material) {
+        return jdbc.queryForObject("select estoque from material where id = ?::uuid", Double.class, material);
+    }
+
+    private ResultActions mudarStatus(String agendamento, String novo) throws Exception {
+        return mvc.perform(put("/api/agendamentos/" + agendamento + "/status").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"" + novo + "\"}"));
+    }
+
+    @Test
+    void localComServicoEProdutoBaixaOEstoqueECongelaPrecoSemMostrarComissao() throws Exception {
+        String m = pomada(10);
+        atender(APEX, davi, comProdutos(pabloId, "[\"" + lavagem + "\"]", "[{\"materialId\":\"" + m + "\",\"qtd\":2}]", ",\"telefone\":\"53999000030\""))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.status").value("concluido")).andExpect(jsonPath("$.total").value(80)).andExpect(jsonPath("$.totalProdutos").value(90))
+                .andExpect(jsonPath("$.produtos", hasSize(1))).andExpect(jsonPath("$.produtos[0].nome").value("Pomada")).andExpect(jsonPath("$.produtos[0].qtd").value(2))
+                .andExpect(jsonPath("$.produtos[0].preco").value(45)).andExpect(jsonPath("$.produtos[0].vendedorId").value(pabloId.toString()))
+                .andExpect(jsonPath("$.produtos[0].comissaoPct").doesNotExist());
+        assertEquals(8.0, estoqueDe(m));
+        assertEquals(1, jdbc.queryForObject("select count(*) from movimento_estoque where tipo = 'saida' and delta = -2", Integer.class));
+        assertEquals(10.0, jdbc.queryForObject("select comissao_pct from agendamento_produto", Double.class));
+        // mudar o preço do produto depois não muda o que já foi vendido
+        mvc.perform(put("/api/produtos/" + m).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"nome\":\"Pomada\",\"preco\":99,\"comissaoPct\":50}")).andExpect(status().isOk());
+        assertEquals(45.0, jdbc.queryForObject("select preco from agendamento_produto", Double.class));
+        assertEquals(10.0, jdbc.queryForObject("select comissao_pct from agendamento_produto", Double.class));
+    }
+
+    @Test
+    void soProdutoDoVendedorEscolhidoOcupaUmMinutoENaoPedeServico() throws Exception {
+        String m = pomada(5);
+        // sem vendedor e sem serviço: precisa escolher
+        atender(APEX, davi, comProdutos(null, "[]", "[{\"materialId\":\"" + m + "\",\"qtd\":1}]", "")).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("Escolha o vendedor."));
+        String ag = id(atender(APEX, davi, comProdutos(null, "[]", "[{\"materialId\":\"" + m + "\",\"qtd\":1}]", ",\"vendedorId\":\"" + pabloId + "\""))
+                .andExpect(jsonPath("$.status").value("concluido")).andExpect(jsonPath("$.total").value(0)).andExpect(jsonPath("$.totalProdutos").value(45))
+                .andExpect(jsonPath("$.servicos", hasSize(0))).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
+        assertEquals(1, jdbc.queryForObject("select count(*) from agendamento where id = ?::uuid and fim_servico = inicio + interval '1 minute'", Integer.class, ag));
+        assertEquals(4.0, estoqueDe(m));
+    }
+
+    @Test
+    void futuroPedeServicoEProdutoNaoBaixaAteConcluir() throws Exception {
+        String m = pomada(5);
+        String prod = "[{\"materialId\":\"" + m + "\",\"qtd\":1}]";
+        atender(APEX, davi, comProdutos(pabloId, "[]", prod, ",\"inicio\":\"" + futuro + "\",\"nome\":\"Ana Lima\",\"telefone\":\"53999000031\"")).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("Para agendar um horário futuro, escolha ao menos um serviço. Produto sozinho só no atendimento de agora."));
+        String ag = id(atender(APEX, davi, comProdutos(pabloId, "[\"" + lavagem + "\"]", prod, ",\"inicio\":\"" + futuro + "\",\"nome\":\"Ana Lima\",\"telefone\":\"53999000031\""))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.status").value("a_confirmar")).andExpect(jsonPath("$.produtos", hasSize(1))).andReturn().getResponse().getContentAsString());
+        assertEquals(5.0, estoqueDe(m));
+        mudarStatus(ag, "concluido").andExpect(status().isOk());
+        assertEquals(4.0, estoqueDe(m));
+        // concluir de novo não baixa outra vez; reabrir devolve; cancelar depois de reabrir não devolve duas vezes
+        mudarStatus(ag, "concluido").andExpect(status().isOk());
+        assertEquals(4.0, estoqueDe(m));
+        mudarStatus(ag, "confirmado").andExpect(status().isOk());
+        assertEquals(5.0, estoqueDe(m));
+        mudarStatus(ag, "cancelado").andExpect(status().isOk());
+        assertEquals(5.0, estoqueDe(m));
+        assertEquals(2, jdbc.queryForObject("select count(*) from movimento_estoque", Integer.class));
+        assertEquals(5.0, jdbc.queryForObject("select saldo from movimento_estoque order by em desc, saldo desc limit 1", Double.class));
+    }
+
+    @Test
+    void estoqueInsuficienteVendedorInvalidoELimitesRecusamSemGravarNada() throws Exception {
+        String m = pomada(1);
+        String um = "[{\"materialId\":\"" + m + "\",\"qtd\":2}]";
+        atender(APEX, davi, comProdutos(pabloId, "[\"" + lavagem + "\"]", um, "")).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("Estoque insuficiente de Pomada (restam 1)."));
+        atender(APEX, davi, comProdutos(pabloId, "[\"" + lavagem + "\"]", "[{\"materialId\":\"" + m + "\",\"qtd\":0}]", "")).andExpect(status().isBadRequest());
+        atender(APEX, davi, comProdutos(pabloId, "[\"" + lavagem + "\"]", "[{\"materialId\":\"" + UUID.randomUUID() + "\",\"qtd\":1}]", "")).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("Produto não encontrado."));
+        jdbc.update("update usuario set pode_vender = false where id = ?", marceloId);
+        atender(APEX, davi, comProdutos(pabloId, "[\"" + lavagem + "\"]", "[{\"materialId\":\"" + m + "\",\"qtd\":1}]", ",\"vendedorId\":\"" + marceloId + "\"")).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("Essa pessoa não pode vender produtos (Equipe > Pode vender produtos)."));
+        assertEquals(0, jdbc.queryForObject("select count(*) from agendamento", Integer.class));
+        assertEquals(0, jdbc.queryForObject("select count(*) from movimento_estoque", Integer.class));
+        assertEquals(1.0, estoqueDe(m));
+    }
+
+    @Test
+    void profissionalVendeComoEleMesmoEProdutoVendidoSoDesativa() throws Exception {
+        String m = pomada(5);
+        atender(APEX, pablo, comProdutos(marceloId, "[\"" + lavagem + "\"]", "[{\"materialId\":\"" + m + "\",\"qtd\":1}]", ",\"vendedorId\":\"" + marceloId + "\""))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.produtos[0].vendedorId").value(pabloId.toString()));
+        // já foi vendido: apagar só desativa
+        mvc.perform(delete("/api/produtos/" + m).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi))).andExpect(status().isOk()).andExpect(jsonPath("$.desativado").value(true));
+    }
+
+    @Test
+    void mesmaChaveComProdutoBaixaOEstoqueUmaVezSo() throws Exception {
+        String m = pomada(5);
+        String corpo = comProdutos(pabloId, "[\"" + lavagem + "\"]", "[{\"materialId\":\"" + m + "\",\"qtd\":2}]", "");
+        atenderComChave(APEX, davi, CHAVE, corpo).andExpect(status().isCreated());
+        atenderComChave(APEX, davi, CHAVE, corpo).andExpect(status().isCreated());
+        assertEquals(3.0, estoqueDe(m));
+        assertEquals(1, jdbc.queryForObject("select count(*) from movimento_estoque", Integer.class));
     }
 
     // ---------- chave de repetição (Idempotency-Key) ----------

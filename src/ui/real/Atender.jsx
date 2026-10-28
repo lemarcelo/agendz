@@ -1,20 +1,20 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
 // Atender do site real (F2 parte 5c): um botão só para atendimento já feito (agora ou passado, concluído na hora) e agendamento futuro.
 // A regra toda (cliente por telefone, conflito, expediente, dia anterior com motivo, quem pode lançar) está no servidor (POST /api/atendimentos);
-// a tela mostra as mensagens dele. Produto, forma de pagamento e comissão chegam na parte 5d. Não importa `api.js`, `hooks.js` nem `common.jsx`.
+// a tela mostra as mensagens dele. Produtos (5d-4a): venda com serviço ou só de produto (só no atendimento de agora), com vendedor; forma de pagamento e comissão chegam nas próximas fatias da 5d. Não importa `api.js`, `hooks.js` nem `common.jsx`.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { agenda as api, clientes as apiClientes, servicos as apiServicos } from '../../services/api-real.js';
+import { agenda as api, clientes as apiClientes, produtos as apiProdutos, servicos as apiServicos } from '../../services/api-real.js';
 import { fmtMoney, startOfDay } from '../../domain/time.js';
 import { formatarTelefone, somenteDigitos } from '../../domain/rules.js';
 import { Rot } from '../../domain/tipos.js';
-import { camposFaltando, ehRetroativo, filtrarServicos, resumoDosServicos, tipoDoAtendimento } from '../../domain/atender-form.js';
+import { camposFaltando, ehRetroativo, faltaItem, filtrarProdutos, filtrarServicos, qtdValida, resumoDosProdutos, resumoDosServicos, tipoDoAtendimento, vendedorPadrao } from '../../domain/atender-form.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
 
 const aoLocal = (ts) => { const d = new Date(ts); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
 const doLocal = (v) => { const t = new Date(v).getTime(); return Number.isFinite(t) ? t : null; };
 const telNacional = (t) => { const d = somenteDigitos(t); return d.startsWith('55') && d.length >= 12 ? d.slice(2) : d; };
 
-export default function Atender({ profissionais, meuId, ehProprio, aoSalvar, aoFechar }) {
+export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSalvar, aoFechar }) {
   const agora = Date.now();
   const [personalizar, setPersonalizar] = useState(false);
   const [quando, setQuando] = useState(() => aoLocal(Math.ceil(agora / 3600000) * 3600000));
@@ -27,6 +27,11 @@ export default function Atender({ profissionais, meuId, ehProprio, aoSalvar, aoF
   const [servicos, setServicos] = useState(null);
   const [buscaSrv, setBuscaSrv] = useState('');
   const [ids, setIds] = useState([]);
+  const [produtos, setProdutos] = useState(null);
+  const [buscaProd, setBuscaProd] = useState('');
+  const [itens, setItens] = useState([]); // produtos escolhidos: [{ materialId, qtd }]
+  const [vendedorEscolhido, setVendedorEscolhido] = useState('');
+  const vendem = useMemo(() => (equipe || profissionais).filter((p) => p.podeVender !== false), [equipe, profissionais]);
   const [status, setStatus] = useState('a_confirmar');
   const [encaixe, setEncaixe] = useState(false);
   const [motivo, setMotivo] = useState('');
@@ -35,6 +40,7 @@ export default function Atender({ profissionais, meuId, ehProprio, aoSalvar, aoF
   const ultima = useRef(0);
 
   useEffect(() => { let vivo = true; apiServicos.listar().then((r) => { if (vivo) { if (r.ok) setServicos(r.servicos.filter((s) => s.ativo !== false)); else { setServicos([]); setErro(r.erro); } } }); return () => { vivo = false; }; }, []);
+  useEffect(() => { let vivo = true; apiProdutos.listar().then((r) => { if (vivo) setProdutos(r.ok ? r.produtos : []); }); return () => { vivo = false; }; }, []);
   useEffect(() => {
     const q = busca.trim();
     if (q.length < 2) { setAchados([]); return undefined; }
@@ -54,16 +60,23 @@ export default function Atender({ profissionais, meuId, ehProprio, aoSalvar, aoF
   const lista = useMemo(() => filtrarServicos(servicos || [], buscaSrv), [servicos, buscaSrv]);
   const resumo = resumoDosServicos(servicos || [], ids);
   const faltam = camposFaltando(tipo, { nome, telefone, cliente });
+  const listaProd = useMemo(() => filtrarProdutos(produtos || [], buscaProd), [produtos, buscaProd]);
+  const resumoProd = resumoDosProdutos(produtos || [], itens);
+  const vendedor = vendem.some((p) => p.id === vendedorEscolhido) ? vendedorEscolhido : vendedorPadrao(vendem, meuId, profId);
+  const falta = faltaItem(tipo, ids, itens);
 
   const escolher = (c) => { setCliente(c); setNome(c.apelido || c.nome); setTelefone(c.telefone ? formatarTelefone(telNacional(c.telefone)) : ''); setBusca(''); setAchados([]); setErro(''); };
   const marcar = (id) => setIds((x) => (x.includes(id) ? x.filter((i) => i !== id) : [...x, id]));
+  const marcarProd = (id) => setItens((x) => (x.some((i) => i.materialId === id) ? x.filter((i) => i.materialId !== id) : [...x, { materialId: id, qtd: 1 }]));
+  const trocarQtd = (id, v) => setItens((x) => x.map((i) => (i.materialId === id ? { ...i, qtd: qtdValida(v) } : i)));
   const enviar = async (e) => {
     e.preventDefault();
     if (enviando) return;
     if (personalizar && inicio === null) { setErro('Informe a data e a hora.'); return; }
+    if (falta) { setErro(falta); return; }
     setEnviando(true); setErro('');
     const r = await api.atender({
-      servicoIds: ids, nome, telefone, ...(cliente ? { clienteId: cliente.id } : {}), profissionalId: profId,
+      servicoIds: ids, ...(itens.length ? { produtos: itens, vendedorId: vendedor } : {}), nome, telefone, ...(cliente ? { clienteId: cliente.id } : {}), profissionalId: profId,
       ...(personalizar ? { inicio } : {}), ...(retro ? { motivoRetroativo: motivo } : {}),
       ...(tipo === 'futuro' ? { status, encaixe } : {}),
     });
@@ -126,8 +139,37 @@ export default function Atender({ profissionais, meuId, ehProprio, aoSalvar, aoF
             </li>
           ))}
         </ul>
-        <p className="muted" data-testid="atender-total">{resumo.qtd ? `${resumo.qtd} serviço${resumo.qtd === 1 ? '' : 's'} · ${resumo.minutos} min · ${fmtMoney(resumo.total)}` : 'Escolha ao menos um serviço.'}</p>
+        <p className="muted" data-testid="atender-total">{resumo.qtd ? `${resumo.qtd} serviço${resumo.qtd === 1 ? '' : 's'} · ${resumo.minutos} min · ${fmtMoney(resumo.total)}` : itens.length ? 'Só produtos: registra a venda de agora.' : 'Escolha ao menos um serviço ou um produto.'}</p>
       </fieldset>
+
+      {produtos !== null && produtos.length > 0 && (
+        <fieldset className="atender-real-bloco" data-testid="atender-produtos-bloco">
+          <legend>Produtos (opcional)</legend>
+          <Campo rotulo="Buscar produto"><input value={buscaProd} onChange={(e) => setBuscaProd(e.target.value)} maxLength={40} placeholder="Nome ou código" data-testid="atender-busca-produto" /></Campo>
+          {listaProd.length === 0 && <p className="muted">Nenhum produto com essa busca.</p>}
+          <ul className="atender-real-servicos" data-testid="atender-lista-produtos">
+            {listaProd.map((p) => {
+              const it = itens.find((i) => i.materialId === p.id);
+              return (
+                <li key={p.id}>
+                  <label className="check-linha"><input type="checkbox" checked={!!it} onChange={() => marcarProd(p.id)} data-testid={`atender-prod-${p.id}`} /><span>{p.nome}</span><span className="muted"> · {fmtMoney(p.preco)} · estoque {p.estoque}</span></label>
+                  {it && <input type="number" min={1} max={999} step={1} value={it.qtd} onChange={(e) => trocarQtd(p.id, e.target.value)} aria-label={`Quantidade de ${p.nome}`} data-testid={`atender-qtd-${p.id}`} />}
+                </li>
+              );
+            })}
+          </ul>
+          {itens.length > 0 && (
+            <>
+              <Campo rotulo="Quem vendeu">
+                <select value={vendedor} onChange={(e) => setVendedorEscolhido(e.target.value)} disabled={ehProprio} data-testid="atender-vendedor">
+                  {vendem.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                </select>
+              </Campo>
+              <p className="muted" data-testid="atender-total-produtos">{resumoProd.qtd} unidade{resumoProd.qtd === 1 ? '' : 's'} · {fmtMoney(resumoProd.total)} em produtos</p>
+            </>
+          )}
+        </fieldset>
+      )}
 
       <div className="form-grade">
         <Campo rotulo={Rot('profissional')}>
