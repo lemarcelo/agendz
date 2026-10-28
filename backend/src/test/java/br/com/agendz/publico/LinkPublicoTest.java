@@ -264,7 +264,7 @@ class LinkPublicoTest extends BaseApi {
         pedir(OFFBOX, corpo("Ana Lima", novoTelefone(), "", bom, "")).andExpect(status().isBadRequest()).andExpect(jsonPath("$.mensagem").value("Escolha ao menos um serviço."));
         pedir(OFFBOX, corpo("Ana Lima", novoTelefone(), s + "," + s, bom, "")).andExpect(status().isBadRequest()).andExpect(jsonPath("$.mensagem").value("O mesmo serviço aparece duas vezes."));
         pedir(OFFBOX, corpo("Ana Lima", novoTelefone(), "\"" + UUID.randomUUID() + "\"", bom, "")).andExpect(status().isBadRequest());
-        pedir(OFFBOX, corpo("Ana Lima", novoTelefone(), s, Instant.now().minusSeconds(3600).withNano(0), "")).andExpect(status().isBadRequest());
+        pedir(OFFBOX, corpo("Ana Lima", novoTelefone(), s, Instant.now().minusSeconds(3600).truncatedTo(java.time.temporal.ChronoUnit.SECONDS), "")).andExpect(status().isBadRequest());
         pedir(OFFBOX, corpo("Ana Lima", novoTelefone(), s, bom.plusSeconds(5), "")).andExpect(status().isBadRequest());
         pedir(OFFBOX, corpo("Ana Lima", novoTelefone(), s, as(LocalDate.now(Fuso.BRASIL).plusDays(45), 9, 0), "")).andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.mensagem").value("Escolha um dia e um horário."));
