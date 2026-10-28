@@ -76,3 +76,8 @@ Tipo imutável; loja pelo endereço; um código só com pastas por tipo; capacid
 4. Criação de loja pela plataforma (`POST /plataforma/lojas`, domínio próprio com verificação por DNS).
 5. Ligar cron do backup e testar `restaurar.sh`; snapshot antes de mudança grande.
 6. Pendências do Marcelo: INPI/registro "Agendz", sobrenomes/e-mails reais (Davi, Pablo), logo da Apex em alta, dados reais da Offbox, `npm run autoria`.
+
+## F2 por partes (27/10/2026, noite)
+- Decisão do Marcelo: migrar o site real por partes (clientes → serviços → equipe → agenda). **Parte 2 (clientes) pronta, CI e deploy verdes (v81):** servidor com cifra de CPF/telefone/nascimento, busca, edição e veículos; tela `src/ui/real/Clientes.jsx`; casos compartilhados simulada × real. Detalhes em `docs/F2-front-na-api-real.md`.
+- A VPS gera `CIFRA_CHAVE` e `CIFRA_PEPPER` sozinha no deploy: o Marcelo precisa guardar uma cópia fora da VPS (ver `docs/PENDENTE-MARCELO.md`).
+- **Próxima: parte 3, serviços** (CRUD já existe no servidor; falta tela, código por tipo, preço por porte, combo, vários dias e a equivalência). Depois equipe e agenda. As senhas dos donos só vão com a agenda real.
