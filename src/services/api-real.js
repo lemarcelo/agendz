@@ -9,6 +9,8 @@
 let base = ''; // '' = mesmo endereço do site (o Caddy manda /api/* para a API); os testes apontam para um servidor falso
 let token = null;
 let sessao = null; // { nome, papel, deveTrocarSenha, onboardingPendente } (sem o token)
+let aoEsperar = null; // (esperando: boolean) → a tela mostra "sem conexão, aguardando"
+let esperas = []; // chamadas paradas esperando a internet voltar
 
 const TEMPO_MAX_MS = 15000;
 
@@ -19,6 +21,25 @@ export function configurar({ base: b } = {}) {
 
 export const sessaoAtual = () => (sessao ? { ...sessao } : null);
 export const sair = () => { token = null; sessao = null; };
+export const quandoEsperar = (f) => { aoEsperar = typeof f === 'function' ? f : null; };
+export const esperandoRede = () => esperas.length > 0;
+// A pessoa desistiu de esperar: as chamadas paradas terminam com a mensagem de sem conexão (nada foi enviado).
+export function cancelarEspera() { const e = esperas; esperas = []; e.forEach((x) => x.cancelar()); if (aoEsperar) aoEsperar(false); }
+
+const semRede = () => typeof navigator !== 'undefined' && navigator.onLine === false;
+// Segura a chamada enquanto o navegador estiver sem internet; volta true quando a rede voltar e false se a pessoa cancelar.
+// Só se espera quando o aparelho SABE que está offline: a requisição não saiu, então reenviar nunca duplica. Queda no meio de uma resposta
+// (aparelho online, resposta perdida) NÃO é reenviada sozinha: o servidor ainda não tem chave de repetição.
+function esperarRede() {
+  return new Promise((resolve) => {
+    const item = {};
+    const voltou = () => { globalThis.removeEventListener?.('online', voltou); esperas = esperas.filter((x) => x !== item); if (aoEsperar && esperas.length === 0) aoEsperar(false); resolve(true); };
+    item.cancelar = () => { globalThis.removeEventListener?.('online', voltou); resolve(false); };
+    esperas.push(item);
+    if (aoEsperar) aoEsperar(true);
+    globalThis.addEventListener?.('online', voltou);
+  });
+}
 
 function mensagemPadrao(status) {
   if (status === 401) return 'Usuário ou senha inválidos';
@@ -31,6 +52,15 @@ function mensagemPadrao(status) {
 
 // Uma chamada. Devolve { ok: true, status, dados } ou { ok: false, status, erro } (status 0 = sem conexão).
 async function chamar(metodo, caminho, corpo) {
+  for (;;) {
+    if (semRede() && !(await esperarRede())) return { ok: false, status: 0, erro: 'Sem conexão com o servidor. Confira a internet e tente de novo.' };
+    const r = await tentar(metodo, caminho, corpo);
+    if (r.status === 0 && semRede()) continue; // caiu a rede durante o envio: espera voltar e manda de novo (a requisição não chegou ao servidor)
+    return r;
+  }
+}
+
+async function tentar(metodo, caminho, corpo) {
   const ctl = typeof AbortController === 'function' ? new AbortController() : null;
   const t = ctl ? setTimeout(() => ctl.abort(), TEMPO_MAX_MS) : null;
   try {

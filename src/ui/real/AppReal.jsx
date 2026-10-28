@@ -3,7 +3,7 @@
 // temporária e mostra o painel com o menu. Os módulos entram um a um (Clientes na parte 2, Serviços na 3, Equipe na 4; a agenda na seguinte), cada um só
 // quando o servidor tem a regra inteira. Não importa `api.js` (a simulada) nem `hooks.js`: o estado aqui é só o da sessão real, em memória.
 import React, { useEffect, useMemo, useState } from 'react';
-import { carregarLoja, entrar, loginValido, onboarding, sair, sessaoAtual, trocarSenha } from '../../services/api-real.js';
+import { cancelarEspera, carregarLoja, entrar, esperandoRede, loginValido, onboarding, quandoEsperar, sair, sessaoAtual, trocarSenha } from '../../services/api-real.js';
 import PrimeiroAcesso from '../leve/PrimeiroAcesso.jsx';
 import Clientes from './Clientes.jsx';
 import Servicos from './Servicos.jsx';
@@ -11,6 +11,19 @@ import Equipe from './Equipe.jsx';
 import { TIPOS, definirTipoAtivo, rotulo, tipoValido } from '../../domain/tipos.js';
 import { cssDaMarca, logoValida } from '../../domain/tema.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
+
+// Faixa fixa no alto: a ação foi pedida mas o aparelho está sem internet; ela é enviada sozinha quando a conexão voltar (ou cancelada aqui).
+function AvisoRede() {
+  const [esperando, setEsperando] = useState(esperandoRede());
+  useEffect(() => { quandoEsperar(setEsperando); return () => quandoEsperar(null); }, []);
+  if (!esperando) return null;
+  return (
+    <div className="faixa-rede" role="status" data-testid="aviso-rede">
+      <span>Sem conexão com a internet. Sua ação será enviada assim que a conexão voltar.</span>
+      <button type="button" className="btn pequeno" onClick={cancelarEspera} data-testid="rede-cancelar">Cancelar</button>
+    </div>
+  );
+}
 
 function Marca({ loja }) {
   const tipo = TIPOS[loja.tipo];
@@ -164,11 +177,12 @@ export default function AppReal() {
   const css = useMemo(() => (loja ? cssDaMarca({ logo: loja.logo, corTema: loja.temaCor, corTema2: loja.temaCor2, temaCor: loja.temaCor ? 'logo' : 'padrao' }) : ''), [loja]);
   const aoSair = () => { sair(); setSessao(null); };
 
-  if (estado.fase === 'carregando') return <main className="login"><div className="login-cartao" role="status" data-testid="carregando"><p className="muted">Carregando…</p></div></main>;
+  if (estado.fase === 'carregando') return <><AvisoRede /><main className="login"><div className="login-cartao" role="status" data-testid="carregando"><p className="muted">Carregando…</p></div></main></>;
   if (estado.fase === 'sem-loja') return <Cartao><h1>Loja não encontrada</h1><p className="muted" data-testid="loja-nao-encontrada">O endereço usado não aponta para nenhuma loja do Agendz. Confira o link com o estabelecimento.</p></Cartao>;
   if (estado.fase === 'erro') return <Cartao><h1>Não foi possível abrir</h1><Aviso tipo="erro" data-testid="erro-carga">{estado.erro}</Aviso><Btn variante="primario" onClick={carregar} data-testid="tentar-de-novo">Tentar de novo</Btn></Cartao>;
   return (
     <>
+      <AvisoRede />
       {css && <style id="tema-marca">{css}</style>}
       {!sessao && <Login loja={loja} aoEntrar={setSessao} />}
       {sessao && sessao.deveTrocarSenha && <TrocarSenha loja={loja} sessao={sessao} aoTrocar={setSessao} aoSair={aoSair} />}

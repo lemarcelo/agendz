@@ -21,3 +21,8 @@ Lista simples. Cada item está no histórico do `prompt-agendz-regras.md` (v84 a
 - No Admin, o suporte deve poder **desfazer** uma reconfiguração da loja ou só o administrador (hoje: só administrador, ainda a implementar)?
 - Serviço precisa de um campo "descrição" de verdade (texto que o cliente vê)? Hoje não existe.
 - Prazo de 30 dias para desfazer reconfiguração está bom?
+
+## v87 (28/10): Admin no ar e sem internet
+- **Decidi:** sem QR code no autenticador do Admin (npm bloqueado no ambiente; a chave vai em grupos de 4 para digitar no aplicativo).
+- **Decidi:** sem internet, a ação espera e segue sozinha ao voltar a conexão (faixa de aviso, cancelável). Só espera quando o aparelho sabe que está offline; resposta perdida com o aparelho online não é reenviada.
+- **Dúvida:** fila no aparelho (para a pessoa poder até fechar a página) + chave de repetição no servidor. Recomendo só para Atender e agenda do profissional, depois da fatia 5c; financeiro e Pix nunca reenviam sozinhos.

@@ -82,3 +82,5 @@ Tipo imutável; loja pelo endereço; um código só com pastas por tipo; capacid
 - A VPS gera `CIFRA_CHAVE` e `CIFRA_PEPPER` sozinha no deploy: o Marcelo precisa guardar uma cópia fora da VPS (ver `docs/PENDENTE-MARCELO.md`).
 - **Próxima: parte 3, serviços** (CRUD já existe no servidor; falta tela, código por tipo, preço por porte, combo, vários dias e a equivalência). Depois equipe e agenda. As senhas dos donos só vão com a agenda real.
 - 28/10 (v84): decisões do Marcelo aplicadas no simulador (remarcar concluído/cancelado, lançamento atrasado com motivo e comissão para o próximo pagamento, comissão cancelável); servidor tem a 5a (V13, histórico, automação por minuto). Pendente: portar v84 ao servidor (5d), telas reais da agenda (5b), Atender real (5c); senhas dos donos só depois.
+
+- **28/10 (v87):** painel Admin no ar em `admin.agendz.io` com login real (repositório `agendz-admin`); o Caddy de `admin.<domínio>` repassa tudo à Admin API. Site real e Admin: sem internet a ação espera e segue ao voltar a conexão (`tests/e2e45.mjs`, `tests/api-real-offline.test.mjs`).

@@ -829,3 +829,6 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
 .cliente-cartao { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--raio); }
 .cliente-dados { display: grid; gap: 3px; min-width: 0; overflow-wrap: anywhere; }
 .cliente-linha { display: inline-flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+
+/* faixa de aviso do site real quando o aparelho está sem internet (a ação espera e segue sozinha ao voltar) */
+.faixa-rede { position: fixed; top: 0; left: 0; right: 0; z-index: 60; display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 10px 16px; background: var(--amarelo-bg); color: var(--amarelo); border-bottom: 1px solid var(--amarelo); font-weight: 600; font-size: 13px; }

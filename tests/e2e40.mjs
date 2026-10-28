@@ -150,7 +150,7 @@ const portes = async (p, precos, duracoes) => { for (const [i, k] of PORTES.entr
   await p.getByTestId(`remover-${a}`).click(); await p.getByTestId(`srv-remover-sim-${a}`).click();
   await p.getByTestId('srv-salvo').waitFor();
   assert.match(await p.getByTestId('srv-salvo').innerText(), /desativado em vez de apagado/);
-  assert.match(await p.getByTestId(`srv-${a}`).innerText(), /Desativado/);
+  await p.waitForFunction((id) => /Desativado/.test(document.querySelector(`[data-testid="srv-${id}"]`)?.innerText || ''), a); // a lista atualiza depois do aviso
   const combo = banco.find((s) => s.combo);
   await p.getByTestId(`remover-${combo.id}`).click(); await p.getByTestId(`srv-remover-sim-${combo.id}`).click();
   await p.waitForFunction((cid) => !document.querySelector(`[data-testid="srv-${cid}"]`), combo.id);
