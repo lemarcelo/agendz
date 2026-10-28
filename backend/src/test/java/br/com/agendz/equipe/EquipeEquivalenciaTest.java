@@ -63,7 +63,7 @@ class EquipeEquivalenciaTest extends BaseApi {
                 String id = null;
                 if (st < 300) {
                     JsonNode n = om.readTree(resp);
-                    id = n.has("usuario") ? n.get("usuario").get("id").asText() : n.get("id").asText();
+                    id = n.path("usuario").isObject() ? n.get("usuario").get("id").asText() : n.get("id").asText(); // criar devolve {usuario:{...}, senhaTemporaria}; alterar devolve a pessoa (cujo "usuario" é o login)
                 }
                 ids.add(id);
                 if (i < passos.size() - 1 && st >= 300) falhas.append("\n- ").append(nome).append(": passo anterior falhou: ").append(resp);

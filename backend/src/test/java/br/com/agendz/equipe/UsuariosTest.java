@@ -51,7 +51,7 @@ class UsuariosTest extends BaseApi {
     void limpar() {
         jdbc.update("delete from agendamento");
         jdbc.update("delete from cliente");
-        jdbc.update("delete from usuario where lower(apelido) like 'ut%'");
+        jdbc.update("delete from usuario where lower(apelido) like 'ut%' or lower(apelido) like 'eq%'");
         jdbc.update("update usuario set permissoes = '{}'::jsonb, atende = true where identificador in ('pablo', 'marcelo', 'davi')");
     }
 
@@ -79,7 +79,7 @@ class UsuariosTest extends BaseApi {
                 .andExpect(status().isCreated()).andExpect(header().string("Cache-Control", containsString("no-store")))
                 .andExpect(jsonPath("$.usuario.usuario").value("utana")).andExpect(jsonPath("$.usuario.papel").value("profissional"))
                 .andExpect(jsonPath("$.usuario.atende").value(true)).andExpect(jsonPath("$.usuario.deveTrocarSenha").value(true))
-                .andExpect(jsonPath("$.usuario.cpfMascarado").value("529.***.***-25")).andExpect(jsonPath("$.usuario.cpf").value(nullValue()))
+                .andExpect(jsonPath("$.usuario.cpfMascarado").value("529.***.***-25")).andExpect(jsonPath("$.usuario.cpf").doesNotExist())
                 .andExpect(jsonPath("$.usuario.telefone").value("5553999000001")).andExpect(jsonPath("$.usuario.corSlot").isNumber())
                 .andExpect(jsonPath("$.senhaTemporaria").isString()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         Matcher m = Pattern.compile("\"senhaTemporaria\":\"([^\"]+)\"").matcher(json);
@@ -93,8 +93,8 @@ class UsuariosTest extends BaseApi {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.cpf").value("52998224725")).andExpect(jsonPath("$.nascimento").value("1990-05-17"))
                 .andExpect(jsonPath("$.email").value("Ut.Ana@Teste.com")).andExpect(jsonPath("$.senhaTemporaria").doesNotExist());
         mvc.perform(get("/api/usuarios").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)))
-                .andExpect(jsonPath("$[*].apelido").value(hasItem("UtAna"))).andExpect(jsonPath("$[?(@.apelido=='UtAna')].cpf").value(hasItem(nullValue())))
-                .andExpect(jsonPath("$[?(@.apelido=='UtAna')].nascimento").value(hasItem(nullValue())));
+                .andExpect(jsonPath("$[*].apelido").value(hasItem("UtAna"))).andExpect(jsonPath("$[?(@.apelido=='UtAna')].cpf").isEmpty())
+                .andExpect(jsonPath("$[?(@.apelido=='UtAna')].nascimento").isEmpty());
     }
 
     @Test
@@ -149,7 +149,7 @@ class UsuariosTest extends BaseApi {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.nome").value("Outro Nome")).andExpect(jsonPath("$.apelido").value("UtE"))
                 .andExpect(jsonPath("$.cpfMascarado").value("390.***.***-05")).andExpect(jsonPath("$.email").value("e@teste.com")).andExpect(jsonPath("$.comissaoPct").value(8));
         mvc.perform(put("/api/usuarios/" + id).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON).content("{\"cpf\":\"\"}"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.cpfMascarado").value(nullValue()));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.cpfMascarado").doesNotExist());
         // com o CPF livre, outra pessoa pode usar o mesmo número
         criar(davi, corpo("UtF", ",\"cpf\":\"39053344705\"")).andExpect(status().isCreated());
     }
@@ -230,7 +230,7 @@ class UsuariosTest extends BaseApi {
                 .content("{\"foto\":\"data:image/png;base64,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"}")).andExpect(status().isBadRequest());
         mvc.perform(put("/api/usuarios/me/foto").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(pablo)).contentType(MediaType.APPLICATION_JSON).content("{\"foto\":\"\"}"))
                 .andExpect(status().isNoContent());
-        mvc.perform(get("/api/usuarios").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi))).andExpect(jsonPath("$[?(@.usuario=='pablo')].foto").value(hasItem(nullValue())));
+        mvc.perform(get("/api/usuarios").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi))).andExpect(jsonPath("$[?(@.usuario=='pablo')].foto").isEmpty());
     }
 
     // ---------- permissões por seção ----------
