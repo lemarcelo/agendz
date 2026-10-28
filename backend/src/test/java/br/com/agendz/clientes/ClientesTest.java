@@ -64,6 +64,11 @@ class ClientesTest extends BaseApi {
         return mvc.perform(get(caminho).with(host(host)).header(HttpHeaders.AUTHORIZATION, bearer(token)));
     }
 
+    /** Busca com o parâmetro `q` codificado uma única vez pelo MockMvc (colocar o texto na URL codificaria duas vezes). */
+    private ResultActions buscar(String host, String token, String q) throws Exception {
+        return mvc.perform(get("/api/clientes").queryParam("q", q).with(host(host)).header(HttpHeaders.AUTHORIZATION, bearer(token)));
+    }
+
     private String criar(String host, String token, String corpo) throws Exception {
         String json = enviar("POST", "/api/clientes", host, token, corpo).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
         Matcher m = Pattern.compile("\"id\":\"([^\"]+)\"").matcher(json);
@@ -196,7 +201,7 @@ class ClientesTest extends BaseApi {
         criar(APEX, davi, corpo("Bruno Lima", "11988887777"));
         ler("/api/clientes", APEX, pablo).andExpect(jsonPath("$", hasSize(2))).andExpect(jsonPath("$[0].cpf").doesNotExist()).andExpect(jsonPath("$[0].cpfMascarado").value("529.***.***-25"));
         for (String q : new String[]{"souza", "ANINHA", "99900", "(53) 9990", "5299822", "abc1234", "civic"}) {
-            ler("/api/clientes?q=" + java.net.URLEncoder.encode(q, java.nio.charset.StandardCharsets.UTF_8), APEX, pablo)
+            buscar(APEX, pablo, q)
                     .andExpect(jsonPath("$", hasSize(1))).andExpect(jsonPath("$[0].nome").value("Ana Souza"));
         }
         ler("/api/clientes?q=bruno", APEX, pablo).andExpect(jsonPath("$", hasSize(1))).andExpect(jsonPath("$[0].nome").value("Bruno Lima"));
@@ -208,7 +213,7 @@ class ClientesTest extends BaseApi {
     void buscaComCaracteresEspeciaisNaoQuebra() throws Exception {
         criar(APEX, davi, corpo("Ana", "53999000001"));
         for (String q : new String[]{"%", "_", "'; drop table cliente; --", "\\"}) {
-            ler("/api/clientes?q=" + java.net.URLEncoder.encode(q, java.nio.charset.StandardCharsets.UTF_8), APEX, davi).andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(0)));
+            buscar(APEX, davi, q).andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(0)));
         }
         assertEquals(1, jdbc.queryForObject("select count(*) from cliente", Integer.class));
     }
