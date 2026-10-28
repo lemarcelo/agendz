@@ -12,6 +12,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
@@ -32,6 +33,11 @@ class EquipeEquivalenciaTest extends BaseApi {
 
     private void limpar() {
         jdbc.update("delete from usuario where lower(apelido) like 'eq%'");
+    }
+
+    @AfterEach
+    void limparSempre() {
+        limpar(); // mesmo se o teste quebrar no meio, não deixa CPF/apelido para os outros testes
     }
 
     @Test
