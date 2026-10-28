@@ -49,6 +49,7 @@ class ServicosEquivalenciaTest extends BaseApi {
         StringBuilder falhas = new StringBuilder();
         for (JsonNode caso : casos) {
             String nome = caso.get("nome").asText();
+            jdbc.update("delete from servico_componente");
             jdbc.update("delete from servico");
             List<String> ids = new ArrayList<>();
             JsonNode passos = caso.get("passos");
@@ -90,6 +91,7 @@ class ServicosEquivalenciaTest extends BaseApi {
                 }
             }
         }
+        jdbc.update("delete from servico_componente");
         jdbc.update("delete from servico");
         assertEquals("", falhas.toString(), "casos que divergem da API simulada");
     }

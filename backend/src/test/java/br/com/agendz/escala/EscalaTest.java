@@ -58,6 +58,7 @@ class EscalaTest extends BaseApi {
         jdbc.update("delete from agendamento_servico");
         jdbc.update("delete from agendamento");
         jdbc.update("delete from escala_faixa");
+        jdbc.update("delete from servico_componente");
         jdbc.update("delete from servico");
         jdbc.update("delete from cliente");
     }

@@ -26,6 +26,7 @@ class ServicosTest extends BaseApi {
 
     @BeforeEach
     void limpar() {
+        jdbc.update("delete from servico_componente");
         jdbc.update("delete from servico");
     }
 

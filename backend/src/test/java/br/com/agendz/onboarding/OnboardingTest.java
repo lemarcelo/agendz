@@ -52,6 +52,7 @@ class OnboardingTest extends BaseApi {
     private void limpar() {
         jdbc.update("delete from onboarding");
         jdbc.update("delete from escala_faixa");
+        jdbc.update("delete from servico_componente");
         jdbc.update("delete from servico");
         jdbc.update("delete from usuario where identificador like 'teste-%' or identificador like 'zeferino%' or identificador like 'zulmira%'");
     }

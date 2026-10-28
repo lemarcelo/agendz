@@ -62,6 +62,7 @@ class AgendaTest extends BaseApi {
     void limpar() {
         jdbc.update("delete from agendamento_servico");
         jdbc.update("delete from agendamento");
+        jdbc.update("delete from servico_componente");
         jdbc.update("delete from servico");
         jdbc.update("delete from cliente");
     }
