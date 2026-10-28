@@ -50,6 +50,7 @@ class OnboardingTest extends BaseApi {
     }
 
     private void limpar() {
+        jdbc.update("delete from reconfiguracao");
         jdbc.update("delete from onboarding");
         jdbc.update("delete from escala_faixa");
         jdbc.update("delete from servico_componente");
@@ -59,6 +60,11 @@ class OnboardingTest extends BaseApi {
 
     private void abrirAssistente(String lojaId) {
         jdbc.update("insert into onboarding (loja_id) values (?::uuid)", lojaId);
+    }
+
+    /** Depois de concluído, reconfigurar exige a senha do dono (ReconfiguracaoTest cobre as regras; aqui só abre a sessão). */
+    private void confirmarSenha(String host, String token) throws Exception {
+        enviar(host, token, "/api/onboarding/reconfiguracoes", "{\"senha\":\"1234\"}").andExpect(status().isOk());
     }
 
     private ResultActions pegar(String host, String token, String rota) throws Exception {
@@ -200,6 +206,7 @@ class OnboardingTest extends BaseApi {
         assertEquals(0, jdbc.queryForObject("select count(*) from escala_faixa", Integer.class));
         pegar(APEX, davi, "/api/onboarding").andExpect(jsonPath("$.passo").value("pronto"));
         enviar(APEX, davi, "/api/onboarding/concluir", "{}").andExpect(status().isOk());
+        confirmarSenha(APEX, davi);
         // reaberto depois de concluído: o expediente enviado substitui o da loja (reconfigurar)
         enviar(APEX, davi, "/api/onboarding/expediente", "{\"semana\":{\"1\":{\"aberto\":true,\"faixas\":[[\"09:00\",\"18:00\"]]}}}").andExpect(status().isOk()).andExpect(jsonPath("$.criados").value(1));
         assertEquals(1, jdbc.queryForObject("select count(*) from escala_faixa", Integer.class));
@@ -229,6 +236,7 @@ class OnboardingTest extends BaseApi {
         enviar(DALFORNO, t, "/api/onboarding/concluir", "{}").andExpect(status().isOk()).andExpect(jsonPath("$.concluido").value(true));
         enviar(DALFORNO, t, "/api/onboarding/concluir", "{}").andExpect(status().isOk()); // repetir é inofensivo
         pegar(DALFORNO, t, "/api/onboarding").andExpect(jsonPath("$.concluido").value(true)).andExpect(jsonPath("$.passo").value("pronto"));
+        confirmarSenha(DALFORNO, t);
         // reconfigurar: serviços novos entram, idempotente por nome
         enviar(DALFORNO, t, "/api/onboarding/servicos", "{\"itens\":[{\"chave\":\"s-barba\"}]}").andExpect(status().isOk()).andExpect(jsonPath("$.criados").value(1));
         enviar(DALFORNO, t, "/api/onboarding/servicos", "{\"itens\":[{\"chave\":\"s-barba\"}]}").andExpect(jsonPath("$.criados").value(0)).andExpect(jsonPath("$.jaExistiam").value(1));

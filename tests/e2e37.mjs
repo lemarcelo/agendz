@@ -101,6 +101,12 @@ const semRolagem = async (p, nome) => assert.ok(await p.evaluate(() => document.
   assert.match(await r.p.getByTestId('reconfigurar').innerText(), /ninguém da equipe é excluído/);
   const usuariosAntes = await r.p.evaluate(() => document.body.innerText.length);
   await r.p.getByTestId('reconfigurar-abrir').click();
+  await r.p.getByTestId('pa-reconf-senha').waitFor();
+  assert.equal(await r.p.getByTestId('pa-servicos').count(), 0, 'sem a senha não há passos');
+  await r.p.getByTestId('pa-reconf-confirmar').click();
+  assert.match(await r.p.getByTestId('pa-erro').innerText(), /Digite a sua senha/);
+  await r.p.getByTestId('pa-reconf-senha').fill('qualquer');
+  await r.p.getByTestId('pa-reconf-confirmar').click();
   await r.p.getByTestId('pa-servicos').waitFor();
   assert.match(await r.p.getByTestId('pa').locator('h1').innerText(), /Reconfigurar Apex/);
   assert.equal(await r.p.getByTestId('pa-previa').count(), 1);
@@ -124,6 +130,22 @@ const semRolagem = async (p, nome) => assert.ok(await p.evaluate(() => document.
   await r.p.getByTestId('pa-concluir').click(); // "Voltar ao estabelecimento"
   await r.p.getByTestId('reconfigurar').waitFor();
   assert.equal(await r.p.getByTestId('pa').count(), 0);
+  // histórico: a reconfiguração aparece com as contagens; Desfazer e Refazer pedem a senha e não mexem em nada lançado
+  await r.p.getByTestId('reconfigurar-abrir').click();
+  await r.p.getByTestId('pa-reconf-senha').waitFor();
+  assert.match(await r.p.getByTestId('pa-reconf-historico').innerText(), /1 pessoa/);
+  await r.p.locator('[data-testid^="pa-reconf-desfazer-"]').click();
+  assert.match(await r.p.getByTestId('pa-erro').innerText(), /Digite a sua senha para desfazer/);
+  await r.p.getByTestId('pa-reconf-senha').fill('qualquer');
+  await r.p.locator('[data-testid^="pa-reconf-desfazer-"]').click();
+  await r.p.locator('[data-testid^="pa-reconf-refazer-"]').waitFor();
+  assert.match(await r.p.getByTestId('pa-reconf-historico').innerText(), /desfeita/);
+  assert.equal(await r.p.locator('[data-testid^="pa-reconf-desfazer-"]').count(), 0);
+  await r.p.getByTestId('pa-reconf-senha').fill('qualquer');
+  await r.p.locator('[data-testid^="pa-reconf-refazer-"]').click();
+  await r.p.locator('[data-testid^="pa-reconf-desfazer-"]').waitFor();
+  await r.p.getByTestId('pa-voltar').click();
+  await r.p.getByTestId('reconfigurar').waitFor();
   // nada foi gravado: a Equipe não ganhou o Zeca
   await r.p.getByTestId('nav-equipe').click();
   assert.equal(await r.p.getByText('Zeca Novo').count(), 0);
@@ -142,7 +164,7 @@ const pagina = readFileSync(new URL('../dist/index-real.html', import.meta.url),
 const chamadas = [];
 const dia = (a) => ({ aberto: a, faixas: a ? [['09:00', '12:00'], ['14:00', '18:00']] : [] });
 const SUGESTAO = { semana: { 0: dia(false), 1: dia(true), 2: dia(true), 3: dia(true), 4: dia(true), 5: dia(true), 6: dia(true) } };
-const banco = { passo: 'senha', concluido: false, servicos: [], logins: new Set(['marcos']), senhaTemp: true };
+const banco = { passo: 'senha', concluido: false, servicos: [], logins: new Set(['marcos']), senhaTemp: true , autorizado: false, hist: [{ id: '11111111-1111-1111-1111-111111111111', criadaEm: '2026-10-28T12:00:00Z', por: 'Alan', servicosCriados: 1, pessoasCriadas: 1, expedienteTrocado: false, desfeitaEm: '', podeDesfazer: true, podeRefazer: false }] };
 const CATALOGO = [
   { chave: 's-corte', nome: 'Corte', categoria: null, preco: 40, duracaoMin: 30, precos: null, duracoes: null },
   { chave: 's-barba', nome: 'Barba', categoria: null, preco: 35, duracaoMin: 40, precos: null, duracoes: null },
@@ -167,6 +189,19 @@ const servidor = http.createServer((req, res) => {
     }
     if (tok !== 'Bearer tok-ok') return json(403, { mensagem: 'Sem permissão' });
     if (req.url === '/api/onboarding') return json(200, { tipo: 'barbearia', passo: banco.passo, concluido: banco.concluido, servicos: CATALOGO, jaCadastrados: banco.servicos, expedienteSugerido: SUGESTAO });
+    if (req.url === '/api/onboarding/reconfiguracoes' && req.method === 'POST') {
+      if (c.senha !== 'Minha-senha-nova') return json(403, { mensagem: 'Senha incorreta' });
+      banco.autorizado = true; return json(200, { id: '22222222-2222-2222-2222-222222222222', autorizadaAte: '2026-10-28T13:00:00Z' });
+    }
+    if (req.url === '/api/onboarding/reconfiguracoes' && req.method === 'GET') return json(200, { itens: banco.hist });
+    const tr = /^\/api\/onboarding\/reconfiguracoes\/([0-9a-f-]{36})\/(desfazer|refazer)$/.exec(req.url);
+    if (tr) {
+      if (c.senha !== 'Minha-senha-nova') return json(403, { mensagem: 'Senha incorreta' });
+      const h = banco.hist.find((x) => x.id === tr[1]);
+      if (tr[2] === 'desfazer') { h.desfeitaEm = '2026-10-28T12:30:00Z'; h.podeDesfazer = false; h.podeRefazer = true; } else { h.desfeitaEm = ''; h.podeDesfazer = true; h.podeRefazer = false; }
+      return json(200, { itens: banco.hist });
+    }
+    if (banco.concluido && !banco.autorizado && /^\/api\/onboarding\/(servicos|equipe|expediente)$/.test(req.url)) return json(403, { mensagem: 'Confirme sua senha para reconfigurar a loja' });
     if (req.url === '/api/onboarding/servicos') {
       if (banco.falhar) { banco.falhar = false; return json(500, { trace: 'detalhe interno que não pode aparecer' }); }
       let criados = 0;
@@ -254,13 +289,39 @@ const url = `http://127.0.0.1:${servidor.address().port}/`;
   ok('B: assistente concluído não volta');
   // reconfigurar: o dono reabre o assistente pelo painel; começa nos serviços, os existentes ficam travados, nada é concluído de novo
   const antesConcluir = chamadas.filter((c) => c.u === '/api/onboarding/concluir').length;
+  // sem a senha, o servidor recusa os passos (403) e o assistente não os mostra
+  banco.autorizado = false;
   await n.p.getByTestId('reconfigurar-abrir').click();
+  await n.p.getByTestId('pa-reconf-senha').waitFor();
+  assert.equal(await n.p.getByTestId('pa-servicos').count(), 0);
+  await n.p.getByTestId('pa-reconf-senha').fill('errada');
+  await n.p.getByTestId('pa-reconf-confirmar').click();
+  assert.match(await n.p.getByTestId('pa-erro').innerText(), /Senha incorreta/);
+  assert.equal(await n.p.getByTestId('pa-servicos').count(), 0);
+  // o histórico vem do servidor; desfazer manda a senha e o id; senha errada não muda nada
+  assert.match(await n.p.getByTestId('pa-reconf-historico').innerText(), /1 serviço, 1 pessoa/);
+  await n.p.getByTestId('pa-reconf-senha').fill('errada');
+  await n.p.getByTestId('pa-reconf-desfazer-11111111-1111-1111-1111-111111111111').click();
+  assert.match(await n.p.getByTestId('pa-erro').innerText(), /Senha incorreta/);
+  assert.equal(banco.hist[0].desfeitaEm, '');
+  await n.p.getByTestId('pa-reconf-senha').fill('Minha-senha-nova');
+  await n.p.getByTestId('pa-reconf-desfazer-11111111-1111-1111-1111-111111111111').click();
+  await n.p.getByTestId('pa-reconf-refazer-11111111-1111-1111-1111-111111111111').waitFor();
+  assert.deepEqual(chamadas.filter((c) => c.u.endsWith('/desfazer')).at(-1).c, { senha: 'Minha-senha-nova' });
+  await n.p.getByTestId('pa-reconf-senha').fill('Minha-senha-nova');
+  await n.p.getByTestId('pa-reconf-refazer-11111111-1111-1111-1111-111111111111').click();
+  await n.p.getByTestId('pa-reconf-desfazer-11111111-1111-1111-1111-111111111111').waitFor();
+  await n.p.getByTestId('pa-reconf-senha').fill('Minha-senha-nova');
+  await n.p.getByTestId('pa-reconf-confirmar').click();
   await n.p.getByTestId('pa-servicos').waitFor();
   assert.match(await n.p.getByTestId('pa').locator('h1').innerText(), /Reconfigurar Dalforno/);
   assert.equal(await n.p.getByTestId('pa-marcar-s-barba').isDisabled(), true); // já existe
   await n.p.getByTestId('pa-voltar').click();
   await n.p.getByTestId('painel-real').waitFor();
   await n.p.getByTestId('reconfigurar-abrir').click();
+  await n.p.getByTestId('pa-reconf-senha').fill('Minha-senha-nova');
+  await n.p.getByTestId('pa-reconf-confirmar').click();
+  await n.p.getByTestId('pa-marcar-s-corte').waitFor();
   await n.p.getByTestId('pa-marcar-s-corte').check();
   await n.p.getByTestId('pa-continuar-servicos').click();
   await n.p.getByTestId('pa-equipe').waitFor();

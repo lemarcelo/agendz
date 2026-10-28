@@ -48,3 +48,29 @@ test('reconfigurar: o primeiro acesso (sem a opção) continua começando do zer
   assert.equal(estado.concluido, false);
   assert.equal(estado.jaCadastrados.length, 0);
 });
+
+test('senha e desfazer (pré-visualização): senha vazia recusada; desfazer só a mais recente; refazer volta; só contagens', async () => {
+  const a = criarAdaptadorDemo({ reconfigurar: true });
+  assert.equal((await a.confirmarSenha('')).ok, false);
+  assert.equal((await a.confirmarSenha('x')).ok, true);
+  await a.equipe([{ nome: 'Zeca Novo' }]);
+  let { itens } = await a.historico();
+  const mais = itens[0];
+  assert.equal(mais.pessoasCriadas, 1); assert.equal(mais.podeDesfazer, true); assert.equal(mais.podeRefazer, false);
+  assert.ok(!JSON.stringify(itens).match(/senha|login/i), 'o histórico guarda só contagens');
+  // senha vazia não desfaz
+  assert.equal((await a.desfazer(mais.id, '')).ok, false);
+  // uma segunda reconfiguração (nova senha confirmada) torna a primeira não desfazível
+  const b = criarAdaptadorDemo({ reconfigurar: true });
+  await b.confirmarSenha('x'); await b.equipe([{ nome: 'Outra Pessoa' }]);
+  ({ itens } = await a.historico());
+  assert.equal(itens[0].podeDesfazer, true); assert.equal(itens.find((i) => i.id === mais.id).podeDesfazer, false);
+  assert.equal((await a.desfazer(mais.id, 'x')).ok, false, 'só a mais recente se desfaz');
+  const r = await b.desfazer(itens[0].id, 'x');
+  assert.equal(r.ok, true);
+  assert.equal(r.itens[0].podeRefazer, true); assert.ok(r.itens[0].desfeitaEm);
+  assert.equal((await b.desfazer(itens[0].id, 'x')).ok, false, 'não desfaz duas vezes');
+  const f = await b.refazer(itens[0].id, 'x');
+  assert.equal(f.ok, true); assert.equal(f.itens[0].desfeitaEm, ''); assert.equal(f.itens[0].podeDesfazer, true);
+  assert.equal((await b.refazer(itens[0].id, 'x')).ok, false);
+});

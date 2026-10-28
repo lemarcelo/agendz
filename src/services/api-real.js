@@ -144,7 +144,25 @@ export const onboarding = {
   },
   // POST /api/onboarding/concluir
   async concluir() { const r = await chamar('POST', '/api/onboarding/concluir', {}); return r.ok ? { ok: true } : r; },
+  // Reconfigurar com senha e desfazer (só o dono; o servidor confere tudo). Senha errada é 403 "Senha incorreta"; 5 erros bloqueiam (429).
+  // POST /api/onboarding/reconfiguracoes  { senha }  → abre 30 minutos de reconfiguração
+  async confirmarSenha(senha) { const r = await chamar('POST', '/api/onboarding/reconfiguracoes', { senha: texto(senha, 100) }); return r.ok ? { ok: true } : r; },
+  // GET /api/onboarding/reconfiguracoes  → só contagens (nunca senha nem dado de cliente)
+  async historico() { const r = await chamar('GET', '/api/onboarding/reconfiguracoes'); return r.ok ? { ok: true, itens: lerHistorico(r.dados) } : r; },
+  // POST /api/onboarding/reconfiguracoes/{id}/desfazer  { senha }
+  async desfazer(id, senha) { return trocarReconfiguracao(id, 'desfazer', senha); },
+  // POST /api/onboarding/reconfiguracoes/{id}/refazer  { senha }
+  async refazer(id, senha) { return trocarReconfiguracao(id, 'refazer', senha); },
 };
+const lerHistorico = (d) => listaDe(d && d.itens, 20).map((i) => ({
+  id: texto(i && i.id, 40), criadaEm: texto(i && i.criadaEm, 40), por: texto(i && i.por, 120), servicosCriados: Number(i && i.servicosCriados) || 0, pessoasCriadas: Number(i && i.pessoasCriadas) || 0,
+  expedienteTrocado: !!(i && i.expedienteTrocado === true), desfeitaEm: i && i.desfeitaEm ? texto(i.desfeitaEm, 40) : '', podeDesfazer: !!(i && i.podeDesfazer === true), podeRefazer: !!(i && i.podeRefazer === true),
+}));
+async function trocarReconfiguracao(id, acao, senha) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id))) return { ok: false, erro: 'Reconfiguração inválida' };
+  const r = await chamar('POST', `/api/onboarding/reconfiguracoes/${id}/${acao}`, { senha: texto(senha, 100) });
+  return r.ok ? { ok: true, itens: lerHistorico(r.dados) } : r;
+}
 
 // ---------- clientes (F2 parte 2; regras no servidor: ClienteService) ----------
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

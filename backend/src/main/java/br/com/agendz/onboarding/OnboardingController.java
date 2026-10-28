@@ -36,6 +36,8 @@ import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -94,8 +96,10 @@ public class OnboardingController {
     private final PasswordEncoder encoder;
     private final ObjectMapper json;
     private final EscalaService escalas;
+    private final ReconfiguracaoService reconfiguracoes;
 
-    public OnboardingController(LojaJdbc banco, CatalogoDeServicos catalogos, PasswordEncoder encoder, ObjectMapper json, EscalaService escalas) {
+    public OnboardingController(LojaJdbc banco, CatalogoDeServicos catalogos, PasswordEncoder encoder, ObjectMapper json, EscalaService escalas, ReconfiguracaoService reconfiguracoes) {
+        this.reconfiguracoes = reconfiguracoes;
         this.banco = banco;
         this.catalogos = catalogos;
         this.encoder = encoder;
@@ -115,7 +119,7 @@ public class OnboardingController {
     }
 
     @PostMapping("/api/onboarding/servicos")
-    public Resultado servicos(@Valid @RequestBody Servicos corpo) {
+    public Resultado servicos(@Valid @RequestBody Servicos corpo, @AuthenticationPrincipal Jwt jwt) {
         Loja loja = LojaContext.exigir();
         linha(); // 404 se a loja não tem o assistente
         Catalogo c = catalogos.doTipo(loja.tipo()).orElseThrow(() -> new ErroDeNegocio(HttpStatus.NOT_FOUND, "Não há exemplos para este tipo de estabelecimento"));
@@ -127,7 +131,9 @@ public class OnboardingController {
             escolhidos.putIfAbsent(e.chave(), e);
         }
         int[] contagem = new int[2];
+        UUID quem = UUID.fromString(jwt.getSubject());
         banco.naLoja(jdbc -> {
+            UUID reconf = reconfiguracoes.autorizada(jdbc, quem); // concluído: só com a senha confirmada (403 sem ela)
             Set<String> nomes = new HashSet<>(jdbc.queryForList("select lower(nome) from servico", String.class));
             for (ItemEscolhido e : escolhidos.values()) {
                 Item s = porChave.get(e.chave());
@@ -138,11 +144,12 @@ public class OnboardingController {
                 boolean porPorte = s.precos() != null;
                 BigDecimal preco = porPorte || e.preco() == null ? s.preco() : e.preco(); // serviço com preço por porte não muda o preço aqui (isso é na tela de Serviços)
                 int duracao = porPorte || e.duracaoMin() == null ? s.duracaoMin() : e.duracaoMin();
-                jdbc.update("insert into servico (loja_id, codigo, nome, categoria, preco, duracao_min, intervalo_min, multi_dia, ativo, precos, duracoes) "
+                UUID novo = jdbc.queryForObject("insert into servico (loja_id, codigo, nome, categoria, preco, duracao_min, intervalo_min, multi_dia, ativo, precos, duracoes) "
                                 + "values (?::uuid, (select (coalesce(max(case when codigo ~ '^[0-9]{1,9}$' then codigo::int end), 0) + 1)::text from servico), "
-                                + "?, nullif(?, ''), ?, ?, ?, ?, true, cast(? as jsonb), cast(? as jsonb))",
+                                + "?, nullif(?, ''), ?, ?, ?, ?, true, cast(? as jsonb), cast(? as jsonb)) returning id", UUID.class,
                         loja.id().toString(), s.nome(), s.categoria() == null ? "" : s.categoria(), preco.setScale(2, RoundingMode.HALF_UP), duracao, s.intervaloMin(), s.multiDia(),
                         escrever(s.precos()), escrever(s.duracoes()));
+                reconfiguracoes.anotarServico(jdbc, reconf, novo);
                 contagem[0]++;
             }
             jdbc.update("update onboarding set passo = 'equipe', atualizado_em = now() where concluido_em is null and passo in ('senha', 'servicos')");
@@ -152,10 +159,12 @@ public class OnboardingController {
     }
 
     @PostMapping("/api/onboarding/equipe")
-    public ResponseEntity<EquipeCriada> equipe(@Valid @RequestBody Equipe corpo) {
+    public ResponseEntity<EquipeCriada> equipe(@Valid @RequestBody Equipe corpo, @AuthenticationPrincipal Jwt jwt) {
         Loja loja = LojaContext.exigir();
         linha(); // 404 se a loja não tem o assistente
+        UUID quem = UUID.fromString(jwt.getSubject());
         List<PessoaCriada> criadas = banco.naLoja(jdbc -> {
+            UUID reconf = reconfiguracoes.autorizada(jdbc, quem);
             Set<String> logins = new HashSet<>(jdbc.queryForList("select identificador from usuario", String.class));
             List<PessoaCriada> saida = new ArrayList<>();
             for (NovaPessoa p : corpo.pessoas()) {
@@ -165,8 +174,9 @@ public class OnboardingController {
                 logins.add(login);
                 String senha = senhaTemporaria();
                 boolean atende = p.atende() == null || p.atende();
-                jdbc.update("insert into usuario (loja_id, identificador, nome, papel, senha_hash, atende, deve_trocar_senha) values (?::uuid, ?, ?, 'profissional', ?, ?, true)",
-                        loja.id().toString(), login, nome, encoder.encode(senha), atende);
+                UUID novo = jdbc.queryForObject("insert into usuario (loja_id, identificador, nome, papel, senha_hash, atende, deve_trocar_senha) values (?::uuid, ?, ?, 'profissional', ?, ?, true) returning id",
+                        UUID.class, loja.id().toString(), login, nome, encoder.encode(senha), atende);
+                reconfiguracoes.anotarPessoa(jdbc, reconf, novo);
                 saida.add(new PessoaCriada(nome, login, senha, atende));
             }
             jdbc.update("update onboarding set passo = 'expediente', atualizado_em = now() where concluido_em is null and passo in ('senha', 'servicos', 'equipe')");
@@ -177,13 +187,18 @@ public class OnboardingController {
     }
 
     @PostMapping("/api/onboarding/expediente")
-    public Resultado expediente(@Valid @RequestBody Expediente corpo) {
+    public Resultado expediente(@Valid @RequestBody Expediente corpo, @AuthenticationPrincipal Jwt jwt) {
         Loja loja = LojaContext.exigir();
         linha(); // 404 se a loja não tem o assistente
         Map<Integer, List<Faixa>> semana = corpo.semana() == null ? null : EscalaService.validar(new Escala(corpo.semana()));
         boolean grava = semana != null && EscalaService.temFaixa(semana);
+        UUID quem = UUID.fromString(jwt.getSubject());
         banco.naLoja((jdbc) -> {
-            if (grava) escalas.gravar(jdbc, loja.id(), null, semana);
+            UUID reconf = reconfiguracoes.autorizada(jdbc, quem);
+            if (grava) {
+                escalas.gravar(jdbc, loja.id(), null, semana);
+                reconfiguracoes.anotarExpediente(jdbc, reconf);
+            }
             jdbc.update("update onboarding set passo = 'pronto', atualizado_em = now() where concluido_em is null and passo <> 'pronto'");
             return null;
         });

@@ -75,6 +75,8 @@ Protótipo React 19 + esbuild com API simulada (`src/services/api.js`), que depo
 
 - v84: Atender com data **anterior a hoje** exige `motivoRetroativo` (5–300) e só dono/admin/atendente lançam (profissional só hoje); comissão de período já pago vai ao próximo pagamento (`a.comissaoEm`, `dataComissao`); `comissoes.cancelar/restaurar` (só dono, motivo obrigatório, não cancela paga, `comissaoOriginal`); remarcar: concluído nunca, cancelado só junto com `status` não cancelado. Servidor ainda sem o lançamento atrasado e o cancelamento de comissão (fatia 5d).
 
+- v85: Reconfigurar exige a **senha do dono** e é reversível: `POST /api/onboarding/reconfiguracoes` abre 30 min; passos de serviços/equipe/expediente depois de concluído dão 403 sem ela; `desfazer`/`refazer` (senha de novo, só a mais recente, 30 dias) devolvem o expediente e desativam o criado, nunca excluem nem tocam dado lançado (V14). Senha errada é **403**, nunca 401 (o front derruba a sessão em 401). Adaptador do assistente ganhou `confirmarSenha/historico/desfazer/refazer`.
+
 ## Agendz (plataforma multi-tenant, a caminho)
 - **Ids neutros (v71):** o profissional é `profissionalId` / `papel: 'profissional'` (não existe mais `esteticistaId`); "esteticista" e "barbeiro" só aparecem como **rótulo** do tipo (`rot('profissional')`). Funções e testids seguem: `SeletorProfissionais`, `relatorioDoProfissional`, `atender-profissional`.
 - O nome da plataforma é **Agendz**; a Apex é o primeiro cliente (tenant), não o nome do app. Prompt operacional: `prompt-agendz.md` (fluxo de trabalho, checklist anti-erro, regras multi-tenant, tipos de estabelecimento por capacidades, fases F0 a F7). Leia-o antes de começar qualquer fase.

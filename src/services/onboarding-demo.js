@@ -21,6 +21,12 @@ const loginDe = (nome, usados) => {
 
 // `reconfigurar` (Estabelecimento > Reconfigurar): o catálogo é o do TIPO (seed) e já estão "na loja" os que ainda existem na loja atual por nome
 // (apagou um serviço? ele volta a aparecer para marcar); o expediente atual é o da loja. Continua sem gravar nada.
+// Histórico da pré-visualização (vive só nesta página). Só a mais recente com mudança se desfaz; refazer só se nada mais novo mudou.
+const HIST = [];
+const mudou = (h) => h.servicosCriados + h.pessoasCriadas > 0 || h.expedienteTrocado;
+const visiveis = () => HIST.filter(mudou).map((h, i, l) => ({
+  ...h, podeDesfazer: !h.desfeitaEm && !l.slice(0, i).some((n) => !n.desfeitaEm), podeRefazer: !!h.desfeitaEm && i === 0,
+}));
 export function criarAdaptadorDemo({ reconfigurar = false } = {}) {
   let passo = 'servicos'; let concluido = reconfigurar;
   const atual = () => store.getState();
@@ -28,13 +34,33 @@ export function criarAdaptadorDemo({ reconfigurar = false } = {}) {
   const nomesDaLoja = () => new Set((atual().servicos || []).map((x) => String(x.nome).toLowerCase()));
   const feitos = new Set(reconfigurar ? catalogo().filter((x) => nomesDaLoja().has(x.nome.toLowerCase())).map((x) => x.chave) : []);
   const usados = new Set(); let expediente = reconfigurar ? expedienteDeEstado(atual()) : null;
+  // Histórico só em memória (pré-visualização: nada é gravado). Em pré-visualização qualquer senha preenchida vale.
+  let abertaId = null;
+  const nova = () => { if (!abertaId) { abertaId = 'r-' + (HIST.length + 1); HIST.unshift({ id: abertaId, criadaEm: new Date().toISOString(), por: 'Você', servicosCriados: 0, pessoasCriadas: 0, expedienteTrocado: false, desfeitaEm: '' }); } return HIST.find((h) => h.id === abertaId); };
   return {
+    async confirmarSenha(senha) { if (typeof senha !== 'string' || !senha) return { ok: false, erro: 'Senha incorreta' }; abertaId = null; return { ok: true }; },
+    async historico() { return { ok: true, itens: visiveis() }; },
+    async desfazer(id, senha) {
+      if (!senha) return { ok: false, erro: 'Senha incorreta' };
+      const h = HIST.find((x) => x.id === id);
+      if (!h || h.desfeitaEm || visiveis().find((x) => x.id === id)?.podeDesfazer !== true) return { ok: false, erro: 'Só a reconfiguração mais recente pode ser desfeita, e só por 30 dias' };
+      h.desfeitaEm = new Date().toISOString();
+      return { ok: true, itens: visiveis() };
+    },
+    async refazer(id, senha) {
+      if (!senha) return { ok: false, erro: 'Senha incorreta' };
+      const h = HIST.find((x) => x.id === id);
+      if (!h || !h.desfeitaEm || visiveis().find((x) => x.id === id)?.podeRefazer !== true) return { ok: false, erro: 'Não é mais possível refazer esta reconfiguração' };
+      h.desfeitaEm = '';
+      return { ok: true, itens: visiveis() };
+    },
     async carregar() { return { ok: true, estado: { tipo: tipoDe(store.getState().estabelecimento), passo, concluido, servicos: catalogo(), jaCadastrados: [...feitos], expedienteSugerido: expedienteDeEstado(store.getState()), expediente } }; },
     async servicos(itens) {
       const chaves = new Set(catalogo().map((s) => s.chave));
       if (!Array.isArray(itens) || itens.some((i) => !i || !chaves.has(i.chave))) return { ok: false, erro: 'Serviço de exemplo desconhecido' };
       let criados = 0; let jaExistiam = 0;
       for (const i of itens) { if (feitos.has(i.chave)) jaExistiam++; else { feitos.add(i.chave); criados++; } }
+      if (reconfigurar && criados) nova().servicosCriados += criados;
       passo = 'equipe';
       return { ok: true, resultado: { criados, jaExistiam } };
     },
@@ -42,11 +68,12 @@ export function criarAdaptadorDemo({ reconfigurar = false } = {}) {
       if (!Array.isArray(pessoas) || pessoas.length > 10) return { ok: false, erro: 'No máximo 10 pessoas por vez' };
       const saida = pessoas.map((p) => { const login = loginDe(String(p.nome || ''), usados); usados.add(login); return { nome: String(p.nome || '').slice(0, 80), login, senhaTemporaria: senha(), atende: p.atende !== false }; });
       passo = 'expediente';
+      if (reconfigurar && saida.length) nova().pessoasCriadas += saida.length;
       return { ok: true, pessoas: saida };
     },
     async expediente(semana) {
       const abertos = Object.values(semana || {}).filter((d) => d && d.aberto);
-      if (abertos.length) expediente = { semana };
+      if (abertos.length) { expediente = { semana }; if (reconfigurar) nova().expedienteTrocado = true; }
       passo = 'pronto';
       return { ok: true };
     },
