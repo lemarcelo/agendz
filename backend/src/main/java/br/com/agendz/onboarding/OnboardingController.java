@@ -312,7 +312,7 @@ public class OnboardingController {
         Loja loja = LojaContext.exigir();
         linha();
         banco.naLoja(jdbc -> jdbc.update("update onboarding set passo = 'pronto', concluido_em = coalesce(concluido_em, now()), atualizado_em = now()"));
-        return new Estado(loja.tipo(), "pronto", true, List.of(), List.of(), null, null);
+        return new Estado(loja.tipo(), "pronto", true, List.of(), List.of(), null, null, null, List.of());
     }
 
     private Linha linha() {
