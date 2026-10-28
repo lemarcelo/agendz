@@ -72,3 +72,5 @@ Sem SSH de saída (não toco na VPS; "testar no servidor real" = job do CI com e
 ## Relato final (≤ 10 linhas)
 Feito · decisões tomadas sem confirmação · o que depende do Marcelo (com o comando pronto, vindo de `PENDENTE-MARCELO.md`) · próximo passo.
 17. **[Backlog, pedido do Marcelo em 28/10]** `docs/BACKLOG-FUTURO.md`: B1 modo homologação por cliente (liga/desliga no Admin, lançamentos de teste invisíveis e reversíveis, configs mantidas ou restauradas), B2 log de ações dos usuários no Admin (aba Atividade do cliente + Auditoria), B3 trocar o domínio sem dor (teste estático + roteiro). Toda ideia nova "para depois" entra nesse arquivo com onde mexe (Admin, Agendz ou os dois). Módulos novos (5d, 5e) já devem nascer com a coluna `teste` e a gravação no log pensadas para o B1/B2.
+18. **[Pedido do Marcelo em 28/10, entra na 5d]** `docs/PROMPT-COMISSAO-E-PRODUTOS.md`: comissão em três níveis (serviço > funcionário > estabelecimento; **inverte** a regra atual funcionário > serviço) e produtos no assistente de início. Pronto para executar.
+
