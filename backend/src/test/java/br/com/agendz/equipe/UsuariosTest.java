@@ -79,7 +79,7 @@ class UsuariosTest extends BaseApi {
                 .andExpect(status().isCreated()).andExpect(header().string("Cache-Control", containsString("no-store")))
                 .andExpect(jsonPath("$.usuario.usuario").value("utana")).andExpect(jsonPath("$.usuario.papel").value("profissional"))
                 .andExpect(jsonPath("$.usuario.atende").value(true)).andExpect(jsonPath("$.usuario.deveTrocarSenha").value(true))
-                .andExpect(jsonPath("$.usuario.cpfMascarado").value("529.***.***-25")).andExpect(jsonPath("$.usuario.cpf").doesNotExist())
+                .andExpect(jsonPath("$.usuario.cpfMascarado").value("529.***.***-25")).andExpect(jsonPath("$.usuario.cpf").value("52998224725")) // criar devolve a ficha (como GET por id); a lista só traz o mascarado
                 .andExpect(jsonPath("$.usuario.telefone").value("5553999000001")).andExpect(jsonPath("$.usuario.corSlot").isNumber())
                 .andExpect(jsonPath("$.senhaTemporaria").isString()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         Matcher m = Pattern.compile("\"senhaTemporaria\":\"([^\"]+)\"").matcher(json);
