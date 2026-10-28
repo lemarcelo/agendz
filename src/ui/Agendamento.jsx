@@ -517,8 +517,8 @@ export function GavetaAgendamento({ id, user, onClose, onRemarcar }) {
                     {Object.entries(ROTULO_STATUS).map(([k, r]) => <option key={k} value={k}>{r}</option>)}
                   </select>
                 </Campo>}
-                {!paga && <div className="campo">
-                  <ListaItens titulo="Serviços realizados" testid="ficha-lista-servicos" className="lista-itens" itens={porUltimoUso(st.servicos.filter((s) => s.ativo !== false || a.servicoIds.includes(s.id)), agendamentosVisiveis(st, user), 'servico')} selecionado={(s) => (editaServ || a.servicoIds).includes(s.id)} renderItem={(s) => {
+                {!paga && <div className="campo campo-itens">
+                  <ListaItens titulo="Serviços realizados" testid="ficha-lista-servicos" className="conj lista-itens" itens={porUltimoUso(st.servicos.filter((s) => s.ativo !== false || a.servicoIds.includes(s.id)), agendamentosVisiveis(st, user), 'servico')} selecionado={(s) => (editaServ || a.servicoIds).includes(s.id)} renderItem={(s) => {
                     const cur = editaServ || a.servicoIds;
                     return <label key={s.id} className={`servico-op ${cur.includes(s.id) ? 'on' : ''}`}><input type="checkbox" checked={cur.includes(s.id)} onChange={() => setEditaServ(cur.includes(s.id) ? cur.filter((x) => x !== s.id) : [...cur, s.id])} /><span><b>{s.nome}</b><small className="muted"> cód. {s.codigo}</small></span></label>;
                   }} />

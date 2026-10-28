@@ -569,6 +569,8 @@ input:disabled, select:disabled, textarea:disabled { opacity: .6; }
 .lista-itens { display: grid; gap: 8px; }
 .lista-itens-cab { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .lista-itens .busca { width: 100%; }
+.campo-itens { gap: 12px; } /* o botão abaixo da lista não encosta nos cantos arredondados */
+.campo-itens > .btn { margin-bottom: 2px; }
 .cod { font-variant-numeric: tabular-nums; }
 
 /* contador de cada marcador da legenda (período mostrado abaixo) */

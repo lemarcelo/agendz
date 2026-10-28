@@ -42,3 +42,4 @@ Lista simples. Cada item está no histórico do `prompt-agendz-regras.md` (v84 a
 - **Decidi:** fazer isso antes da 5d, porque com os donos usando o site real um clique repetido depois de uma queda de rede duplicaria o atendimento (e, depois, o dinheiro).
 - **Decidi:** a chave vale 7 dias e só existe nas duas rotas que criam atendimento/agendamento; as outras escritas seguem sem reenvio automático.
 - **Decidi:** continua sem fila no aparelho: a espera pela internet (v87) mais a chave já evitam perda e duplicação sem guardar nada no aparelho.
+- v91: o "canto tampado pelo botão" foi entendido como a lista Serviços realizados da ficha (caixa sem raio e botão colado). Atender (modal e site real) conferidos e sem o problema. Se for outra tela, o Marcelo avisa.
