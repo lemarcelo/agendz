@@ -1,16 +1,7 @@
-// Roda todos os testes de navegador em sequência; falha se algum falhar.
+// Roda os testes de navegador; falha se algum falhar. Em fatias e/ou em paralelo com E2E_FRACAO=i/n e E2E_PARALELO=k (veja tools/lote-e2e.mjs).
 import { readdirSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
-const arquivos = readdirSync(new URL('.', import.meta.url)).filter((f) => /^e2e\d*\.mjs$/.test(f)).sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
-let falhas = 0;
-for (const f of arquivos) {
-  const r = spawnSync('node', [`tests/${f}`], { encoding: 'utf8', timeout: 180000 });
-  const ok = r.status === 0;
-  console.log(`${ok ? 'ok  ' : 'FALHOU'} ${f}`);
-  if (!ok) {
-    falhas++; const resto = (r.stdout || '').split('\n').slice(-12).join('\n');
-    console.log(resto, r.stderr || '');
-    if (process.env.GITHUB_ACTIONS) console.log(`::error title=${f}::${(resto + ' ' + (r.stderr || '')).slice(-900).replace(/%/g, '%25').replace(/\r?\n/g, '%0A')}`); // anotação legível pela API do GitHub
-  }
-}
-process.exit(falhas ? 1 : 0);
+import { rodarLote, fatiar } from '../tools/lote-e2e.mjs';
+const todos = readdirSync(new URL('.', import.meta.url)).filter((f) => /^e2e\d*\.mjs$/.test(f)).sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
+const arquivos = fatiar(todos);
+if (process.env.E2E_FRACAO) console.log(`Fatia ${process.env.E2E_FRACAO}: ${arquivos.length} de ${todos.length} testes`);
+process.exit((await rodarLote(arquivos.map((f) => ({ nome: f, caminho: `tests/${f}` })))) ? 1 : 0);

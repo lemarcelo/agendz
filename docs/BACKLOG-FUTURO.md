@@ -36,3 +36,17 @@ Regra de uso: toda funcionalidade nova pedida "para outro momento" entra aqui co
 **Decisões já tomadas:** sem as chaves nada muda (bloqueio em 5 erros); com as chaves, captcha do 6º erro em diante e bloqueio duro só no 12º; a recusa do captcha não conta como senha errada; falha de rede com o Google = recusa (nunca libera).
 **Depende do Marcelo:** criar o site no Google reCAPTCHA (v2 caixa), pôr `RECAPTCHA_CHAVE_SITE` e `RECAPTCHA_SEGREDO` no `/opt/agendz/.env` da VPS (segredo nunca no repositório).
 **Onde mexe:** Agendz (servidor e telas). O Admin tem login próprio com TOTP: decidir depois se também leva.
+**Configurar pelo Admin (pergunta de 28/10: sim, dá):** tela **Segurança do login** no Admin com chave do site, segredo (cifrado no banco do Admin, nunca mostrado de novo, só "trocar") e liga/desliga; o Agendz lê pela rota interna da A3 (cache curto) e cai nas variáveis de ambiente se o Admin estiver fora do ar. Pré-configurado = vem desligado, com o passo a passo na própria tela. Depende da A3. Onde mexe: os dois.
+
+
+## B5. Relatório de uso do link de agendamento no Admin (pedido de 28/10)
+**Para que serve:** o Admin ver, por cliente (loja), quantos links foram enviados e como foi o caminho até o agendamento, para melhorar o processo.
+**O que mostrar (só contagens, por loja e por período):**
+- links enviados (cada vez que o proprietário ou a equipe usa "Link de agendamento": copiar ou abrir o WhatsApp);
+- agendamentos feitos pelo link (origem `link`, já existe) e a taxa sobre os links enviados;
+- cancelamentos pelo cliente;
+- **abandonos no meio do agendamento e em que etapa** (funil: abriu o link → identificou-se → escolheu serviço → [veículo e porte, só estética] → escolheu data e horário → confirmou). A etapa é a última alcançada antes de sair.
+- consulta por cliente (loja) e total da plataforma, com filtro de período e tipo de estabelecimento.
+**Como seria:** tabela de eventos `evento_funil` no Agendz (loja, tipo do evento, etapa, código anônimo da visita, hora), gravada pelas rotas públicas e pelo botão do link; **nunca** nome, telefone nem CPF do cliente final (regra do painel: o Admin só vê contagens). Código da visita aleatório, sem ligar a pessoa. Retenção sugerida: 12 meses. O Admin lê por rota interna agregada (`/interno/plataforma/**`); tela **Relatórios** no Admin (suporte vê contagens, nunca valores).
+**Dúvidas decididas por mim (avisar):** abandono = visita que passou da abertura e não confirmou em 30 min; "link enviado" conta o uso do botão, não a mensagem entregue.
+**Onde mexe: os dois.** Agendz grava (junto da 5e, link do cliente real) e expõe o agregado; Admin mostra. Depende de **A3** e da **5e**; módulos novos já devem nascer gravando evento (junto do log B2).

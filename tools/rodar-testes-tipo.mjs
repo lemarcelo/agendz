@@ -2,6 +2,7 @@
 // Uso: node tools/rodar-testes-tipo.mjs barbearia [unidade|build|e2e]   (sem a etapa, roda as três; funciona igual no Windows)
 import { readdirSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { rodarLote, fatiar } from './lote-e2e.mjs';
 const tipo = process.argv[2];
 const etapa = process.argv[3] || 'tudo';
 const pasta = `tests-${tipo}`;
@@ -19,16 +20,9 @@ if (etapa === 'tudo' || etapa === 'build') {
   if (r.status !== 0) falhas++;
 }
 if (etapa === 'tudo' || etapa === 'e2e') {
-  const e2e = arquivos.filter((f) => /^e2e\d*\.mjs$/.test(f)).sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
-  for (const f of e2e) {
-    const r = spawnSync('node', [`${pasta}/${f}`], { env, encoding: 'utf8', timeout: 180000 });
-    const ok = r.status === 0;
-    console.log(`${ok ? 'ok  ' : 'FALHOU'} ${f}`);
-    if (!ok) {
-      falhas++; const resto = (r.stdout || '').split('\n').slice(-12).join('\n');
-      console.log(resto, r.stderr || '');
-      if (process.env.GITHUB_ACTIONS) console.log(`::error title=${f}::${(resto + ' ' + (r.stderr || '')).slice(-900).replace(/%/g, '%25').replace(/\r?\n/g, '%0A')}`); // anotação legível pela API
-    }
-  }
+  const todos = arquivos.filter((f) => /^e2e\d*\.mjs$/.test(f)).sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
+  const e2e = fatiar(todos); // E2E_FRACAO=i/n e E2E_PARALELO=k: veja tools/lote-e2e.mjs
+  if (process.env.E2E_FRACAO) console.log(`Fatia ${process.env.E2E_FRACAO}: ${e2e.length} de ${todos.length} testes`);
+  falhas += await rodarLote(e2e.map((f) => ({ nome: f, caminho: `${pasta}/${f}` })), { env });
 }
 process.exit(falhas ? 1 : 0);

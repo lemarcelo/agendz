@@ -6,7 +6,13 @@ on:
 env:
   TZ: America/Sao_Paulo   # as regras usam o horário local da loja (ex.: aviso às 9h); o runner vem em UTC
 
+# Um push novo na mesma branch cancela o CI anterior que ainda roda (o último commit é o que vale; o deploy sai do último).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  # Rápido (cerca de 1 min): testes de unidade/estáticos e conferência de que o build fecha. Os testes de navegador rodam em paralelo nos jobs abaixo.
   testes:
     runs-on: ubuntu-latest
     steps:
@@ -22,12 +28,59 @@ jobs:
         env:
           AUTORIA_SEGREDO: ${{ secrets.AUTORIA_SEGREDO }}
         run: npm run build
-      - name: Navegador (Playwright)
-        run: |
-          npx playwright install --with-deps chromium
-          npm run e2e
-      - name: Suite da barbearia (Gate 1)
-        run: npm run testar:barbearia
+
+  # Testes de navegador (Playwright) divididos em 3 fatias que rodam ao mesmo tempo, cada uma num computador próprio (os testes são independentes).
+  navegador:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        fatia: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package.json') }}
+      - run: npx playwright install --with-deps chromium   # com o cache só instala as dependências do sistema
+      - run: npm run build
+      - name: Navegador, fatia ${{ matrix.fatia }} de 3
+        env:
+          E2E_FRACAO: ${{ matrix.fatia }}/3
+          E2E_PARALELO: 2
+        run: npm run e2e
+
+  # Suíte da barbearia (Gate 1): unidade na fatia 1; navegador dividido em 2 fatias. O build da barbearia escreve em dist/, por isso cada fatia tem o próprio computador.
+  barbearia:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        fatia: [1, 2]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package.json') }}
+      - run: npx playwright install --with-deps chromium
+      - name: Unidade da barbearia
+        if: matrix.fatia == 1
+        run: node tools/rodar-testes-tipo.mjs barbearia unidade
+      - run: node tools/rodar-testes-tipo.mjs barbearia build
+      - name: Navegador da barbearia, fatia ${{ matrix.fatia }} de 2
+        env:
+          E2E_FRACAO: ${{ matrix.fatia }}/2
+          E2E_PARALELO: 2
+        run: node tools/rodar-testes-tipo.mjs barbearia e2e
 
   backend:
     runs-on: ubuntu-latest
@@ -52,7 +105,7 @@ jobs:
 
   deploy:
     # Publica o site na VPS depois que front e backend passam, só no main. Sem os segredos VPS_HOST e VPS_SSH_KEY, o passo é pulado (CI segue verde).
-    needs: [testes, backend]
+    needs: [testes, navegador, barbearia, backend]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     env:
