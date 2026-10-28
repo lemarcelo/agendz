@@ -75,5 +75,13 @@ for (const caso of fixture.casos) {
     });
     assert.equal(r.ok, caso.esperado.ok, JSON.stringify(r));
     if (!caso.esperado.ok) assert.equal(r.erros[0], caso.esperado.erro);
+    const est = caso.esperado.estado;
+    if (est) {
+      const a = store.getState().agendamentos.find((x) => x.id === res(est.alvo));
+      assert.equal(a.status, est.status);
+      assert.equal(a.motivoCancelamento ?? null, est.motivo);
+      assert.equal(!!a.reagendado, est.reagendado);
+      assert.deepEqual(a.log.filter((l) => l.campo === 'status' || l.campo === 'profissional').map((l) => [l.campo, l.de, l.para]), est.eventos);
+    }
   });
 }

@@ -167,6 +167,7 @@ class AgendaEquivalenciaTest extends BaseApi {
             String corpo = ultimo.getResponse().getContentAsString(StandardCharsets.UTF_8);
             if (esperado.get("ok").asBoolean()) {
                 if (status >= 300) falhas.append("\n- ").append(nome).append(": esperava dar certo e veio ").append(status).append(" ").append(corpo);
+                else if (esperado.has("estado")) conferirEstado(nome, esperado.get("estado"), ids, alanToken, falhas);
             } else {
                 String msg = esperado.get("erro").asText();
                 if (status < 400 || status >= 500 || !corpo.contains("\"mensagem\":" + om.writeValueAsString(msg))) {
@@ -175,6 +176,26 @@ class AgendaEquivalenciaTest extends BaseApi {
             }
         }
         assertEquals("", falhas.toString(), "casos que divergem da API simulada");
+    }
+
+    /** Estado do agendamento "@n" depois do último passo: status, motivo, reagendado e os eventos de status/profissional. */
+    private void conferirEstado(String nome, JsonNode est, List<String> ids, String token, StringBuilder falhas) throws Exception {
+        MvcResult r = mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/agendamentos/" + alvo(est.get("alvo").asText(), ids))
+                .with(host(DALFORNO)).header(HttpHeaders.AUTHORIZATION, bearer(token))).andReturn();
+        JsonNode a = om.readTree(r.getResponse().getContentAsString(StandardCharsets.UTF_8));
+        if (!est.get("status").asText().equals(a.path("status").asText())) falhas.append("\n- ").append(nome).append(": status ").append(a.path("status").asText());
+        String motivo = est.get("motivo").isNull() ? null : est.get("motivo").asText();
+        String veio = a.hasNonNull("motivoCancelamento") ? a.get("motivoCancelamento").asText() : null;
+        if (motivo == null ? veio != null : !motivo.equals(veio)) falhas.append("\n- ").append(nome).append(": motivo ").append(veio);
+        if (est.get("reagendado").asBoolean() != a.path("reagendado").asBoolean()) falhas.append("\n- ").append(nome).append(": reagendado ").append(a.path("reagendado").asBoolean());
+        List<String> esperados = new ArrayList<>();
+        for (JsonNode e : est.get("eventos")) esperados.add(e.get(0).asText() + "|" + e.get(1).asText() + "|" + e.get(2).asText());
+        List<String> reais = new ArrayList<>();
+        for (JsonNode e : a.path("historico")) {
+            String campo = e.path("campo").asText();
+            if (campo.equals("status") || campo.equals("profissional")) reais.add(campo + "|" + e.path("de").asText() + "|" + e.path("para").asText());
+        }
+        if (!esperados.equals(reais)) falhas.append("\n- ").append(nome).append(": eventos ").append(reais).append(" em vez de ").append(esperados);
     }
 
     private String alvo(String ref, List<String> ids) {

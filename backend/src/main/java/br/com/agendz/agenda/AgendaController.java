@@ -52,14 +52,25 @@ public class AgendaController {
     private static final String A_CONFIRMAR = "a_confirmar";
     private static final String CONFIRMADO = "confirmado";
     private static final String CANCELADO = "cancelado";
+    private static final String CONCLUIDO = "concluido";
+    private static final Map<String, String> ROTULOS = Map.of(A_CONFIRMAR, "A confirmar", CONFIRMADO, "Confirmado", CONCLUIDO, "Concluído", CANCELADO, "Cancelado");
 
     public record Item(UUID servicoId, String nome, BigDecimal preco, int duracaoMin) {
     }
 
+    /** Uma linha do histórico do agendamento (quem, quando, o quê). `autor` "Sistema" = feito automaticamente. */
+    public record Evento(Instant em, String autor, String campo, String de, String para) {
+    }
+
     public record Agendamento(UUID id, UUID clienteId, UUID profissionalId, Instant inicio, Instant fim, Instant fimOcupado,
-                              String status, boolean encaixe, BigDecimal total, List<Item> servicos, List<UUID> conflitosPendentes) {
+                              String status, boolean encaixe, BigDecimal total, List<Item> servicos, List<UUID> conflitosPendentes,
+                              String origem, boolean reagendado, String motivoCancelamento, boolean statusManual, List<Evento> historico) {
         Agendamento comAvisos(List<UUID> pendentes) {
-            return new Agendamento(id, clienteId, profissionalId, inicio, fim, fimOcupado, status, encaixe, total, servicos, pendentes);
+            return new Agendamento(id, clienteId, profissionalId, inicio, fim, fimOcupado, status, encaixe, total, servicos, pendentes, origem, reagendado, motivoCancelamento, statusManual, historico);
+        }
+
+        Agendamento comHistorico(List<Evento> eventos) {
+            return new Agendamento(id, clienteId, profissionalId, inicio, fim, fimOcupado, status, encaixe, total, servicos, conflitosPendentes, origem, reagendado, motivoCancelamento, statusManual, eventos);
         }
     }
 
@@ -113,7 +124,8 @@ public class AgendaController {
                 args.add(so);
             }
             List<Agendamento> base = jdbc.query(
-                    "select a.id, a.cliente_id, a.profissional_id, a.inicio, a.fim_servico, a.fim_ocupado, a.status, a.encaixe, a.total from agendamento a "
+                    "select a.id, a.cliente_id, a.profissional_id, a.inicio, a.fim_servico, a.fim_ocupado, a.status, a.encaixe, a.total, a.origem, a.reagendado, a.motivo_cancelamento, "
+                            + "(a.status_manual_inicio is not null and a.status_manual_inicio = a.inicio) as status_manual from agendamento a "
                             + "where a.inicio < ? and a.fim_ocupado > ?" + filtro + " order by a.inicio limit 1000",
                     (rs, i) -> linha(rs), args.toArray());
             Map<UUID, List<Item>> itens = new LinkedHashMap<>();
@@ -131,7 +143,7 @@ public class AgendaController {
 
     @GetMapping("/api/agendamentos/{id}")
     public Agendamento obter(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
-        return banco.naLoja(jdbc -> buscar(jdbc, id, somenteDe(jwt)));
+        return banco.naLoja(jdbc -> buscar(jdbc, id, somenteDe(jwt)).comHistorico(historico(jdbc, id)));
     }
 
     // ---------------------------------------------------------------- criar
@@ -176,7 +188,8 @@ public class AgendaController {
                                 + "values (?::uuid, ?, ?, ?, ?, ?, ?, ?)",
                         loja.id().toString(), id, s.id(), ordem++, s.nome(), s.preco(), s.duracaoMin(), s.intervaloMin());
             }
-            if (CONFIRMADO.equals(status)) cancelarPendentesQueCobrem(jdbc, d.profissionalId(), id, inicio, fimOcupado);
+            registrar(jdbc, loja.id(), id, jwt, "criação", null, servicos.stream().map(ServicoLinha::nome).collect(java.util.stream.Collectors.joining(" + ")) + " em " + dataHora(inicio));
+            if (CONFIRMADO.equals(status)) cancelarPendentesQueCobrem(jdbc, loja.id(), d.profissionalId(), id, inicio, fimOcupado);
             return buscar(jdbc, id, null).comAvisos(CONFIRMADO.equals(status) || pendentes.isEmpty() ? null : pendentes);
         });
         return ResponseEntity.status(HttpStatus.CREATED).body(criado);
@@ -186,8 +199,9 @@ public class AgendaController {
 
     @PutMapping("/api/agendamentos/{id}/status")
     public Agendamento alterarStatus(@PathVariable UUID id, @Valid @RequestBody NovoStatus d, @AuthenticationPrincipal Jwt jwt) {
-        if (!List.of(A_CONFIRMAR, CONFIRMADO, "concluido", CANCELADO).contains(d.status())) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Status inválido.");
+        if (!ROTULOS.containsKey(d.status())) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Status inválido.");
         UUID so = somenteDe(jwt);
+        Loja loja = LojaContext.exigir();
         return banco.naLoja(jdbc -> {
             Atual a = ler(jdbc, id, so, false);
             travarProfissional(jdbc, a.profissionalId());
@@ -200,8 +214,12 @@ public class AgendaController {
                 conferirExpediente(jdbc, a.profissionalId(), a.inicio(), a.fimServico(), multiDia(jdbc, id));
                 pendentes = conferirConflitos(jdbc, a.profissionalId(), id, a.inicio(), a.fimOcupado(), a.encaixe());
             }
-            if (CONFIRMADO.equals(novo)) cancelarPendentesQueCobrem(jdbc, a.profissionalId(), id, a.inicio(), a.fimOcupado());
-            jdbc.update("update agendamento set status = ?, atualizado_em = now() where id = ?", novo, id);
+            if (CONFIRMADO.equals(novo) || CONCLUIDO.equals(novo)) cancelarPendentesQueCobrem(jdbc, loja.id(), a.profissionalId(), id, a.inicio(), a.fimOcupado());
+            registrar(jdbc, loja.id(), id, jwt, "status", ROTULOS.get(a.status()), ROTULOS.get(novo));
+            // escolha manual depois do horário começar vale como foi escolhida: o sistema não conclui nem cancela sozinho (remarcar libera de novo)
+            Instant manual = relogio.instant().isBefore(a.inicio()) ? null : a.inicio();
+            jdbc.update("update agendamento set status = ?, motivo_cancelamento = ?, status_manual_inicio = ?, atualizado_em = now() where id = ?",
+                    novo, CANCELADO.equals(novo) ? "profissional" : null, manual == null ? null : utc(manual), id);
             Agendamento r = buscar(jdbc, id, so);
             return CONFIRMADO.equals(novo) ? r : r.comAvisos(pendentes.isEmpty() ? null : pendentes);
         });
@@ -216,6 +234,7 @@ public class AgendaController {
             throw new ErroDeNegocio(HttpStatus.FORBIDDEN, "Só o dono repassa o atendimento a outro profissional.");
         }
         Instant novoInicio = conferirInicio(d.inicio());
+        Loja loja = LojaContext.exigir();
         return banco.naLoja(jdbc -> {
             Atual a = ler(jdbc, id, so, false);
             UUID alvo = d.profissionalId() == null ? a.profissionalId() : d.profissionalId();
@@ -230,9 +249,12 @@ public class AgendaController {
             boolean encaixe = d.encaixe() == null ? a.encaixe() : d.encaixe();
             conferirExpediente(jdbc, alvo, novoInicio, fimServico, multiDia(jdbc, id));
             List<UUID> pendentes = conferirConflitos(jdbc, alvo, id, novoInicio, fimOcupado, encaixe);
-            jdbc.update("update agendamento set profissional_id = ?, inicio = ?, fim_servico = ?, fim_ocupado = ?, encaixe = ?, atualizado_em = now() where id = ?",
+            registrar(jdbc, loja.id(), id, jwt, "data e hora", dataHora(a.inicio()), dataHora(novoInicio));
+            if (!alvo.equals(a.profissionalId())) registrar(jdbc, loja.id(), id, jwt, "profissional", nomeDe(jdbc, a.profissionalId()), nomeDe(jdbc, alvo));
+            // reagendado: etiqueta fixa (a data ou a hora mudou); o motivo do cancelamento, se havia, não vale mais
+            jdbc.update("update agendamento set profissional_id = ?, inicio = ?, fim_servico = ?, fim_ocupado = ?, encaixe = ?, reagendado = true, motivo_cancelamento = null, atualizado_em = now() where id = ?",
                     alvo, utc(novoInicio), utc(fimServico), utc(fimOcupado), encaixe, id);
-            if (CONFIRMADO.equals(a.status())) cancelarPendentesQueCobrem(jdbc, alvo, id, novoInicio, fimOcupado);
+            if (CONFIRMADO.equals(a.status()) || CONCLUIDO.equals(a.status())) cancelarPendentesQueCobrem(jdbc, loja.id(), alvo, id, novoInicio, fimOcupado);
             Agendamento r = buscar(jdbc, id, so);
             return CONFIRMADO.equals(a.status()) || pendentes.isEmpty() ? r : r.comAvisos(pendentes);
         });
@@ -318,9 +340,35 @@ public class AgendaController {
         return pendentes;
     }
 
-    private void cancelarPendentesQueCobrem(JdbcTemplate jdbc, UUID profissionalId, UUID mantido, Instant inicio, Instant fimOcupado) {
-        jdbc.update("update agendamento set status = 'cancelado', atualizado_em = now() where profissional_id = ? and id <> ? and status = 'a_confirmar' "
-                + "and inicio < ? and fim_ocupado > ?", profissionalId, mantido, utc(fimOcupado), utc(inicio));
+    /** Quem confirma primeiro fica com o horário: os "a confirmar" sobrepostos são cancelados (motivo "conflito"), menos os marcados como encaixe. */
+    private void cancelarPendentesQueCobrem(JdbcTemplate jdbc, UUID lojaId, UUID profissionalId, UUID mantido, Instant inicio, Instant fimOcupado) {
+        List<UUID> perdedores = jdbc.queryForList(
+                "update agendamento set status = 'cancelado', motivo_cancelamento = 'conflito', atualizado_em = now() where profissional_id = ? and id <> ? and status = 'a_confirmar' "
+                        + "and not encaixe and inicio < ? and fim_ocupado > ? returning id", UUID.class, profissionalId, mantido, utc(fimOcupado), utc(inicio));
+        for (UUID p : perdedores) {
+            registrar(jdbc, lojaId, p, null, "status", ROTULOS.get(A_CONFIRMAR), "Cancelado (horário ocupado por outro cliente)");
+        }
+    }
+
+    // ---------------------------------------------------------------- histórico
+
+    /** Registra uma alteração. `jwt` nulo = o próprio sistema. */
+    private void registrar(JdbcTemplate jdbc, UUID lojaId, UUID agendamentoId, Jwt jwt, String campo, String de, String para) {
+        UUID autorId = jwt == null ? null : UUID.fromString(jwt.getSubject());
+        String nome = jwt == null ? "Sistema" : String.valueOf(jwt.getClaimAsString("nome"));
+        jdbc.update("insert into agendamento_evento (loja_id, agendamento_id, em, autor_id, autor_nome, campo, de, para) values (?::uuid, ?, ?, ?, ?, ?, ?, ?)",
+                lojaId.toString(), agendamentoId, utc(relogio.instant()), autorId, nome, campo, de, para);
+    }
+
+    private List<Evento> historico(JdbcTemplate jdbc, UUID agendamentoId) {
+        return jdbc.query("select em, autor_nome, campo, de, para from agendamento_evento where agendamento_id = ? order by id",
+                (rs, i) -> new Evento(rs.getObject("em", OffsetDateTime.class).toInstant(), rs.getString("autor_nome"), rs.getString("campo"), rs.getString("de"), rs.getString("para")), agendamentoId);
+    }
+
+    private static final java.time.format.DateTimeFormatter DIA_HORA = java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy 'às' HH:mm");
+
+    private static String dataHora(Instant i) {
+        return DIA_HORA.format(i.atZone(br.com.agendz.escala.Fuso.BRASIL));
     }
 
     // ---------------------------------------------------------------- acesso a dados
@@ -338,7 +386,8 @@ public class AgendaController {
     }
 
     private Agendamento buscar(JdbcTemplate jdbc, UUID id, UUID so) {
-        String sql = "select id, cliente_id, profissional_id, inicio, fim_servico, fim_ocupado, status, encaixe, total from agendamento where id = ?"
+        String sql = "select id, cliente_id, profissional_id, inicio, fim_servico, fim_ocupado, status, encaixe, total, origem, reagendado, motivo_cancelamento, "
+                + "(status_manual_inicio is not null and status_manual_inicio = inicio) as status_manual from agendamento where id = ?"
                 + (so == null ? "" : " and profissional_id = ?");
         Object[] args = so == null ? new Object[]{id} : new Object[]{id, so};
         List<Agendamento> achados = jdbc.query(sql, (rs, i) -> linha(rs), args);
@@ -352,11 +401,13 @@ public class AgendaController {
         return new Agendamento(rs.getObject("id", UUID.class), rs.getObject("cliente_id", UUID.class), rs.getObject("profissional_id", UUID.class),
                 rs.getObject("inicio", OffsetDateTime.class).toInstant(), rs.getObject("fim_servico", OffsetDateTime.class).toInstant(),
                 rs.getObject("fim_ocupado", OffsetDateTime.class).toInstant(), rs.getString("status"), rs.getBoolean("encaixe"),
-                rs.getBigDecimal("total"), List.of(), null);
+                rs.getBigDecimal("total"), List.of(), null,
+                rs.getString("origem"), rs.getBoolean("reagendado"), rs.getString("motivo_cancelamento"), rs.getBoolean("status_manual"), null);
     }
 
     private static Agendamento comItens(Agendamento a, List<Item> itens) {
-        return new Agendamento(a.id(), a.clienteId(), a.profissionalId(), a.inicio(), a.fim(), a.fimOcupado(), a.status(), a.encaixe(), a.total(), itens, a.conflitosPendentes());
+        return new Agendamento(a.id(), a.clienteId(), a.profissionalId(), a.inicio(), a.fim(), a.fimOcupado(), a.status(), a.encaixe(), a.total(), itens, a.conflitosPendentes(),
+                a.origem(), a.reagendado(), a.motivoCancelamento(), a.statusManual(), a.historico());
     }
 
     private static OffsetDateTime utc(Instant i) {
