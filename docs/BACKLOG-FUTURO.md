@@ -1,0 +1,31 @@
+# Backlog futuro (ideias pedidas pelo Marcelo, para fazer depois)
+
+Regra de uso: toda funcionalidade nova pedida "para outro momento" entra aqui com **o que é**, **onde mexe** (só Admin, só Agendz, ou os dois) e **dúvidas**. Não implementar antes de a fila principal (`docs/PROMPT-CONTINUACAO.md`) chegar nela, salvo se o Marcelo pedir.
+
+## B1. Modo homologação por cliente (pedido de 28/10)
+**Para que serve:** testar o sistema numa loja de verdade sem sujar os dados. O Admin liga e desliga o modo por cliente (loja); vale para qualquer tipo (barbearia, estética, futuros).
+**Já existe algo parecido?** Não. Existe só histórico por agendamento (`agendamento_evento`) e o Reconfigurar reversível (serviços/equipe/expediente do assistente). Nenhum dos dois cobre lançamentos de teste.
+**Como seria:**
+- Admin liga o modo (com motivo, entra no log). Tudo que a loja **lançar** enquanto o modo está ligado (agendamentos, atendimentos, clientes criados pelo atendimento, estoque, financeiro, mensagens) ganha a marca `teste` e o número da sessão de teste. **Configurações** (estabelecimento, serviços, equipe, expediente) não levam a marca.
+- Ao ligar, o servidor guarda uma **foto das configurações** (JSON). Ao desligar, o Admin escolhe: **(a) manter as configurações** e esconder os lançamentos de teste; **(b) manter os lançamentos** (viram reais) ; ou os dois; se não mantiver as configurações, volta a foto.
+- Lançamentos de teste **não são apagados**: ficam salvos e **invisíveis** para a loja com o modo desligado. O Admin vê a lista deles e pode **reverter** (devolver a visibilidade) um a um ou por período. (Dúvida D1 abaixo.)
+- No modo teste nada sai de verdade: sem WhatsApp, sem cobrança Pix, sem e-mail; faixa visível "Modo de teste" para quem usa a loja.
+**Onde mexe: os dois.**
+- Agendz (servidor): coluna `teste` em toda tabela de lançamento, filtro em **toda** consulta (hoje cada rota consulta direto; precisa de uma regra única no banco, p. ex. política RLS ou visão), conflito de horário e unicidade (telefone+nome) que **ignoram** linhas de teste escondidas, bloqueio dos envios, faixa na tela, rota interna `/interno/plataforma/**` para ligar/desligar/listar/reverter.
+- Admin: botão e assistente de desligar (as duas escolhas), tela da lista de testes com reverter, eventos na linha do tempo.
+- Depende de: **A3** (rotas internas entre Admin e Agendz).
+**Cuidado:** é a mudança mais invasiva do backlog (toca todas as consultas). Fazer cedo é mais barato que tarde: cada módulo novo (5d financeiro/estoque, 5e mensagens) já deveria nascer com a coluna `teste`.
+**Dúvidas:** D1 "reverter" = tornar o lançamento real de novo (visível)? Ou desfazer/apagar? Estou assumindo "tornar visível"; apagar definitivo nunca. D2 Pix/WhatsApp reais ficam sempre desligados no modo teste (assumido).
+
+## B2. Log de ações dos usuários no Admin (pedido de 28/10)
+**Para que serve:** o Admin ver, por cliente, quem fez o quê e quando.
+**Já existe algo parecido?** Em parte: cada agendamento tem histórico (quem, quando, campo, de, para) e o Admin tem a linha do tempo das ações **do próprio Admin**. Não existe registro de ações dos usuários da loja em geral (login, cadastro de serviço, troca de equipe, cancelamentos...).
+**Como seria:** tabela `log_acao` no Agendz (loja, usuário, papel, ação, tipo e id do objeto, resumo sem dado pessoal, hora, origem normal/teste) gravada na mesma transação da ação; o Admin lê por rota interna. Retenção sugerida: 12 meses.
+**Onde fica no Admin (decisão minha):** dentro da ficha do cliente, aba **Atividade** (filtro por usuário, ação e período), mais uma tela **Auditoria** global para o administrador filtrar por cliente. **Suporte** vê ação, usuário e hora, nunca valores nem contrato.
+**Regra de privacidade:** o painel nunca mostra dados dos clientes finais (CPF, telefone). O resumo grava só nome/apelido (que já podem ir para log) e ids; valores financeiros só para o administrador.
+**Onde mexe: os dois.** Agendz grava (um ponto único, para nenhuma rota esquecer), Admin lê. Depende de A3.
+
+## B3. Poder trocar o domínio (DNS) do Agendz depois (pedido de 28/10)
+**Situação hoje (verificada):** o domínio já é **uma variável** (`DOMINIO`, `AGENDZ_DOMINIOS_BASE`, `AGENDZ_DOMINIO` no build); o Caddy usa `{$DOMINIO}`; as lojas vêm do endereço (Host), não de texto fixo; o token fica em memória (sem cookie por domínio). Os únicos lugares com `agendz.io` escrito são **valores padrão**: `ci.yml`, `deploy-api.yml` e `deploy-admin.yml` (`vars.DOMINIO || 'agendz.io'`), `application.yml` (`agendz.io,localhost`) e a constante de demonstração `DOMINIO` do Admin (`src/api-demo.js`). Nenhum texto de tela, e-mail ou regra depende dele.
+**Para ficar à prova de erro (tarefa pequena, a fazer junto da A3):** (1) teste estático nos dois repositórios que **falha** se `agendz.io` aparecer fora desses padrões; (2) todo link montado (e-mail, WhatsApp, link de agendamento) sai de uma função única que lê `DOMINIO`; (3) roteiro de troca em `docs/TROCA-DE-DOMINIO.md`: criar os registros DNS (curinga das lojas e `admin`), mudar a variável `DOMINIO` nos três repositórios, redeploy, conferir `deploy/smoke-producao.sh`; lojas com domínio próprio não mudam; slugs continuam iguais.
+**Onde mexe: os dois**, mas só em configuração e testes, sem regra de negócio.
