@@ -87,9 +87,10 @@ class AtendimentoTest extends BaseApi {
         atender(APEX, davi, corpo(pabloId, ",\"telefone\":\"(53) 99900-0002\",\"nome\":\"João Silva\"")).andExpect(status().isCreated());
         assertEquals(1, jdbc.queryForObject("select count(*) from cliente", Integer.class));
         assertEquals("João Silva", jdbc.queryForObject("select nome from cliente", String.class));
-        // nome diferente no mesmo número (família): cadastro novo, o primeiro fica como estava
+        // nome diferente no mesmo número: como no simulador, o telefone que já tem cadastro vale (o primeiro do número) e o nome do cadastro não muda
         atender(APEX, davi, corpo(pabloId, ",\"telefone\":\"53999000002\",\"nome\":\"Maria\"")).andExpect(status().isCreated());
-        assertEquals(2, jdbc.queryForObject("select count(*) from cliente", Integer.class));
+        assertEquals(1, jdbc.queryForObject("select count(*) from cliente", Integer.class));
+        assertEquals("João Silva", jdbc.queryForObject("select nome from cliente", String.class));
     }
 
     @Test
