@@ -44,6 +44,13 @@ Lista simples. Cada item está no histórico do `prompt-agendz-regras.md` (v84 a
 - **Decidi:** continua sem fila no aparelho: a espera pela internet (v87) mais a chave já evitam perda e duplicação sem guardar nada no aparelho.
 - v91: o "canto tampado pelo botão" foi entendido como a lista Serviços realizados da ficha (caixa sem raio e botão colado). Atender (modal e site real) conferidos e sem o problema. Se for outra tela, o Marcelo avisa.
 
+## v94 (28/10): comissão no site real (5d-4b)
+- **Decidi:** sem financeiro no servidor, "pagar comissão" só registra o pagamento (valor, período, quem pagou). A despesa "Comissões" entra quando o financeiro real existir.
+- **Decidi:** a conta é por linha (serviço ou produto) e a parte de uma pessoa é o conjunto das linhas dela; "paga" e "cancelada" só valem quando todas as linhas estão assim.
+- **Decidi:** o menu Comissões é só do dono; os demais perfis veem "Meus ganhos".
+- **Decidi:** não criei JSON de equivalência do cálculo; os testes de integração repetem os números do simulador.
+- **Dúvida (D2):** quando a ficha do atendimento existir no site real, adicionar/retirar serviço de atendimento com comissão paga deve ser bloqueado (trava `comissaoJaPaga`). Vale o mesmo bloqueio do simulador?
+
 ## v93 (28/10): produtos no Atender real (5d-4a)
 - **Decidi:** venda só de produto ocupa 1 minuto na coluna de quem atende (se o vendedor não atende, vai para o primeiro que atende).
 - **Decidi:** o estoque pode ficar negativo ao concluir uma venda antiga; a checagem de "estoque insuficiente" é só ao lançar.

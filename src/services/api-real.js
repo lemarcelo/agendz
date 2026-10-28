@@ -479,6 +479,78 @@ export const agenda = {
   },
 };
 
+// ---------- comissões (5d-4b; regras no servidor: ComissaoController/ComissaoService) ----------
+const DIA_ISO = /^\d{4}-\d{2}-\d{2}$/;
+const MES_ISO = /^\d{4}-(0[1-9]|1[0-2])$/;
+// Período: { mes: 'AAAA-MM' } ou { de: 'AAAA-MM-DD', ate: 'AAAA-MM-DD' } (dias inclusive, até 366). Devolve a consulta ou { erro }.
+export function consultaDoPeriodo(p) {
+  if (p && typeof p === 'object' && DIA_ISO.test(String(p.de)) && DIA_ISO.test(String(p.ate))) {
+    if (p.ate < p.de) return { erro: 'A data final não pode ser antes da inicial.' };
+    return { q: `de=${p.de}&ate=${p.ate}` };
+  }
+  if (p && typeof p === 'object' && MES_ISO.test(String(p.mes))) return { q: `mes=${p.mes}` };
+  return { erro: 'Informe o período.' };
+}
+const dinheiroOuZero = (v) => numeroOuNulo(v) ?? 0;
+const lerParteDono = (l) => ({ agendamentoId: texto(l && l.agendamentoId, 40), inicio: instante(l && l.inicio), clienteId: ID.test(String(l && l.clienteId)) ? l.clienteId : null, nomeAvulso: l && l.nomeAvulso ? texto(l.nomeAvulso, 100) : '',
+  servicos: listaDe(l && l.servicos, 30).map((x) => texto(x, 120)), base: dinheiroOuZero(l && l.base), comissao: dinheiroOuZero(l && l.comissao), casa: dinheiroOuZero(l && l.casa), paga: !!(l && l.paga === true), pagaEm: instante(l && l.pagaEm),
+  cancelada: !!(l && l.cancelada === true), motivoCancelada: l && l.motivoCancelada ? texto(l.motivoCancelada, 300) : '', comissaoOriginal: numeroOuNulo(l && l.comissaoOriginal) });
+let ultimoPagamento = { assinatura: '', chave: '' };
+export const comissoes = {
+  // GET /api/comissoes?mes= | ?de=&ate=  (só o proprietário: por pessoa, com a parte do estabelecimento)
+  async relatorio(periodo) {
+    const c = consultaDoPeriodo(periodo);
+    if (c.erro) return { ok: false, status: 0, erro: c.erro };
+    const r = await chamar('GET', `/api/comissoes?${c.q}`);
+    if (!r.ok) return r;
+    const d = r.dados || {}; const t = d.totais || {};
+    return { ok: true, de: texto(d.de, 10), ate: texto(d.ate, 10), totais: { comissao: dinheiroOuZero(t.comissao), aPagar: dinheiroOuZero(t.aPagar), pago: dinheiroOuZero(t.pago), casa: dinheiroOuZero(t.casa) },
+      profissionais: listaDe(d.profissionais, 200).map((p) => ({ id: texto(p && p.id, 40), nome: texto(p && p.nome, 150), semComissao: !!(p && p.semComissao === true), atendimentos: numeroOuNulo(p && p.atendimentos) ?? 0,
+        base: dinheiroOuZero(p && p.base), comissao: dinheiroOuZero(p && p.comissao), casa: dinheiroOuZero(p && p.casa), pago: dinheiroOuZero(p && p.pago), aPagar: dinheiroOuZero(p && p.aPagar), linhas: listaDe(p && p.linhas, 1000).map(lerParteDono) })).filter((p) => ID.test(p.id)) };
+  },
+  // GET /api/comissoes/meu?mes= | ?de=&ate=  (profissional, atendente e admin: SÓ o que eles recebem; nunca o valor cheio, a parte da casa nem o percentual)
+  async meu(periodo) {
+    const c = consultaDoPeriodo(periodo);
+    if (c.erro) return { ok: false, status: 0, erro: c.erro };
+    const r = await chamar('GET', `/api/comissoes/meu?${c.q}`);
+    if (!r.ok) return r;
+    const d = r.dados || {}; const t = d.totais || {}; const pv = d.previsto || {};
+    return { ok: true, totais: { atendimentos: numeroOuNulo(t.atendimentos) ?? 0, receber: dinheiroOuZero(t.receber), jaPago: dinheiroOuZero(t.jaPago), aReceber: dinheiroOuZero(t.aReceber) }, previsto: { atendimentos: numeroOuNulo(pv.atendimentos) ?? 0, receber: dinheiroOuZero(pv.receber) },
+      linhas: listaDe(d.linhas, 1000).map((l) => ({ agendamentoId: texto(l && l.agendamentoId, 40), inicio: instante(l && l.inicio), local: !!(l && l.local === true), clienteId: ID.test(String(l && l.clienteId)) ? l.clienteId : null, nomeAvulso: l && l.nomeAvulso ? texto(l.nomeAvulso, 100) : '',
+        servicos: listaDe(l && l.servicos, 30).map((x) => texto(x, 120)), receber: dinheiroOuZero(l && l.receber), paga: !!(l && l.paga === true), pagaEm: instante(l && l.pagaEm), cancelada: !!(l && l.cancelada === true), motivoCancelada: l && l.motivoCancelada ? texto(l.motivoCancelada, 300) : '' })) };
+  },
+  // POST /api/comissoes/pagamentos  { profissionalId, mes | de, ate }  (só o proprietário; leva Idempotency-Key: o mesmo pedido de novo nunca paga duas vezes)
+  async pagar(profissionalId, periodo) {
+    if (!ID.test(String(profissionalId ?? ''))) return { ok: false, status: 0, erro: 'Profissional não encontrado.' };
+    const c = consultaDoPeriodo(periodo);
+    if (c.erro) return { ok: false, status: 0, erro: c.erro };
+    const corpo = { profissionalId, ...(c.q.startsWith('mes=') ? { mes: periodo.mes } : { de: periodo.de, ate: periodo.ate }) };
+    const assinatura = JSON.stringify(corpo);
+    if (ultimoPagamento.assinatura !== assinatura) ultimoPagamento = { assinatura, chave: novaChave() };
+    const r = await chamar('POST', '/api/comissoes/pagamentos', corpo, ultimoPagamento.chave);
+    if (r.ok) ultimoPagamento = { assinatura: '', chave: '' };
+    if (!r.ok) return r;
+    const d = r.dados || {};
+    return { ok: true, valor: dinheiroOuZero(d.valor), atendimentos: numeroOuNulo(d.atendimentos) ?? 0 };
+  },
+  // POST /api/agendamentos/{id}/comissao/cancelar  { quem?, motivo }  (só o proprietário; motivo de 5 a 300 letras; comissão paga não se cancela)
+  async cancelar(agendamentoId, { quem, motivo } = {}) {
+    if (!ID.test(String(agendamentoId ?? ''))) return { ok: false, status: 0, erro: 'Agendamento não encontrado.' };
+    if (quem !== undefined && quem !== null && quem !== '' && !ID.test(String(quem))) return { ok: false, status: 0, erro: 'Pessoa inválida.' };
+    const m = typeof motivo === 'string' ? motivo.trim() : '';
+    if (m.length > 300) return { ok: false, status: 0, erro: 'O motivo pode ter até 300 letras.' };
+    const r = await chamar('POST', `/api/agendamentos/${agendamentoId}/comissao/cancelar`, { ...(quem ? { quem } : {}), motivo: m });
+    return r.ok ? { ok: true } : r;
+  },
+  // POST /api/agendamentos/{id}/comissao/restaurar  { quem? }
+  async restaurar(agendamentoId, { quem } = {}) {
+    if (!ID.test(String(agendamentoId ?? ''))) return { ok: false, status: 0, erro: 'Agendamento não encontrado.' };
+    if (quem !== undefined && quem !== null && quem !== '' && !ID.test(String(quem))) return { ok: false, status: 0, erro: 'Pessoa inválida.' };
+    const r = await chamar('POST', `/api/agendamentos/${agendamentoId}/comissao/restaurar`, quem ? { quem } : {});
+    return r.ok ? { ok: true } : r;
+  },
+};
+
 // GET /api/profissionais  (quem pode aparecer na agenda: usuários ativos; `atende` diz se têm agenda própria)
 export const profissionais = {
   async listar() {

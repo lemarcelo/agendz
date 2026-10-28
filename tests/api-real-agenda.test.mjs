@@ -2,7 +2,7 @@
 // Agenda do site real (src/services/api-real.js, `agenda` e `profissionais`): rotas e corpos, validação antes da rede, leitura defensiva da resposta.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { agenda, configurar, produtos, profissionais } from '../src/services/api-real.js';
+import { agenda, comissoes, configurar, consultaDoPeriodo, produtos, profissionais } from '../src/services/api-real.js';
 import { agruparPorDia } from '../src/domain/agenda-grupos.js';
 
 const ID = '00000000-0000-4000-8000-000000000101';
@@ -154,4 +154,37 @@ test('resposta perdida com o aparelho online: com chave, reenvia sozinho a MESMA
   const s = await agenda.mudarStatus(ID, 'confirmado');
   assert.equal(s.ok, false); assert.equal(s.status, 0);
   assert.equal(chamadas.length, 1);
+});
+
+test('comissões: período vira consulta; entrada ruim nem sai do cliente; leitura defensiva sem percentual nem valor cheio no "meu"', async () => {
+  assert.deepEqual(consultaDoPeriodo({ mes: '2026-10' }), { q: 'mes=2026-10' });
+  assert.deepEqual(consultaDoPeriodo({ de: '2026-10-01', ate: '2026-10-31' }), { q: 'de=2026-10-01&ate=2026-10-31' });
+  for (const x of [null, {}, { mes: '2026-13' }, { de: '2026-10-01' }, { de: '1; drop', ate: '2026-10-31' }]) assert.ok(consultaDoPeriodo(x).erro, JSON.stringify(x));
+  assert.match(consultaDoPeriodo({ de: '2026-10-31', ate: '2026-10-01' }).erro, /não pode ser antes/);
+  servidor({ totais: { atendimentos: 1, receber: 40, jaPago: 0, aReceber: 40 }, previsto: { atendimentos: 1, receber: 10 },
+    linhas: [{ agendamentoId: ID, inicio: '2026-10-28T13:00:00Z', local: true, servicos: ['Lavagem'], receber: 40, paga: false, cancelada: false, base: 80, casa: 40, pct: 50 }] });
+  const r = await comissoes.meu({ mes: '2026-10' });
+  assert.equal(chamadas[0].url, 'https://loja.teste/api/comissoes/meu?mes=2026-10');
+  assert.equal(r.totais.receber, 40); assert.equal(r.linhas[0].receber, 40);
+  assert.ok(!('base' in r.linhas[0]) && !('casa' in r.linhas[0]) && !('pct' in r.linhas[0]) && !('casa' in r.totais), 'nada do valor cheio chega à tela');
+  const antes = chamadas.length;
+  assert.equal((await comissoes.meu({})).ok, false);
+  assert.equal(chamadas.length, antes);
+});
+
+test('comissões: pagar leva chave e a repete no mesmo pedido; pedido ruim nem sai; cancelar exige id e limite do motivo', async () => {
+  servidor({ valor: 80, atendimentos: 2 }, 201);
+  const per = { de: '2026-10-01', ate: '2026-10-31' };
+  const r = await comissoes.pagar(PROF, per);
+  assert.deepEqual(r, { ok: true, valor: 80, atendimentos: 2 });
+  assert.deepEqual(chamadas[0].corpo, { profissionalId: PROF, de: '2026-10-01', ate: '2026-10-31' });
+  const antes = chamadas.length;
+  for (const x of [await comissoes.pagar('x', per), await comissoes.pagar(PROF, {}), await comissoes.cancelar('x', { motivo: 'abc' }), await comissoes.cancelar(ID, { quem: 'x', motivo: 'Cortesia' }),
+    await comissoes.cancelar(ID, { motivo: 'a'.repeat(301) }), await comissoes.restaurar('x'), await comissoes.restaurar(ID, { quem: '1; drop' })]) assert.equal(x.ok, false);
+  assert.equal(chamadas.length, antes);
+  servidor(null, 204);
+  assert.equal((await comissoes.cancelar(ID, { quem: PROF, motivo: '  Cortesia da casa ' })).ok, true);
+  assert.deepEqual(chamadas[0], { url: `https://loja.teste/api/agendamentos/${ID}/comissao/cancelar`, metodo: 'POST', corpo: { quem: PROF, motivo: 'Cortesia da casa' } });
+  assert.equal((await comissoes.restaurar(ID)).ok, true);
+  assert.deepEqual(chamadas[1].corpo, {});
 });

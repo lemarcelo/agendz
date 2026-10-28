@@ -9,6 +9,8 @@ import Agenda from './Agenda.jsx';
 import Clientes from './Clientes.jsx';
 import Servicos from './Servicos.jsx';
 import Equipe from './Equipe.jsx';
+import Comissoes from './Comissoes.jsx';
+import Ganhos from './Ganhos.jsx';
 import { TIPOS, definirTipoAtivo, rotulo, tipoValido } from '../../domain/tipos.js';
 import { cssDaMarca, logoValida } from '../../domain/tema.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
@@ -128,6 +130,8 @@ function Painel({ loja, sessao, aoSair }) {
   if (dono || (sessao.secoes || []).includes('clientes')) itens.push(['clientes', 'Clientes', 'users']);
   itens.push(['servicos', 'Serviços', 'scissors']);
   if (dono) itens.push(['equipe', 'Equipe', 'team']);
+  if (dono) itens.push(['comissoes', 'Comissões', 'wallet']);
+  else itens.push(['ganhos', 'Meus ganhos', 'wallet']);
   return (
     <div className="app">
       <header className="topo">
@@ -148,7 +152,7 @@ function Painel({ loja, sessao, aoSair }) {
           {aba === 'inicio' && (
             <section className="tela" data-testid="painel-real">
               <p><b data-testid="painel-nome">{sessao.nome}</b> · <span data-testid="painel-papel">{papel}</span></p>
-              <Aviso>Sua conta está pronta e o acesso é seguro. Clientes, serviços, equipe e a agenda (horários, calendário, status e remarcar) já estão aqui; o botão Atender chega na próxima atualização.</Aviso>
+              <Aviso>Sua conta está pronta e o acesso é seguro. Clientes, serviços, equipe, a agenda (horários, calendário, status, remarcar e o botão Atender) e as comissões já estão aqui.</Aviso>
               {sessao.papel === 'dono' && <Btn onClick={() => setReconfigurando(true)} data-testid="reconfigurar-abrir">Reconfigurar estabelecimento</Btn>}
             </section>
           )}
@@ -156,6 +160,8 @@ function Painel({ loja, sessao, aoSair }) {
           {aba === 'clientes' && <Clientes />}
           {aba === 'servicos' && <Servicos ehDono={dono || (sessao.secoes || []).includes('servicos')} />}
           {aba === 'equipe' && dono && <Equipe meuId={sessao.id} />}
+          {aba === 'comissoes' && dono && <Comissoes />}
+          {aba === 'ganhos' && !dono && <Ganhos />}
         </main>
       </div>
     </div>

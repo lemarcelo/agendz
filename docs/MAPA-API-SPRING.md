@@ -235,6 +235,16 @@ O catálogo (`backend/src/main/resources/catalogo/<tipo>.json`) é gerado dos se
 | `DELETE /api/produtos/{id}` | seção `estoque` | produto com venda ou movimento só desativa (200 `{desativado:true}`) | |
 | `GET /api/profissionais` | quem já tinha | cada pessoa traz `podeVender` | |
 
+## 10g. Comissões (v94, 5d-4b; `ComissaoTest`)
+| Rota | Quem | O que faz | Regras |
+|---|---|---|---|
+| `GET /api/comissoes?mes=AAAA-MM` ou `?de=&ate=` | dono | por pessoa: base, comissão, parte da casa, pago, a pagar e linhas | até 366 dias, fuso da loja; só atendimentos **concluídos** (data = `comissao_em` ou início); dono/master aparecem como "sem comissão" |
+| `GET /api/comissoes/meu` | profissional, atendente, admin | só o que a pessoa recebe: linhas (`receber`, paga, cancelada), totais e previsto | **nunca** valor cheio, parte da casa nem percentual |
+| `POST /api/comissoes/pagamentos` `{profissionalId, mes \| de, ate}` + `Idempotency-Key` | dono | marca as linhas em aberto como pagas e guarda o pagamento | proprietário não recebe; sem nada em aberto = 400; cancelada não entra; linha do usuário travada (um pagamento por vez) |
+| `POST /api/agendamentos/{id}/comissao/cancelar` `{quem?, motivo}` | dono | cancela a comissão da pessoa naquele atendimento (vale zero, a parte vira da casa) | motivo 5 a 300 letras; paga não se cancela; histórico `comissão` |
+| `POST /api/agendamentos/{id}/comissao/restaurar` `{quem?}` | dono | desfaz o cancelamento | só se estiver cancelada |
+| `POST /api/atendimentos` (retroativo) | quem já tinha | período já pago a alguém do atendimento grava `comissao_em = agora` | comissão entra no próximo pagamento; o histórico informa |
+
 ## 11. Pontos do protótipo que **não** existem no real (tratar como pendência)
 
 `MODO_DEMO` (código de recuperação na resposta), `bancoSimulado`, `store.avancar`/`reiniciar`, snapshot com senhas e CPFs, sessão em variável do navegador, contadores de login na memória, chave de autoria no front. Todos substituídos pelas camadas das seções 0 a 10.
