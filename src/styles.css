@@ -832,3 +832,28 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
 
 /* faixa de aviso do site real quando o aparelho está sem internet (a ação espera e segue sozinha ao voltar) */
 .faixa-rede { position: fixed; top: 0; left: 0; right: 0; z-index: 60; display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 10px 16px; background: var(--amarelo-bg); color: var(--amarelo); border-bottom: 1px solid var(--amarelo); font-weight: 600; font-size: 13px; }
+
+/* agenda do site real (ui/real/Agenda.jsx): cartão com detalhes, barra de dia, seletor e calendário do mês */
+.agenda-real { display: grid; gap: 12px; }
+.agenda-barra { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.agenda-titulo-real { margin: 0 0 0 6px; font-size: 16px; } .agenda-titulo-real::first-letter { text-transform: uppercase; }
+.agenda-dia-real, .agenda-lista-real, .agenda-proximos-real { display: grid; gap: 8px; }
+.agenda-proximos-real { margin-top: 12px; }
+.agenda-titulo-proximos-real { margin: 0; font-size: 14px; color: var(--muted); }
+.agenda-grupo-real { display: grid; gap: 6px; }
+.seletor-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.seletor-chips .chip { border: 1px solid var(--line); cursor: pointer; }
+.seletor-chips .chip.on { background: var(--ink); color: var(--ink-fg); border-color: var(--ink); }
+.cartao-real { display: grid; gap: 0; }
+.cartao-detalhe { display: grid; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-top: 0; border-radius: 0 0 10px 10px; background: var(--surface-2); }
+.detalhe-itens { margin: 0; padding-left: 18px; font-size: 13px; }
+.confirmar-linha { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.historico ul { margin: 6px 0 0; padding-left: 18px; font-size: 12.5px; }
+.cal-real-grade { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.cal-real-cab { background: var(--surface-2); padding: 6px 2px; text-align: center; font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--muted); }
+.cal-real-dia { background: var(--surface); min-height: 56px; padding: 6px 4px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; cursor: pointer; border: 0; text-align: left; }
+.cal-real-dia:hover { background: var(--surface-2); }
+.cal-real-dia.fora { color: var(--muted); background: color-mix(in srgb, var(--surface-2) 60%, var(--surface)); }
+.cal-real-dia.hoje .cal-real-num { background: var(--ink); color: var(--ink-fg); border-radius: 50%; width: 24px; height: 24px; display: inline-grid; place-items: center; }
+.cal-real-num { font-weight: 700; font-variant-numeric: tabular-nums; }
+.cal-real-cont { background: var(--azul-bg); color: var(--azul); border-radius: 999px; padding: 0 7px; font-size: 11px; font-weight: 700; }

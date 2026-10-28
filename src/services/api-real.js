@@ -345,3 +345,63 @@ export const equipe = {
     return r.ok ? { ok: true } : r;
   },
 };
+
+// ---------- agenda (F2 parte 5b; regras no servidor: AgendaController) ----------
+const STATUS_AGENDA = ['a_confirmar', 'confirmado', 'concluido', 'cancelado'];
+const instante = (v) => { const t = typeof v === 'string' ? Date.parse(v) : NaN; return Number.isFinite(t) ? t : null; };
+function lerAgendamento(d) {
+  d = d || {};
+  const inicio = instante(d.inicio);
+  return {
+    id: texto(d.id, 40), clienteId: ID.test(String(d.clienteId)) ? d.clienteId : null, profissionalId: texto(d.profissionalId, 40),
+    inicio, fim: instante(d.fim), fimOcupado: instante(d.fimOcupado), status: STATUS_AGENDA.includes(d.status) ? d.status : 'a_confirmar',
+    encaixe: d.encaixe === true, total: numeroOuNulo(d.total) ?? 0,
+    servicos: listaDe(d.servicos, 20).map((i) => ({ servicoId: texto(i && i.servicoId, 40), nome: texto(i && i.nome, 100), preco: numeroOuNulo(i && i.preco) ?? 0, duracaoMin: numeroOuNulo(i && i.duracaoMin) ?? 0 })),
+    conflitosPendentes: listaDe(d.conflitosPendentes, 50).map((c) => texto(c, 40)).filter((c) => ID.test(c)),
+    origem: texto(d.origem, 20), reagendado: d.reagendado === true, motivoCancelamento: d.motivoCancelamento ? texto(d.motivoCancelamento, 30) : '', statusManual: d.statusManual === true,
+    historico: listaDe(d.historico, 100).map((e) => ({ em: instante(e && e.em), autor: texto(e && e.autor, 80), campo: texto(e && e.campo, 40), de: e && e.de ? texto(e.de, 120) : '', para: e && e.para ? texto(e.para, 200) : '' })),
+  };
+}
+const soDia = (ts) => (Number.isFinite(ts) ? new Date(ts).toISOString() : null);
+export const agenda = {
+  // GET /api/agendamentos?de=&ate=  (até 366 dias, 1000 itens; o profissional só recebe os dele)
+  async listar({ de, ate }) {
+    const a = soDia(de), b = soDia(ate);
+    if (!a || !b || !(ate > de)) return { ok: false, status: 0, erro: 'Período inválido.' };
+    const r = await chamar('GET', `/api/agendamentos?de=${encodeURIComponent(a)}&ate=${encodeURIComponent(b)}`);
+    return r.ok ? { ok: true, agendamentos: listaDe(r.dados, 1000).map(lerAgendamento) } : r;
+  },
+  // GET /api/agendamentos/{id}  (com o histórico: quem, quando, o quê)
+  async obter(id) {
+    if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Agendamento não encontrado.' };
+    const r = await chamar('GET', `/api/agendamentos/${id}`);
+    return r.ok ? { ok: true, agendamento: lerAgendamento(r.dados) } : r;
+  },
+  // PUT /api/agendamentos/{id}/status  { status }   (reativar confere o horário; confirmar cancela os "a confirmar" que o cobrem)
+  async mudarStatus(id, status) {
+    if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Agendamento não encontrado.' };
+    if (!STATUS_AGENDA.includes(status)) return { ok: false, status: 0, erro: 'Status inválido.' };
+    const r = await chamar('PUT', `/api/agendamentos/${id}/status`, { status });
+    return r.ok ? { ok: true, agendamento: lerAgendamento(r.dados) } : r;
+  },
+  // PUT /api/agendamentos/{id}/remarcar  { inicio, profissionalId?, encaixe?, status? }   (concluído nunca; cancelado só junto com um status não cancelado)
+  async remarcar(id, { inicio, profissionalId, encaixe, status } = {}) {
+    if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Agendamento não encontrado.' };
+    const novo = soDia(inicio);
+    if (!novo) return { ok: false, status: 0, erro: 'Informe a nova data e hora.' };
+    const corpo = { inicio: novo };
+    if (profissionalId !== undefined && profissionalId !== null && profissionalId !== '') { if (!ID.test(String(profissionalId))) return { ok: false, status: 0, erro: 'Profissional não encontrado.' }; corpo.profissionalId = profissionalId; }
+    if (typeof encaixe === 'boolean') corpo.encaixe = encaixe;
+    if (status !== undefined) { if (!STATUS_AGENDA.includes(status)) return { ok: false, status: 0, erro: 'Status inválido.' }; corpo.status = status; }
+    const r = await chamar('PUT', `/api/agendamentos/${id}/remarcar`, corpo);
+    return r.ok ? { ok: true, agendamento: lerAgendamento(r.dados) } : r;
+  },
+};
+
+// GET /api/profissionais  (quem pode aparecer na agenda: usuários ativos; `atende` diz se têm agenda própria)
+export const profissionais = {
+  async listar() {
+    const r = await chamar('GET', '/api/profissionais');
+    return r.ok ? { ok: true, profissionais: listaDe(r.dados, 200).map((p) => ({ id: texto(p && p.id, 40), nome: texto(p && p.nome, 150), papel: PAPEIS.includes(p && p.papel) ? p.papel : 'profissional', atende: !!(p && p.atende === true) })).filter((p) => ID.test(p.id)) } : r;
+  },
+};

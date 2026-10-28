@@ -5,6 +5,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { cancelarEspera, carregarLoja, entrar, esperandoRede, loginValido, onboarding, quandoEsperar, sair, sessaoAtual, trocarSenha } from '../../services/api-real.js';
 import PrimeiroAcesso from '../leve/PrimeiroAcesso.jsx';
+import Agenda from './Agenda.jsx';
 import Clientes from './Clientes.jsx';
 import Servicos from './Servicos.jsx';
 import Equipe from './Equipe.jsx';
@@ -123,6 +124,7 @@ function Painel({ loja, sessao, aoSair }) {
   // O menu mostra só o que a pessoa pode usar (o servidor confere de novo em cada rota). Serviços todo perfil pode ler; Equipe é do proprietário.
   const dono = sessao.papel === 'dono';
   const itens = [['inicio', 'Início', 'store']];
+  if (dono || (sessao.secoes || []).includes('agenda')) itens.push(['agenda', 'Agenda', 'calendar']);
   if (dono || (sessao.secoes || []).includes('clientes')) itens.push(['clientes', 'Clientes', 'users']);
   itens.push(['servicos', 'Serviços', 'scissors']);
   if (dono) itens.push(['equipe', 'Equipe', 'team']);
@@ -146,10 +148,11 @@ function Painel({ loja, sessao, aoSair }) {
           {aba === 'inicio' && (
             <section className="tela" data-testid="painel-real">
               <p><b data-testid="painel-nome">{sessao.nome}</b> · <span data-testid="painel-papel">{papel}</span></p>
-              <Aviso>Sua conta está pronta e o acesso é seguro. Clientes, serviços e equipe já estão aqui; a agenda chega ao site na próxima atualização.</Aviso>
+              <Aviso>Sua conta está pronta e o acesso é seguro. Clientes, serviços, equipe e a agenda (horários, calendário, status e remarcar) já estão aqui; o botão Atender chega na próxima atualização.</Aviso>
               {sessao.papel === 'dono' && <Btn onClick={() => setReconfigurando(true)} data-testid="reconfigurar-abrir">Reconfigurar estabelecimento</Btn>}
             </section>
           )}
+          {aba === 'agenda' && <Agenda ehProprio={sessao.papel === 'profissional'} ehDono={dono || sessao.papel === 'admin' || sessao.papel === 'atendente'} />}
           {aba === 'clientes' && <Clientes />}
           {aba === 'servicos' && <Servicos ehDono={dono || (sessao.secoes || []).includes('servicos')} />}
           {aba === 'equipe' && dono && <Equipe meuId={sessao.id} />}

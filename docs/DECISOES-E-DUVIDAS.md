@@ -26,3 +26,8 @@ Lista simples. Cada item está no histórico do `prompt-agendz-regras.md` (v84 a
 - **Decidi:** sem QR code no autenticador do Admin (npm bloqueado no ambiente; a chave vai em grupos de 4 para digitar no aplicativo).
 - **Decidi:** sem internet, a ação espera e segue sozinha ao voltar a conexão (faixa de aviso, cancelável). Só espera quando o aparelho sabe que está offline; resposta perdida com o aparelho online não é reenviada.
 - **Dúvida:** fila no aparelho (para a pessoa poder até fechar a página) + chave de repetição no servidor. Recomendo só para Atender e agenda do profissional, depois da fatia 5c; financeiro e Pix nunca reenviam sozinhos.
+
+## v88 (28/10): agenda no site real (5b)
+- **Decidi:** o seletor de profissional é uma fila de botões (Todos + um por pessoa), sem a seleção múltipla por gesto da tela simulada; só aparece com mais de um profissional que atende.
+- **Decidi:** cancelar pede confirmação na própria tela; o servidor grava o motivo "profissional" (motivo escolhido pelo dono entra junto com a 5d).
+- **Decidi:** escala por profissional na tela fica depois da 5c (a rota já existe); a prioridade é o Atender, que libera os logins dos donos.
