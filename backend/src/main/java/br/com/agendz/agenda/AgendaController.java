@@ -64,21 +64,21 @@ public class AgendaController {
     }
 
     public record NovoAgendamento(
-            @NotNull UUID clienteId,
+            UUID clienteId,
             @NotNull UUID profissionalId,
-            @NotNull @Size(min = 1, max = 10) List<@NotNull UUID> servicoIds,
+            @Size(max = 50) List<UUID> servicoIds,
             @NotNull Instant inicio,
-            @Pattern(regexp = "^(a_confirmar|confirmado)$", message = "status: a_confirmar ou confirmado") String status,
+            @Size(max = 30) String status,
             Boolean encaixe) {
     }
 
     public record Remarcacao(@NotNull Instant inicio, UUID profissionalId, Boolean encaixe) {
     }
 
-    public record NovoStatus(@NotNull @Pattern(regexp = "^(a_confirmar|confirmado|concluido|cancelado)$", message = "status inválido") String status) {
+    public record NovoStatus(@NotNull @Size(max = 30) String status) {
     }
 
-    private record ServicoLinha(UUID id, String nome, BigDecimal preco, int duracaoMin, int intervaloMin, boolean multiDia) {
+    private record ServicoLinha(UUID id, String nome, BigDecimal preco, int duracaoMin, int intervaloMin, boolean multiDia, boolean ativo) {
     }
 
     private record Conflito(UUID id, String status) {
@@ -142,17 +142,20 @@ public class AgendaController {
         if (!ehDono(jwt) && !d.profissionalId().toString().equals(jwt.getSubject())) {
             throw new ErroDeNegocio(HttpStatus.FORBIDDEN, "Você só agenda na sua própria agenda.");
         }
-        Instant inicio = conferirInicio(d.inicio());
-        if (new HashSet<>(d.servicoIds()).size() != d.servicoIds().size()) {
-            throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Há serviço repetido na lista.");
-        }
-        boolean encaixe = Boolean.TRUE.equals(d.encaixe());
         String status = d.status() == null ? A_CONFIRMAR : d.status();
+        if (!A_CONFIRMAR.equals(status) && !CONFIRMADO.equals(status)) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Status inválido."); // criar já concluído/cancelado não existe
+        List<UUID> servicoIds = d.servicoIds() == null ? List.of() : d.servicoIds();
+        if (servicoIds.isEmpty()) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha ao menos um serviço.");
+        if (servicoIds.size() > 10) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "No máximo 10 serviços por agendamento.");
+        if (new HashSet<>(servicoIds).size() != servicoIds.size()) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "O mesmo serviço aparece duas vezes.");
+        boolean encaixe = Boolean.TRUE.equals(d.encaixe());
         Agendamento criado = banco.naLoja(jdbc -> {
+            List<ServicoLinha> servicos = carregarServicos(jdbc, servicoIds);
+            if (d.clienteId() == null) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha o cliente.");
             Integer clientes = jdbc.queryForObject("select count(*) from cliente where id = ?", Integer.class, d.clienteId());
-            if (clientes == null || clientes == 0) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, "Cliente não encontrado");
+            if (clientes == null || clientes == 0) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, "Escolha o cliente.");
             travarProfissional(jdbc, d.profissionalId());
-            List<ServicoLinha> servicos = carregarServicos(jdbc, d.servicoIds());
+            Instant inicio = conferirInicio(d.inicio());
             int minutos = 0;
             BigDecimal total = BigDecimal.ZERO;
             for (ServicoLinha s : servicos) {
@@ -183,6 +186,7 @@ public class AgendaController {
 
     @PutMapping("/api/agendamentos/{id}/status")
     public Agendamento alterarStatus(@PathVariable UUID id, @Valid @RequestBody NovoStatus d, @AuthenticationPrincipal Jwt jwt) {
+        if (!List.of(A_CONFIRMAR, CONFIRMADO, "concluido", CANCELADO).contains(d.status())) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Status inválido.");
         UUID so = somenteDe(jwt);
         return banco.naLoja(jdbc -> {
             Atual a = ler(jdbc, id, so, false);
@@ -239,7 +243,7 @@ public class AgendaController {
     /** Minuto exato e dentro de ±400 dias (como `validarHorario`). */
     private Instant conferirInicio(Instant inicio) {
         if (inicio.getNano() != 0 || inicio.getEpochSecond() % 60 != 0) {
-            throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Data e hora inválidas: use minuto exato.");
+            throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Data e hora inválidas.");
         }
         Instant agora = relogio.instant();
         if (inicio.isAfter(agora.plus(400, ChronoUnit.DAYS))) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Data distante demais.");
@@ -250,7 +254,7 @@ public class AgendaController {
     /** O atendimento inteiro precisa caber no expediente da loja e na escala do profissional (EscalaService); sem expediente cadastrado, não restringe. */
     private void conferirExpediente(JdbcTemplate jdbc, UUID profissionalId, Instant inicio, Instant fimServico, boolean multiDia) {
         if (!escalas.atende(jdbc, profissionalId, inicio, fimServico, multiDia)) {
-            throw new ErroDeNegocio(HttpStatus.CONFLICT, "O profissional não atende nesse horário (fora do expediente).");
+            throw new ErroDeNegocio(HttpStatus.CONFLICT, nomeDe(jdbc, profissionalId) + " não atende nesse horário.");
         }
     }
 
@@ -262,24 +266,33 @@ public class AgendaController {
 
     /** Trava a linha do profissional até o fim da transação: marcações no mesmo profissional passam uma por vez (sem corrida). */
     private void travarProfissional(JdbcTemplate jdbc, UUID profissionalId) {
-        List<Boolean> achado = jdbc.query("select atende from usuario where id = ? and ativo for update", (rs, i) -> rs.getBoolean(1), profissionalId);
-        if (achado.isEmpty()) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, "Profissional não encontrado");
-        if (!achado.get(0)) throw new ErroDeNegocio(HttpStatus.CONFLICT, "Esse profissional não recebe novos agendamentos.");
+        List<Object[]> achado = jdbc.query("select atende, coalesce(nullif(apelido, ''), nome) from usuario where id = ? and ativo for update",
+                (rs, i) -> new Object[]{rs.getBoolean(1), rs.getString(2)}, profissionalId);
+        if (achado.isEmpty()) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, "Profissional não encontrado.");
+        if (!(Boolean) achado.get(0)[0]) throw new ErroDeNegocio(HttpStatus.CONFLICT, achado.get(0)[1] + " está desativado e não recebe novos agendamentos.");
+    }
+
+    /** Como o simulador: "<apelido ou nome>" nas mensagens ao usuário. */
+    private String nomeDe(JdbcTemplate jdbc, UUID usuarioId) {
+        return jdbc.queryForObject("select coalesce(nullif(apelido, ''), nome) from usuario where id = ?", String.class, usuarioId);
     }
 
     private List<ServicoLinha> carregarServicos(JdbcTemplate jdbc, List<UUID> ids) {
         String marcas = String.join(",", ids.stream().map(x -> "?").toList());
         List<ServicoLinha> achados = jdbc.query(
-                "select id, nome, preco, duracao_min, intervalo_min, multi_dia from servico where ativo and id in (" + marcas + ")",
-                (rs, i) -> new ServicoLinha(rs.getObject("id", UUID.class), rs.getString("nome"), rs.getBigDecimal("preco"), rs.getInt("duracao_min"), rs.getInt("intervalo_min"), rs.getBoolean("multi_dia")),
+                "select id, nome, preco, duracao_min, intervalo_min, multi_dia, ativo from servico where id in (" + marcas + ")",
+                (rs, i) -> new ServicoLinha(rs.getObject("id", UUID.class), rs.getString("nome"), rs.getBigDecimal("preco"), rs.getInt("duracao_min"), rs.getInt("intervalo_min"), rs.getBoolean("multi_dia"), rs.getBoolean("ativo")),
                 ids.toArray());
         Map<UUID, ServicoLinha> porId = new LinkedHashMap<>();
         for (ServicoLinha s : achados) porId.put(s.id(), s);
         List<ServicoLinha> naOrdem = new ArrayList<>();
         for (UUID id : ids) {
             ServicoLinha s = porId.get(id);
-            if (s == null) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Serviço não encontrado ou desativado.");
+            if (s == null) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Serviço não encontrado.");
             naOrdem.add(s);
+        }
+        for (ServicoLinha s : naOrdem) {
+            if (!s.ativo()) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, s.nome() + " está desativado."); // como o simulador: primeiro vê se todos existem
         }
         return naOrdem;
     }
@@ -320,7 +333,7 @@ public class AgendaController {
         List<Atual> achados = jdbc.query(sql, (rs, i) -> new Atual(rs.getObject("profissional_id", UUID.class),
                 rs.getObject("inicio", OffsetDateTime.class).toInstant(), rs.getObject("fim_servico", OffsetDateTime.class).toInstant(),
                 rs.getObject("fim_ocupado", OffsetDateTime.class).toInstant(), rs.getString("status"), rs.getBoolean("encaixe")), args);
-        if (achados.isEmpty()) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, "Agendamento não encontrado");
+        if (achados.isEmpty()) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, "Agendamento não encontrado.");
         return achados.get(0);
     }
 
@@ -329,7 +342,7 @@ public class AgendaController {
                 + (so == null ? "" : " and profissional_id = ?");
         Object[] args = so == null ? new Object[]{id} : new Object[]{id, so};
         List<Agendamento> achados = jdbc.query(sql, (rs, i) -> linha(rs), args);
-        if (achados.isEmpty()) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, "Agendamento não encontrado");
+        if (achados.isEmpty()) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, "Agendamento não encontrado.");
         List<Item> itens = jdbc.query("select servico_id, nome, preco, duracao_min from agendamento_servico where agendamento_id = ? order by ordem",
                 (rs, i) -> new Item(rs.getObject("servico_id", UUID.class), rs.getString("nome"), rs.getBigDecimal("preco"), rs.getInt("duracao_min")), id);
         return comItens(achados.get(0), itens);
