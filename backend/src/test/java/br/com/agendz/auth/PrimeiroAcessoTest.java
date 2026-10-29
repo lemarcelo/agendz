@@ -158,6 +158,20 @@ class PrimeiroAcessoTest extends BaseApi {
     }
 
     @Test
+    void primeiroAcessoDoDonoTrocaASenhaEJaEntraNoAssistenteComOUsuarioNovo() throws Exception {
+        jdbc.update("insert into onboarding (loja_id) values (?::uuid)", LOJA_OFFBOX);
+        String t = token(login(OFFBOX, "teste-kiko", TEMPORARIA));
+        // a própria resposta da troca já abre o assistente (sem passar pelo login de novo), no passo de serviços
+        String resposta = trocarComUsuario(OFFBOX, t, TEMPORARIA, "NovaSenhaForte#2026", "Teste-Novo.Kiko").andExpect(status().isOk())
+                .andExpect(jsonPath("$.deveTrocarSenha").value(false)).andExpect(jsonPath("$.onboardingPendente").value(true)).andReturn().getResponse().getContentAsString();
+        mvc.perform(get("/api/onboarding").with(host(OFFBOX)).header(HttpHeaders.AUTHORIZATION, bearer(token(resposta)))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.passo").value("servicos")).andExpect(jsonPath("$.concluido").value(false));
+        // entrando depois com o usuário escolhido, o assistente continua pendente
+        mvc.perform(post("/api/auth/login").with(host(OFFBOX)).contentType(MediaType.APPLICATION_JSON).content(corpoLogin("teste-novo.kiko", "NovaSenhaForte#2026")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.onboardingPendente").value(true));
+    }
+
+    @Test
     void onboardingPendenteSoAparecePraDonoEQuandoHaLinhaAberta() throws Exception {
         // sem linha de onboarding: não se aplica
         String json = login(DALFORNO, "alan", "1234");

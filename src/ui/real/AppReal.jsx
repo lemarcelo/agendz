@@ -124,7 +124,8 @@ function LogoPequena({ loja }) {
 
 // Área logada: menu com as telas que já existem no site real. Telas que ainda não chegaram não aparecem (nada de botão morto).
 function Painel({ loja, sessao, aoSair }) {
-  const [aba, setAba] = useState('inicio');
+  // Depois de entrar (e de concluir o assistente) a pessoa cai na Agenda, que é o que ela usa todo dia; quem não tem a agenda abre o Início.
+  const [aba, setAba] = useState(() => (sessao.papel === 'dono' || (sessao.secoes || []).includes('agenda') ? 'agenda' : 'inicio'));
   const [reconfigurando, setReconfigurando] = useState(false);
   if (reconfigurando) return <PrimeiroAcesso modo="reconfigurar" tipo={loja.tipo} nomeLoja={loja.nome} adaptador={onboarding} aoConcluir={() => setReconfigurando(false)} aoCancelar={() => setReconfigurando(false)} />;
   const papel = sessao.papel === 'dono' ? 'Proprietário' : rotulo({ tipo: loja.tipo }, 'profissional', { capitalizado: true });

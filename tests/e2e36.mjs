@@ -116,6 +116,8 @@ async function abrir(viewport = { width: 1280, height: 800 }) {
   await p.waitForFunction(() => /Senha atual incorreta/.test(document.querySelector('[data-testid=troca-erro]')?.textContent || ''));
   await p.getByTestId('troca-atual').fill('Temporaria-123');
   await p.getByTestId('troca-salvar').click();
+  await p.getByTestId('agenda-real').waitFor(); // depois de entrar cai na Agenda, não no Início
+  await p.getByTestId('nav-inicio').click();
   await p.getByTestId('painel-real').waitFor();
   assert.equal(await p.getByTestId('painel-nome').innerText(), 'Alan');
   assert.equal(await p.getByTestId('painel-papel').innerText(), 'Proprietário');
@@ -132,7 +134,7 @@ async function abrir(viewport = { width: 1280, height: 800 }) {
   await p.getByTestId('login-id').fill('alan.dalforno');
   await p.getByTestId('login-senha').fill('Minha-senha-nova');
   await p.getByTestId('login-entrar').click();
-  await p.getByTestId('painel-real').waitFor();
+  await p.getByTestId('nav-inicio').click(); await p.getByTestId('painel-real').waitFor();
   await p.reload();
   await p.getByTestId('login-id').waitFor();
   ok('token e senha fora de storage/cookie; sair e recarregar pedem o login');
@@ -152,7 +154,7 @@ async function abrir(viewport = { width: 1280, height: 800 }) {
   await p.getByTestId('login-id').fill('alan'); await p.getByTestId('login-senha').fill('Temporaria-123'); await p.getByTestId('login-entrar').click();
   await p.getByTestId('troca-nova').waitFor(); await semRolagem('troca');
   await p.getByTestId('troca-atual').fill('Temporaria-123'); await p.getByTestId('troca-usuario').fill('alan'); await p.getByTestId('troca-nova').fill('Minha-senha-nova'); await p.getByTestId('troca-repetir').fill('Minha-senha-nova'); await p.getByTestId('troca-salvar').click();
-  await p.getByTestId('painel-real').waitFor(); await semRolagem('painel');
+  await p.getByTestId('nav-inicio').click(); await p.getByTestId('painel-real').waitFor(); await semRolagem('painel');
   ok('estética: tipo certo e 390 px sem rolagem lateral (login, troca, painel)');
   await ctx.close();
 }
