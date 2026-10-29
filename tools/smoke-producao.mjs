@@ -112,4 +112,6 @@ const md = [`## Fumaça no site real: ${URL_SITE}`, '', `- Rede: Google DNS \`${
 writeFileSync('smoke-relatorio.md', md);
 if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, md + '\n');
 console.log(md);
+// anotações do GitHub (aparecem no job e na API de anotações, que é o que o agente de trabalho consegue ler)
+if (process.env.GITHUB_ACTIONS) for (const f of unicas.slice(0, 40)) console.log(`::error title=Fumaça ${f.tipo}::${f.onde} — ${String(f.detalhe).replace(/[\r\n%]/g, ' ').slice(0, 300)}`);
 process.exit(unicas.length ? 1 : 0);
