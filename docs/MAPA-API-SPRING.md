@@ -288,7 +288,8 @@ Rotas **sem login** (a loja vem do Host; `SegurancaConfig` libera só estas). Li
 | `GET /api/publico/agendamentos/{id}/horarios?data=` e `/dias?de&dias=` (`X-Acesso`) | horários/dias livres para REMARCAR | mesmo profissional e serviços do horário; o próprio horário conta como livre; link desligado = lista vazia |
 | `POST /api/publico/agendamentos/{id}/remarcar {inicio}` (`X-Acesso`) | remarca o próprio horário | token deste horário; ativo; 24 h ou mais até o horário atual; regras do pedido no horário novo; volta a "a confirmar", `reagendado`; link desligado = 403; 30 por 10 min por IP |
 | `GET /api/avisos`, `PUT /api/avisos/{id}/lido` | avisos do painel (pedido, remarcou, cancelou) | seção agenda; profissional vê só os seus; outra loja/profissional = 404 |
-Ainda não existe no servidor (continua no 10b): código por telefone, lembretes, mensagem/WhatsApp e estética (veículo e porte).
+**Estética no link (v105):** `GET /api/publico/agendar` devolve `tipo`, `portes` e, por serviço, `precos`/`duracoes` por porte (só serviços de um dia; `multi_dia` fica de fora); `dias`/`horarios` aceitam `&porte=` (obrigatório na estética) e só oferecem horário com profissional **e box** livres (`Ocupacao`); `POST /api/publico/agendamentos` exige `veiculo {placa, modelo, porte, marca?, cor?}` (placa antiga ou Mercosul), escolhe o box, grava os blocos e congela `veiculo`/`porte`/`precos`; o veículo **não** entra no cadastro do cliente pelo link (`resolverVeiculo` sem cadastro). O resumo devolve `veiculo {placa, modelo, porte}`. Testes: `LinkPublicoEsteticaTest`, `tests/api-real-publico.test.mjs`, `tests/e2e64.mjs`.
+Ainda não existe no servidor (continua no 10b): código por telefone, lembretes e mensagem/WhatsApp.
 
 ## 11. Pontos do protótipo que **não** existem no real (tratar como pendência)
 

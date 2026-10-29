@@ -3,7 +3,7 @@
 // (cupom opcional) e acompanha ou cancela o que é dele. Fala só com `publico.*` de api-real.js (GET/POST /api/publico/*); a regra toda (horário livre,
 // expediente, 24 h para cancelar, limite de 3 abertos, cupom) está no servidor. O acesso a cada horário é um token que a resposta do pedido entrega UMA vez;
 // ele fica só neste aparelho (localStorage, dentro de try/catch: sem storage a página funciona, só não lembra dos horários na próxima visita).
-// Remarcar entrou na 5e-2 (24 h ou mais, como cancelar). Código por telefone, lembretes e estética (veículo e porte) ficam para a 5e-3.
+// Remarcar entrou na 5e-2 (24 h ou mais, como cancelar). Estética (v104): primeiro o veículo (placa, modelo, porte), que define preço e duração, e o horário só existe com profissional e box livres. Código por telefone e lembretes ficam para a 5e-3.
 // Não importa `api.js`, `hooks.js` nem `common.jsx` (tests/estatico.test.mjs).
 import { caminhoHttps } from '../../domain/localizacao.js';
 import { adicionarReserva, lerReservas, limparReservas, removerReserva, sincronizarReservas } from '../../domain/reservas-local.js';
@@ -11,7 +11,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { publico } from '../../services/api-real.js';
 import { fmtMoney } from '../../domain/time.js';
 import { formatarTelefone } from '../../domain/rules.js';
-import { Rot, rot } from '../../domain/tipos.js';
+import { Rot, capAtiva, rot } from '../../domain/tipos.js';
+import { EXEMPLO_PORTE, formatarPlaca, placaValida, tipoPlaca } from '../../domain/veiculos.js';
 import { logoValida } from '../../domain/tema.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
 
@@ -60,7 +61,7 @@ function salvarReservas(slug, dados) {
 const diaSemana = (ts) => new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'short', day: '2-digit', month: '2-digit' }).format(new Date(ts)).replace('.', '').replace(',', '');
 
 // Dia + horário livres: os dois vêm do servidor, que só devolve o que está livre. `fonte` ({ dias(de, n), horarios(dia) }) troca a consulta (remarcar um horário já marcado).
-function DiaHora({ chave, diasMax, servicoIds, profissionalId, valor, aoEscolher, fonte }) {
+function DiaHora({ chave, diasMax, servicoIds, profissionalId, porte, valor, aoEscolher, fonte }) {
   const hoje = useMemo(hojeBrasilia, []);
   const [janela, setJanela] = useState(14);
   const [dias, setDias] = useState(null);
@@ -74,7 +75,7 @@ function DiaHora({ chave, diasMax, servicoIds, profissionalId, valor, aoEscolher
     (async () => {
       const achados = [];
       for (let ini = 0; ini < limite; ini += 31) {
-        const r = fonte ? await fonte.dias(somaDias(hoje, ini), Math.min(31, limite - ini)) : await publico.dias({ de: somaDias(hoje, ini), dias: Math.min(31, limite - ini), servicoIds, profissionalId });
+        const r = fonte ? await fonte.dias(somaDias(hoje, ini), Math.min(31, limite - ini)) : await publico.dias({ de: somaDias(hoje, ini), dias: Math.min(31, limite - ini), servicoIds, profissionalId, porte });
         if (!vivo) return;
         if (!r.ok) { setErro(r.erro); setDias([]); return; }
         achados.push(...r.dias);
@@ -88,7 +89,7 @@ function DiaHora({ chave, diasMax, servicoIds, profissionalId, valor, aoEscolher
     if (!diaAtual) { setHoras([]); return undefined; }
     let vivo = true;
     setHoras(null);
-    (fonte ? fonte.horarios(diaAtual) : publico.horarios({ data: diaAtual, servicoIds, profissionalId })).then((r) => { if (!vivo) return; if (r.ok) setHoras(r.horarios); else { setErro(r.erro); setHoras([]); } });
+    (fonte ? fonte.horarios(diaAtual) : publico.horarios({ data: diaAtual, servicoIds, profissionalId, porte })).then((r) => { if (!vivo) return; if (r.ok) setHoras(r.horarios); else { setErro(r.erro); setHoras([]); } });
     return () => { vivo = false; };
   }, [chave, diaAtual]);
   const podeMais = limite < diasMax;
@@ -118,7 +119,14 @@ function DiaHora({ chave, diasMax, servicoIds, profissionalId, valor, aoEscolher
 }
 
 function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMeus }) {
-  const [etapa, setEtapa] = useState(1);
+  const usaVeiculo = capAtiva('usaVeiculo');
+  const desl = usaVeiculo ? 0 : 1; // sem veículo (barbearia) a primeira etapa é o serviço
+  const [etapa, setEtapa] = useState(desl);
+  const [placa, setPlaca] = useState('');
+  const [modelo, setModelo] = useState('');
+  const [marca, setMarca] = useState('');
+  const [cor, setCor] = useState('');
+  const [porte, setPorte] = useState('');
   const [srv, setSrv] = useState([]);
   const [barb, setBarb] = useState(profissionalInicial || '');
   const [escolha, setEscolha] = useState(null);
@@ -130,16 +138,21 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
   const [enviando, setEnviando] = useState(false);
   const [feito, setFeito] = useState(null);
   const servicos = pagina.servicos.filter((x) => srv.includes(x.id));
-  const total = servicos.reduce((t, x) => t + x.preco, 0);
-  const duracao = servicos.reduce((t, x) => t + x.duracao, 0);
-  const chave = `${srv.join(',')}|${barb}`;
+  const preco = (x) => (usaVeiculo ? x.precos[porte] ?? x.preco : x.preco);
+  const minutos = (x) => (usaVeiculo ? x.duracoes[porte] ?? x.duracao : x.duracao);
+  const total = servicos.reduce((t, x) => t + preco(x), 0);
+  const duracao = servicos.reduce((t, x) => t + minutos(x), 0);
+  const placaOk = placaValida(placa);
+  const veiculoOk = placaOk && modelo.trim().length >= 2 && !!porte;
+  const rotuloPorte = (pagina.portes || []).find((x) => x.id === porte)?.nome || '';
+  const chave = `${srv.join(',')}|${barb}|${porte}`;
   const nomeBarb = (id) => pagina.profissionais.find((b) => b.id === id)?.nome || `Qualquer ${rot('profissional')}`;
   const alternar = (id) => { setSrv((l) => (l.includes(id) ? l.filter((x) => x !== id) : l.length >= 5 ? l : [...l, id])); setEscolha(null); };
 
   const enviar = async () => {
     if (enviando) return;
     setErro(''); setEnviando(true);
-    const r = await publico.agendar({ nome, telefone: tel, servicoIds: srv, profissionalId: escolha?.profissionalId || barb, inicio: escolha?.inicio, cupomChave: cupom, site: isca });
+    const r = await publico.agendar({ nome, telefone: tel, servicoIds: srv, profissionalId: escolha?.profissionalId || barb, inicio: escolha?.inicio, cupomChave: cupom, site: isca, ...(usaVeiculo ? { veiculo: { placa, marca, modelo, cor, porte } } : {}) });
     setEnviando(false);
     if (!r.ok) {
       setErro(r.erro);
@@ -150,14 +163,14 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
     setFeito(r.agendamento);
     setEtapa(4);
   };
-  const recomecar = () => { setEtapa(1); setSrv([]); setEscolha(null); setFeito(null); setCupom(''); setErro(''); };
+  const recomecar = () => { setEtapa(desl); setSrv([]); setEscolha(null); setFeito(null); setCupom(''); setErro(''); };
 
   if (etapa === 4 && feito) {
     return (
       <section className="pub-cartao" data-testid="pub-feito" aria-live="polite">
         <div className="pub-ok"><Icone n="check" size={26} /></div>
         <h2>Pedido enviado</h2>
-        <p>{feito.servicos.join(', ')} com <b>{feito.profissional}</b><br /><b>{diaLongo(feito.inicio)}, {horaDe(feito.inicio)}</b></p>
+        <p>{feito.servicos.join(', ')}{feito.veiculo ? ` · ${feito.veiculo.modelo} ${formatarPlaca(feito.veiculo.placa)}` : ''} com <b>{feito.profissional}</b><br /><b>{diaLongo(feito.inicio)}, {horaDe(feito.inicio)}</b></p>
         {feito.desconto > 0 && <p data-testid="pub-feito-cupom"><Icone n="key" size={14} /> Cupom {feito.cupom}: −{fmtMoney(feito.desconto)} · a pagar {fmtMoney(feito.total - feito.desconto)}</p>}
         <p className="muted">{loja.nome} vai confirmar o seu horário. Você acompanha em “Meus agendamentos” neste aparelho.</p>
         <div className="pub-linha">
@@ -171,19 +184,51 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
   return (
     <section className="pub-cartao">
       <ol className="pub-passos" aria-label="Etapas">
-        {['Serviço', 'Dia e horário', 'Seus dados'].map((r, k) => <li key={r} className={k + 1 === etapa ? 'on' : k + 1 < etapa ? 'feito' : ''} aria-current={k + 1 === etapa ? 'step' : undefined}><span>{k + 1}</span>{r}</li>)}
+        {['Veículo', 'Serviço', 'Dia e horário', 'Seus dados'].slice(desl).map((r, k) => { const i = k + desl; return <li key={r} className={i === etapa ? 'on' : i < etapa ? 'feito' : ''} aria-current={i === etapa ? 'step' : undefined}><span>{k + 1}</span>{r}</li>; })}
       </ol>
+
+      {etapa === 0 && usaVeiculo && (
+        <div className="pub-bloco">
+          <h2>Qual é o seu veículo?</h2>
+          <p className="muted">O porte define o preço e o tempo de cada serviço.</p>
+          <div className="pub-form">
+            <Campo rotulo="Placa (ABC-1234 ou ABC1D23)">
+              <input value={placa} onChange={(e) => setPlaca(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 8))} maxLength={8} autoCapitalize="characters" autoComplete="off" placeholder="ABC1D23" aria-invalid={!!placa && !placaOk} data-testid="pub-placa" />
+            </Campo>
+            {placa && !placaOk && <p className="erro-txt" role="alert" data-testid="pub-placa-erro">Placa inválida.</p>}
+            <Campo rotulo="Modelo"><input value={modelo} onChange={(e) => setModelo(e.target.value)} maxLength={40} placeholder="Ex.: Onix, Corolla, Hilux" autoComplete="off" data-testid="pub-modelo" /></Campo>
+            <div className="pub-duas">
+              <Campo rotulo="Marca (opcional)"><input value={marca} onChange={(e) => setMarca(e.target.value)} maxLength={30} autoComplete="off" data-testid="pub-marca" /></Campo>
+              <Campo rotulo="Cor (opcional)"><input value={cor} onChange={(e) => setCor(e.target.value)} maxLength={20} autoComplete="off" data-testid="pub-cor" /></Campo>
+            </div>
+            <div className="campo"><span className="campo-rotulo" id="pub-porte-r">Porte</span>
+              <div className="pub-portes" role="group" aria-labelledby="pub-porte-r">
+                {(pagina.portes || []).map((x) => (
+                  <button type="button" key={x.id} className={`pub-porte ${porte === x.id ? 'on' : ''}`} aria-pressed={porte === x.id} onClick={() => { setPorte(x.id); setEscolha(null); }} data-testid={`pub-porte-${x.id}`}>
+                    <b>{x.nome}</b><small>{(EXEMPLO_PORTE[x.id] || '').replace('Ex.: ', '')}</small>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="pub-rodape">
+            <span className="muted">{placaOk ? `Placa ${tipoPlaca(placa) === 'mercosul' ? 'Mercosul' : 'antiga'} ✓` : ''}</span>
+            <Btn variante="primario" disabled={!veiculoOk} onClick={() => setEtapa(1)} data-testid="pub-continuar-0">Escolher serviço</Btn>
+          </div>
+        </div>
+      )}
 
       {etapa === 1 && (
         <div className="pub-bloco">
           <h2>O que vamos fazer?</h2>
+          {usaVeiculo && <p className="muted" data-testid="pub-veiculo-atual">{modelo.trim()} · {formatarPlaca(placa)} · porte {rotuloPorte.toLowerCase()} <button type="button" className="link" onClick={() => setEtapa(0)} data-testid="pub-trocar-veiculo">Trocar</button></p>}
           {!pagina.servicos.length && <p className="muted" data-testid="pub-sem-servicos">Nenhum serviço disponível para agendar por aqui. Fale com a loja.</p>}
           <div className="pub-lista">
             {pagina.servicos.map((x) => (
               <label key={x.id} className={`pub-item ${srv.includes(x.id) ? 'on' : ''}`}>
                 <input type="checkbox" checked={srv.includes(x.id)} onChange={() => alternar(x.id)} data-testid={`pub-srv-${x.id}`} />
-                <span className="pub-item-txt"><b>{x.nome}</b><small className="muted">{fmtDur(x.duracao)}{x.antecedenciaH > 0 ? ` · agende com ${x.antecedenciaH} h de antecedência` : ''}</small></span>
-                <span className="pub-preco">{fmtMoney(x.preco)}</span>
+                <span className="pub-item-txt"><b>{x.nome}</b><small className="muted">{fmtDur(minutos(x))}{x.antecedenciaH > 0 ? ` · agende com ${x.antecedenciaH} h de antecedência` : ''}</small></span>
+                <span className="pub-preco">{fmtMoney(preco(x))}</span>
               </label>
             ))}
           </div>
@@ -194,6 +239,7 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
           </div>
           <div className="pub-rodape">
             {servicos.length > 0 && <span className="muted">{fmtDur(duracao)} · {fmtMoney(total)}</span>}
+            {usaVeiculo && <Btn variante="fantasma" onClick={() => setEtapa(0)} data-testid="pub-voltar-0">Voltar</Btn>}
             <Btn variante="primario" disabled={!srv.length} onClick={() => setEtapa(2)} data-testid="pub-continuar-1">Escolher horário</Btn>
           </div>
         </div>
@@ -203,10 +249,10 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
         <div className="pub-bloco">
           <h2>Quando?</h2>
           <p className="muted">Só aparecem horários livres. Toque no dia e no horário.</p>
-          <DiaHora chave={chave} diasMax={pagina.diasMax} servicoIds={srv} profissionalId={barb} valor={escolha?.inicio} aoEscolher={setEscolha} />
+          <DiaHora chave={chave} diasMax={pagina.diasMax} servicoIds={srv} profissionalId={barb} porte={usaVeiculo ? porte : undefined} valor={escolha?.inicio} aoEscolher={setEscolha} />
           {erro && <Aviso tipo="erro"><span data-testid="pub-erro">{erro}</span></Aviso>}
           <div className="pub-rodape">
-            <Btn variante="fantasma" onClick={() => setEtapa(1)} data-testid="pub-voltar-1">Voltar</Btn>
+            <Btn variante="fantasma" onClick={() => setEtapa(1)} data-testid={`pub-voltar-${1 - desl}`}>Voltar</Btn>
             <Btn variante="primario" disabled={!escolha} onClick={() => { setErro(''); setEtapa(3); }} data-testid="pub-continuar-2">Continuar</Btn>
           </div>
         </div>
@@ -217,6 +263,7 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
           <h2>Seus dados</h2>
           <div className="pub-resumo" data-testid="pub-resumo">
             <b>{servicos.map((x) => x.nome).join(', ')}</b>
+            {usaVeiculo && <span>{modelo.trim()} · {formatarPlaca(placa)} ({rotuloPorte})</span>}
             <span>{diaLongo(escolha.inicio)}, {horaDe(escolha.inicio)} · {nomeBarb(escolha.profissionalId)}</span>
             <span className="muted">{fmtDur(duracao)} · {fmtMoney(total)}</span>
           </div>
@@ -227,7 +274,7 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
             <input className="pub-isca" tabIndex={-1} aria-hidden="true" autoComplete="off" name="site" value={isca} onChange={(e) => setIsca(e.target.value)} data-testid="pub-isca" />
             {erro && <Aviso tipo="erro"><span data-testid="pub-erro">{erro}</span></Aviso>}
             <div className="pub-rodape">
-              <Btn variante="fantasma" onClick={() => setEtapa(2)} data-testid="pub-voltar-2">Voltar</Btn>
+              <Btn variante="fantasma" onClick={() => setEtapa(2)} data-testid={`pub-voltar-${2 - desl}`}>Voltar</Btn>
               <button type="submit" className="btn btn-primario" disabled={enviando} data-testid="pub-enviar">{enviando ? 'Enviando…' : 'Pedir este horário'}</button>
             </div>
           </form>
@@ -295,7 +342,7 @@ function Meus({ loja, acessos, setAcessos, diasMax, aoSincronizar }) {
         {futuros.map((a) => (
           <li key={a.id} className="pub-ag" data-testid={`pub-ag-${a.id}`}>
             <div className="pub-ag-topo">
-              <div><b>{diaLongo(a.inicio)}, {horaDe(a.inicio)}</b><br /><span className="muted">{a.servicos.join(', ')} · {a.profissional}</span>
+              <div><b>{diaLongo(a.inicio)}, {horaDe(a.inicio)}</b><br /><span className="muted">{a.servicos.join(', ')}{a.veiculo ? ` · ${a.veiculo.modelo} ${formatarPlaca(a.veiculo.placa)}` : ''} · {a.profissional}</span>
                 {a.desconto > 0 && <><br /><span className="muted" data-testid={`pub-cupom-${a.id}`}><Icone n="key" size={13} /> Cupom {a.cupom}: −{fmtMoney(a.desconto)} · a pagar {fmtMoney(a.total - a.desconto)}</span></>}</div>
               <span className={`chip ${a.status === 'confirmado' ? 'st-azul' : 'st-roxo'}`}><i className="ponto" />{a.rotulo}</span>
             </div>

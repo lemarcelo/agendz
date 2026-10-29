@@ -852,12 +852,25 @@ export const comissaoGeral = {
 const PUB = { publico: true };
 const IDV = (v) => (ID.test(String(v)) ? String(v) : '');
 const inteiroOuZero = (v) => (Number.isInteger(v) && v >= 0 ? v : 0);
+const PORTES_PUB = ['pequeno', 'medio', 'grande', 'suv', 'pickup'];
+const tabelaPorPorte = (t, conv) => {
+  const o = {};
+  if (t && typeof t === 'object') for (const p of PORTES_PUB) if (conv(t[p]) !== null) o[p] = conv(t[p]);
+  return o;
+};
+const dinheiroOuNulo = (v) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v < 1e7 ? v : null);
+const minutosOuNulo = (v) => (Number.isInteger(v) && v > 0 && v <= 1440 ? v : null);
 function lerPaginaPublica(d) {
   d = d && typeof d === 'object' ? d : {};
   return {
     endereco: opcional(d.endereco, 300), mapaUrl: httpsOuVazio(d.mapaUrl),
     ativo: d.ativo === true, aviso: texto(d.aviso, 200), diasMax: Number.isInteger(d.diasMax) ? Math.min(60, Math.max(1, d.diasMax)) : 30,
-    servicos: listaDe(d.servicos, 200).filter((x) => x && IDV(x.id)).map((x) => ({ id: x.id, nome: texto(x.nome, 120), duracao: inteiroOuZero(x.duracao), preco: dinheiroOuZero(x.preco), antecedenciaH: inteiroOuZero(x.antecedenciaH) })),
+    tipo: texto(d.tipo, 40),
+    portes: listaDe(d.portes, 10).filter((x) => x && PORTES_PUB.includes(x.id)).map((x) => ({ id: x.id, nome: texto(x.nome, 20) })),
+    servicos: listaDe(d.servicos, 200).filter((x) => x && IDV(x.id)).map((x) => ({
+      id: x.id, nome: texto(x.nome, 120), duracao: inteiroOuZero(x.duracao), preco: dinheiroOuZero(x.preco), antecedenciaH: inteiroOuZero(x.antecedenciaH),
+      precos: tabelaPorPorte(x.precos, dinheiroOuNulo), duracoes: tabelaPorPorte(x.duracoes, minutosOuNulo),
+    })),
     profissionais: listaDe(d.profissionais, 100).filter((x) => x && IDV(x.id)).map((x) => ({ id: x.id, nome: texto(x.nome, 80), foto: typeof x.foto === 'string' && x.foto.startsWith('data:image/') ? x.foto : null })),
   };
 }
@@ -867,6 +880,7 @@ function lerResumoPublico(d) {
     id: IDV(d.id), inicio: instante(d.inicio), fim: instante(d.fim), status: STATUS_AGENDA.includes(d.status) ? d.status : 'a_confirmar', rotulo: texto(d.rotulo, 40),
     servicos: listaDe(d.servicos, 20).map((x) => texto(x, 120)), duracao: inteiroOuZero(d.duracao), total: dinheiroOuZero(d.total), desconto: dinheiroOuZero(d.desconto),
     cupom: d.cupom ? texto(d.cupom, 60) : '', profissional: texto(d.profissional, 80), ativo: d.ativo === true, podeCancelar: d.podeCancelar === true,
+    veiculo: d.veiculo && typeof d.veiculo === 'object' ? { placa: texto(d.veiculo.placa, 10), modelo: texto(d.veiculo.modelo, 60), porte: PORTES_PUB.includes(d.veiculo.porte) ? d.veiculo.porte : '' } : null,
   };
 }
 const consultaServicos = (ids) => (Array.isArray(ids) ? ids.filter((x) => ID.test(String(x))).slice(0, 5).join(',') : '');
@@ -876,27 +890,32 @@ export const publico = {
     const r = await chamar('GET', '/api/publico/agendar', undefined, undefined, PUB);
     return r.ok ? { ok: true, pagina: lerPaginaPublica(r.dados) } : r;
   },
-  // GET /api/publico/dias?de=AAAA-MM-DD&dias=14&servicos=id,id&profissionalId=   → ['AAAA-MM-DD', ...]
-  async dias({ de, dias, servicoIds, profissionalId }) {
+  // GET /api/publico/dias?de=AAAA-MM-DD&dias=14&servicos=id,id&profissionalId=&porte=   → ['AAAA-MM-DD', ...]  (porte só na estética)
+  async dias({ de, dias, servicoIds, profissionalId, porte }) {
     if (!DIA_ISO.test(String(de)) || !consultaServicos(servicoIds)) return { ok: true, dias: [] };
-    const q = `de=${de}&dias=${Math.min(31, Math.max(1, Number(dias) || 1))}&servicos=${consultaServicos(servicoIds)}${ID.test(String(profissionalId)) ? `&profissionalId=${profissionalId}` : ''}`;
+    const q = `de=${de}&dias=${Math.min(31, Math.max(1, Number(dias) || 1))}&servicos=${consultaServicos(servicoIds)}${ID.test(String(profissionalId)) ? `&profissionalId=${profissionalId}` : ''}${PORTES_PUB.includes(porte) ? `&porte=${porte}` : ''}`;
     const r = await chamar('GET', `/api/publico/dias?${q}`, undefined, undefined, PUB);
     return r.ok ? { ok: true, dias: listaDe(r.dados, 62).filter((x) => DIA_ISO.test(String(x))) } : r;
   },
-  // GET /api/publico/horarios?data=AAAA-MM-DD&servicos=id,id&profissionalId=   → [{ inicio, profissionalId }]
-  async horarios({ data, servicoIds, profissionalId }) {
+  // GET /api/publico/horarios?data=AAAA-MM-DD&servicos=id,id&profissionalId=&porte=   → [{ inicio, profissionalId }]  (porte só na estética)
+  async horarios({ data, servicoIds, profissionalId, porte }) {
     if (!DIA_ISO.test(String(data)) || !consultaServicos(servicoIds)) return { ok: true, horarios: [] };
-    const q = `data=${data}&servicos=${consultaServicos(servicoIds)}${ID.test(String(profissionalId)) ? `&profissionalId=${profissionalId}` : ''}`;
+    const q = `data=${data}&servicos=${consultaServicos(servicoIds)}${ID.test(String(profissionalId)) ? `&profissionalId=${profissionalId}` : ''}${PORTES_PUB.includes(porte) ? `&porte=${porte}` : ''}`;
     const r = await chamar('GET', `/api/publico/horarios?${q}`, undefined, undefined, PUB);
     return r.ok ? { ok: true, horarios: listaDe(r.dados, 100).filter((x) => x && instante(x.inicio) !== null && IDV(x.profissionalId)).map((x) => ({ inicio: instante(x.inicio), profissionalId: x.profissionalId })) } : r;
   },
-  // POST /api/publico/agendamentos  { nome, telefone, servicoIds, inicio, profissionalId?, cupomChave?, site }  → { agendamento, token }
-  async agendar({ nome, telefone, servicoIds, inicio, profissionalId, cupomChave, site }) {
+  // POST /api/publico/agendamentos  { nome, telefone, servicoIds, inicio, profissionalId?, cupomChave?, veiculo?, site }  → { agendamento, token }
+  async agendar({ nome, telefone, servicoIds, inicio, profissionalId, cupomChave, veiculo, site }) {
     if (!Number.isFinite(inicio)) return { ok: false, status: 0, erro: 'Escolha um dia e um horário.' };
     const corpo = { nome: texto(nome, 100), telefone: texto(telefone, 30), servicoIds: Array.isArray(servicoIds) ? servicoIds.filter((x) => ID.test(String(x))).slice(0, 10) : [], inicio: new Date(inicio).toISOString() };
     if (ID.test(String(profissionalId))) corpo.profissionalId = profissionalId;
     if (typeof cupomChave === 'string' && cupomChave.trim()) corpo.cupomChave = texto(cupomChave.trim(), 40);
     if (typeof site === 'string' && site) corpo.site = texto(site, 100);
+    if (veiculo && typeof veiculo === 'object') {
+      corpo.veiculo = { placa: texto(veiculo.placa, 20), modelo: texto(veiculo.modelo, 60), porte: PORTES_PUB.includes(veiculo.porte) ? veiculo.porte : '' };
+      if (typeof veiculo.marca === 'string' && veiculo.marca.trim()) corpo.veiculo.marca = texto(veiculo.marca, 60);
+      if (typeof veiculo.cor === 'string' && veiculo.cor.trim()) corpo.veiculo.cor = texto(veiculo.cor, 40);
+    }
     const r = await chamar('POST', '/api/publico/agendamentos', corpo, undefined, PUB);
     if (!r.ok) return r;
     const token = r.dados && typeof r.dados.token === 'string' && /^[0-9a-f]{48}$/.test(r.dados.token) ? r.dados.token : '';

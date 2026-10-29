@@ -37,7 +37,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 /**
  * Link de agendamento do cliente (5e-1), sem login: página, horários livres (só início e profissional), pedido que entra a confirmar com token do próprio horário,
  * cadastro do cliente pelo telefone, limite de 3 abertos, cancelamento só com 24 h ou mais, cupom, ligar/desligar, limites de uso e isolamento entre lojas.
- * Usa a Offbox (barbearia, dois profissionais) e a Dalforno (barbearia, sem expediente); a Apex (estética) ainda não agenda pelo link.
+ * Usa a Offbox (barbearia, dois profissionais) e a Dalforno (barbearia, sem expediente); a Apex (estética, com veículo, porte e box) tem a própria classe: LinkPublicoEsteticaTest.
  */
 class LinkPublicoTest extends BaseApi {
 
@@ -171,13 +171,6 @@ class LinkPublicoTest extends BaseApi {
         // serviço de vários dias, combo e desativado não aparecem; só o que o link sabe agendar
         jdbc.update("update servico set ativo = false where id = ?::uuid", corte);
         mvc.perform(doCliente(get("/api/publico/agendar")).with(host(OFFBOX))).andExpect(jsonPath("$.servicos", hasSize(0)));
-    }
-
-    @Test
-    void esteticaAindaNaoAgendaPeloLinkEFicaDesligada() throws Exception {
-        mvc.perform(doCliente(get("/api/publico/agendar")).with(host(APEX))).andExpect(status().isOk())
-                .andExpect(jsonPath("$.ativo").value(false)).andExpect(jsonPath("$.servicos", hasSize(0))).andExpect(jsonPath("$.aviso").value(LinkPublicoService.ERRO_DESLIGADO));
-        pedir(APEX, corpo("Ana Lima", "5399900001", "\"" + UUID.randomUUID() + "\"", as(dia, 9, 0), "")).andExpect(status().isForbidden());
     }
 
     @Test

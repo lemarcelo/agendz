@@ -165,3 +165,25 @@ test('avisos do painel: lista com limite e leitura defensiva; marcar como lido p
   servidor({});
   assert.equal((await avisos.marcarLido('../x')).ok, false); assert.equal(chamadas.length, 0);
 });
+
+test('estética (v104): portes e tabelas por porte lidos com defesa; porte na consulta; veículo no corpo do pedido', async () => {
+  servidor({ ativo: true, tipo: 'estetica_automotiva', portes: [{ id: 'pequeno', nome: 'Pequeno' }, { id: 'lixo', nome: 'x' }, { id: 'suv', nome: 'SUV' }],
+    servicos: [{ id: SRV, nome: 'Lavagem', duracao: 60, preco: 80, precos: { pequeno: 80, suv: 120, gigante: 1, medio: -5 }, duracoes: { pequeno: 60, suv: 90, grande: 'x' } }], profissionais: [] });
+  const p = (await publico.pagina()).pagina;
+  assert.equal(p.tipo, 'estetica_automotiva'); assert.deepEqual(p.portes.map((x) => x.id), ['pequeno', 'suv']);
+  assert.deepEqual(p.servicos[0].precos, { pequeno: 80, suv: 120 }); assert.deepEqual(p.servicos[0].duracoes, { pequeno: 60, suv: 90 });
+  servidor(['2026-11-02']);
+  await publico.dias({ de: '2026-11-01', dias: 5, servicoIds: [SRV], porte: 'suv' });
+  assert.ok(chamadas[0].url.endsWith('&porte=suv'));
+  await publico.dias({ de: '2026-11-01', dias: 5, servicoIds: [SRV], porte: 'x&y=1' });
+  assert.ok(!chamadas[1].url.includes('porte'), 'porte desconhecido nem sai');
+  servidor([]);
+  await publico.horarios({ data: '2026-11-02', servicoIds: [SRV], porte: 'pequeno' });
+  assert.ok(chamadas[0].url.endsWith('&porte=pequeno'));
+  const resumo = { id: AG, inicio: '2026-11-02T12:00:00Z', fim: '2026-11-02T13:00:00Z', status: 'a_confirmar', rotulo: 'Aguardando confirmação', servicos: ['Lavagem'], duracao: 60, total: 120, desconto: 0, profissional: 'Ana', veiculo: { placa: 'ABC1D23', modelo: 'Onix', porte: 'suv', cpf: '1' } };
+  servidor({ agendamento: resumo, token: TOKEN }, 201);
+  const r = await publico.agendar({ nome: 'Maria', telefone: '(53) 99900-0001', servicoIds: [SRV], inicio: Date.parse('2026-11-02T12:00:00Z'), profissionalId: PROF, site: '',
+    veiculo: { placa: 'ABC1D23', modelo: 'Onix', marca: '', cor: 'Prata', porte: 'suv', id: 'x', clienteId: 'y' } });
+  assert.deepEqual(chamadas[0].corpo.veiculo, { placa: 'ABC1D23', modelo: 'Onix', porte: 'suv', cor: 'Prata' });
+  assert.deepEqual(r.agendamento.veiculo, { placa: 'ABC1D23', modelo: 'Onix', porte: 'suv' });
+});

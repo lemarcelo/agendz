@@ -5,16 +5,21 @@ import br.com.agendz.comissao.ComissaoService;
 import br.com.agendz.configuracao.LinkAgendamento;
 import br.com.agendz.configuracao.LocalDaLoja;
 import br.com.agendz.cupom.CupomService;
+import br.com.agendz.agenda.Ocupacao;
 import br.com.agendz.aviso.AvisosPainel;
 import br.com.agendz.erro.ErroDeNegocio;
 import br.com.agendz.escala.EscalaService;
 import br.com.agendz.escala.EscalaService.Faixa;
 import br.com.agendz.escala.Fuso;
+import br.com.agendz.tenant.Capacidades;
 import br.com.agendz.tenant.Loja;
 import br.com.agendz.tenant.LojaContext;
 import br.com.agendz.tenant.LojaJdbc;
 import br.com.agendz.validacao.Documentos;
 import br.com.agendz.validacao.Texto;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
@@ -69,17 +74,29 @@ public class LinkPublicoService {
     private static final DateTimeFormatter DIA_HORA = DateTimeFormatter.ofPattern("dd/MM/yyyy 'às' HH:mm");
     private static final SecureRandom ALEATORIO = new SecureRandom();
 
-    public record ServicoPublico(UUID id, String nome, int duracao, BigDecimal preco, int antecedenciaH) {
+    /** `precos` e `duracoes` (por porte) só vêm no tipo que cobra por porte; os campos simples são os do porte médio/padrão do serviço. */
+    public record ServicoPublico(UUID id, String nome, int duracao, BigDecimal preco, int antecedenciaH, Map<String, BigDecimal> precos, Map<String, Integer> duracoes) {
+    }
+
+    public record PortePublico(String id, String nome) {
     }
 
     public record ProfissionalPublico(UUID id, String nome, String foto) {
     }
 
     /** `endereco` e `mapaUrl` só vêm quando o proprietário ligou "mostrar o endereço no link" e há endereço gravado. */
-    public record Pagina(boolean ativo, String aviso, int diasMax, List<ServicoPublico> servicos, List<ProfissionalPublico> profissionais, String endereco, String mapaUrl) {
+    public record Pagina(boolean ativo, String aviso, int diasMax, List<ServicoPublico> servicos, List<ProfissionalPublico> profissionais, String endereco, String mapaUrl,
+                         String tipo, List<PortePublico> portes) {
     }
 
     public record Horario(Instant inicio, UUID profissionalId) {
+    }
+
+    /** Veículo do pedido (estética): vira a "foto" do agendamento; não entra no cadastro de quem já é cliente. */
+    public record VeiculoEntrada(@Size(max = 20) String placa, @Size(max = 60) String marca, @Size(max = 60) String modelo, @Size(max = 40) String cor, @Size(max = 20) String porte) {
+    }
+
+    public record VeiculoResumo(String placa, String modelo, String porte) {
     }
 
     public record Pedido(
@@ -89,11 +106,12 @@ public class LinkPublicoService {
             @NotNull Instant inicio,
             UUID profissionalId,
             @Size(max = 40) String cupomChave,
-            @Size(max = 100) String site) {
+            @Size(max = 100) String site,
+            @Valid VeiculoEntrada veiculo) {
     }
 
     public record Resumo(UUID id, Instant inicio, Instant fim, String status, String rotulo, List<String> servicos, int duracao, BigDecimal total, BigDecimal desconto,
-                         String cupom, String profissional, boolean ativo, boolean podeCancelar) {
+                         String cupom, String profissional, boolean ativo, boolean podeCancelar, VeiculoResumo veiculo) {
     }
 
     public record Criado(Resumo agendamento, String token) {
@@ -109,7 +127,10 @@ public class LinkPublicoService {
     }
 
     /** Escalas lidas uma vez por consulta (cada dia testa dezenas de horários sem reler o banco). */
-    private record Base(Map<Integer, List<Faixa>> loja, List<Prof> profissionais, Map<UUID, Map<Integer, List<Faixa>>> escalas) {
+    private record Base(Map<Integer, List<Faixa>> loja, List<Prof> profissionais, Map<UUID, Map<Integer, List<Faixa>>> escalas, List<UUID> boxes) {
+    }
+
+    private record BoxOcupado(UUID boxId, Instant inicio, Instant fimOcupado) {
     }
 
     private final LojaJdbc banco;
@@ -119,8 +140,12 @@ public class LinkPublicoService {
     private final CupomService cupons;
     private final ComissaoService comissoes;
     private final LimitePublico limite;
+    private final Ocupacao ocupacao;
+    private static final ObjectMapper JSON = new ObjectMapper();
+    private static final List<String> PORTES = List.of("pequeno", "medio", "grande", "suv", "pickup");
+    private static final Map<String, String> ROTULO_PORTE = Map.of("pequeno", "Pequeno", "medio", "Médio", "grande", "Grande", "suv", "SUV", "pickup", "Pickup");
 
-    public LinkPublicoService(LojaJdbc banco, Clock relogio, EscalaService escalas, ClienteService clientes, CupomService cupons, ComissaoService comissoes, LimitePublico limite) {
+    public LinkPublicoService(LojaJdbc banco, Clock relogio, EscalaService escalas, ClienteService clientes, CupomService cupons, ComissaoService comissoes, LimitePublico limite, Ocupacao ocupacao) {
         this.banco = banco;
         this.relogio = relogio;
         this.escalas = escalas;
@@ -128,6 +153,7 @@ public class LinkPublicoService {
         this.cupons = cupons;
         this.comissoes = comissoes;
         this.limite = limite;
+        this.ocupacao = ocupacao;
     }
 
     // ---------------------------------------------------------------- página (o que o cliente vê antes de escolher)
@@ -138,37 +164,40 @@ public class LinkPublicoService {
         return banco.naLoja(jdbc -> {
             LinkAgendamento.Config cfg = LinkAgendamento.ler(jdbc);
             boolean ativo = cfg.ativo() && LinkAgendamento.tipoSuportado(loja);
-            if (!ativo) return new Pagina(false, ERRO_DESLIGADO, cfg.diasMax(), List.of(), List.of(), null, null);
+            if (!ativo) return new Pagina(false, ERRO_DESLIGADO, cfg.diasMax(), List.of(), List.of(), null, null, loja.tipo(), List.of());
+            boolean porPorte = Capacidades.precoPorPorte(loja);
             List<ServicoPublico> servicos = jdbc.query(
-                    "select id, nome, preco, duracao_min, antecedencia_h from servico where ativo and not multi_dia order by lower(nome), id",
-                    (rs, i) -> new ServicoPublico(rs.getObject("id", UUID.class), rs.getString("nome"), rs.getInt("duracao_min"), rs.getBigDecimal("preco"), rs.getInt("antecedencia_h")));
+                    "select id, nome, preco, duracao_min, antecedencia_h, precos::text as precos, duracoes::text as duracoes from servico where ativo and not multi_dia order by lower(nome), id",
+                    (rs, i) -> new ServicoPublico(rs.getObject("id", UUID.class), rs.getString("nome"), rs.getInt("duracao_min"), rs.getBigDecimal("preco"), rs.getInt("antecedencia_h"),
+                            porPorte ? tabelaPrecos(rs.getString("precos")) : null, porPorte ? tabelaDuracoes(rs.getString("duracoes")) : null));
             List<ProfissionalPublico> profissionais = jdbc.query(
                     "select id, coalesce(nullif(apelido, ''), nome) as n, foto from usuario where ativo and atende order by lower(coalesce(nullif(apelido, ''), nome)), id",
                     (rs, i) -> new ProfissionalPublico(rs.getObject("id", UUID.class), rs.getString("n"), rs.getString("foto")));
             LocalDaLoja.Local local = LocalDaLoja.ler(jdbc);
             boolean mostra = local.enderecoNoLink() && local.temEndereco();
-            return new Pagina(true, null, cfg.diasMax(), servicos, profissionais, mostra ? local.enderecoTexto() : null, mostra ? local.mapaUrl() : null);
+            List<PortePublico> portes = porPorte ? PORTES.stream().map(x -> new PortePublico(x, ROTULO_PORTE.get(x))).toList() : List.of();
+            return new Pagina(true, null, cfg.diasMax(), servicos, profissionais, mostra ? local.enderecoTexto() : null, mostra ? local.mapaUrl() : null, loja.tipo(), portes);
         });
     }
 
     // ---------------------------------------------------------------- horários livres
 
     /** Horários livres de um dia (de 30 em 30 min, só dentro do expediente). `profissionalId` vazio = qualquer um (mostra o primeiro livre). */
-    public List<Horario> horarios(String ip, LocalDate dia, List<UUID> servicoIds, UUID profissionalId) {
+    public List<Horario> horarios(String ip, LocalDate dia, List<UUID> servicoIds, UUID profissionalId, String porte) {
         Loja loja = LojaContext.exigir();
         consultaLiberada(loja, ip);
         if (dia == null) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha um dia.");
         return banco.naLoja(jdbc -> {
             LinkAgendamento.Config cfg = config(jdbc, loja);
             if (!cfg.ativo()) return List.<Horario>of();
-            List<Svc> servicos = servicosDoLink(jdbc, ids(servicoIds));
-            Base base = base(jdbc, profissionalId);
+            List<Svc> servicos = servicosDoLink(jdbc, ids(servicoIds), porteDoPedido(loja, porte));
+            Base base = base(jdbc, loja, profissionalId);
             return horariosDoDia(jdbc, cfg, base, dia, servicos, relogio.instant(), false, null);
         });
     }
 
     /** Dias (a partir de `de`) que têm ao menos um horário livre, para pintar o calendário. Até 31 dias por consulta. */
-    public List<LocalDate> dias(String ip, LocalDate de, int quantos, List<UUID> servicoIds, UUID profissionalId) {
+    public List<LocalDate> dias(String ip, LocalDate de, int quantos, List<UUID> servicoIds, UUID profissionalId, String porte) {
         Loja loja = LojaContext.exigir();
         consultaLiberada(loja, ip);
         if (de == null) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha o primeiro dia.");
@@ -176,8 +205,8 @@ public class LinkPublicoService {
         return banco.naLoja(jdbc -> {
             LinkAgendamento.Config cfg = config(jdbc, loja);
             if (!cfg.ativo() || n == 0) return List.<LocalDate>of();
-            List<Svc> servicos = servicosDoLink(jdbc, ids(servicoIds));
-            Base base = base(jdbc, profissionalId);
+            List<Svc> servicos = servicosDoLink(jdbc, ids(servicoIds), porteDoPedido(loja, porte));
+            Base base = base(jdbc, loja, profissionalId);
             Instant agora = relogio.instant();
             List<LocalDate> livres = new ArrayList<>();
             for (int i = 0; i < n; i++) {
@@ -197,13 +226,14 @@ public class LinkPublicoService {
         return new LinkAgendamento.Config(c.ativo() && LinkAgendamento.tipoSuportado(loja), c.diasMax());
     }
 
-    private Base base(JdbcTemplate jdbc, UUID profissionalId) {
+    private Base base(JdbcTemplate jdbc, Loja loja, UUID profissionalId) {
         List<Prof> profs = jdbc.query("select id, coalesce(nullif(apelido, ''), nome) as n from usuario where ativo and atende" + (profissionalId == null ? "" : " and id = ?")
                         + " order by lower(coalesce(nullif(apelido, ''), nome)), id",
                 (rs, i) -> new Prof(rs.getObject("id", UUID.class), rs.getString("n")), profissionalId == null ? new Object[0] : new Object[]{profissionalId});
         Map<UUID, Map<Integer, List<Faixa>>> porProf = new LinkedHashMap<>();
         for (Prof p : profs) porProf.put(p.id(), escalas.ler(jdbc, p.id()));
-        return new Base(escalas.ler(jdbc, null), profs, porProf);
+        List<UUID> boxes = Capacidades.usaRecursoFisico(loja) ? jdbc.queryForList("select id from box where ativo order by ordem, criado_em, id", UUID.class) : null; // null = tipo sem box
+        return new Base(escalas.ler(jdbc, null), profs, porProf, boxes);
     }
 
     /**
@@ -215,12 +245,20 @@ public class LinkPublicoService {
         Instant diaFim = dia.plusDays(1).atStartOfDay(Fuso.BRASIL).toInstant();
         if (!diaFim.isAfter(agora) || diaIni.isAfter(agora.plus(cfg.diasMax(), ChronoUnit.DAYS))) return List.of();
         if (!EscalaService.temFaixa(base.loja())) return List.of();
+        if (base.boxes() != null && base.boxes().isEmpty()) return List.of(); // estética sem box cadastrado não oferece horário
         int duracao = servicos.stream().mapToInt(Svc::duracaoMin).sum();
         int folga = servicos.get(servicos.size() - 1).intervaloMin();
         int antecedencia = servicos.stream().mapToInt(Svc::antecedenciaH).max().orElse(0);
         Instant minimo = agora.plus(antecedencia, ChronoUnit.HOURS);
         int dow = dia.getDayOfWeek().getValue() % 7; // domingo = 0
         Map<Instant, UUID> achados = new TreeMap<>();
+        // estética: o horário só existe se houver profissional E box livres (o carro nunca divide o box); sem nenhum box cadastrado não há horário
+        boolean usaBox = base.boxes() != null;
+        List<BoxOcupado> boxesOcupados = usaBox
+                ? jdbc.query("select box_id, inicio, fim_ocupado from agendamento where box_id is not null and id <> ? and status <> 'cancelado' and inicio < ? and fim_ocupado > ?",
+                        (rs, i) -> new BoxOcupado(rs.getObject(1, UUID.class), rs.getObject(2, OffsetDateTime.class).toInstant(), rs.getObject(3, OffsetDateTime.class).toInstant()),
+                        ignorar == null ? NINGUEM : ignorar, utc(diaFim.plus(1, ChronoUnit.DAYS)), utc(diaIni))
+                : List.of();
         for (Prof p : base.profissionais()) {
             Map<Integer, List<Faixa>> deleEscala = base.escalas().get(p.id());
             List<Ocupado> ocupados = jdbc.query("select inicio, fim_ocupado from agendamento where profissional_id = ? and id <> ? and status <> 'cancelado' and inicio < ? and fim_ocupado > ?",
@@ -233,6 +271,7 @@ public class LinkPublicoService {
                     if (!inicio.isAfter(agora) || inicio.isBefore(minimo)) continue;
                     Instant fimOcupado = inicio.plus(duracao + folga, ChronoUnit.MINUTES);
                     if (ocupados.stream().anyMatch(o -> o.inicio().isBefore(fimOcupado) && o.fimOcupado().isAfter(inicio))) continue;
+                    if (usaBox && boxesOcupados.stream().filter(o -> o.inicio().isBefore(fimOcupado) && o.fimOcupado().isAfter(inicio)).map(BoxOcupado::boxId).distinct().count() >= base.boxes().size()) continue;
                     achados.putIfAbsent(inicio, p.id());
                     if (soUm) return List.of(new Horario(inicio, p.id()));
                 }
@@ -259,6 +298,7 @@ public class LinkPublicoService {
         String tel = Documentos.telefone(p.telefone());
         if (tel == null) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe o telefone com DDD.");
         List<UUID> servicoIds = ids(p.servicoIds());
+        if (Capacidades.usaVeiculo(loja) && p.veiculo() == null) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe o veículo (placa, modelo e porte).");
         boolean comCupom = p.cupomChave() != null && !p.cupomChave().isBlank();
         boolean liberado = limite.liberar("agendar-tel:" + loja.id() + ":" + tel, 5, Duration.ofMinutes(1))
                 && limite.liberar("agendar-ip:" + loja.id() + ":" + ip, 20, Duration.ofMinutes(10))
@@ -269,7 +309,10 @@ public class LinkPublicoService {
             Instant agora = relogio.instant();
             LinkAgendamento.Config cfg = config(jdbc, loja);
             if (!cfg.ativo()) throw new ErroDeNegocio(HttpStatus.FORBIDDEN, ERRO_DESLIGADO);
-            List<Svc> servicos = servicosDoLink(jdbc, servicoIds);
+            // estética: o veículo vem do pedido (não entra no cadastro de quem já é cliente) e o porte dele define preço e duração
+            ClienteService.VeiculoDoAgendamento vei = !Capacidades.usaVeiculo(loja) ? null
+                    : clientes.resolverVeiculo(jdbc, loja, null, null, new ClienteService.EntradaVeiculo(null, p.veiculo().placa(), p.veiculo().marca(), p.veiculo().modelo(), p.veiculo().cor(), p.veiculo().porte()));
+            List<Svc> servicos = servicosDoLink(jdbc, servicoIds, vei == null ? null : vei.porte());
             Instant inicio = p.inicio();
             if (inicio.getNano() != 0 || inicio.getEpochSecond() % 60 != 0 || !inicio.isAfter(agora) || inicio.isAfter(agora.plus(cfg.diasMax(), ChronoUnit.DAYS))) {
                 throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha um dia e um horário.");
@@ -287,7 +330,7 @@ public class LinkPublicoService {
             List<UUID> candidatos = jdbc.queryForList("select id from usuario where ativo and atende" + (p.profissionalId() == null ? "" : " and id = ?") + " order by id for update",
                     UUID.class, p.profissionalId() == null ? new Object[0] : new Object[]{p.profissionalId()});
             if (candidatos.isEmpty()) throw new ErroDeNegocio(HttpStatus.CONFLICT, ERRO_HORARIO);
-            Base base = base(jdbc, p.profissionalId());
+            Base base = base(jdbc, loja, p.profissionalId());
             Map<Integer, List<Faixa>> lojaEscala = base.loja();
             if (!EscalaService.temFaixa(lojaEscala)) throw new ErroDeNegocio(HttpStatus.CONFLICT, ERRO_HORARIO);
             var local = inicio.atZone(Fuso.BRASIL);
@@ -301,6 +344,7 @@ public class LinkPublicoService {
                 if (ocupados != null && ocupados == 0) { profissional = c.id(); break; }
             }
             if (profissional == null) throw new ErroDeNegocio(HttpStatus.CONFLICT, ERRO_HORARIO);
+            UUID boxId = escolherBoxDoLink(jdbc, loja, inicio, fimServico, fimOcupado, null, NINGUEM);
 
             ClienteService.DoLink cli = clientes.resolverDoLink(jdbc, nome, tel);
             Integer abertos = jdbc.queryForObject("select count(*) from agendamento where cliente_id = ? and status in ('a_confirmar', 'confirmado') and inicio > ?", Integer.class, cli.clienteId(), utc(agora));
@@ -308,21 +352,23 @@ public class LinkPublicoService {
                 throw new ErroDeNegocio(HttpStatus.CONFLICT, "Você já tem " + MAX_ABERTOS + " horários marcados. Cancele um deles para agendar outro.");
             }
             UUID id = jdbc.queryForObject(
-                    "insert into agendamento (loja_id, cliente_id, profissional_id, inicio, fim_servico, fim_ocupado, status, encaixe, total, origem) "
-                            + "values (?::uuid, ?, ?, ?, ?, ?, 'a_confirmar', false, ?, 'link') returning id",
-                    UUID.class, loja.id().toString(), cli.clienteId(), profissional, utc(inicio), utc(fimServico), utc(fimOcupado), total);
+                    "insert into agendamento (loja_id, cliente_id, profissional_id, inicio, fim_servico, fim_ocupado, status, encaixe, total, origem, box_id, porte, veiculo_placa, veiculo_marca, veiculo_modelo, veiculo_cor) "
+                            + "values (?::uuid, ?, ?, ?, ?, ?, 'a_confirmar', false, ?, 'link', ?, ?, ?, ?, ?, ?) returning id",
+                    UUID.class, loja.id().toString(), cli.clienteId(), profissional, utc(inicio), utc(fimServico), utc(fimOcupado), total, boxId,
+                    vei == null ? null : vei.porte(), vei == null ? null : vei.placa(), vei == null ? null : vei.marca(), vei == null ? null : vei.modelo(), vei == null ? null : vei.cor());
             short ordem = 0;
             for (Svc s : servicos) {
                 jdbc.update("insert into agendamento_servico (loja_id, agendamento_id, servico_id, ordem, nome, preco, duracao_min, intervalo_min) values (?::uuid, ?, ?, ?, ?, ?, ?, ?)",
                         loja.id().toString(), id, s.id(), ordem++, s.nome(), s.preco(), s.duracaoMin(), s.intervaloMin());
             }
             comissoes.congelar(jdbc, id);
-            evento(jdbc, loja.id(), id, "criação", null, servicos.stream().map(Svc::nome).collect(java.util.stream.Collectors.joining(" + ")) + " em " + dataHora(inicio));
+            evento(jdbc, loja.id(), id, "criação", null, servicos.stream().map(Svc::nome).collect(java.util.stream.Collectors.joining(" + "))
+                    + (vei == null ? "" : " (" + vei.modelo() + " " + vei.placa() + ")") + " em " + dataHora(inicio));
             if (comCupom) {
                 CupomService.Aplicado ap = cupons.aplicar(jdbc, loja.id(), id, null, "link:" + ip, p.cupomChave(), agora);
                 evento(jdbc, loja.id(), id, "cupom", null, ap.nome() + ": desconto de " + CupomService.reais(ap.desconto()));
             }
-            avisar(jdbc, loja.id(), id, "pedido", nome + " pediu horário pelo link: " + dataHora(inicio) + " (aguardando a sua confirmação).");
+            avisar(jdbc, loja.id(), id, "pedido", nome + " pediu horário pelo link" + (vei == null ? "" : " para o " + vei.modelo() + " " + vei.placa()) + ": " + dataHora(inicio) + " (aguardando a sua confirmação).");
             String token = novoToken();
             jdbc.update("delete from acesso_publico where expira_em < ?", utc(agora));
             jdbc.update("insert into acesso_publico (loja_id, agendamento_id, token_hash, expira_em) values (?::uuid, ?, ?, ?)",
@@ -378,16 +424,16 @@ public class LinkPublicoService {
 
     // ---------------------------------------------------------------- remarcar o próprio horário
 
-    private record Meu(UUID profissionalId, String status, Instant inicio, Instant fimServico, Instant fimOcupado, List<Svc> servicos) {
+    private record Meu(UUID profissionalId, String status, Instant inicio, Instant fimServico, Instant fimOcupado, List<Svc> servicos, UUID boxId) {
     }
 
     /** O horário do token, para remarcar: ativo (a confirmar/confirmado e no futuro) e do token. Qualquer outra coisa é "não achei" (nada diz de quem é). */
     private Meu meuParaRemarcar(JdbcTemplate jdbc, UUID id, String token, Instant agora, boolean travar) {
         UUID doToken = agendamentoDoToken(jdbc, token, agora);
         if (doToken == null || !doToken.equals(id)) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, ERRO_NAO_ACHEI);
-        List<Object[]> l = jdbc.query("select profissional_id, status, inicio, fim_servico, fim_ocupado from agendamento where id = ?" + (travar ? " for update" : ""),
+        List<Object[]> l = jdbc.query("select profissional_id, status, inicio, fim_servico, fim_ocupado, box_id from agendamento where id = ?" + (travar ? " for update" : ""),
                 (rs, i) -> new Object[]{rs.getObject(1, UUID.class), rs.getString(2), rs.getObject(3, OffsetDateTime.class).toInstant(),
-                        rs.getObject(4, OffsetDateTime.class).toInstant(), rs.getObject(5, OffsetDateTime.class).toInstant()}, id);
+                        rs.getObject(4, OffsetDateTime.class).toInstant(), rs.getObject(5, OffsetDateTime.class).toInstant(), rs.getObject(6, UUID.class)}, id);
         if (l.isEmpty()) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, ERRO_NAO_ACHEI);
         Object[] a = l.get(0);
         if (!ativo((String) a[1], (Instant) a[2], agora)) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, ERRO_NAO_ACHEI);
@@ -396,7 +442,7 @@ public class LinkPublicoService {
                         + "from agendamento_servico x left join servico sv on sv.id = x.servico_id where x.agendamento_id = ? order by x.ordem",
                 (rs, i) -> new Svc(rs.getObject(1, UUID.class), rs.getString(2), rs.getBigDecimal(3), rs.getInt(4), rs.getInt(5), rs.getInt(6)), id);
         if (servicos.isEmpty()) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, ERRO_NAO_ACHEI);
-        return new Meu((UUID) a[0], (String) a[1], (Instant) a[2], (Instant) a[3], (Instant) a[4], servicos);
+        return new Meu((UUID) a[0], (String) a[1], (Instant) a[2], (Instant) a[3], (Instant) a[4], servicos, (UUID) a[5]);
     }
 
     private static void conferir24h(Instant inicio, Instant agora) {
@@ -415,7 +461,7 @@ public class LinkPublicoService {
             Meu m = meuParaRemarcar(jdbc, id, token, agora, false);
             LinkAgendamento.Config cfg = config(jdbc, loja);
             if (!cfg.ativo()) return List.<Horario>of();
-            return horariosDoDia(jdbc, cfg, base(jdbc, m.profissionalId()), dia, m.servicos(), agora, false, id);
+            return horariosDoDia(jdbc, cfg, base(jdbc, loja, m.profissionalId()), dia, m.servicos(), agora, false, id);
         });
     }
 
@@ -430,7 +476,7 @@ public class LinkPublicoService {
             Meu m = meuParaRemarcar(jdbc, id, token, agora, false);
             LinkAgendamento.Config cfg = config(jdbc, loja);
             if (!cfg.ativo() || n == 0) return List.<LocalDate>of();
-            Base base = base(jdbc, m.profissionalId());
+            Base base = base(jdbc, loja, m.profissionalId());
             List<LocalDate> livres = new ArrayList<>();
             for (int i = 0; i < n; i++) {
                 LocalDate d = de.plusDays(i);
@@ -474,7 +520,7 @@ public class LinkPublicoService {
             int folga = m.servicos().get(m.servicos().size() - 1).intervaloMin();
             Instant fimServico = novoInicio.plus(duracao, ChronoUnit.MINUTES);
             Instant fimOcupado = fimServico.plus(folga, ChronoUnit.MINUTES);
-            Base base = base(jdbc, m.profissionalId());
+            Base base = base(jdbc, loja, m.profissionalId());
             var local = novoInicio.atZone(Fuso.BRASIL);
             int ini = local.getHour() * 60 + local.getMinute();
             if (!EscalaService.temFaixa(base.loja())
@@ -484,11 +530,12 @@ public class LinkPublicoService {
             Integer ocupados = jdbc.queryForObject("select count(*) from agendamento where profissional_id = ? and id <> ? and status <> 'cancelado' and inicio < ? and fim_ocupado > ?",
                     Integer.class, m.profissionalId(), id, utc(fimOcupado), utc(novoInicio));
             if (ocupados != null && ocupados > 0) throw new ErroDeNegocio(HttpStatus.CONFLICT, ERRO_HORARIO);
+            UUID boxId = escolherBoxDoLink(jdbc, loja, novoInicio, fimServico, fimOcupado, m.boxId(), id); // estética: fica no mesmo box se estiver livre, senão outro; nunca divide
 
             evento(jdbc, loja.id(), id, "data e hora", dataHora(m.inicio()), dataHora(novoInicio));
             if ("confirmado".equals(m.status())) evento(jdbc, loja.id(), id, "status", "Confirmado", "A confirmar (cliente remarcou pelo link)");
-            jdbc.update("update agendamento set inicio = ?, fim_servico = ?, fim_ocupado = ?, status = 'a_confirmar', reagendado = true, motivo_cancelamento = null, atualizado_em = now() where id = ?",
-                    utc(novoInicio), utc(fimServico), utc(fimOcupado), id);
+            jdbc.update("update agendamento set inicio = ?, fim_servico = ?, fim_ocupado = ?, status = 'a_confirmar', reagendado = true, motivo_cancelamento = null, box_id = ?, atualizado_em = now() where id = ?",
+                    utc(novoInicio), utc(fimServico), utc(fimOcupado), boxId, id);
             jdbc.update("delete from agendamento_bloco where agendamento_id = ?", id);
             jdbc.update("insert into agendamento_bloco (loja_id, agendamento_id, ini, fim) values (?::uuid, ?, ?, ?)", loja.id().toString(), id, utc(novoInicio), utc(fimOcupado));
             avisar(jdbc, loja.id(), id, "remarcou", nomeDoCliente(jdbc, id) + " remarcou pelo link: agora " + dataHora(novoInicio)
@@ -515,9 +562,10 @@ public class LinkPublicoService {
     }
 
     private Resumo resumo(JdbcTemplate jdbc, UUID id, Instant agora) {
-        List<Object[]> l = jdbc.query("select a.status, a.inicio, a.fim_servico, a.total, coalesce(nullif(u.apelido, ''), u.nome), a.cupom_foto ->> 'nome' "
+        List<Object[]> l = jdbc.query("select a.status, a.inicio, a.fim_servico, a.total, coalesce(nullif(u.apelido, ''), u.nome), a.cupom_foto ->> 'nome', a.veiculo_placa, a.veiculo_modelo, a.porte "
                         + "from agendamento a join usuario u on u.id = a.profissional_id where a.id = ?",
-                (rs, i) -> new Object[]{rs.getString(1), rs.getObject(2, OffsetDateTime.class).toInstant(), rs.getObject(3, OffsetDateTime.class).toInstant(), rs.getBigDecimal(4), rs.getString(5), rs.getString(6)}, id);
+                (rs, i) -> new Object[]{rs.getString(1), rs.getObject(2, OffsetDateTime.class).toInstant(), rs.getObject(3, OffsetDateTime.class).toInstant(), rs.getBigDecimal(4), rs.getString(5), rs.getString(6),
+                        rs.getString(7), rs.getString(8), rs.getString(9)}, id);
         if (l.isEmpty()) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, ERRO_NAO_ACHEI);
         Object[] a = l.get(0);
         String status = (String) a[0];
@@ -540,7 +588,8 @@ public class LinkPublicoService {
             case "concluido" -> "Concluído";
             default -> "Cancelado";
         };
-        return new Resumo(id, inicio, (Instant) a[2], status, rotulo, nomes, duracao, (BigDecimal) a[3], desconto, (String) a[5], (String) a[4], ativo, podeCancelar);
+        VeiculoResumo veiculo = a[6] == null ? null : new VeiculoResumo((String) a[6], (String) a[7], (String) a[8]);
+        return new Resumo(id, inicio, (Instant) a[2], status, rotulo, nomes, duracao, (BigDecimal) a[3], desconto, (String) a[5], (String) a[4], ativo, podeCancelar, veiculo);
     }
 
     private UUID agendamentoDoToken(JdbcTemplate jdbc, String token, Instant agora) {
@@ -550,11 +599,21 @@ public class LinkPublicoService {
     }
 
     /** Serviços do pedido, na ordem escolhida. Só os que o link oferece: ativos e de um dia só. */
-    private List<Svc> servicosDoLink(JdbcTemplate jdbc, List<UUID> ids) {
+    private List<Svc> servicosDoLink(JdbcTemplate jdbc, List<UUID> ids, String porte) {
         String marcas = String.join(",", ids.stream().map(x -> "?").toList());
-        List<Object[]> achados = jdbc.query("select id, nome, preco, duracao_min, intervalo_min, antecedencia_h, ativo, multi_dia from servico where id in (" + marcas + ")",
-                (rs, i) -> new Object[]{rs.getObject("id", UUID.class), rs.getString("nome"), rs.getBigDecimal("preco"), rs.getInt("duracao_min"), rs.getInt("intervalo_min"),
-                        rs.getInt("antecedencia_h"), rs.getBoolean("ativo"), rs.getBoolean("multi_dia")}, ids.toArray());
+        List<Object[]> achados = jdbc.query("select id, nome, preco, duracao_min, intervalo_min, antecedencia_h, ativo, multi_dia, precos::text as precos, duracoes::text as duracoes from servico where id in (" + marcas + ")",
+                (rs, i) -> {
+                    BigDecimal preco = rs.getBigDecimal("preco");
+                    int duracao = rs.getInt("duracao_min");
+                    if (porte != null) { // preço e duração do porte do veículo
+                        BigDecimal pp = valorDoPorte(rs.getString("precos"), porte);
+                        BigDecimal dd = valorDoPorte(rs.getString("duracoes"), porte);
+                        if (pp != null && pp.signum() >= 0) preco = pp.setScale(2, java.math.RoundingMode.HALF_UP);
+                        if (dd != null && dd.signum() > 0) duracao = dd.intValue();
+                    }
+                    return new Object[]{rs.getObject("id", UUID.class), rs.getString("nome"), preco, duracao, rs.getInt("intervalo_min"),
+                            rs.getInt("antecedencia_h"), rs.getBoolean("ativo"), rs.getBoolean("multi_dia")};
+                }, ids.toArray());
         Map<UUID, Object[]> porId = new LinkedHashMap<>();
         for (Object[] s : achados) porId.put((UUID) s[0], s);
         List<Svc> saida = new ArrayList<>();
@@ -564,6 +623,53 @@ public class LinkPublicoService {
             saida.add(new Svc(id, (String) s[1], (BigDecimal) s[2], (int) s[3], (int) s[4], (int) s[5]));
         }
         return saida;
+    }
+
+    /** Porte pedido nas consultas de horário: no tipo que cobra por porte é obrigatório e válido; nos outros é ignorado. */
+    private static String porteDoPedido(Loja loja, String porte) {
+        if (!Capacidades.precoPorPorte(loja)) return null;
+        String p = porte == null ? "" : porte.trim().toLowerCase(java.util.Locale.ROOT);
+        if (!PORTES.contains(p)) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha o porte do veículo.");
+        return p;
+    }
+
+    /** Box do pedido (estética): o preferido se estiver livre, senão o primeiro livre. Sem box livre o horário "acabou de ser ocupado". Tipo sem box devolve null. */
+    private UUID escolherBoxDoLink(JdbcTemplate jdbc, Loja loja, Instant inicio, Instant fimServico, Instant fimOcupado, UUID preferido, UUID ignorar) {
+        if (!Capacidades.usaRecursoFisico(loja)) return null;
+        Ocupacao.Plano plano = new Ocupacao.Plano(List.<Instant[]>of(new Instant[]{inicio, fimServico}), fimServico, fimOcupado);
+        try {
+            return ocupacao.escolherBox(jdbc, loja, plano, null, preferido, ignorar);
+        } catch (ErroDeNegocio e) {
+            throw new ErroDeNegocio(HttpStatus.CONFLICT, ERRO_HORARIO); // a mensagem de box é da equipe; o cliente só vê que o horário acabou
+        }
+    }
+
+    private static BigDecimal valorDoPorte(String json, String porte) {
+        if (json == null || json.isBlank()) return null;
+        try {
+            JsonNode n = JSON.readTree(json).get(porte);
+            return n == null || !n.isNumber() ? null : n.decimalValue();
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            return null;
+        }
+    }
+
+    private static Map<String, BigDecimal> tabelaPrecos(String json) {
+        Map<String, BigDecimal> m = new LinkedHashMap<>();
+        for (String x : PORTES) {
+            BigDecimal v = valorDoPorte(json, x);
+            if (v != null) m.put(x, v);
+        }
+        return m;
+    }
+
+    private static Map<String, Integer> tabelaDuracoes(String json) {
+        Map<String, Integer> m = new LinkedHashMap<>();
+        for (String x : PORTES) {
+            BigDecimal v = valorDoPorte(json, x);
+            if (v != null) m.put(x, v.intValue());
+        }
+        return m;
     }
 
     private static List<UUID> ids(List<UUID> bruto) {

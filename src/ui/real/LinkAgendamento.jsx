@@ -41,7 +41,7 @@ export default function LinkAgendamento() {
     <form className="regras-real" onSubmit={salvar} data-testid="link-real" aria-label="Link de agendamento do cliente">
       <h3>Link de agendamento do cliente</h3>
       <p className="muted">O cliente abre este endereço, vê só os horários livres e pede o dele. O pedido entra “a confirmar” na agenda.</p>
-      {!link.disponivel && <Aviso data-testid="link-indisponivel">Este tipo de loja ainda não agenda pelo link (falta pedir veículo e porte). Fica fora do ar até essa parte chegar.</Aviso>}
+      {!link.disponivel && <Aviso data-testid="link-indisponivel">O link não está disponível para esta loja no momento.</Aviso>}
       <Campo rotulo="Endereço da página do cliente"><input readOnly value={endereco} onFocus={(e) => e.target.select()} data-testid="link-endereco" /></Campo>
       <div className="acoes">
         <Btn onClick={copiar} data-testid="link-copiar"><Icone n="copy" size={15} /> {copiado ? 'Copiado' : 'Copiar link'}</Btn>

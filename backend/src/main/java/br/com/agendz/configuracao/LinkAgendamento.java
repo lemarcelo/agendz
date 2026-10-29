@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Link de agendamento do cliente (espelho de `estabelecimento.linkAgendamento` na API simulada): a loja liga/desliga o link e escolhe até quantos dias à frente
  * ele oferece horário (1 a 60, padrão 30). GET/PUT /api/estabelecimento/link-agendamento, só o proprietário. Sem linha gravada vale o padrão (ligado).
- * `disponivel` é falso para o tipo que ainda não agenda pelo link (estética precisa de veículo e porte: fatia seguinte); o link fica fora do ar mesmo ligado.
+ * `disponivel` é falso só para um tipo que não agende pelo link (hoje todos agendam; a estética pede veículo e porte).
  */
 @RestController
 public class LinkAgendamento {
@@ -39,9 +39,9 @@ public class LinkAgendamento {
         this.banco = banco;
     }
 
-    /** O tipo agenda pelo link nesta fatia? (estética automotiva precisa de veículo e porte, que o link real ainda não pede.) */
+    /** O tipo agenda pelo link? Todos agendam (a estética pede veículo e porte, e só oferece horário com profissional e box livres). */
     public static boolean tipoSuportado(Loja loja) {
-        return !"estetica_automotiva".equals(loja.tipo());
+        return true;
     }
 
     /** Configuração gravada da loja atual (dentro de uma transação já aberta). */

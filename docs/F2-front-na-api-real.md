@@ -102,3 +102,5 @@ Decisão sem confirmação: o `tick` do servidor roda por `@Scheduled` (por loja
 **Progresso 5d-4c-2 (28/10) — cupom:** V22 (`cupom`, `cupom_servico`, `cupom_tentativa`, `agendamento.cupom_*`, `agendamento_servico.desconto`), `cupom/CupomService`, rotas `/api/cupons` (Estabelecimento) e `POST|DELETE /api/agendamentos/{id}/cupom`, `cupomChave` no `POST /api/atendimentos` (só futuro); tela `ui/real/Cupons.jsx`, campo no Atender, aplicar/retirar na ficha. Testes: `CupomTest`, `tests/api-real-cupons.test.mjs`, `tests/e2e54.mjs`. A 5d fecha aqui; falta 5e.
 
 - v100: primeiro acesso: a tela de entrada pede usuário + senha enviada e a redefinição pede só usuário novo + senha definitiva (a enviada fica em memória, `senhaEnviada`), depois entra sozinho no assistente (dono) ou na Agenda. **WhatsApp/Pix não serão configurados agora**: no futuro serão por cliente, via Admin, com as chaves da Meta de cada loja; 5e-3 adiado. Testes: `tests/e2e36.mjs`, `tests/e2e37.mjs`.
+
+- **v105 (5e-1b):** estética no link do cliente (veículo, porte, box). Ver MAPA-API-SPRING 10j. 5e-3 segue adiada (WhatsApp/Pix por cliente via Admin).
