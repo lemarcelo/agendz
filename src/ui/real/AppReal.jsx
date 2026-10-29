@@ -62,7 +62,7 @@ function Login({ loja, aoEntrar }) {
     const r = await entrar({ identificador: id, senha });
     setEnviando(false);
     if (!r.ok) { setErro(r.erro); setSenha(''); return; }
-    aoEntrar(r.sessao);
+    aoEntrar(r.sessao, r.sessao.deveTrocarSenha ? senha : '');
   };
   return (
     <Cartao loja={loja}>
@@ -78,11 +78,14 @@ function Login({ loja, aoEntrar }) {
   );
 }
 
-function TrocarSenha({ loja, sessao, aoTrocar, aoSair }) {
+// Primeiro acesso: a pessoa já entrou com o usuário e a senha que recebeu; aqui só redefine (usuário que ela escolhe + senha nova). A senha enviada vem da
+// tela de entrada e fica só em memória até a troca (nunca vai ao storage); depois de salvar a sessão já é a nova e a tela segue sozinha (assistente ou agenda).
+function TrocarSenha({ loja, sessao, senhaEnviada, aoTrocar, aoSair }) {
   const [f, setF] = useState({ atual: '', usuario: '', nova: '', repetir: '' });
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
   const mudar = (k) => (e) => { setF({ ...f, [k]: e.target.value }); setErro(''); };
+  const precisaAtual = !senhaEnviada; // só se a senha enviada não estiver em memória
   const enviar = async (e) => {
     e.preventDefault();
     if (enviando) return;
@@ -90,7 +93,7 @@ function TrocarSenha({ loja, sessao, aoTrocar, aoSair }) {
     if (!loginValido(usuario)) { setErro('Escolha o seu usuário: de 2 a 60 caracteres, só letras, números, ponto, hífen e sublinhado'); return; }
     if (f.nova !== f.repetir) { setErro('A confirmação da nova senha não confere'); return; }
     setEnviando(true); setErro('');
-    const r = await trocarSenha({ senhaAtual: f.atual, nova: f.nova, usuario });
+    const r = await trocarSenha({ senhaAtual: senhaEnviada || f.atual, nova: f.nova, usuario });
     setEnviando(false);
     if (!r.ok) { setErro(r.erro); return; }
     aoTrocar(r.sessao);
@@ -98,14 +101,14 @@ function TrocarSenha({ loja, sessao, aoTrocar, aoSair }) {
   return (
     <Cartao loja={loja}>
       <form onSubmit={enviar} className="form-grade um">
-        <p><b>Olá, {sessao.nome}.</b> Sua senha é temporária. Confirme-a e escolha o seu usuário e a sua senha para continuar.</p>
-        <Campo rotulo="Senha temporária (a que você recebeu)"><input type="password" value={f.atual} onChange={mudar('atual')} autoComplete="current-password" autoFocus maxLength={100} data-testid="troca-atual" /></Campo>
-        <Campo rotulo="Seu usuário (você escolhe; letras, números, ponto, hífen)"><input value={f.usuario} onChange={mudar('usuario')} autoComplete="username" autoCapitalize="none" spellCheck={false} maxLength={60} data-testid="troca-usuario" /></Campo>
+        <p><b>Olá, {sessao.nome}.</b> Sua senha é temporária. Escolha o seu usuário e a sua senha definitiva: depois disso você já entra e segue para a configuração.</p>
+        {precisaAtual && <Campo rotulo="Senha temporária (a que você recebeu)"><input type="password" value={f.atual} onChange={mudar('atual')} autoComplete="current-password" autoFocus maxLength={100} data-testid="troca-atual" /></Campo>}
+        <Campo rotulo="Seu usuário (você escolhe; letras, números, ponto, hífen)"><input value={f.usuario} onChange={mudar('usuario')} autoComplete="username" autoCapitalize="none" spellCheck={false} maxLength={60} autoFocus={!precisaAtual} data-testid="troca-usuario" /></Campo>
         <Campo rotulo="Sua senha definitiva (8 caracteres ou mais)"><input type="password" value={f.nova} onChange={mudar('nova')} autoComplete="new-password" maxLength={100} data-testid="troca-nova" /></Campo>
         <Campo rotulo="Repita a senha definitiva"><input type="password" value={f.repetir} onChange={mudar('repetir')} autoComplete="new-password" maxLength={100} data-testid="troca-repetir" /></Campo>
         {erro && <Aviso tipo="erro" data-testid="troca-erro">{erro}</Aviso>}
         <p className="muted" data-testid="troca-esqueci">Esqueceu a senha depois? Quando o e-mail ou o WhatsApp da loja estiver configurado, dá para redefinir por lá. Até lá, peça ao suporte do Agendz, que redefine para você.</p>
-        <Btn variante="primario" type="submit" disabled={enviando} data-testid="troca-salvar">{enviando ? 'Salvando…' : 'Salvar usuário e senha'}</Btn>
+        <Btn variante="primario" type="submit" disabled={enviando} data-testid="troca-salvar">{enviando ? 'Salvando…' : 'Salvar e continuar'}</Btn>
         <button type="button" className="link" onClick={aoSair} data-testid="troca-sair">Sair</button>
       </form>
     </Cartao>
@@ -196,6 +199,7 @@ export default function AppReal() {
   const hash = useHash();
   const [estado, setEstado] = useState({ fase: 'carregando' });
   const [sessao, setSessao] = useState(() => sessaoAtual());
+  const [senhaEnviada, setSenhaEnviada] = useState(''); // a senha temporária digitada no login, só em memória e só até a troca
   const carregar = async () => {
     setEstado({ fase: 'carregando' });
     const r = await carregarLoja();
@@ -208,7 +212,7 @@ export default function AppReal() {
   const loja = estado.fase === 'ok' ? estado.loja : null;
   useEffect(() => { if (loja) document.documentElement.setAttribute('data-tipo', loja.tipo); }, [loja]);
   const css = useMemo(() => (loja ? cssDaMarca({ logo: loja.logo, corTema: loja.temaCor, corTema2: loja.temaCor2, temaCor: loja.temaCor ? 'logo' : 'padrao' }) : ''), [loja]);
-  const aoSair = () => { sair(); setSessao(null); };
+  const aoSair = () => { sair(); setSessao(null); setSenhaEnviada(''); };
 
   if (estado.fase === 'carregando') return <><AvisoRede /><main className="login"><div className="login-cartao" role="status" data-testid="carregando"><p className="muted">Carregando…</p></div></main></>;
   if (estado.fase === 'sem-loja') return <Cartao><h1>Loja não encontrada</h1><p className="muted" data-testid="loja-nao-encontrada">O endereço usado não aponta para nenhuma loja do Agendz. Confira o link com o estabelecimento.</p></Cartao>;
@@ -227,8 +231,8 @@ export default function AppReal() {
     <>
       <AvisoRede />
       {css && <style id="tema-marca">{css}</style>}
-      {!sessao && <Login loja={loja} aoEntrar={setSessao} />}
-      {sessao && sessao.deveTrocarSenha && <TrocarSenha loja={loja} sessao={sessao} aoTrocar={setSessao} aoSair={aoSair} />}
+      {!sessao && <Login loja={loja} aoEntrar={(se, senha) => { setSenhaEnviada(senha || ''); setSessao(se); }} />}
+      {sessao && sessao.deveTrocarSenha && <TrocarSenha loja={loja} sessao={sessao} senhaEnviada={senhaEnviada} aoTrocar={(se) => { setSenhaEnviada(''); setSessao(se); }} aoSair={aoSair} />}
       {sessao && !sessao.deveTrocarSenha && sessao.papel === 'dono' && sessao.onboardingPendente && <PrimeiroAcesso tipo={loja.tipo} nomeLoja={loja.nome} adaptador={onboarding} aoConcluir={() => setSessao({ ...sessao, onboardingPendente: false })} />}
       {sessao && !sessao.deveTrocarSenha && !(sessao.papel === 'dono' && sessao.onboardingPendente) && <Painel loja={loja} sessao={sessao} aoSair={aoSair} />}
     </>

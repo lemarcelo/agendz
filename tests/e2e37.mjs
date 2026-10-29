@@ -231,7 +231,7 @@ const url = `http://127.0.0.1:${servidor.address().port}/`;
   await p.addStyleTag({ content: '*{font-family:"DejaVu Sans" !important}' });
   await p.getByTestId('login-id').fill('alan'); await p.getByTestId('login-senha').fill('Temporaria-123'); await p.getByTestId('login-entrar').click();
   await p.getByTestId('troca-nova').waitFor();
-  await p.getByTestId('troca-atual').fill('Temporaria-123'); await p.getByTestId('troca-usuario').fill('alan'); await p.getByTestId('troca-nova').fill('Minha-senha-nova'); await p.getByTestId('troca-repetir').fill('Minha-senha-nova'); await p.getByTestId('troca-salvar').click();
+  await p.getByTestId('troca-usuario').fill('alan'); await p.getByTestId('troca-nova').fill('Minha-senha-nova'); await p.getByTestId('troca-repetir').fill('Minha-senha-nova'); await p.getByTestId('troca-salvar').click();
   // dono com onboarding pendente cai no assistente, no passo "servicos"
   await p.getByTestId('pa-servicos').waitFor();
   assert.equal(chamadas.at(-1).u, '/api/onboarding');

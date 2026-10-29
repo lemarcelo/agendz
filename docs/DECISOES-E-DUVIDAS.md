@@ -99,3 +99,4 @@ Lista simples. Cada item está no histórico do `prompt-agendz-regras.md` (v84 a
 - **Decidi:** Desfazer devolve a comissão geral de antes (sem valor anterior volta a valer 50%) e desativa os produtos criados, sem excluir.
 - **Dúvida (não bloqueia):** produto desativado por um Desfazer pode ser reativado em Estoque; se preferir que Refazer seja o único caminho, é só avisar.
 
+- v100: primeiro acesso: a tela de entrada pede usuário + senha enviada e a redefinição pede só usuário novo + senha definitiva (a enviada fica em memória, `senhaEnviada`), depois entra sozinho no assistente (dono) ou na Agenda. **WhatsApp/Pix não serão configurados agora**: no futuro serão por cliente, via Admin, com as chaves da Meta de cada loja; 5e-3 adiado. Testes: `tests/e2e36.mjs`, `tests/e2e37.mjs`.

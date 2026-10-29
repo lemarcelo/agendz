@@ -76,3 +76,5 @@ Feito · decisões tomadas sem confirmação · o que depende do Marcelo (com o 
 19. **[Backlog B4, adiado pelo Marcelo]** reCAPTCHA no login a partir da 7ª tentativa errada: rascunho em `docs/backlog/B4-recaptcha.patch` e plano em `docs/BACKLOG-FUTURO.md`.
 20. **[Backlog B5]** Relatório no Admin de links enviados por cliente, agendamentos, cancelamentos e abandono por etapa do agendamento (só contagens): `docs/BACKLOG-FUTURO.md`. Depende de A3 e 5e.
 
+
+- v100: primeiro acesso: entrada pede usuário + senha enviada; a redefinição pede só usuário novo + senha definitiva (a enviada fica em memória) e depois entra sozinho no assistente (dono) ou na Agenda. WhatsApp/Pix não serão configurados agora: no futuro por cliente, via Admin, com as chaves da Meta de cada loja; 5e-3 adiado.

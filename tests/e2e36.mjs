@@ -32,6 +32,7 @@ const servidor = http.createServer((req, res) => {
       if (req.headers.authorization !== 'Bearer tok-login') return json(401, { mensagem: 'Sessão inválida' });
       const c = JSON.parse(corpo);
       if (c.senhaAtual !== 'Temporaria-123') return json(400, { mensagem: 'Senha atual incorreta' });
+      if (c.usuario === 'ocupado') return json(409, { mensagem: 'Esse usuário já está em uso nesta loja. Escolha outro.' });
       if (!/^[a-z0-9._-]{2,60}$/.test(c.usuario || '')) return json(400, { mensagem: 'Usuário inválido' });
       loginAtual = c.usuario;
       senhaTemporaria = false;
@@ -87,11 +88,11 @@ async function abrir(viewport = { width: 1280, height: 800 }) {
   await p.getByTestId('troca-nova').waitFor();
   assert.match(await p.getByTestId('troca-esqueci').innerText(), /suporte/);
   assert.equal(await p.getByTestId('troca-usuario').inputValue(), '', 'o usuário é preenchido pela própria pessoa');
+  assert.equal(await p.getByTestId('troca-atual').count(), 0, 'a senha enviada já foi digitada no login: não pede de novo');
   assert.equal(await p.getByTestId('painel-real').count(), 0, 'com senha temporária não chega ao painel');
   ok('login errado recusado; senha temporária pede a troca');
 
   // 3. troca: confirmação diferente e senha curta ficam na tela; senha atual errada mostra o erro do servidor
-  await p.getByTestId('troca-atual').fill('Temporaria-123');
   await p.getByTestId('troca-nova').fill('Minha-senha-nova');
   await p.getByTestId('troca-repetir').fill('Minha-senha-nova');
   await p.getByTestId('troca-salvar').click(); // sem usuário: não segue
@@ -109,12 +110,12 @@ async function abrir(viewport = { width: 1280, height: 800 }) {
   await p.getByTestId('troca-repetir').fill('curta');
   await p.getByTestId('troca-salvar').click();
   assert.match(await p.getByTestId('troca-erro').innerText(), /8 caracteres/);
-  await p.getByTestId('troca-atual').fill('senha-errada-aqui');
+  await p.getByTestId('troca-usuario').fill('ocupado');
   await p.getByTestId('troca-nova').fill('Minha-senha-nova');
   await p.getByTestId('troca-repetir').fill('Minha-senha-nova');
   await p.getByTestId('troca-salvar').click();
-  await p.waitForFunction(() => /Senha atual incorreta/.test(document.querySelector('[data-testid=troca-erro]')?.textContent || ''));
-  await p.getByTestId('troca-atual').fill('Temporaria-123');
+  await p.waitForFunction(() => /já está em uso/.test(document.querySelector('[data-testid=troca-erro]')?.textContent || ''));
+  await p.getByTestId('troca-usuario').fill('Alan.Dalforno');
   await p.getByTestId('troca-salvar').click();
   await p.getByTestId('agenda-real').waitFor(); // depois de entrar cai na Agenda, não no Início
   await p.getByTestId('nav-inicio').click();
@@ -153,7 +154,7 @@ async function abrir(viewport = { width: 1280, height: 800 }) {
   await semRolagem('login');
   await p.getByTestId('login-id').fill('alan'); await p.getByTestId('login-senha').fill('Temporaria-123'); await p.getByTestId('login-entrar').click();
   await p.getByTestId('troca-nova').waitFor(); await semRolagem('troca');
-  await p.getByTestId('troca-atual').fill('Temporaria-123'); await p.getByTestId('troca-usuario').fill('alan'); await p.getByTestId('troca-nova').fill('Minha-senha-nova'); await p.getByTestId('troca-repetir').fill('Minha-senha-nova'); await p.getByTestId('troca-salvar').click();
+  await p.getByTestId('troca-usuario').fill('alan'); await p.getByTestId('troca-nova').fill('Minha-senha-nova'); await p.getByTestId('troca-repetir').fill('Minha-senha-nova'); await p.getByTestId('troca-salvar').click();
   await p.getByTestId('nav-inicio').click(); await p.getByTestId('painel-real').waitFor(); await semRolagem('painel');
   ok('estética: tipo certo e 390 px sem rolagem lateral (login, troca, painel)');
   await ctx.close();
