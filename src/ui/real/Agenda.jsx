@@ -6,7 +6,7 @@
 // Não importa `api.js`, `hooks.js` nem `common.jsx` (tests/estatico.test.mjs).
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { agenda as api, boxes as apiBoxes, clientes as apiClientes, local as apiLocal, profissionais as apiProf } from '../../services/api-real.js';
-import { DIAS_CURTOS, addDays, addMonths, fmtDateTime, fmtDayLong, fmtDiaMesSemana, fmtHM, fmtMoney, fmtMonthYear, monthStart, sameDay, startOfDay, weekStart, ymd } from '../../domain/time.js';
+import { DIAS_CURTOS, addDays, addMonths, fmtDateTime, fmtDayLong, maiuscula1, fmtDiaMesSemana, fmtHM, fmtMoney, fmtMonthYear, monthStart, sameDay, startOfDay, weekStart, ymd } from '../../domain/time.js';
 import { ATIVOS, ROTULO_STATUS } from '../../domain/rules.js';
 import { agruparPorDia } from '../../domain/agenda-grupos.js';
 import { abreviarNome } from '../../domain/abreviar.js';
@@ -26,7 +26,7 @@ const visual = (a) => (a.status === 'a_confirmar' && a.origem === 'link' ? { cor
 const aoLocal = (ts) => { const d = new Date(ts); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
 const doLocal = (v) => { const t = new Date(v).getTime(); return Number.isFinite(t) ? t : null; };
 
-const rotuloDoGrupo = (dia, agora) => (sameDay(dia, addDays(startOfDay(agora), 1)) ? `Amanhã · ${fmtDayLong(dia)}` : sameDay(dia, agora) ? `Hoje · ${fmtDayLong(dia)}` : fmtDayLong(dia));
+const rotuloDoGrupo = (dia, agora) => (sameDay(dia, addDays(startOfDay(agora), 1)) ? `Amanhã · ${maiuscula1(fmtDayLong(dia))}` : sameDay(dia, agora) ? `Hoje · ${maiuscula1(fmtDayLong(dia))}` : maiuscula1(fmtDayLong(dia)));
 
 function Cartao({ a, nomeCliente, nomeProf, mostraProf, aberto, aoAbrir, testid, destaque = false, children }) {
   const v = visual(a);

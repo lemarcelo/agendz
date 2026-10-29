@@ -9,7 +9,7 @@ import { caminhoHttps } from '../../domain/localizacao.js';
 import { adicionarReserva, lerReservas, limparReservas, removerReserva, sincronizarReservas } from '../../domain/reservas-local.js';
 import React, { useEffect, useMemo, useState } from 'react';
 import { publico } from '../../services/api-real.js';
-import { fmtMoney } from '../../domain/time.js';
+import { fmtMoney, maiuscula1 } from '../../domain/time.js';
 import { formatarTelefone } from '../../domain/rules.js';
 import { Rot, capAtiva, rot } from '../../domain/tipos.js';
 import { EXEMPLO_PORTE, formatarPlaca, placaValida, tipoPlaca } from '../../domain/veiculos.js';
@@ -106,7 +106,7 @@ function DiaHora({ chave, diasMax, servicoIds, profissionalId, porte, valor, aoE
       </div>
       {!dias.length && <p className="muted" data-testid="pub-sem-horarios">Não há horários livres {podeMais ? 'nesses dias. Toque em "Mais dias".' : `nos próximos ${diasMax} dias. Tente outro ${rot('profissional')} ou fale com a loja.`}</p>}
       {erro && <Aviso tipo="erro"><span data-testid="pub-erro-horarios">{erro}</span></Aviso>}
-      {horas && horas.length > 0 && <p className="pub-dia-titulo">{diaLongo(horas[0].inicio)}</p>}
+      {horas && horas.length > 0 && <p className="pub-dia-titulo">{maiuscula1(diaLongo(horas[0].inicio))}</p>}
       <div className="pub-horas" role="group" aria-label="Escolher o horário">
         {(horas || []).map((h) => (
           <button type="button" key={h.inicio} className={`pub-hora ${valor === h.inicio ? 'on' : ''}`} aria-pressed={valor === h.inicio} onClick={() => aoEscolher(h)} data-testid={`pub-hora-${horaDe(h.inicio).replace(':', '')}`}>

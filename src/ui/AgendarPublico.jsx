@@ -2,7 +2,7 @@
 import { caminhoHttps } from '../domain/localizacao.js';
 import React, { useMemo, useState } from 'react';
 import { MODO_DEMO, publico, store } from '../services/api.js';
-import { DIAS_CURTOS, fmtDayLong, fmtHM, fmtMoney, startOfDay, ymd } from '../domain/time.js';
+import { DIAS_CURTOS, fmtDayLong, fmtHM, fmtMoney, maiuscula1, startOfDay, ymd } from '../domain/time.js';
 import { formatarTelefone } from '../domain/rules.js';
 import { EXEMPLO_PORTE, formatarPlaca, placaValida, resumoVeiculo, tipoPlaca } from '../domain/veiculos.js';
 import { Aviso, Btn, Campo, Icon } from './common.jsx';
@@ -39,7 +39,7 @@ function DiaHora({ chave, obterDias, obterHorarios, diasMax, valor, aoEscolher, 
         {podeMais && <button type="button" className="pub-dia pub-mais" onClick={() => setJanela(Math.min(janela + 14, diasMax))} data-testid={`${id}-mais-dias`}><Icon n="plus" size={16} /><small>Mais dias</small></button>}
       </div>
       {!dias.length && <p className="muted" data-testid={`${id}-sem-horarios`}>Não há horários livres {podeMais ? 'nesses dias. Toque em "Mais dias".' : `nos próximos ${diasMax} dias. Tente outro ${rot('profissional')} ou serviço.`}</p>}
-      {diaAtual && <p className="pub-dia-titulo">{fmtDayLong(diaAtual)}</p>}
+      {diaAtual && <p className="pub-dia-titulo">{maiuscula1(fmtDayLong(diaAtual))}</p>}
       <div className="pub-horas" role="group" aria-label="Escolher o horário">
         {horas.map((h) => (
           <button type="button" key={h.inicio} className={`pub-hora ${valor === h.inicio ? 'on' : ''}`} aria-pressed={valor === h.inicio} onClick={() => aoEscolher(h)} data-testid={`${id}-hora-${fmtHM(h.inicio).replace(':', '')}`}>

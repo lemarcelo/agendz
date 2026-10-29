@@ -86,6 +86,9 @@ export function fmtDateTime(ts) {
   return `${fmtDate(ts)} às ${fmtHM(ts)}`;
 }
 
+/** Só a primeira letra maiúscula (o `text-transform: capitalize` do CSS escrevia "13 De Outubro"). */
+export const maiuscula1 = (t) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : t);
+
 export function fmtDayLong(ts) {
   const d = new Date(ts);
   return `${DIAS_SEMANA[d.getDay()]}, ${d.getDate()} de ${MESES[d.getMonth()]}`;

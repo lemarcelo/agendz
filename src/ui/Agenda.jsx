@@ -5,7 +5,7 @@ import { LOJA_TROCAVEL, MODO_DEMO, agendamentosVisiveis, profissionaisVisiveis }
 import { baseDoLink, montarLinkAgendamento } from '../domain/link-publico.js';
 import { ATIVOS, STATUS, boxesAtivos, ocupacaoDe, retiradaDe } from '../domain/rules.js';
 import { faixasDoProfissional, excecaoDoDia, TIPOS_EXCECAO } from '../domain/schedule.js';
-import { DIAS_CURTOS, addDays, addMonths, fmtDate, fmtDayLong, fmtDiaMesSemana, fmtHM, fmtMonthYear, monthStart, sameDay, startOfDay, weekStart, fmtDateShort, fmtMoney } from '../domain/time.js';
+import { DIAS_CURTOS, addDays, addMonths, fmtDate, fmtDayLong, maiuscula1, fmtDiaMesSemana, fmtHM, fmtMonthYear, monthStart, sameDay, startOfDay, weekStart, fmtDateShort, fmtMoney } from '../domain/time.js';
 import { cobrancasDoAgendamento } from '../domain/financeiro.js';
 import { totalAcrescimos } from '../domain/reports.js';
 import { Avatar, Btn, Etiquetas, Icon, StatusChip, Vazio } from './common.jsx';
@@ -34,7 +34,7 @@ function agruparPorDia(lista) {
   }
   return grupos;
 }
-const rotuloDoGrupo = (dia, agora) => (sameDay(dia, addDays(startOfDay(agora), 1)) ? `Amanhã · ${fmtDayLong(dia)}` : sameDay(dia, agora) ? `Hoje · ${fmtDayLong(dia)}` : fmtDayLong(dia));
+const rotuloDoGrupo = (dia, agora) => (sameDay(dia, addDays(startOfDay(agora), 1)) ? `Amanhã · ${maiuscula1(fmtDayLong(dia))}` : sameDay(dia, agora) ? `Hoje · ${maiuscula1(fmtDayLong(dia))}` : maiuscula1(fmtDayLong(dia)));
 
 // Miniatura redonda do profissional (foto, ou inicial com cor própria) para os eventos do calendário.
 function FotoProfissional({ u }) {
@@ -56,9 +56,11 @@ function CartaoAgendamento({ a, st, agora, onClick, mostraBarb, testid = 'cartao
       </div>
       <div className="cartao-servico" title={nomeServicos(st, a)} data-testid="cartao-servico">{nomeServicos(st, a)}</div>
       {a.veiculo && <div className="cartao-veiculo cartao-veiculo-centro" data-testid="cartao-veiculo"><Icon n="car" size={13} /> {textoVeiculo(a)}{textoBox(st, a) ? ` · ${textoBox(st, a)}` : ''}</div>}
-      <div className="cartao-profissional">
-        <span className="cartao-prof" title={nomeProfissional(st, a)} data-testid="cartao-profissional">{mostraBarb && <FotoProfissional u={st.usuarios.find((x) => x.id === a.profissionalId)} />}com <b>{abreviarNome(nomeProfissional(st, a))}</b></span>
-      </div>
+      {mostraBarb && (
+        <div className="cartao-profissional">
+          <span className="cartao-prof" title={nomeProfissional(st, a)} data-testid="cartao-profissional"><FotoProfissional u={st.usuarios.find((x) => x.id === a.profissionalId)} />com <b>{abreviarNome(nomeProfissional(st, a))}</b></span>
+        </div>
+      )}
       <div className="cartao-rodape">
         <Etiquetas a={a} />
         {totalAcrescimos(a) > 0 && <span className="chip chip-acr" title="Valor a mais, separado do serviço">Acréscimo {fmtMoney(totalAcrescimos(a))}</span>}

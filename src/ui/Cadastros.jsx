@@ -42,7 +42,7 @@ export function Clientes({ user }) {
       {lista.length === 0 ? <Vazio icone="users" titulo="Nenhum cliente encontrado" /> : (
         <Tabela id="clientes" chave={(c) => c.id} linhas={lista} colunas={[
           { id: 'cliente', titulo: 'Cliente', cel: (c) => <><b>{c.nome}</b>{c.apelido && c.apelido !== c.nome ? <small className="muted"> “{c.apelido}”</small> : null}{creditoDoCliente(st, c.id, null, agora) > 0 ? <small className="muted" style={{ display: 'block' }} data-testid={`credito-${c.id}`}>Crédito: {fmtMoney(creditoDoCliente(st, c.id, null, agora))}</small> : null}</> },
-          { id: 'telefone', titulo: 'Telefone', cel: (c) => <>{c.telefone}{c.telefonesAnteriores?.length ? <small className="muted" style={{ display: 'block' }}>antes: {c.telefonesAnteriores[c.telefonesAnteriores.length - 1].telefone}</small> : null}</> },
+          { id: 'telefone', titulo: 'Telefone', cel: (c) => <><span style={{ whiteSpace: 'nowrap' }}>{c.telefone}</span>{c.telefonesAnteriores?.length ? <small className="muted" style={{ display: 'block' }}>antes: {c.telefonesAnteriores[c.telefonesAnteriores.length - 1].telefone}</small> : null}</> },
           ...(capAtiva('usaVeiculo') ? [{ id: 'veiculos', titulo: 'Veículos', cel: (c) => (c.veiculos || []).length ? <ul className="lista-veiculos" data-testid={`cli-veiculos-${c.id}`}>{c.veiculos.map((v) => <li key={v.id}>{rotuloVeiculo(v)} <small className="muted">{ROTULO_PORTE[v.porte]}</small></li>)}</ul> : <span className="muted">—</span> }] : []),
           { id: 'cpf', titulo: 'CPF', cel: (c) => c.cpf || <span className="muted">—</span> },
           { id: 'nascimento', titulo: 'Nascimento', cel: (c) => fmtNasc(c.nascimento) || <span className="muted">—</span> },
