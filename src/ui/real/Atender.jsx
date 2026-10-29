@@ -142,7 +142,7 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
         <ul className="atender-real-servicos" data-testid="atender-lista-servicos">
           {lista.map((s) => (
             <li key={s.id}>
-              <label className="check-linha"><input type="checkbox" checked={ids.includes(s.id)} onChange={() => marcar(s.id)} data-testid={`atender-srv-${s.id}`} /><span>{s.nome}</span><span className="muted"> · {s.duracaoMin} min · {fmtMoney(s.preco)}</span></label>
+              <label className="check-linha"><input type="checkbox" checked={ids.includes(s.id)} onChange={() => marcar(s.id)} data-testid={`atender-srv-${s.id}`} /><span className="atender-real-item"><b>{s.nome}</b><small className="muted">{s.duracaoMin} min · {fmtMoney(s.preco)}</small></span></label>
             </li>
           ))}
         </ul>
@@ -159,7 +159,7 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
               const it = itens.find((i) => i.materialId === p.id);
               return (
                 <li key={p.id}>
-                  <label className="check-linha"><input type="checkbox" checked={!!it} onChange={() => marcarProd(p.id)} data-testid={`atender-prod-${p.id}`} /><span>{p.nome}</span><span className="muted"> · {fmtMoney(p.preco)} · estoque {p.estoque}</span></label>
+                  <label className="check-linha"><input type="checkbox" checked={!!it} onChange={() => marcarProd(p.id)} data-testid={`atender-prod-${p.id}`} /><span className="atender-real-item"><b>{p.nome}</b><small className="muted">{fmtMoney(p.preco)} · estoque {p.estoque}</small></span></label>
                   {it && <input type="number" min={1} max={999} step={1} value={it.qtd} onChange={(e) => trocarQtd(p.id, e.target.value)} aria-label={`Quantidade de ${p.nome}`} data-testid={`atender-qtd-${p.id}`} />}
                 </li>
               );

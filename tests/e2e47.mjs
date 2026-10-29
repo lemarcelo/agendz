@@ -91,6 +91,13 @@ const textoDe = (p, t) => p.getByTestId(t).innerText();
   assert.match(await textoDe(p, 'atender-tipo'), /Atendimento já feito/);
   assert.equal(await p.getByTestId(`atender-srv-${id(52)}`).count(), 0, 'serviço desativado não é oferecido');
   assert.match(await textoDe(p, 'atender-total'), /Escolha ao menos um serviço/);
+  { // nome do serviço e "duração · preço" em duas linhas dentro do mesmo item (antes viravam peças soltas do flex, com distância errada)
+    const item = p.getByTestId(`atender-srv-${SRV_CORTE}`).locator('xpath=ancestor::label').locator('.atender-real-item');
+    assert.equal(await item.count(), 1);
+    assert.equal((await item.locator('b').innerText()).trim(), 'Corte'); assert.match(await item.locator('small').innerText(), /^45 min · R\$\s?45,00$/);
+    const [bn, sm] = [await item.locator('b').boundingBox(), await item.locator('small').boundingBox()];
+    assert.ok(sm.y > bn.y + bn.height - 2 && sm.y - (bn.y + bn.height) < 8, 'o valor fica logo abaixo do nome');
+  }
   await p.getByTestId(`atender-srv-${SRV_CORTE}`).check();
   assert.match(await textoDe(p, 'atender-total'), /1 serviço · 45 min · R\$\s?45,00/);
   await p.getByTestId('atender-telefone').fill('(11) 98888-7777');
