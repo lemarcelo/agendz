@@ -4,6 +4,7 @@ import br.com.agendz.clientes.ClienteService;
 import br.com.agendz.comissao.ComissaoService;
 import br.com.agendz.configuracao.LinkAgendamento;
 import br.com.agendz.cupom.CupomService;
+import br.com.agendz.aviso.AvisosPainel;
 import br.com.agendz.erro.ErroDeNegocio;
 import br.com.agendz.escala.EscalaService;
 import br.com.agendz.escala.EscalaService.Faixa;
@@ -48,7 +49,7 @@ import org.springframework.stereotype.Service;
  * Link de agendamento do cliente final, SEM login (espelho de `src/domain/publico.js` na API simulada; docs/MAPA-API-SPRING.md, seção 10b).
  * A loja vem do Host. O cliente vê só horários livres (nunca quem ocupa os outros), pede um horário, vê e cancela o que é dele.
  * O acesso ao próprio horário é um token que vale para UM agendamento (só o hash fica no banco); sem o token nada se enxerga.
- * Fica para as próximas fatias: remarcar, código por telefone, lembretes, aviso no painel e no WhatsApp, estética (veículo e porte).
+ * Remarcar o próprio horário (24 h ou mais) e o aviso no painel (`aviso_painel`) entram na 5e-2. Ficam para a 5e-3: código por telefone, lembretes, WhatsApp, estética.
  */
 @Service
 public class LinkPublicoService {
@@ -58,6 +59,7 @@ public class LinkPublicoService {
     public static final int MAX_SERVICOS = 5;
     public static final int TOKEN_DIAS = 90;
     public static final int MAX_DIAS_CONSULTA = 31;
+    private static final UUID NINGUEM = new UUID(0L, 0L);
     public static final String ERRO_DESLIGADO = "O agendamento pelo link não está disponível agora. Fale com a loja.";
     public static final String ERRO_HORARIO = "Esse horário acabou de ser ocupado. Escolha outro.";
     public static final String ERRO_NAO_ACHEI = "Agendamento não encontrado.";
@@ -157,7 +159,7 @@ public class LinkPublicoService {
             if (!cfg.ativo()) return List.<Horario>of();
             List<Svc> servicos = servicosDoLink(jdbc, ids(servicoIds));
             Base base = base(jdbc, profissionalId);
-            return horariosDoDia(jdbc, cfg, base, dia, servicos, relogio.instant(), false);
+            return horariosDoDia(jdbc, cfg, base, dia, servicos, relogio.instant(), false, null);
         });
     }
 
@@ -176,7 +178,7 @@ public class LinkPublicoService {
             List<LocalDate> livres = new ArrayList<>();
             for (int i = 0; i < n; i++) {
                 LocalDate d = de.plusDays(i);
-                if (!horariosDoDia(jdbc, cfg, base, d, servicos, agora, true).isEmpty()) livres.add(d);
+                if (!horariosDoDia(jdbc, cfg, base, d, servicos, agora, true, null).isEmpty()) livres.add(d);
             }
             return livres;
         });
@@ -204,7 +206,7 @@ public class LinkPublicoService {
      * Os horários livres de um dia. Livre = dentro do expediente da loja e do profissional, depois da antecedência do serviço e sem NENHUM agendamento ativo na janela
      * (pendente também ocupa: o cliente nunca disputa horário). Loja sem expediente cadastrado não oferece horário. `soUm`: para ao achar o primeiro.
      */
-    private List<Horario> horariosDoDia(JdbcTemplate jdbc, LinkAgendamento.Config cfg, Base base, LocalDate dia, List<Svc> servicos, Instant agora, boolean soUm) {
+    private List<Horario> horariosDoDia(JdbcTemplate jdbc, LinkAgendamento.Config cfg, Base base, LocalDate dia, List<Svc> servicos, Instant agora, boolean soUm, UUID ignorar) {
         Instant diaIni = dia.atStartOfDay(Fuso.BRASIL).toInstant();
         Instant diaFim = dia.plusDays(1).atStartOfDay(Fuso.BRASIL).toInstant();
         if (!diaFim.isAfter(agora) || diaIni.isAfter(agora.plus(cfg.diasMax(), ChronoUnit.DAYS))) return List.of();
@@ -217,9 +219,9 @@ public class LinkPublicoService {
         Map<Instant, UUID> achados = new TreeMap<>();
         for (Prof p : base.profissionais()) {
             Map<Integer, List<Faixa>> deleEscala = base.escalas().get(p.id());
-            List<Ocupado> ocupados = jdbc.query("select inicio, fim_ocupado from agendamento where profissional_id = ? and status <> 'cancelado' and inicio < ? and fim_ocupado > ?",
+            List<Ocupado> ocupados = jdbc.query("select inicio, fim_ocupado from agendamento where profissional_id = ? and id <> ? and status <> 'cancelado' and inicio < ? and fim_ocupado > ?",
                     (rs, i) -> new Ocupado(rs.getObject("inicio", OffsetDateTime.class).toInstant(), rs.getObject("fim_ocupado", OffsetDateTime.class).toInstant()),
-                    p.id(), utc(diaFim.plus(1, ChronoUnit.DAYS)), utc(diaIni));
+                    p.id(), ignorar == null ? NINGUEM : ignorar, utc(diaFim.plus(1, ChronoUnit.DAYS)), utc(diaIni));
             for (Faixa f : EscalaService.faixasDoDia(base.loja(), deleEscala, dow)) {
                 for (int t = f.ini(); t + duracao <= f.fim(); t += PASSO_MIN) {
                     if (!EscalaService.cabeNoDia(base.loja(), deleEscala, dow, t, t + duracao)) continue;
@@ -316,6 +318,7 @@ public class LinkPublicoService {
                 CupomService.Aplicado ap = cupons.aplicar(jdbc, loja.id(), id, null, "link:" + ip, p.cupomChave(), agora);
                 evento(jdbc, loja.id(), id, "cupom", null, ap.nome() + ": desconto de " + CupomService.reais(ap.desconto()));
             }
+            avisar(jdbc, loja.id(), id, "pedido", nome + " pediu horário pelo link: " + dataHora(inicio) + " (aguardando a sua confirmação).");
             String token = novoToken();
             jdbc.update("delete from acesso_publico where expira_em < ?", utc(agora));
             jdbc.update("insert into acesso_publico (loja_id, agendamento_id, token_hash, expira_em) values (?::uuid, ?, ?, ?)",
@@ -364,11 +367,142 @@ public class LinkPublicoService {
             }
             jdbc.update("update agendamento set status = 'cancelado', motivo_cancelamento = 'cliente', atualizado_em = now() where id = ?", id);
             evento(jdbc, loja.id(), id, "status", "confirmado".equals(status) ? "Confirmado" : "A confirmar", "Cancelado pelo cliente");
+            avisar(jdbc, loja.id(), id, "cancelou", nomeDoCliente(jdbc, id) + " cancelou o horário de " + dataHora(inicio) + " pelo link.");
+            return resumo(jdbc, id, agora);
+        });
+    }
+
+    // ---------------------------------------------------------------- remarcar o próprio horário
+
+    private record Meu(UUID profissionalId, String status, Instant inicio, Instant fimServico, Instant fimOcupado, List<Svc> servicos) {
+    }
+
+    /** O horário do token, para remarcar: ativo (a confirmar/confirmado e no futuro) e do token. Qualquer outra coisa é "não achei" (nada diz de quem é). */
+    private Meu meuParaRemarcar(JdbcTemplate jdbc, UUID id, String token, Instant agora, boolean travar) {
+        UUID doToken = agendamentoDoToken(jdbc, token, agora);
+        if (doToken == null || !doToken.equals(id)) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, ERRO_NAO_ACHEI);
+        List<Object[]> l = jdbc.query("select profissional_id, status, inicio, fim_servico, fim_ocupado from agendamento where id = ?" + (travar ? " for update" : ""),
+                (rs, i) -> new Object[]{rs.getObject(1, UUID.class), rs.getString(2), rs.getObject(3, OffsetDateTime.class).toInstant(),
+                        rs.getObject(4, OffsetDateTime.class).toInstant(), rs.getObject(5, OffsetDateTime.class).toInstant()}, id);
+        if (l.isEmpty()) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, ERRO_NAO_ACHEI);
+        Object[] a = l.get(0);
+        if (!ativo((String) a[1], (Instant) a[2], agora)) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, ERRO_NAO_ACHEI);
+        // os valores congelados do agendamento (a duração não muda se o serviço foi editado depois); a antecedência vale a de hoje
+        List<Svc> servicos = jdbc.query("select x.servico_id, x.nome, x.preco, x.duracao_min, x.intervalo_min, coalesce(sv.antecedencia_h, 0) "
+                        + "from agendamento_servico x left join servico sv on sv.id = x.servico_id where x.agendamento_id = ? order by x.ordem",
+                (rs, i) -> new Svc(rs.getObject(1, UUID.class), rs.getString(2), rs.getBigDecimal(3), rs.getInt(4), rs.getInt(5), rs.getInt(6)), id);
+        if (servicos.isEmpty()) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, ERRO_NAO_ACHEI);
+        return new Meu((UUID) a[0], (String) a[1], (Instant) a[2], (Instant) a[3], (Instant) a[4], servicos);
+    }
+
+    private static void conferir24h(Instant inicio, Instant agora) {
+        if (Duration.between(agora, inicio).compareTo(Duration.ofHours(24)) < 0) {
+            throw new ErroDeNegocio(HttpStatus.CONFLICT, "Esse horário não pode mais ser remarcado por aqui (faltam menos de 24 horas). Fale com a loja.");
+        }
+    }
+
+    /** Horários livres de um dia para REMARCAR: mesmo profissional e mesmos serviços do horário; o próprio horário conta como livre. */
+    public List<Horario> horariosParaRemarcar(String ip, UUID id, String token, LocalDate dia) {
+        Loja loja = LojaContext.exigir();
+        consultaLiberada(loja, ip);
+        if (dia == null) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha um dia.");
+        return banco.naLoja(jdbc -> {
+            Instant agora = relogio.instant();
+            Meu m = meuParaRemarcar(jdbc, id, token, agora, false);
+            LinkAgendamento.Config cfg = config(jdbc, loja);
+            if (!cfg.ativo()) return List.<Horario>of();
+            return horariosDoDia(jdbc, cfg, base(jdbc, m.profissionalId()), dia, m.servicos(), agora, false, id);
+        });
+    }
+
+    /** Dias com horário livre para remarcar (até 31 por consulta). */
+    public List<LocalDate> diasParaRemarcar(String ip, UUID id, String token, LocalDate de, int quantos) {
+        Loja loja = LojaContext.exigir();
+        consultaLiberada(loja, ip);
+        if (de == null) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha o primeiro dia.");
+        int n = Math.min(Math.max(quantos, 0), MAX_DIAS_CONSULTA);
+        return banco.naLoja(jdbc -> {
+            Instant agora = relogio.instant();
+            Meu m = meuParaRemarcar(jdbc, id, token, agora, false);
+            LinkAgendamento.Config cfg = config(jdbc, loja);
+            if (!cfg.ativo() || n == 0) return List.<LocalDate>of();
+            Base base = base(jdbc, m.profissionalId());
+            List<LocalDate> livres = new ArrayList<>();
+            for (int i = 0; i < n; i++) {
+                LocalDate d = de.plusDays(i);
+                if (!horariosDoDia(jdbc, cfg, base, d, m.servicos(), agora, true, id).isEmpty()) livres.add(d);
+            }
+            return livres;
+        });
+    }
+
+    /**
+     * Remarcar pelo link: só o horário a que o token dá acesso, ativo, com 24 h ou mais até o horário ATUAL (conferido aqui). Mesmo profissional e mesmos
+     * serviços; o novo horário passa pelas mesmas regras do pedido (minuto exato, até `diasMax`, antecedência, expediente, sem conflito). O horário volta a
+     * "a confirmar" (a loja confirma de novo), fica marcado como reagendado e a loja é avisada no painel. Link desligado = 403.
+     */
+    public Resumo remarcar(String ip, UUID id, String token, Instant novoInicio) {
+        Loja loja = LojaContext.exigir();
+        if (!limite.liberar("remarcar:" + loja.id() + ":" + ip, 30, Duration.ofMinutes(10))) throw new ErroDeNegocio(HttpStatus.TOO_MANY_REQUESTS, ERRO_MUITOS);
+        if (novoInicio == null) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha um dia e um horário.");
+        return banco.naLoja(jdbc -> {
+            Instant agora = relogio.instant();
+            LinkAgendamento.Config cfg = config(jdbc, loja);
+            if (!cfg.ativo()) throw new ErroDeNegocio(HttpStatus.FORBIDDEN, ERRO_DESLIGADO);
+            UUID doToken = agendamentoDoToken(jdbc, token, agora);
+            if (doToken == null || !doToken.equals(id)) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, ERRO_NAO_ACHEI);
+            // trava o profissional do horário (mesma ordem de sempre: usuário primeiro) para duas remarcações/pedidos no mesmo horário passarem um de cada vez
+            UUID prof = jdbc.queryForList("select profissional_id from agendamento where id = ?", UUID.class, id).stream().findFirst().orElseThrow(() -> new ErroDeNegocio(HttpStatus.NOT_FOUND, ERRO_NAO_ACHEI));
+            if (jdbc.queryForList("select id from usuario where id = ? and ativo and atende for update", UUID.class, prof).isEmpty()) {
+                throw new ErroDeNegocio(HttpStatus.CONFLICT, ERRO_HORARIO);
+            }
+            Meu m = meuParaRemarcar(jdbc, id, token, agora, true);
+            conferir24h(m.inicio(), agora);
+            if (novoInicio.getNano() != 0 || novoInicio.getEpochSecond() % 60 != 0 || !novoInicio.isAfter(agora) || novoInicio.isAfter(agora.plus(cfg.diasMax(), ChronoUnit.DAYS))) {
+                throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha um dia e um horário.");
+            }
+            if (novoInicio.equals(m.inicio())) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Esse já é o seu horário. Escolha outro.");
+            int antecedencia = m.servicos().stream().mapToInt(Svc::antecedenciaH).max().orElse(0);
+            if (novoInicio.isBefore(agora.plus(antecedencia, ChronoUnit.HOURS))) {
+                throw new ErroDeNegocio(HttpStatus.CONFLICT, "Esse serviço exige " + antecedencia + " h de antecedência.");
+            }
+            int duracao = m.servicos().stream().mapToInt(Svc::duracaoMin).sum();
+            int folga = m.servicos().get(m.servicos().size() - 1).intervaloMin();
+            Instant fimServico = novoInicio.plus(duracao, ChronoUnit.MINUTES);
+            Instant fimOcupado = fimServico.plus(folga, ChronoUnit.MINUTES);
+            Base base = base(jdbc, m.profissionalId());
+            var local = novoInicio.atZone(Fuso.BRASIL);
+            int ini = local.getHour() * 60 + local.getMinute();
+            if (!EscalaService.temFaixa(base.loja())
+                    || !EscalaService.cabeNoDia(base.loja(), base.escalas().get(m.profissionalId()), local.getDayOfWeek().getValue() % 7, ini, ini + duracao)) {
+                throw new ErroDeNegocio(HttpStatus.CONFLICT, ERRO_HORARIO);
+            }
+            Integer ocupados = jdbc.queryForObject("select count(*) from agendamento where profissional_id = ? and id <> ? and status <> 'cancelado' and inicio < ? and fim_ocupado > ?",
+                    Integer.class, m.profissionalId(), id, utc(fimOcupado), utc(novoInicio));
+            if (ocupados != null && ocupados > 0) throw new ErroDeNegocio(HttpStatus.CONFLICT, ERRO_HORARIO);
+
+            evento(jdbc, loja.id(), id, "data e hora", dataHora(m.inicio()), dataHora(novoInicio));
+            if ("confirmado".equals(m.status())) evento(jdbc, loja.id(), id, "status", "Confirmado", "A confirmar (cliente remarcou pelo link)");
+            jdbc.update("update agendamento set inicio = ?, fim_servico = ?, fim_ocupado = ?, status = 'a_confirmar', reagendado = true, motivo_cancelamento = null, atualizado_em = now() where id = ?",
+                    utc(novoInicio), utc(fimServico), utc(fimOcupado), id);
+            avisar(jdbc, loja.id(), id, "remarcou", nomeDoCliente(jdbc, id) + " remarcou pelo link: agora " + dataHora(novoInicio)
+                    + ("confirmado".equals(m.status()) ? " (estava confirmado, volta a aguardar a sua confirmação)." : " (aguardando a sua confirmação)."));
             return resumo(jdbc, id, agora);
         });
     }
 
     // ---------------------------------------------------------------- apoio
+
+    /** Aviso no painel (na mesma transação do fato). O profissional do horário é quem o vê; dono e equipe veem todos. */
+    private void avisar(JdbcTemplate jdbc, UUID lojaId, UUID agendamentoId, String tipo, String texto) {
+        UUID prof = jdbc.queryForList("select profissional_id from agendamento where id = ?", UUID.class, agendamentoId).stream().findFirst().orElse(null);
+        AvisosPainel.criar(jdbc, lojaId, agendamentoId, prof, tipo, texto);
+    }
+
+    private String nomeDoCliente(JdbcTemplate jdbc, UUID agendamentoId) {
+        List<String> n = jdbc.queryForList("select coalesce(nullif(c.apelido, ''), c.nome) from agendamento a join cliente c on c.id = a.cliente_id where a.id = ?", String.class, agendamentoId);
+        return n.isEmpty() || n.get(0) == null ? "O cliente" : n.get(0);
+    }
 
     private static boolean ativo(String status, Instant inicio, Instant agora) {
         return ("a_confirmar".equals(status) || "confirmado".equals(status)) && inicio.isAfter(agora);

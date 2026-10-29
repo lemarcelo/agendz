@@ -44,6 +44,13 @@ Lista simples. Cada item está no histórico do `prompt-agendz-regras.md` (v84 a
 - **Decidi:** continua sem fila no aparelho: a espera pela internet (v87) mais a chave já evitam perda e duplicação sem guardar nada no aparelho.
 - v91: o "canto tampado pelo botão" foi entendido como a lista Serviços realizados da ficha (caixa sem raio e botão colado). Atender (modal e site real) conferidos e sem o problema. Se for outra tela, o Marcelo avisa.
 
+## v98 (28/10): remarcar pelo link e avisos do painel (5e-2)
+- **Decidi:** remarcar pelo link exige as mesmas **24 h ou mais** do cancelar (o simulador deixava remarcar até o início). Remarcar é cancelar + pedir de novo, e a loja precisa de tempo.
+- **Decidi:** o horário remarcado volta sempre a **a confirmar** (mesmo se estava confirmado) e o histórico registra; a loja decide de novo. O profissional e os serviços não mudam.
+- **Decidi:** aviso no painel também para **pedido novo** (o simulador só avisava remarcação e cancelamento). Sem WhatsApp, o painel é o único jeito de a loja saber do pedido.
+- **Decidi:** desligar o link bloqueia remarcar (403), mas o cliente continua vendo e cancelando o que já tem.
+- **Dúvida (D1 da v97, aberta):** avisar a loja também no WhatsApp quando o canal existir (5e-3).
+
 ## v97 (28/10): link do cliente no site real (5e-1)
 - **Decidi:** o token de acesso vale para **um agendamento** (não para o cliente todo, como no simulador): quem tem o token de um horário não enxerga os outros do mesmo cliente. A página guarda a lista de tokens no aparelho do cliente (`localStorage`, só neste navegador).
 - **Decidi:** nesta fatia **não há código por telefone, lembretes, aviso no painel/WhatsApp nem remarcar**: tudo isso depende do canal de WhatsApp (5e-2/5e-3). Quem perde o aparelho fala com a loja.

@@ -92,6 +92,7 @@ Snapshot do estado com senhas e CPFs em texto puro no navegador; senha comparada
 ## Link do cliente no servidor (v97)
 - Quem agenda pelo link informa **nome e telefone**: o telefone é cifrado como qualquer outro (`telefone_cif` + `telefone_hash`) e o cadastro nasce com `origem_cadastro = 'link'`. Se o número já tem cadastro, **nada do cadastro é alterado** pelo link.
 - O **token de acesso** a um horário (48 caracteres) é segredo de acesso: no banco só o SHA-256 (`acesso_publico.token_hash`), 90 dias, apagado junto com o agendamento; nunca em URL, log nem resposta que não seja a do próprio pedido. No aparelho do cliente fica em `localStorage` (por loja).
+- **Avisos do painel** (`aviso_painel`, v98): texto curto com o **nome** do cliente (texto puro, como o cadastro), nunca telefone, CPF ou nascimento; visível à equipe com acesso à agenda (profissional só os do próprio horário); apagado junto com o agendamento.
 - As respostas públicas nunca trazem telefone, CPF, id de cliente nem quem ocupa os outros horários. O IP de quem pede entra só no limite de uso e na tentativa de cupom (`cupom_tentativa.quem = link:<IP>`), em memória e na tabela de tentativas; some com a limpeza das tentativas.
 
 ## Implementado no servidor real (v81)

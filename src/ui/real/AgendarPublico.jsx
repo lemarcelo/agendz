@@ -3,7 +3,7 @@
 // (cupom opcional) e acompanha ou cancela o que é dele. Fala só com `publico.*` de api-real.js (GET/POST /api/publico/*); a regra toda (horário livre,
 // expediente, 24 h para cancelar, limite de 3 abertos, cupom) está no servidor. O acesso a cada horário é um token que a resposta do pedido entrega UMA vez;
 // ele fica só neste aparelho (localStorage, dentro de try/catch: sem storage a página funciona, só não lembra dos horários na próxima visita).
-// Remarcar, código por telefone, lembretes e estética (veículo e porte) ficam para as próximas fatias.
+// Remarcar entrou na 5e-2 (24 h ou mais, como cancelar). Código por telefone, lembretes e estética (veículo e porte) ficam para a 5e-3.
 // Não importa `api.js`, `hooks.js` nem `common.jsx` (tests/estatico.test.mjs).
 import React, { useEffect, useMemo, useState } from 'react';
 import { publico } from '../../services/api-real.js';
@@ -40,8 +40,8 @@ function gravarAcessos(slug, lista) {
   try { localStorage.setItem(chaveStorage(slug), JSON.stringify(lista.slice(-20))); } catch { /* sem storage: vale só nesta visita */ }
 }
 
-// Dia + horário livres: os dois vêm do servidor, que só devolve o que está livre.
-function DiaHora({ chave, diasMax, servicoIds, profissionalId, valor, aoEscolher }) {
+// Dia + horário livres: os dois vêm do servidor, que só devolve o que está livre. `fonte` ({ dias(de, n), horarios(dia) }) troca a consulta (remarcar um horário já marcado).
+function DiaHora({ chave, diasMax, servicoIds, profissionalId, valor, aoEscolher, fonte }) {
   const hoje = useMemo(hojeBrasilia, []);
   const [janela, setJanela] = useState(14);
   const [dias, setDias] = useState(null);
@@ -55,7 +55,7 @@ function DiaHora({ chave, diasMax, servicoIds, profissionalId, valor, aoEscolher
     (async () => {
       const achados = [];
       for (let ini = 0; ini < limite; ini += 31) {
-        const r = await publico.dias({ de: somaDias(hoje, ini), dias: Math.min(31, limite - ini), servicoIds, profissionalId });
+        const r = fonte ? await fonte.dias(somaDias(hoje, ini), Math.min(31, limite - ini)) : await publico.dias({ de: somaDias(hoje, ini), dias: Math.min(31, limite - ini), servicoIds, profissionalId });
         if (!vivo) return;
         if (!r.ok) { setErro(r.erro); setDias([]); return; }
         achados.push(...r.dias);
@@ -69,7 +69,7 @@ function DiaHora({ chave, diasMax, servicoIds, profissionalId, valor, aoEscolher
     if (!diaAtual) { setHoras([]); return undefined; }
     let vivo = true;
     setHoras(null);
-    publico.horarios({ data: diaAtual, servicoIds, profissionalId }).then((r) => { if (!vivo) return; if (r.ok) setHoras(r.horarios); else { setErro(r.erro); setHoras([]); } });
+    (fonte ? fonte.horarios(diaAtual) : publico.horarios({ data: diaAtual, servicoIds, profissionalId })).then((r) => { if (!vivo) return; if (r.ok) setHoras(r.horarios); else { setErro(r.erro); setHoras([]); } });
     return () => { vivo = false; };
   }, [chave, diaAtual]);
   const podeMais = limite < diasMax;
@@ -218,11 +218,13 @@ function Agendar({ pagina, loja, profissionalInicial, aoCriar, irParaMeus }) {
   );
 }
 
-function Meus({ loja, acessos, setAcessos }) {
+function Meus({ loja, acessos, setAcessos, diasMax }) {
   const [lista, setLista] = useState(null);
   const [erro, setErro] = useState('');
   const [aviso, setAviso] = useState('');
   const [confirmando, setConfirmando] = useState(null);
+  const [remarcando, setRemarcando] = useState(null); // { id, escolha }
+  const [enviando, setEnviando] = useState(false);
   const tokens = acessos.map((a) => a.token).join(',');
   useEffect(() => {
     let vivo = true;
@@ -247,10 +249,25 @@ function Meus({ loja, acessos, setAcessos }) {
     setLista((l) => l.map((x) => (x.id === a.id ? r.agendamento : x)));
     setAviso('Horário cancelado.');
   };
+  const fonteDe = (a) => {
+    const t = (acessos.find((x) => x.id === a.id) || {}).token || '';
+    return { dias: (de, n) => publico.diasRemarcar(a.id, t, { de, dias: n }), horarios: (dia) => publico.horariosRemarcar(a.id, t, { data: dia }) };
+  };
+  const remarcar = async (a) => {
+    if (!remarcando || !remarcando.escolha) return;
+    const acesso = acessos.find((x) => x.id === a.id);
+    setEnviando(true); setAviso(''); setErro('');
+    const r = await publico.remarcar(a.id, acesso ? acesso.token : '', remarcando.escolha.inicio);
+    setEnviando(false);
+    if (!r.ok) { setErro(r.erro); return; }
+    setLista((l) => l.map((x) => (x.id === a.id ? r.agendamento : x)));
+    setRemarcando(null);
+    setAviso('Pedido de novo horário enviado. A loja confirma em breve.');
+  };
   return (
     <section className="pub-cartao" data-testid="pub-meus">
       <h2>Meus agendamentos</h2>
-      <p className="muted">Aqui aparecem os horários pedidos neste aparelho. Para remarcar, cancele (com 24 horas ou mais) e peça outro horário, ou fale com {loja.nome}.</p>
+      <p className="muted">Aqui aparecem os horários pedidos neste aparelho. Dá para remarcar ou cancelar com 24 horas ou mais de antecedência; antes disso, fale com {loja.nome}.</p>
       {aviso && <Aviso><span data-testid="pub-aviso">{aviso}</span></Aviso>}
       {erro && <Aviso tipo="erro"><span data-testid="pub-erro-meus">{erro}</span></Aviso>}
       <h3>Próximos horários</h3>
@@ -263,7 +280,28 @@ function Meus({ loja, acessos, setAcessos }) {
                 {a.desconto > 0 && <><br /><span className="muted" data-testid={`pub-cupom-${a.id}`}><Icone n="key" size={13} /> Cupom {a.cupom}: −{fmtMoney(a.desconto)} · a pagar {fmtMoney(a.total - a.desconto)}</span></>}</div>
               <span className={`chip ${a.status === 'confirmado' ? 'st-azul' : 'st-roxo'}`}><i className="ponto" />{a.rotulo}</span>
             </div>
-            {confirmando !== a.id && <div className="pub-linha"><Btn tamanho="sm" variante="perigo" onClick={() => { setConfirmando(a.id); setAviso(''); }} data-testid={`pub-cancelar-${a.id}`}>Cancelar</Btn></div>}
+            {confirmando !== a.id && remarcando?.id !== a.id && (
+              <div className="pub-linha">
+                <Btn tamanho="sm" onClick={() => { setRemarcando({ id: a.id, escolha: null }); setConfirmando(null); setAviso(''); setErro(''); }} data-testid={`pub-remarcar-${a.id}`}>Remarcar</Btn>
+                <Btn tamanho="sm" variante="perigo" onClick={() => { setConfirmando(a.id); setRemarcando(null); setAviso(''); }} data-testid={`pub-cancelar-${a.id}`}>Cancelar</Btn>
+              </div>
+            )}
+            {remarcando?.id === a.id && (
+              <div className="pub-confirma" data-testid={`pub-remarcando-${a.id}`}>
+                {a.podeCancelar
+                  ? (
+                    <>
+                      <p>Escolha o novo dia e horário. A loja precisa confirmar de novo.</p>
+                      <DiaHora chave={`r-${a.id}-${a.inicio}`} diasMax={diasMax} fonte={fonteDe(a)} valor={remarcando.escolha?.inicio} aoEscolher={(h) => setRemarcando({ id: a.id, escolha: h })} />
+                      <div className="pub-linha">
+                        <Btn tamanho="sm" variante="primario" disabled={!remarcando.escolha || enviando} onClick={() => remarcar(a)} data-testid={`pub-remarcar-sim-${a.id}`}>{enviando ? 'Enviando…' : 'Pedir este horário'}</Btn>
+                        <Btn tamanho="sm" onClick={() => setRemarcando(null)} data-testid={`pub-remarcar-nao-${a.id}`}>Voltar</Btn>
+                      </div>
+                    </>
+                  )
+                  : <><Aviso tipo="erro"><span data-testid={`pub-remarcar-prazo-${a.id}`}>Faltam menos de 24 horas, então não dá para remarcar por aqui. Fale com {loja.nome}.</span></Aviso><Btn tamanho="sm" onClick={() => setRemarcando(null)}>Voltar</Btn></>}
+              </div>
+            )}
             {confirmando === a.id && (
               <div className="pub-confirma">
                 {a.podeCancelar
@@ -321,7 +359,7 @@ export default function AgendarPublico({ loja, profissionalInicial, logado, aoVo
       {pagina && !pagina.ativo && <section className="pub-cartao" data-testid="pub-desligado"><h2>Agendamento indisponível</h2><p className="muted">{pagina.aviso || `O agendamento pelo link não está disponível agora. Fale com ${loja.nome}.`}</p></section>}
       {pagina && pagina.ativo && (aba === 'agendar'
         ? <Agendar pagina={pagina} loja={loja} profissionalInicial={barb} aoCriar={guardar} irParaMeus={() => setAba('meus')} />
-        : <Meus loja={loja} acessos={acessos} setAcessos={setAcessos} />)}
+        : <Meus loja={loja} acessos={acessos} setAcessos={setAcessos} diasMax={pagina.diasMax} />)}
       <p className="rodape-plataforma">Agendz</p>
     </div>
   );

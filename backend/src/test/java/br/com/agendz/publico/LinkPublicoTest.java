@@ -83,6 +83,7 @@ class LinkPublicoTest extends BaseApi {
 
     @AfterEach
     void limpar() {
+        jdbc.update("delete from aviso_painel");
         jdbc.update("delete from acesso_publico");
         jdbc.update("delete from idempotencia");
         jdbc.update("delete from agendamento_servico");
@@ -354,6 +355,100 @@ class LinkPublicoTest extends BaseApi {
         // concluído não cancela
         jdbc.update("update agendamento set status = 'concluido' where id = ?::uuid", id(r2));
         cancelar(OFFBOX, id(r2), texto(r2, "token")).andExpect(status().isNotFound());
+    }
+
+    // ---------------------------------------------------------------- remarcar e avisos no painel
+
+    private ResultActions remarcar(String host, String agendamento, String token, Instant inicio) throws Exception {
+        MockHttpServletRequestBuilder req = doCliente(post("/api/publico/agendamentos/" + agendamento + "/remarcar")).with(host(host)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"inicio\":\"" + inicio + "\"}");
+        return mvc.perform(token == null ? req : req.header("X-Acesso", token));
+    }
+
+    private ResultActions avisosDe(String jwt) throws Exception {
+        return mvc.perform(get("/api/avisos").with(host(OFFBOX)).header(HttpHeaders.AUTHORIZATION, bearer(jwt)));
+    }
+
+    @Test
+    void remarcarLevaOHorarioParaOutroLivreVoltaAConfirmarEAvisaAPainel() throws Exception {
+        String r = agendar(0, ",\"profissionalId\":\"" + proprietarioId + "\"");
+        String ag = id(r), token = texto(r, "token");
+        // o horário do próprio cliente conta como livre para ele; para os outros continua ocupado
+        mvc.perform(doCliente(get("/api/publico/agendamentos/" + ag + "/horarios?data=" + dia)).with(host(OFFBOX)).header("X-Acesso", token)).andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].inicio").value(as(dia, 9, 0).toString())).andExpect(jsonPath("$[0].profissionalId").value(proprietarioId.toString()));
+        mvc.perform(doCliente(get("/api/publico/agendamentos/" + ag + "/dias?de=" + dia + "&dias=3")).with(host(OFFBOX)).header("X-Acesso", token))
+                .andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(3)));
+        // sem token ou com token de outro horário não se enxerga nada
+        mvc.perform(doCliente(get("/api/publico/agendamentos/" + ag + "/horarios?data=" + dia)).with(host(OFFBOX))).andExpect(status().isNotFound());
+        String outro = agendar(4, ",\"profissionalId\":\"" + proprietarioId + "\"");
+        mvc.perform(doCliente(get("/api/publico/agendamentos/" + ag + "/horarios?data=" + dia)).with(host(OFFBOX)).header("X-Acesso", texto(outro, "token"))).andExpect(status().isNotFound());
+        remarcar(OFFBOX, ag, texto(outro, "token"), as(dia, 10, 0)).andExpect(status().isNotFound());
+        remarcar(OFFBOX, ag, null, as(dia, 10, 0)).andExpect(status().isNotFound());
+
+        // confirmado pela loja; remarcar leva para o novo horário, mesmo profissional, e volta a aguardar a loja
+        jdbc.update("update agendamento set status = 'confirmado' where id = ?::uuid", ag);
+        remarcar(OFFBOX, ag, token, as(dia, 10, 0)).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("a_confirmar")).andExpect(jsonPath("$.inicio").value(as(dia, 10, 0).toString()))
+                .andExpect(jsonPath("$.profissional").exists());
+        assertEquals(proprietarioId, jdbc.queryForObject("select profissional_id from agendamento where id = ?::uuid", UUID.class, ag));
+        assertEquals(Boolean.TRUE, jdbc.queryForObject("select reagendado from agendamento where id = ?::uuid", Boolean.class, ag));
+        assertEquals(as(dia, 10, 30), jdbc.queryForObject("select fim_ocupado from agendamento where id = ?::uuid", java.sql.Timestamp.class, ag).toInstant());
+        assertEquals(1, contar("select count(*) from agendamento_evento where campo = 'data e hora' and agendamento_id = ?::uuid", ag));
+        assertEquals(1, contar("select count(*) from agendamento_evento where campo = 'status' and para like 'A confirmar (cliente remarcou%'"));
+        // o horário antigo ficou livre
+        horarios(OFFBOX, dia, corte, "&profissionalId=" + proprietarioId).andExpect(jsonPath("$[0].inicio").value(as(dia, 9, 0).toString()));
+        // o mesmo horário de novo, horário ocupado por outro, fora do expediente e minuto quebrado são recusados
+        remarcar(OFFBOX, ag, token, as(dia, 10, 0)).andExpect(status().isBadRequest()).andExpect(jsonPath("$.mensagem", containsString("Esse já é o seu horário")));
+        remarcar(OFFBOX, ag, token, as(dia, 11, 0).plusSeconds(5)).andExpect(status().isBadRequest());
+        remarcar(OFFBOX, ag, token, as(dia, 9, 0).plusSeconds(1800 * 8)).andExpect(status().isConflict()).andExpect(jsonPath("$.mensagem").value(LinkPublicoService.ERRO_HORARIO));
+        jdbc.update("update agendamento set status = 'confirmado' where id = ?::uuid", id(outro)); // o outro (9:00 + 2h = 11:00) está confirmado
+        remarcar(OFFBOX, ag, token, as(dia, 11, 0)).andExpect(status().isConflict()).andExpect(jsonPath("$.mensagem").value(LinkPublicoService.ERRO_HORARIO));
+        remarcar(OFFBOX, ag, token, as(dia.plusDays(45), 9, 0)).andExpect(status().isBadRequest());
+        // aviso para a loja: o dono vê o pedido e a remarcação; o outro profissional, nenhum
+        avisosDe(dono).andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(3))).andExpect(jsonPath("$[?(@.tipo=='remarcou')].texto", hasSize(1)))
+                .andExpect(content().string(not(containsString("telefone")))).andExpect(content().string(containsString("Cliente Teste remarcou pelo link")));
+        avisosDe(colaborador).andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(0)));
+        // sem login não há aviso
+        mvc.perform(get("/api/avisos").with(host(OFFBOX))).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void remarcarSoComVinteEQuatroHorasOuMaisELinkDesligadoRecusa() throws Exception {
+        String r = agendar(0, ",\"profissionalId\":\"" + proprietarioId + "\"");
+        String ag = id(r), token = texto(r, "token");
+        jdbc.update("update agendamento set inicio = now() + interval '2 hours', fim_servico = now() + interval '150 minutes', fim_ocupado = now() + interval '150 minutes' where id = ?::uuid", ag);
+        remarcar(OFFBOX, ag, token, as(dia, 10, 0)).andExpect(status().isConflict()).andExpect(jsonPath("$.mensagem", containsString("24 horas")));
+        assertEquals(0, contar("select count(*) from agendamento_evento where campo = 'data e hora'"));
+        // com folga volta a funcionar, mas desligar o link recusa (403) e cancelar/ver continuam
+        jdbc.update("update agendamento set inicio = ?, fim_servico = ?, fim_ocupado = ? where id = ?::uuid", java.sql.Timestamp.from(as(dia, 9, 0)), java.sql.Timestamp.from(as(dia, 9, 30)), java.sql.Timestamp.from(as(dia, 9, 30)), ag);
+        mvc.perform(put("/api/estabelecimento/link-agendamento").with(host(OFFBOX)).header(HttpHeaders.AUTHORIZATION, bearer(dono)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"ativo\":false,\"diasMax\":30}")).andExpect(status().isOk());
+        remarcar(OFFBOX, ag, token, as(dia, 10, 0)).andExpect(status().isForbidden());
+        mvc.perform(doCliente(get("/api/publico/agendamentos/" + ag + "/horarios?data=" + dia)).with(host(OFFBOX)).header("X-Acesso", token)).andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(0)));
+        meus(OFFBOX, token).andExpect(jsonPath("$", hasSize(1)));
+        // cancelado ou concluído não remarca
+        cancelar(OFFBOX, ag, token).andExpect(status().isOk());
+        mvc.perform(put("/api/estabelecimento/link-agendamento").with(host(OFFBOX)).header(HttpHeaders.AUTHORIZATION, bearer(dono)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"ativo\":true,\"diasMax\":30}")).andExpect(status().isOk());
+        remarcar(OFFBOX, ag, token, as(dia, 10, 0)).andExpect(status().isNotFound());
+        avisosDe(dono).andExpect(jsonPath("$[?(@.tipo=='cancelou')].texto", hasSize(1)));
+    }
+
+    @Test
+    void osAvisosSoOProfissionalDoHorarioVeEOutroNaoMarcaComoLido() throws Exception {
+        agendar(0, ",\"profissionalId\":\"" + colaboradorId + "\"");
+        String lista = avisosDe(colaborador).andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(1))).andExpect(jsonPath("$[0].tipo").value("pedido")).andExpect(jsonPath("$[0].lido").value(false))
+                .andReturn().getResponse().getContentAsString();
+        String aviso = id(lista.substring(1));
+        // o dono vê o do colaborador; um aviso de outro profissional nem existe para o colaborador
+        avisosDe(dono).andExpect(jsonPath("$", hasSize(1)));
+        jdbc.update("update aviso_painel set profissional_id = ?", proprietarioId);
+        avisosDe(colaborador).andExpect(jsonPath("$", hasSize(0)));
+        mvc.perform(put("/api/avisos/" + aviso + "/lido").with(host(OFFBOX)).header(HttpHeaders.AUTHORIZATION, bearer(colaborador))).andExpect(status().isNotFound());
+        assertEquals(0, contar("select count(*) from aviso_painel where lido"));
+        mvc.perform(put("/api/avisos/" + aviso + "/lido").with(host(OFFBOX)).header(HttpHeaders.AUTHORIZATION, bearer(dono))).andExpect(status().isOk()).andExpect(jsonPath("$.lido").value(true));
+        // outra loja não enxerga nem mexe
+        mvc.perform(put("/api/avisos/" + aviso + "/lido").with(host(DALFORNO)).header(HttpHeaders.AUTHORIZATION, bearer(token(DALFORNO, "alan")))).andExpect(status().isNotFound());
+        mvc.perform(get("/api/avisos").with(host(DALFORNO)).header(HttpHeaders.AUTHORIZATION, bearer(token(DALFORNO, "alan")))).andExpect(jsonPath("$", hasSize(0)));
     }
 
     // ---------------------------------------------------------------- cupom

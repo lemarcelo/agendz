@@ -71,7 +71,7 @@ O motor do navegador (`domain/engine.js`, 838 linhas, mais `api.js`) tem muito m
 - **5c — Atender** (agendamento futuro e atendimento local), cliente por nome+telefone (`resolverClienteDoAtendimento`), veículo/porte na tela. Aqui a agenda real "existe": **liberar as senhas dos donos**.
 - **5d — produtos, comissão, pagamento local** (`domain/comissao.js`, `pagamento.js`).
 - **5e — link do cliente (`#agendar`), mensagens/WhatsApp, lembretes, Pix.**
-  - **5e-1 (feita, v97):** porta pública do servidor (`/api/publico/*`, V23) e página `#agendar` no site real. **5e-2:** remarcar, código por telefone, lembretes e aviso à loja. **5e-3:** mensagens/WhatsApp e Pix. **5a restante:** estética (veículo, porte, box) no servidor e no link.
+  - **5e-1 (feita, v97):** porta pública do servidor (`/api/publico/*`, V23) e página `#agendar` no site real. **5e-2 (feita, v98):** remarcar pelo link e avisos do painel (V24). **5e-3:** código por telefone, lembretes, mensagens/WhatsApp e Pix. **5a restante:** estética (veículo, porte, box) no servidor e no link.
 
 Decisão sem confirmação: o `tick` do servidor roda por `@Scheduled` (por loja, dentro de `naLoja`) e não a cada leitura, para a leitura continuar sem efeito colateral.
 

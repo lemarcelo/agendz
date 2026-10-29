@@ -276,7 +276,10 @@ Rotas **sem login** (a loja vem do Host; `SegurancaConfig` libera só estas). Li
 | `POST /api/publico/meus {tokens}` | os horários dos tokens | até 10 tokens; inválido some; nunca telefone nem id de cliente |
 | `POST /api/publico/agendamentos/{id}/cancelar` (`X-Acesso`) | cancela o próprio horário | token precisa ser DESTE horário; ativo e 24 h ou mais; motivo `cliente` |
 | `GET/PUT /api/estabelecimento/link-agendamento` | liga/desliga e `diasMax` (1 a 60) | só o proprietário |
-Ainda não existe no servidor (continua no 10b): remarcar, código por telefone, lembretes, aviso à loja e estética (veículo e porte).
+| `GET /api/publico/agendamentos/{id}/horarios?data=` e `/dias?de&dias=` (`X-Acesso`) | horários/dias livres para REMARCAR | mesmo profissional e serviços do horário; o próprio horário conta como livre; link desligado = lista vazia |
+| `POST /api/publico/agendamentos/{id}/remarcar {inicio}` (`X-Acesso`) | remarca o próprio horário | token deste horário; ativo; 24 h ou mais até o horário atual; regras do pedido no horário novo; volta a "a confirmar", `reagendado`; link desligado = 403; 30 por 10 min por IP |
+| `GET /api/avisos`, `PUT /api/avisos/{id}/lido` | avisos do painel (pedido, remarcou, cancelou) | seção agenda; profissional vê só os seus; outra loja/profissional = 404 |
+Ainda não existe no servidor (continua no 10b): código por telefone, lembretes, mensagem/WhatsApp e estética (veículo e porte).
 
 ## 11. Pontos do protótipo que **não** existem no real (tratar como pendência)
 

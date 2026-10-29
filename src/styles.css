@@ -866,6 +866,11 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
 .atender-real-titulo { margin: 0; font-size: 16px; }
 .regras-real { display: grid; gap: 10px; margin-top: 12px; min-width: 0; }
 .regras-real > h3 { margin: 0; font-size: 15px; }
+.avisos-real { display: grid; gap: 10px; margin-top: 12px; min-width: 0; }
+.avisos-real > h3 { margin: 0; font-size: 15px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.avisos-lista-real { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.avisos-lista-real li { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; min-width: 0; overflow-wrap: anywhere; }
+.avisos-lista-real li.lido { opacity: .65; }
 .atender-real-bloco { display: grid; gap: 8px; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; min-width: 0; margin: 0; }
 .atender-real-bloco > legend { font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--muted); padding: 0 6px; }
 .atender-real-servicos, .atender-real-achados { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 220px; overflow-y: auto; }

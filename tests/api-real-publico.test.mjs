@@ -3,7 +3,7 @@
 // o token de acesso vai no cabeçalho (cancelar) ou no corpo (meus) e nunca na URL, entrada ruim nem sai do cliente e a leitura é defensiva.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { configurar, entrar, linkAgendamento, publico } from '../src/services/api-real.js';
+import { avisos, configurar, entrar, linkAgendamento, publico } from '../src/services/api-real.js';
 
 const SRV = '00000000-0000-4000-8000-000000000050';
 const PROF = '00000000-0000-4000-8000-000000000001';
@@ -124,4 +124,44 @@ test('linkAgendamento: GET e PUT do proprietário; dias fora de 1 a 60 nem saem'
   servidor({});
   for (const ruim of [0, 61, 1.5, '30', null]) assert.equal((await linkAgendamento.gravar({ diasMax: ruim })).ok, false);
   assert.equal(chamadas.length, 0);
+});
+
+test('remarcar: horários e dias com o token no cabeçalho (nunca na URL), corpo só com o início, entrada ruim nem sai', async () => {
+  servidor([{ inicio: '2026-11-03T12:00:00Z', profissionalId: PROF }, { inicio: 'lixo', profissionalId: PROF }, { inicio: '2026-11-03T12:30:00Z', profissionalId: 'x' }]);
+  const h = await publico.horariosRemarcar(AG, TOKEN, { data: '2026-11-03' });
+  assert.deepEqual([chamadas[0].metodo, chamadas[0].url], ['GET', `https://loja.teste/api/publico/agendamentos/${AG}/horarios?data=2026-11-03`]);
+  assert.equal(chamadas[0].cab['X-Acesso'], TOKEN); assert.ok(!chamadas[0].url.includes(TOKEN)); assert.ok(!('Authorization' in chamadas[0].cab));
+  assert.equal(h.horarios.length, 1, 'horário ruim e profissional ruim são descartados');
+  servidor(['2026-11-03', 'lixo', '2026-11-04']);
+  const d = await publico.diasRemarcar(AG, TOKEN, { de: '2026-11-03', dias: 99 });
+  assert.match(chamadas[0].url, /\/dias\?de=2026-11-03&dias=31$/); assert.deepEqual(d.dias, ['2026-11-03', '2026-11-04']);
+  servidor({ id: AG, inicio: '2026-11-03T12:00:00Z', status: 'a_confirmar', ativo: true, podeCancelar: true, servicos: ['Corte'] });
+  const r = await publico.remarcar(AG, TOKEN, Date.parse('2026-11-03T12:00:00Z'));
+  assert.deepEqual([chamadas[0].metodo, chamadas[0].url], ['POST', `https://loja.teste/api/publico/agendamentos/${AG}/remarcar`]);
+  assert.deepEqual(chamadas[0].corpo, { inicio: '2026-11-03T12:00:00.000Z' }); assert.equal(chamadas[0].cab['X-Acesso'], TOKEN);
+  assert.equal(r.ok, true); assert.equal(r.agendamento.status, 'a_confirmar');
+  // entrada ruim nem chega ao servidor
+  servidor({});
+  assert.equal((await publico.remarcar('lixo', TOKEN, 1)).ok, false);
+  assert.equal((await publico.remarcar(AG, 'curto', 1)).ok, false);
+  assert.equal((await publico.remarcar(AG, TOKEN, NaN)).ok, false);
+  assert.equal((await publico.horariosRemarcar(AG, TOKEN, { data: '3/11' })).horarios.length, 0);
+  assert.equal(chamadas.length, 0);
+  // a mensagem do servidor chega à tela
+  servidor({ mensagem: 'Esse horário acabou de ser ocupado. Escolha outro.' }, 409);
+  const e = await publico.remarcar(AG, TOKEN, Date.parse('2026-11-03T12:30:00Z'));
+  assert.equal(e.ok, false); assert.match(e.erro, /acabou de ser ocupado/);
+});
+
+test('avisos do painel: lista com limite e leitura defensiva; marcar como lido por id válido', async () => {
+  servidor([{ id: AG, em: '2026-10-28T13:00:00Z', agendamentoId: AG, tipo: 'remarcou', texto: 'x'.repeat(400), lido: false, telefone: '5399' }, { id: 'lixo', texto: 'fora' }, { id: PROF, tipo: 'estranho', texto: 'ok', lido: true }]);
+  const r = await avisos.listar();
+  assert.deepEqual([chamadas[0].metodo, chamadas[0].url], ['GET', 'https://loja.teste/api/avisos']);
+  assert.equal(r.avisos.length, 2); assert.equal(r.avisos[0].texto.length, 300); assert.ok(!('telefone' in r.avisos[0]));
+  assert.equal(r.avisos[1].tipo, 'pedido', 'tipo desconhecido vira o padrão'); assert.equal(r.avisos[1].lido, true);
+  servidor({ id: AG, tipo: 'pedido', texto: 'a', lido: true });
+  const l = await avisos.marcarLido(AG);
+  assert.deepEqual([chamadas[0].metodo, chamadas[0].url], ['PUT', `https://loja.teste/api/avisos/${AG}/lido`]); assert.equal(l.aviso.lido, true);
+  servidor({});
+  assert.equal((await avisos.marcarLido('../x')).ok, false); assert.equal(chamadas.length, 0);
 });

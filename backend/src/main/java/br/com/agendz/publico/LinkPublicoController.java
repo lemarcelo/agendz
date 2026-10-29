@@ -71,6 +71,30 @@ public class LinkPublicoController {
         return servico.cancelar(ip(req), id, token);
     }
 
+    public record NovoHorario(@jakarta.validation.constraints.NotNull java.time.Instant inicio) {
+    }
+
+    /** GET /api/publico/agendamentos/{id}/horarios?data= (cabeçalho X-Acesso): horários livres do dia para REMARCAR este horário (mesmo profissional e serviços). */
+    @GetMapping("/api/publico/agendamentos/{id}/horarios")
+    public List<LinkPublicoService.Horario> horariosParaRemarcar(@PathVariable UUID id, @RequestHeader(value = "X-Acesso", required = false) String token,
+                                                                 @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate data, HttpServletRequest req) {
+        return servico.horariosParaRemarcar(ip(req), id, token, data);
+    }
+
+    /** GET /api/publico/agendamentos/{id}/dias?de=&dias= (cabeçalho X-Acesso): dias com horário livre para remarcar. */
+    @GetMapping("/api/publico/agendamentos/{id}/dias")
+    public List<LocalDate> diasParaRemarcar(@PathVariable UUID id, @RequestHeader(value = "X-Acesso", required = false) String token,
+                                            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate de, @RequestParam int dias, HttpServletRequest req) {
+        return servico.diasParaRemarcar(ip(req), id, token, de, dias);
+    }
+
+    /** POST /api/publico/agendamentos/{id}/remarcar (cabeçalho X-Acesso, corpo {inicio}): remarca só com 24 h ou mais; volta a "a confirmar". */
+    @PostMapping("/api/publico/agendamentos/{id}/remarcar")
+    public LinkPublicoService.Resumo remarcar(@PathVariable UUID id, @RequestHeader(value = "X-Acesso", required = false) String token,
+                                              @Valid @RequestBody NovoHorario corpo, HttpServletRequest req) {
+        return servico.remarcar(ip(req), id, token, corpo.inicio());
+    }
+
     /** IP de quem pede: o primeiro do X-Forwarded-For que o Caddy escreve (ele substitui o que o cliente mandar), senão o da conexão. Só caracteres de IP. */
     static String ip(HttpServletRequest req) {
         String f = req.getHeader("X-Forwarded-For");

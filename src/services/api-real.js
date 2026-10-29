@@ -760,5 +760,44 @@ export const publico = {
     const r = await chamar('POST', `/api/publico/agendamentos/${id}/cancelar`, undefined, undefined, { publico: true, cabecalhos: { 'X-Acesso': token } });
     return r.ok ? { ok: true, agendamento: lerResumoPublico(r.dados) } : r;
   },
+  // GET /api/publico/agendamentos/{id}/dias?de=AAAA-MM-DD&dias=14  (cabeçalho X-Acesso)  → ['AAAA-MM-DD', ...]: dias com horário livre para REMARCAR este horário
+  async diasRemarcar(id, token, { de, dias }) {
+    if (!ID.test(String(id)) || !/^[0-9a-f]{48}$/.test(String(token)) || !DIA_ISO.test(String(de))) return { ok: true, dias: [] };
+    const r = await chamar('GET', `/api/publico/agendamentos/${id}/dias?de=${de}&dias=${Math.min(31, Math.max(1, Number(dias) || 1))}`, undefined, undefined, { publico: true, cabecalhos: { 'X-Acesso': token } });
+    return r.ok ? { ok: true, dias: listaDe(r.dados, 62).filter((x) => DIA_ISO.test(String(x))) } : r;
+  },
+  // GET /api/publico/agendamentos/{id}/horarios?data=AAAA-MM-DD  (cabeçalho X-Acesso)  → [{ inicio, profissionalId }]
+  async horariosRemarcar(id, token, { data }) {
+    if (!ID.test(String(id)) || !/^[0-9a-f]{48}$/.test(String(token)) || !DIA_ISO.test(String(data))) return { ok: true, horarios: [] };
+    const r = await chamar('GET', `/api/publico/agendamentos/${id}/horarios?data=${data}`, undefined, undefined, { publico: true, cabecalhos: { 'X-Acesso': token } });
+    return r.ok ? { ok: true, horarios: listaDe(r.dados, 100).filter((x) => x && instante(x.inicio) !== null && IDV(x.profissionalId)).map((x) => ({ inicio: instante(x.inicio), profissionalId: x.profissionalId })) } : r;
+  },
+  // POST /api/publico/agendamentos/{id}/remarcar  { inicio }  (cabeçalho X-Acesso): só com 24 h ou mais; o horário volta a "a confirmar"
+  async remarcar(id, token, inicio) {
+    if (!ID.test(String(id)) || !/^[0-9a-f]{48}$/.test(String(token))) return { ok: false, status: 0, erro: 'Agendamento não encontrado.' };
+    if (!Number.isFinite(inicio)) return { ok: false, status: 0, erro: 'Escolha um dia e um horário.' };
+    const r = await chamar('POST', `/api/publico/agendamentos/${id}/remarcar`, { inicio: new Date(inicio).toISOString() }, undefined, { publico: true, cabecalhos: { 'X-Acesso': token } });
+    return r.ok ? { ok: true, agendamento: lerResumoPublico(r.dados) } : r;
+  },
 };
 
+
+// ---- Avisos do painel (5e-2): o que o cliente fez pelo link (pediu horário, remarcou, cancelou) ----
+const TIPOS_AVISO = ['pedido', 'remarcou', 'cancelou'];
+const lerAviso = (d) => {
+  d = d && typeof d === 'object' ? d : {};
+  return { id: IDV(d.id), em: instante(d.em), agendamentoId: IDV(d.agendamentoId), tipo: TIPOS_AVISO.includes(d.tipo) ? d.tipo : 'pedido', texto: texto(d.texto, 300), lido: d.lido === true };
+};
+export const avisos = {
+  // GET /api/avisos  (quem usa a agenda; o profissional vê só os seus)  → até 50, não lidos primeiro
+  async listar() {
+    const r = await chamar('GET', '/api/avisos');
+    return r.ok ? { ok: true, avisos: listaDe(r.dados, 50).map(lerAviso).filter((a) => a.id) } : r;
+  },
+  // PUT /api/avisos/{id}/lido
+  async marcarLido(id) {
+    if (!ID.test(String(id))) return { ok: false, status: 0, erro: 'Aviso não encontrado.' };
+    const r = await chamar('PUT', `/api/avisos/${id}/lido`);
+    return r.ok ? { ok: true, aviso: lerAviso(r.dados) } : r;
+  },
+};
