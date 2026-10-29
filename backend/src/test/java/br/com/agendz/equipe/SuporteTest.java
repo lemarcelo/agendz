@@ -3,7 +3,6 @@ package br.com.agendz.equipe;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
-import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -95,7 +94,7 @@ class SuporteTest extends BaseApi {
         String primeira = criarSuporte();
         entrar(senhaDe(primeira));
         mvc.perform(post(ROTA).header("X-Interno-Chave", CHAVE)).andExpect(status().isOk()).andExpect(jsonPath("$.criado").value(false))
-                .andExpect(jsonPath("$.senhaTemporaria").value(nullValue()));
+                .andExpect(jsonPath("$.senhaTemporaria").doesNotExist());
         assertEquals(1, jdbc.queryForObject("select count(*) from usuario where identificador = 'suporte'", Integer.class));
     }
 
