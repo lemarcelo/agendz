@@ -161,7 +161,7 @@ public class EscalaService {
      */
     public List<Instant[]> blocos(JdbcTemplate jdbc, UUID profissionalId, Instant inicio, int minutos) {
         Map<Integer, List<Faixa>> loja = ler(jdbc, null);
-        if (!temFaixa(loja)) return List.of(new Instant[]{inicio, inicio.plus(Duration.ofMinutes(minutos))});
+        if (!temFaixa(loja)) return List.<Instant[]>of(new Instant[]{inicio, inicio.plus(Duration.ofMinutes(minutos))});
         Map<Integer, List<Faixa>> prof = ler(jdbc, profissionalId);
         List<Instant[]> blocos = new ArrayList<>();
         int falta = minutos;

@@ -419,7 +419,7 @@ public class AgendaController {
                 UUID.class, loja.id().toString(), quem.clienteId(), profissionalId, utc(inicio), utc(fimServico), utc(fimOcupado), total, avulso, motivo, forma,
                 vei == null ? null : vei.veiculoId(), vei == null ? null : vei.porte(), vei == null ? null : vei.placa(), vei == null ? null : vei.marca(), vei == null ? null : vei.modelo(), vei == null ? null : vei.cor());
         // atendimento já feito: um bloco só (sem box nem conflito; já aconteceu)
-        ocupacao.gravarBlocos(jdbc, loja.id(), id, new Ocupacao.Plano(List.of(new Instant[]{inicio, fimServico}), fimServico, fimOcupado));
+        ocupacao.gravarBlocos(jdbc, loja.id(), id, new Ocupacao.Plano(List.<Instant[]>of(new Instant[]{inicio, fimServico}), fimServico, fimOcupado));
         gravarServicos(jdbc, loja, id, servicos);
         String vendidos = produtos.isEmpty() ? "" : lancarProdutos(jdbc, loja, id, produtos, vendedor, jwt);
         String nomes = java.util.stream.Stream.of(servicos.stream().map(ServicoLinha::nome).collect(java.util.stream.Collectors.joining(" + ")), vendidos.isEmpty() ? "" : "venda de " + vendidos)

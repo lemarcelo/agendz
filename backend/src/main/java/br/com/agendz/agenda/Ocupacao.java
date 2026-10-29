@@ -65,7 +65,7 @@ public class Ocupacao {
         } else {
             Instant fim = inicio.plus(Duration.ofMinutes(minutos));
             if (!escalas.atende(jdbc, profissionalId, inicio, fim, false)) throw new ErroDeNegocio(HttpStatus.CONFLICT, nome(jdbc, profissionalId) + " não atende nesse horário.");
-            blocos = List.of(new Instant[]{inicio, fim});
+            blocos = List.<Instant[]>of(new Instant[]{inicio, fim});
         }
         Instant fimServico = blocos.get(blocos.size() - 1)[1];
         return new Plano(blocos, fimServico, fimServico.plus(Duration.ofMinutes(intervalo)));
