@@ -94,7 +94,7 @@ class EsteticaTest extends BaseApi {
         return mvc.perform(put("/api/agendamentos/" + ag + "/remarcar").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON).content(corpo));
     }
 
-    private ResultActions status(String ag, String status) throws Exception {
+    private ResultActions mudarStatus(String ag, String status) throws Exception {
         return mvc.perform(put("/api/agendamentos/" + ag + "/status").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"" + status + "\"}"));
     }
 
@@ -154,10 +154,10 @@ class EsteticaTest extends BaseApi {
         // box inexistente / de outra loja
         agendar(clienteA, pabloId, lavagem, t.plus(24, ChronoUnit.HOURS), SUV + ",\"boxId\":\"" + UUID.randomUUID() + "\"").andExpect(status().isBadRequest()).andExpect(jsonPath("$.mensagem").value("Box não encontrado."));
         // cancelar libera o box
-        status(primeiro, "cancelado").andExpect(status().isOk());
+        mudarStatus(primeiro, "cancelado").andExpect(status().isOk());
         agendar(clienteA, pabloId, lavagem, t, SUV).andExpect(status().isCreated()).andExpect(jsonPath("$.estetica.box").value("Box 1"));
         // reativar o cancelado volta a conferir o box (e o profissional): agora o horário está tomado
-        status(primeiro, "confirmado").andExpect(status().isConflict());
+        mudarStatus(primeiro, "confirmado").andExpect(status().isConflict());
     }
 
     @Test
