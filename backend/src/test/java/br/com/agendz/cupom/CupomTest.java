@@ -124,7 +124,7 @@ class CupomTest extends BaseApi {
 
     private String agendarComTelefone(String tel, String servicos, String extra) throws Exception {
         telefone += 1; // cada chamada usa uma hora própria: o mesmo profissional nunca fica com dois horários no mesmo instante
-        String corpo = "{\"profissionalId\":\"" + pabloId + "\",\"servicoIds\":[" + servicos + "],\"nome\":\"Cliente\",\"telefone\":\"" + tel + "\",\"inicio\":\"" + futuro.plus(telefone, ChronoUnit.HOURS) + "\"" + extra + "}";
+        String corpo = "{\"profissionalId\":\"" + pabloId + "\",\"veiculo\":{\"placa\":\"ABC1D23\",\"modelo\":\"Onix\",\"porte\":\"medio\"},\"servicoIds\":[" + servicos + "],\"nome\":\"Cliente\",\"telefone\":\"" + tel + "\",\"inicio\":\"" + futuro.plus(telefone, ChronoUnit.HOURS) + "\"" + extra + "}";
         return id(pedir(APEX, davi, post("/api/atendimentos").contentType(MediaType.APPLICATION_JSON).content(corpo)).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
     }
 
@@ -264,7 +264,7 @@ class CupomTest extends BaseApi {
         aplicar(davi, ag, bom[1]).andExpect(status().isBadRequest()).andExpect(jsonPath("$.mensagem").value("Só dá para usar cupom em horário a confirmar ou confirmado."));
         // atendimento local (já aconteceu) não usa cupom, nem pelo Atender
         pedir(APEX, davi, post("/api/atendimentos").contentType(MediaType.APPLICATION_JSON)
-                .content("{\"profissionalId\":\"" + pabloId + "\",\"servicoIds\":[\"" + lavagem + "\"],\"cupomChave\":\"" + bom[1] + "\"}")).andExpect(status().isBadRequest())
+                .content("{\"profissionalId\":\"" + pabloId + "\",\"veiculo\":{\"placa\":\"ABC1D23\",\"modelo\":\"Onix\",\"porte\":\"medio\"},\"servicoIds\":[\"" + lavagem + "\"],\"cupomChave\":\"" + bom[1] + "\"}")).andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.mensagem").value("Cupom só vale em agendamento (data futura)."));
         assertEquals(1, jdbc.queryForObject("select count(*) from agendamento", Integer.class), "o atendimento recusado não foi criado");
     }
@@ -275,7 +275,7 @@ class CupomTest extends BaseApi {
         String doPablo = agendar();
         String outro = id(pedir(APEX, davi, post("/api/atendimentos").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"profissionalId\":\"" + jdbc.queryForObject("select id from usuario where loja_id = ?::uuid and identificador = 'marcelo'", UUID.class, LOJA_APEX)
-                        + "\",\"servicoIds\":[\"" + lavagem + "\"],\"nome\":\"Z\",\"telefone\":\"53999009999\",\"inicio\":\"" + futuro.plus(30, ChronoUnit.HOURS) + "\"}")).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
+                        + "\",\"veiculo\":{\"placa\":\"ABC1D23\",\"modelo\":\"Onix\",\"porte\":\"medio\"},\"servicoIds\":[\"" + lavagem + "\"],\"nome\":\"Z\",\"telefone\":\"53999009999\",\"inicio\":\"" + futuro.plus(30, ChronoUnit.HOURS) + "\"}")).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
         aplicar(pablo, outro, c[1]).andExpect(status().isNotFound());
         aplicar(pablo, doPablo, c[1]).andExpect(status().isOk());
     }
@@ -313,7 +313,7 @@ class CupomTest extends BaseApi {
     @Test
     void atenderComCupomCriaOAgendamentoComODescontoEChaveErradaNaoCriaNada() throws Exception {
         String[] c = cupomPercentual("No Atender", 50, 5, 1);
-        String corpo = "{\"profissionalId\":\"" + pabloId + "\",\"servicoIds\":[\"" + lavagem + "\"],\"nome\":\"Rita\",\"telefone\":\"53999001111\",\"inicio\":\"" + futuro + "\",\"cupomChave\":\"";
+        String corpo = "{\"profissionalId\":\"" + pabloId + "\",\"veiculo\":{\"placa\":\"ABC1D23\",\"modelo\":\"Onix\",\"porte\":\"medio\"},\"servicoIds\":[\"" + lavagem + "\"],\"nome\":\"Rita\",\"telefone\":\"53999001111\",\"inicio\":\"" + futuro + "\",\"cupomChave\":\"";
         pedir(APEX, davi, post("/api/atendimentos").contentType(MediaType.APPLICATION_JSON).content(corpo + "AAAA-BBBB-CCCC\"}")).andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.mensagem").value("Cupom inválido ou indisponível."));
         assertEquals(0, jdbc.queryForObject("select count(*) from agendamento", Integer.class), "cupom recusado: o agendamento também não é criado");

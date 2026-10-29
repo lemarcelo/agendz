@@ -477,6 +477,60 @@
    "esperado": {
     "ok": true
    }
+  },
+  {
+   "nome": "apelido suporte é reservado",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Pessoa Eq0",
+      "apelido": "Suporte",
+      "cpf": "52998224725",
+      "email": "eq0@teste.com",
+      "papel": "profissional"
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Nome reservado."
+   }
+  },
+  {
+   "nome": "nome suporte é reservado (com espaço e acento)",
+   "passos": [
+    {
+     "corpo": {
+      "nome": " SUPORTE ",
+      "apelido": "Eq0",
+      "cpf": "52998224725",
+      "email": "eq0@teste.com",
+      "papel": "profissional"
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Nome reservado."
+   }
+  },
+  {
+   "nome": "apelido suporte sem diferenciar maiúscula",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Pessoa Eq0",
+      "apelido": "sUpOrTe",
+      "cpf": "52998224725",
+      "email": "eq0@teste.com",
+      "papel": "profissional"
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Nome reservado."
+   }
   }
  ]
 }

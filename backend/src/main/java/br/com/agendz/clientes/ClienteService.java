@@ -300,7 +300,16 @@ public class ClienteService {
         Set<UUID> atuais = new HashSet<>(jdbc.query("select id from cliente_veiculo where cliente_id = ?", (rs, i) -> rs.getObject(1, UUID.class), clienteId));
         Set<UUID> mantidos = new HashSet<>();
         for (Veiculo v : novos) if (v.id() != null && atuais.contains(v.id())) mantidos.add(v.id());
-        for (UUID id : atuais) if (!mantidos.contains(id)) jdbc.update("delete from cliente_veiculo where id = ?", id);
+        for (UUID id : atuais) {
+            if (mantidos.contains(id)) continue;
+            // como no simulador: veículo com agendamento ativo e futuro não sai da lista (cancele ou remarque antes)
+            Integer ativos = jdbc.queryForObject("select count(*) from agendamento where veiculo_id = ? and status in ('a_confirmar', 'confirmado') and inicio > now()", Integer.class, id);
+            if (ativos != null && ativos > 0) {
+                String placa = jdbc.queryForObject("select placa from cliente_veiculo where id = ?", String.class, id);
+                throw new ErroDeNegocio(HttpStatus.CONFLICT, "O veículo " + placa + " tem agendamento ativo. Cancele ou remarque antes de removê-lo.");
+            }
+            jdbc.update("delete from cliente_veiculo where id = ?", id);
+        }
         for (int i = 0; i < novos.size(); i++) {
             Veiculo v = novos.get(i);
             if (v.id() != null && mantidos.contains(v.id())) {
@@ -310,6 +319,41 @@ public class ClienteService {
                 inserirVeiculo(jdbc, loja, clienteId, v, i);
             }
         }
+    }
+
+    // ---------- veículo do atendimento ----------
+
+    /** O veículo como ficou no agendamento (a "foto"): `veiculoId` é o do cadastro do cliente, ou null se o atendimento é de balcão sem cadastro. */
+    public record VeiculoDoAgendamento(UUID veiculoId, String placa, String marca, String modelo, String cor, String porte) {
+    }
+
+    private static VeiculoDoAgendamento foto(Veiculo v) {
+        return new VeiculoDoAgendamento(v.id(), v.placa(), v.marca(), v.modelo(), v.cor(), v.porte());
+    }
+
+    /**
+     * Veículo do atendimento (espelho de `resolverVeiculo`/`gravarVeiculo`, src/domain/engine.js): um do cadastro do cliente (`veiculoId`), o único do cliente quando nada foi
+     * informado, ou um novo (`novo`: placa, modelo, porte…), que entra no cadastro se o cliente existe (placa que ele já tem vale o existente). Sem cliente (balcão) fica só a foto.
+     * Tipo sem veículo (barbearia) devolve null. Roda na transação do atendimento: se o horário for recusado depois, o veículo novo volta atrás junto.
+     */
+    public VeiculoDoAgendamento resolverVeiculo(JdbcTemplate jdbc, Loja loja, UUID clienteId, UUID veiculoId, EntradaVeiculo novo) {
+        if (!br.com.agendz.tenant.Capacidades.usaVeiculo(loja)) return null;
+        List<Veiculo> doCliente = clienteId == null ? List.of() : veiculosDe(jdbc, clienteId);
+        if (veiculoId != null) {
+            return foto(doCliente.stream().filter(x -> x.id().equals(veiculoId)).findFirst().orElseThrow(() -> new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Veículo não encontrado.")));
+        }
+        if (novo == null) {
+            if (doCliente.size() == 1) return foto(doCliente.get(0));
+            throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha o veículo do atendimento.");
+        }
+        Veiculo limpo = veiculosValidos(List.of(new EntradaVeiculo(null, novo.placa(), novo.marca(), novo.modelo(), novo.cor(), novo.porte()))).get(0);
+        String chave = chavePlaca(limpo.placa());
+        for (Veiculo x : doCliente) if (chavePlaca(x.placa()).equals(chave)) return foto(x);
+        if (clienteId == null) return new VeiculoDoAgendamento(null, limpo.placa(), limpo.marca(), limpo.modelo(), limpo.cor(), limpo.porte());
+        if (doCliente.size() >= LIMITE_VEICULOS) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "O cliente já tem " + LIMITE_VEICULOS + " veículos cadastrados.");
+        UUID id = jdbc.queryForObject("insert into cliente_veiculo (loja_id, cliente_id, placa, placa_chave, marca, modelo, cor, porte, ordem) values (?::uuid, ?, ?, ?, ?, ?, ?, ?, ?) returning id",
+                UUID.class, loja.id().toString(), clienteId, limpo.placa(), chave, limpo.marca(), limpo.modelo(), limpo.cor(), limpo.porte(), doCliente.size());
+        return new VeiculoDoAgendamento(id, limpo.placa(), limpo.marca(), limpo.modelo(), limpo.cor(), limpo.porte());
     }
 
     // ---------- cliente de um atendimento (Atender) ----------

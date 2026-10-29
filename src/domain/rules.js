@@ -343,6 +343,10 @@ export const PERMISSOES_PADRAO = {
   atendente: { agenda: true, clientes: true, servicos: true },
   admin: {},
 };
+// `suporte` é o usuário que o Admin da plataforma cria em toda loja: o cliente nunca cadastra esse nome (login, nome ou apelido), sem diferenciar maiúscula, acento nem espaço sobrando.
+// Espelho de Reservados.java.
+export const NOME_RESERVADO = 'Nome reservado.';
+export const nomeReservado = (t) => String(t == null ? '' : t).normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase() === 'suporte';
 export const ehGestor = (u) => !!u && (u.papel === 'admin' || u.papel === 'atendente'); // vê a agenda de todos, como a recepção
 
 export function pode(user, secao) {

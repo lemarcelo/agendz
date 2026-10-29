@@ -100,3 +100,5 @@ Lista simples. Cada item está no histórico do `prompt-agendz-regras.md` (v84 a
 - **Dúvida (não bloqueia):** produto desativado por um Desfazer pode ser reativado em Estoque; se preferir que Refazer seja o único caminho, é só avisar.
 
 - v100: primeiro acesso: a tela de entrada pede usuário + senha enviada e a redefinição pede só usuário novo + senha definitiva (a enviada fica em memória, `senhaEnviada`), depois entra sozinho no assistente (dono) ou na Agenda. **WhatsApp/Pix não serão configurados agora**: no futuro serão por cliente, via Admin, com as chaves da Meta de cada loja; 5e-3 adiado. Testes: `tests/e2e36.mjs`, `tests/e2e37.mjs`.
+
+- v101: o usuário `suporte` é perfil `admin` (gestor sem ser dono), escondido da equipe da loja e sem poder trocar de nome; "salvo por cliente no Admin" = existe por cliente e aparece na ficha, mas a senha nunca é guardada (só redefinida e mostrada uma vez). **Dúvida (não bloqueia):** se preferir que o `suporte` apareça (somente leitura) na equipe do próprio cliente, é só avisar.

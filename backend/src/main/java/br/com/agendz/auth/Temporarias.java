@@ -27,7 +27,7 @@ public final class Temporarias {
         if (primeiro.length() > 20) primeiro = primeiro.substring(0, 20);
         if (primeiro.length() < 2) primeiro = "pro";
         String login = primeiro;
-        for (int n = 2; existentes.contains(login); n++) login = primeiro + n;
+        for (int n = 2; existentes.contains(login) || br.com.agendz.validacao.Reservados.reservado(login); n++) login = primeiro + n;
         return login;
     }
 }

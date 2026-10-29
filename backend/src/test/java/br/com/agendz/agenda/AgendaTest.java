@@ -89,7 +89,7 @@ class AgendaTest extends BaseApi {
     }
 
     private String corpo(UUID cliente, UUID prof, String servicos, Instant inicio, String extra) {
-        return "{\"clienteId\":\"" + cliente + "\",\"profissionalId\":\"" + prof + "\",\"servicoIds\":[" + servicos + "],\"inicio\":\"" + inicio + "\"" + extra + "}";
+        return "{\"clienteId\":\"" + cliente + "\",\"profissionalId\":\"" + prof + "\",\"veiculo\":{\"placa\":\"ABC1D23\",\"modelo\":\"Onix\",\"porte\":\"medio\"},\"servicoIds\":[" + servicos + "],\"inicio\":\"" + inicio + "\"" + extra + "}";
     }
 
     private static String ids(String... s) {
@@ -248,17 +248,17 @@ class AgendaTest extends BaseApi {
         String s = servico(APEX, davi, "Lavagem", 80, 60, 0);
         String base = "\"clienteId\":\"" + clienteApex + "\",\"profissionalId\":\"" + pabloId + "\"";
         String[] ruins = {
-                "{" + base + ",\"servicoIds\":[],\"inicio\":\"" + t + "\"}",                                                   // sem serviço
-                "{" + base + ",\"servicoIds\":[" + ids(s, s) + "],\"inicio\":\"" + t + "\"}",                                  // serviço repetido
-                "{" + base + ",\"servicoIds\":[" + ids(s) + "],\"inicio\":\"" + t.plusSeconds(30) + "\"}",                     // não é minuto exato
-                "{" + base + ",\"servicoIds\":[" + ids(s) + "],\"inicio\":\"" + t.plus(500, ChronoUnit.DAYS) + "\"}",          // distante demais
-                "{" + base + ",\"servicoIds\":[" + ids(s) + "],\"inicio\":\"" + t + "\",\"status\":\"concluido\"}",            // criar já concluído não existe
-                "{" + base + ",\"servicoIds\":[" + ids(s) + "],\"inicio\":\"" + t + "\",\"lojaId\":\"x\"}",                    // campo desconhecido
-                "{" + base + ",\"servicoIds\":[" + ids(s) + "]}",                                                              // sem início
+                "{" + base + ",\"veiculo\":{\"placa\":\"ABC1D23\",\"modelo\":\"Onix\",\"porte\":\"medio\"},\"servicoIds\":[],\"inicio\":\"" + t + "\"}",                                                   // sem serviço
+                "{" + base + ",\"veiculo\":{\"placa\":\"ABC1D23\",\"modelo\":\"Onix\",\"porte\":\"medio\"},\"servicoIds\":[" + ids(s, s) + "],\"inicio\":\"" + t + "\"}",                                  // serviço repetido
+                "{" + base + ",\"veiculo\":{\"placa\":\"ABC1D23\",\"modelo\":\"Onix\",\"porte\":\"medio\"},\"servicoIds\":[" + ids(s) + "],\"inicio\":\"" + t.plusSeconds(30) + "\"}",                     // não é minuto exato
+                "{" + base + ",\"veiculo\":{\"placa\":\"ABC1D23\",\"modelo\":\"Onix\",\"porte\":\"medio\"},\"servicoIds\":[" + ids(s) + "],\"inicio\":\"" + t.plus(500, ChronoUnit.DAYS) + "\"}",          // distante demais
+                "{" + base + ",\"veiculo\":{\"placa\":\"ABC1D23\",\"modelo\":\"Onix\",\"porte\":\"medio\"},\"servicoIds\":[" + ids(s) + "],\"inicio\":\"" + t + "\",\"status\":\"concluido\"}",            // criar já concluído não existe
+                "{" + base + ",\"veiculo\":{\"placa\":\"ABC1D23\",\"modelo\":\"Onix\",\"porte\":\"medio\"},\"servicoIds\":[" + ids(s) + "],\"inicio\":\"" + t + "\",\"lojaId\":\"x\"}",                    // campo desconhecido
+                "{" + base + ",\"veiculo\":{\"placa\":\"ABC1D23\",\"modelo\":\"Onix\",\"porte\":\"medio\"},\"servicoIds\":[" + ids(s) + "]}",                                                              // sem início
         };
         for (String ruim : ruins) marcar(APEX, davi, ruim).andExpect(status().isBadRequest());
         String lista = onzeIdsQuaisquer(s);
-        marcar(APEX, davi, "{" + base + ",\"servicoIds\":[" + lista + "],\"inicio\":\"" + t + "\"}").andExpect(status().isBadRequest());
+        marcar(APEX, davi, "{" + base + ",\"veiculo\":{\"placa\":\"ABC1D23\",\"modelo\":\"Onix\",\"porte\":\"medio\"},\"servicoIds\":[" + lista + "],\"inicio\":\"" + t + "\"}").andExpect(status().isBadRequest());
         mvc.perform(get("/api/agendamentos?de=" + t + "&ate=" + t.plus(400, ChronoUnit.DAYS)).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)))
                 .andExpect(status().isBadRequest());
         mvc.perform(get("/api/agendamentos").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi))).andExpect(status().isBadRequest());

@@ -138,7 +138,9 @@ test('notificação do serviço substitui a do estabelecimento (maior valor prev
 });
 
 test('plano de notificações: passadas são puladas; a pergunta só sai em horário comercial', () => {
-  const d = proxDiaUtil(9);
+  // o dia anterior precisa ter expediente: se for domingo, a pergunta de "1 dia antes" vai para a abertura do próprio dia e nasce pulada (dependia do dia da semana de hoje)
+  let n = 9; let d = proxDiaUtil(n);
+  while (!faixasDoDia(st().estabelecimento.escala, addDays(d, -1)).length) d = proxDiaUtil(++n);
   const a = cria({ inicio: tsAt(d, '09:00') }).agendamento;
   assert.equal(a.plano.length, 2);
   assert.ok(a.plano.every((p) => p.estado === 'pendente'));

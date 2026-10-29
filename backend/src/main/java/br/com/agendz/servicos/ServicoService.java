@@ -69,7 +69,7 @@ public class ServicoService {
 
     /** Capacidade `precoPorPorte` (src/tipos/estetica_automotiva/definicao.js). Tipo novo com preço por porte entra aqui. */
     static boolean precoPorPorte(Loja loja) {
-        return "estetica_automotiva".equals(loja.tipo());
+        return br.com.agendz.tenant.Capacidades.precoPorPorte(loja);
     }
 
     // ---------- leitura ----------

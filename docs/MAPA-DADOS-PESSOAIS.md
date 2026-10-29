@@ -21,6 +21,8 @@ Legenda de proteção: **C** = criptografia por campo (AES-GCM, chave no cofre/K
 | Histórico do agendamento (log) | `agendamentos[].log` (quem alterou o quê) | pessoal (autoria) | só ids de usuário, sem CPF; imutável | `meuAgendamento` | enquanto o agendamento existir |
 | Avisos do painel | `avisosPainel[]` | pessoal | **sem CPF completo** (usar `cpfMascarado`); esteticista só os dele | por perfil | 6 meses |
 | Usuário da equipe: CPF, nascimento, e-mail, telefone | `usuarios[]` | pessoal crítico | **C + H** no CPF; **C** nos demais; **M** em listas | dono; o próprio usuário vê os dele | enquanto vínculo; depois anonimiza |
+| **Usuário `suporte`** | `usuario` (identificador `suporte`) | credencial da plataforma | criado pelo Admin; senha temporária mostrada uma vez, nunca guardada no painel; some da equipe da loja; nome reservado | Admin | — |
+| **Placa do veículo** | `agendamento.veiculo_placa`, `cliente_veiculo` | dado do cliente final (estética) | copiada no agendamento (foto do momento); fica no banco da loja (RLS), fora de log | dono/recepção/profissional da loja | acompanha o agendamento |
 | **Senha** | `usuarios[].senha` | credencial | **hash BCrypt/Argon2**, nunca cifra reversível; **X**; **L**; fora de DTO (`semUsuarioSenha`) | ninguém | troca periódica sugerida |
 | Código de recuperação | `recuperacoes[].codigo` | credencial temporária | guardar só o **hash**; 30 min; uso único; **X**; **L**; sai só pelo canal | ninguém | apaga ao usar ou expirar |
 | Token de sessão / JWT | sessão em variável no protótipo | credencial | assinatura forte, expiração curta, lista de revogação; cookie `HttpOnly; Secure; SameSite` se for sessão | — | expira |

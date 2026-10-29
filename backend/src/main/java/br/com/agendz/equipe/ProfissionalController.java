@@ -63,7 +63,7 @@ public class ProfissionalController {
     @GetMapping("/api/profissionais")
     public List<Pessoa> listar() {
         return banco.naLoja(jdbc -> jdbc.query(
-                "select id, nome, papel, atende, pode_vender from usuario where ativo order by nome limit 200",
+                "select id, nome, papel, atende, pode_vender from usuario where ativo and identificador <> 'suporte' order by nome limit 200",
                 (rs, i) -> new Pessoa(rs.getObject("id", UUID.class), rs.getString("nome"), rs.getString("papel"), rs.getBoolean("atende"), rs.getBoolean("pode_vender"))));
     }
 
@@ -74,6 +74,7 @@ public class ProfissionalController {
         String login = d.identificador().trim().toLowerCase(Locale.ROOT);
         String nome = Texto.limpar(d.nome());
         if (nome.isEmpty()) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe o nome");
+        br.com.agendz.validacao.Reservados.exigirLivre(login, nome);
         String hash = encoder.encode(d.senha());
         UUID id = banco.naLoja(jdbc -> jdbc.queryForObject(
                 "insert into usuario (loja_id, identificador, nome, papel, senha_hash) values (?::uuid, ?, ?, 'profissional', ?) returning id",

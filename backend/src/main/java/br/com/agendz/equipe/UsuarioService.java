@@ -8,6 +8,7 @@ import br.com.agendz.tenant.Loja;
 import br.com.agendz.tenant.LojaContext;
 import br.com.agendz.tenant.LojaJdbc;
 import br.com.agendz.validacao.Documentos;
+import br.com.agendz.validacao.Reservados;
 import br.com.agendz.validacao.Texto;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -86,7 +87,7 @@ public class UsuarioService {
     // ---------- leitura ----------
 
     public List<Usuario> listar() {
-        return banco.naLoja(jdbc -> jdbc.query("select " + COLUNAS + " from usuario where ativo order by lower(coalesce(apelido, nome)), id limit 200",
+        return banco.naLoja(jdbc -> jdbc.query("select " + COLUNAS + " from usuario where ativo and identificador <> 'suporte' order by lower(coalesce(apelido, nome)), id limit 200",
                 (rs, i) -> lerLinha(rs)).stream().map(l -> paraUsuario(l, false)).toList());
     }
 
@@ -242,6 +243,7 @@ public class UsuarioService {
 
     private Validado validar(Dados d, boolean criando) {
         Validado v = new Validado();
+        Reservados.exigirLivre(d.usuario(), d.nome(), d.apelido()); // `suporte` é só do Admin da plataforma
         if (d.comissaoPct() != null) {
             if (d.comissaoPct().signum() < 0 || d.comissaoPct().compareTo(new BigDecimal("100")) > 0) throw ruim("A comissão vai de 0 a 100%.");
             v.comissao = d.comissaoPct().setScale(2, RoundingMode.HALF_UP);
@@ -376,7 +378,7 @@ public class UsuarioService {
     // ---------- linhas ----------
 
     private Linha buscar(JdbcTemplate jdbc, UUID id) {
-        List<Linha> achados = jdbc.query("select " + COLUNAS + " from usuario where id = ? and ativo", (rs, i) -> lerLinha(rs), id);
+        List<Linha> achados = jdbc.query("select " + COLUNAS + " from usuario where id = ? and ativo and identificador <> 'suporte'", (rs, i) -> lerLinha(rs), id);
         return achados.isEmpty() ? null : achados.get(0);
     }
 

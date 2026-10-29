@@ -10,6 +10,7 @@ grep -q '^JWT_SEGREDO=' .env || echo "JWT_SEGREDO=$(gerar)" >> .env
 # Cifra dos dados pessoais (CPF, telefone, nascimento). NUNCA troque depois de ter clientes: o que foi cifrado com a chave antiga não abre mais.
 grep -q '^CIFRA_CHAVE=' .env || echo "CIFRA_CHAVE=$(gerar)" >> .env
 grep -q '^CIFRA_PEPPER=' .env || echo "CIFRA_PEPPER=$(gerar)" >> .env
+grep -q '^INTERNO_CHAVE=' .env || echo "INTERNO_CHAVE=$(gerar)" >> .env
 chmod 600 .env
 echo "Segredos conferidos em .env (valores ocultos)."
 docker compose -f docker-compose.yml -f docker-compose.api.yml pull api || echo "Imagem da API ainda não publicada (ghcr.io). Rode o workflow de deploy da API no GitHub."

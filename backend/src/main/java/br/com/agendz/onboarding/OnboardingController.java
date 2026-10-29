@@ -228,6 +228,7 @@ public class OnboardingController {
             for (NovaPessoa p : corpo.pessoas()) {
                 String nome = Texto.limpar(p.nome());
                 if (nome.isEmpty()) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe o nome");
+                br.com.agendz.validacao.Reservados.exigirLivre(nome);
                 String login = loginLivre(nome, logins);
                 logins.add(login);
                 String senha = senhaTemporaria();
@@ -311,7 +312,18 @@ public class OnboardingController {
     public Estado concluir() {
         Loja loja = LojaContext.exigir();
         linha();
-        banco.naLoja(jdbc -> jdbc.update("update onboarding set passo = 'pronto', concluido_em = coalesce(concluido_em, now()), atualizado_em = now()"));
+        banco.naLoja(jdbc -> {
+            // tipo com box (estética): sem nenhum box a agenda não aceita carro; cria um por profissional que atende (de 1 a 20), que o dono renomeia em Estabelecimento > Boxes
+            if (br.com.agendz.tenant.Capacidades.usaRecursoFisico(loja)) {
+                Integer boxes = jdbc.queryForObject("select count(*) from box", Integer.class);
+                if (boxes != null && boxes == 0) {
+                    Integer atendem = jdbc.queryForObject("select count(*) from usuario where ativo and atende", Integer.class);
+                    int n = Math.max(1, Math.min(20, atendem == null ? 1 : atendem));
+                    for (int i = 1; i <= n; i++) jdbc.update("insert into box (loja_id, nome, ordem) values (?::uuid, ?, ?)", loja.id().toString(), "Box " + i, i - 1);
+                }
+            }
+            return jdbc.update("update onboarding set passo = 'pronto', concluido_em = coalesce(concluido_em, now()), atualizado_em = now()");
+        });
         return new Estado(loja.tipo(), "pronto", true, List.of(), List.of(), null, null, null, List.of());
     }
 

@@ -485,6 +485,8 @@ public class LinkPublicoService {
             if ("confirmado".equals(m.status())) evento(jdbc, loja.id(), id, "status", "Confirmado", "A confirmar (cliente remarcou pelo link)");
             jdbc.update("update agendamento set inicio = ?, fim_servico = ?, fim_ocupado = ?, status = 'a_confirmar', reagendado = true, motivo_cancelamento = null, atualizado_em = now() where id = ?",
                     utc(novoInicio), utc(fimServico), utc(fimOcupado), id);
+            jdbc.update("delete from agendamento_bloco where agendamento_id = ?", id);
+            jdbc.update("insert into agendamento_bloco (loja_id, agendamento_id, ini, fim) values (?::uuid, ?, ?, ?)", loja.id().toString(), id, utc(novoInicio), utc(fimOcupado));
             avisar(jdbc, loja.id(), id, "remarcou", nomeDoCliente(jdbc, id) + " remarcou pelo link: agora " + dataHora(novoInicio)
                     + ("confirmado".equals(m.status()) ? " (estava confirmado, volta a aguardar a sua confirmação)." : " (aguardando a sua confirmação)."));
             return resumo(jdbc, id, agora);

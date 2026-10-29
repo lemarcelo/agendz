@@ -1,6 +1,7 @@
 package br.com.agendz.escala;
 
 import static org.hamcrest.Matchers.hasSize;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -86,7 +87,7 @@ class EscalaTest extends BaseApi {
 
     private ResultActions agendar(String host, String token, UUID cliente, UUID prof, String servico, Instant inicio) throws Exception {
         return mvc.perform(post("/api/agendamentos").with(host(host)).header(HttpHeaders.AUTHORIZATION, bearer(token)).contentType(MediaType.APPLICATION_JSON)
-                .content("{\"clienteId\":\"" + cliente + "\",\"profissionalId\":\"" + prof + "\",\"servicoIds\":[\"" + servico + "\"],\"inicio\":\"" + inicio + "\",\"status\":\"confirmado\"}"));
+                .content("{\"clienteId\":\"" + cliente + "\",\"profissionalId\":\"" + prof + "\",\"veiculo\":{\"placa\":\"ABC1D23\",\"modelo\":\"Onix\",\"porte\":\"medio\"},\"servicoIds\":[\"" + servico + "\"],\"inicio\":\"" + inicio + "\",\"status\":\"confirmado\"}"));
     }
 
     private ResultActions gravarLoja(String host, String token, String corpo) throws Exception {
@@ -226,11 +227,21 @@ class EscalaTest extends BaseApi {
     }
 
     @Test
-    void servicoDeVariosDiasSoExigeAEntradaDentroDoExpediente() throws Exception {
-        String longo = servico(APEX, davi, 3000, true);
-        gravarLoja(APEX, davi, SEGUNDA).andExpect(status().isOk());
-        agendar(APEX, davi, clienteApex, pabloId, longo, local(segunda, 10, 0)).andExpect(status().isCreated());   // 50 h de serviço, mas a entrada é em horário de trabalho
+    void servicoDeVariosDiasUsaOsBlocosDeExpedienteEExigeAEntradaDentroDele() throws Exception {
+        String longo = servico(APEX, davi, 3000, true);   // 50 h de trabalho
+        String diaTodo = "{\"semana\":{" + String.join(",", java.util.stream.IntStream.range(0, 7).mapToObj(d -> "\"" + d + "\":{\"aberto\":true,\"faixas\":[[\"09:00\",\"18:00\"]]}").toList()) + "}}";
+        gravarLoja(APEX, davi, diaTodo).andExpect(status().isOk());
+        // 9 h por dia: 50 h cabem em 6 dias; a entrada é em horário de trabalho
+        String ag = idDe(agendar(APEX, davi, clienteApex, pabloId, longo, local(segunda, 10, 0)).andExpect(status().isCreated()));
+        Instant fim = jdbc.queryForObject("select fim_servico from agendamento where id = ?::uuid", java.time.OffsetDateTime.class, ag).toInstant();
+        assertEquals(local(segunda.plusDays(5), 15, 0), fim);     // 8 h na segunda (10h-18h) + 4 dias de 9 h + 6 h no sábado (9h-15h) = 50 h
+        assertEquals(6, jdbc.queryForObject("select count(*) from agendamento_bloco where agendamento_id = ?::uuid", Integer.class, ag));
         agendar(APEX, davi, clienteApex, marceloId, longo, local(segunda, 20, 0)).andExpect(status().isConflict()); // entrada fora do expediente
+        // mais do que cabe em 10 dias de expediente
+        String enorme = servico(APEX, davi, 6000, true);
+        mvc.perform(post("/api/agendamentos").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"clienteId\":\"" + clienteApex + "\",\"profissionalId\":\"" + marceloId + "\",\"veiculo\":{\"placa\":\"ABC1D23\",\"modelo\":\"Onix\",\"porte\":\"medio\"},\"servicoIds\":[\"" + enorme + "\"],\"inicio\":\"" + local(segunda, 9, 0) + "\"}"))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.mensagem").value("Não há expediente suficiente nos próximos dias para concluir esse serviço."));
     }
 
     @Test

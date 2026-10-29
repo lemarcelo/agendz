@@ -61,7 +61,7 @@ class AutomacaoAgendaTest extends BaseApi {
     }
 
     private String marcar(Instant inicio, String statusInicial) throws Exception {
-        String corpo = "{\"clienteId\":\"" + cliente + "\",\"profissionalId\":\"" + pablo + "\",\"servicoIds\":[\"" + servico + "\"],\"inicio\":\"" + inicio + "\",\"status\":\"" + statusInicial + "\"}";
+        String corpo = "{\"clienteId\":\"" + cliente + "\",\"profissionalId\":\"" + pablo + "\",\"veiculo\":{\"placa\":\"ABC1D23\",\"modelo\":\"Onix\",\"porte\":\"medio\"},\"servicoIds\":[\"" + servico + "\"],\"inicio\":\"" + inicio + "\",\"status\":\"" + statusInicial + "\"}";
         String json = mvc.perform(post("/api/agendamentos").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON).content(corpo))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
         return id(json);

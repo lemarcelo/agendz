@@ -80,7 +80,7 @@ class ComissaoTest extends BaseApi {
     }
 
     private String lavar(UUID prof, String extra) {
-        return "{\"profissionalId\":\"" + prof + "\",\"servicoIds\":[\"" + lavagem + "\"]" + extra + "}";
+        return "{\"profissionalId\":\"" + prof + "\",\"veiculo\":{\"placa\":\"ABC1D23\",\"modelo\":\"Onix\",\"porte\":\"medio\"},\"servicoIds\":[\"" + lavagem + "\"]" + extra + "}";
     }
 
     private String criar(String token, UUID prof, String extra) throws Exception {
@@ -133,7 +133,7 @@ class ComissaoTest extends BaseApi {
                 .content("{\"nome\":\"Polimento\",\"preco\":200,\"duracaoMin\":60,\"intervaloMin\":0,\"comissaoPct\":25}")).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
         String zero = id(mvc.perform(post("/api/servicos").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"nome\":\"Brinde\",\"preco\":10,\"duracaoMin\":10,\"intervaloMin\":0,\"comissaoPct\":0}")).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
-        atender(davi, "{\"profissionalId\":\"" + pabloId + "\",\"servicoIds\":[\"" + lixa + "\",\"" + zero + "\"]}").andExpect(status().isCreated());
+        atender(davi, "{\"profissionalId\":\"" + pabloId + "\",\"veiculo\":{\"placa\":\"ABC1D23\",\"modelo\":\"Onix\",\"porte\":\"medio\"},\"servicoIds\":[\"" + lixa + "\",\"" + zero + "\"]}").andExpect(status().isCreated());
         relatorio(davi).andExpect(jsonPath("$.profissionais[0].base").value(210.0)).andExpect(jsonPath("$.profissionais[0].comissao").value(50.0))
                 .andExpect(jsonPath("$.profissionais[0].casa").value(160.0));
     }

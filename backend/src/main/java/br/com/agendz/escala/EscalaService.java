@@ -151,6 +151,54 @@ public class EscalaService {
         return temFaixa(prof) ? prof.get(dia) : loja.get(dia);
     }
 
+    /** Serviço de vários dias não passa de 10 dias de expediente (como `MAX_DIAS_SERVICO` do simulador). */
+    public static final int MAX_DIAS_SERVICO = 10;
+
+    /**
+     * Blocos em que há trabalho para um serviço de `minutos` que começa em `inicio` (espelho de `blocosDeTrabalho`, src/domain/schedule.js): só conta o tempo em que a loja
+     * E o profissional estão abertos; a entrada precisa cair dentro de uma faixa. Devolve null se a entrada não é horário de trabalho ou se o serviço não termina em
+     * {@link #MAX_DIAS_SERVICO} dias. Loja sem expediente cadastrado não restringe: um bloco contínuo.
+     */
+    public List<Instant[]> blocos(JdbcTemplate jdbc, UUID profissionalId, Instant inicio, int minutos) {
+        Map<Integer, List<Faixa>> loja = ler(jdbc, null);
+        if (!temFaixa(loja)) return List.of(new Instant[]{inicio, inicio.plus(Duration.ofMinutes(minutos))});
+        Map<Integer, List<Faixa>> prof = ler(jdbc, profissionalId);
+        List<Instant[]> blocos = new ArrayList<>();
+        int falta = minutos;
+        java.time.LocalDate dia0 = inicio.atZone(Fuso.BRASIL).toLocalDate();
+        for (int i = 0; i < MAX_DIAS_SERVICO && falta > 0; i++) {
+            java.time.LocalDate dia = dia0.plusDays(i);
+            int dow = dia.getDayOfWeek().getValue() % 7;
+            for (Faixa f : cruzar(loja.get(dow), temFaixa(prof) ? prof.get(dow) : loja.get(dow))) {
+                Instant a = dia.atStartOfDay(Fuso.BRASIL).plusMinutes(f.ini()).toInstant();
+                Instant b = dia.atStartOfDay(Fuso.BRASIL).plusMinutes(f.fim()).toInstant();
+                Instant de = a.isAfter(inicio) ? a : inicio;
+                if (!de.isBefore(b)) continue;
+                if (blocos.isEmpty() && !de.equals(inicio)) return null; // a entrada precisa ser em horário de trabalho
+                long cabe = Duration.between(de, b).toMinutes();
+                int usa = (int) Math.min(cabe, falta);
+                blocos.add(new Instant[]{de, de.plus(Duration.ofMinutes(usa))});
+                falta -= usa;
+                if (falta <= 0) break;
+            }
+        }
+        return falta > 0 || blocos.isEmpty() ? null : blocos;
+    }
+
+    /** Interseção de duas listas de faixas do mesmo dia (ordenada). */
+    static List<Faixa> cruzar(List<Faixa> a, List<Faixa> b) {
+        List<Faixa> saida = new ArrayList<>();
+        for (Faixa x : a) {
+            for (Faixa y : b) {
+                int ini = Math.max(x.ini(), y.ini());
+                int fim = Math.min(x.fim(), y.fim());
+                if (ini < fim) saida.add(new Faixa(ini, fim));
+            }
+        }
+        saida.sort(Comparator.comparingInt(Faixa::ini));
+        return saida;
+    }
+
     private static boolean cabe(List<Faixa> faixas, int ini, int fim) {
         return faixas.stream().anyMatch((f) -> f.ini() <= ini && fim <= f.fim());
     }

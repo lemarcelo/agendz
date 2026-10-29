@@ -76,7 +76,7 @@ class AtendimentoTest extends BaseApi {
     }
 
     private String corpo(UUID prof, String extra) {
-        return "{" + (prof == null ? "" : "\"profissionalId\":\"" + prof + "\",") + "\"servicoIds\":[\"" + lavagem + "\"]" + extra + "}";
+        return "{" + (prof == null ? "" : "\"profissionalId\":\"" + prof + "\",") + "\"veiculo\":{\"placa\":\"ABC1D23\",\"modelo\":\"Onix\",\"porte\":\"medio\"},\"servicoIds\":[\"" + lavagem + "\"]" + extra + "}";
     }
 
     @Test
@@ -197,7 +197,7 @@ class AtendimentoTest extends BaseApi {
     }
 
     private String comProdutos(UUID prof, String servicos, String produtos, String extra) {
-        return "{" + (prof == null ? "" : "\"profissionalId\":\"" + prof + "\",") + "\"servicoIds\":" + servicos + ",\"produtos\":" + produtos + extra + "}";
+        return "{" + (prof == null ? "" : "\"profissionalId\":\"" + prof + "\",") + "\"veiculo\":{\"placa\":\"ABC1D23\",\"modelo\":\"Onix\",\"porte\":\"medio\"},\"servicoIds\":" + servicos + ",\"produtos\":" + produtos + extra + "}";
     }
 
     private double estoqueDe(String material) {
@@ -353,7 +353,7 @@ class AtendimentoTest extends BaseApi {
     @Test
     void agendamentoComChaveTambemNaoDuplica() throws Exception {
         UUID cliente = jdbc.queryForObject("insert into cliente (loja_id, nome, telefone_cif, telefone_hash) values (?::uuid, 'Ana', 'v1:teste', md5('5553999000030')) returning id", UUID.class, LOJA_APEX);
-        String corpo = "{\"clienteId\":\"" + cliente + "\",\"profissionalId\":\"" + pabloId + "\",\"servicoIds\":[\"" + lavagem + "\"],\"inicio\":\"" + futuro + "\"}";
+        String corpo = "{\"clienteId\":\"" + cliente + "\",\"profissionalId\":\"" + pabloId + "\",\"veiculo\":{\"placa\":\"ABC1D23\",\"modelo\":\"Onix\",\"porte\":\"medio\"},\"servicoIds\":[\"" + lavagem + "\"],\"inicio\":\"" + futuro + "\"}";
         String um = mvc.perform(post("/api/agendamentos").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).header("Idempotency-Key", CHAVE)
                 .contentType(MediaType.APPLICATION_JSON).content(corpo)).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
         String dois = mvc.perform(post("/api/agendamentos").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).header("Idempotency-Key", CHAVE)

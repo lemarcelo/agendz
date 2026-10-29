@@ -876,6 +876,7 @@ export const equipe = {
     for (const k of ['nome', 'apelido', 'cpf', 'nascimento', 'email', 'telefone', 'senha']) if (k in u && !texto(u[k], 150)) return erro('Texto inválido ou grande demais em ' + k + '.');
     if (('papel' in u || !u.id) && !['dono', 'admin', 'atendente', 'profissional'].includes(u.papel)) return erro('Escolha o perfil da pessoa.');
     if ('permissoes' in u) u.permissoes = R.limparPermissoes(u.permissoes);
+    if (R.nomeReservado(u.nome) || R.nomeReservado(u.apelido)) return erro(R.NOME_RESERVADO); // `suporte` é do Admin da plataforma
     return mutate((s) => {
       if (!String(u.nome || '').trim() || !String(u.apelido || '').trim()) return erro('Informe o nome e o apelido.');
       if (R.somenteDigitos(u.cpf).length !== 11) return erro('Informe o CPF completo.');

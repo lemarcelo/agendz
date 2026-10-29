@@ -68,10 +68,15 @@ public class SenhaController {
                 (rs, i) -> new Linha(rs.getString("senha_hash"), rs.getString("papel"), rs.getString("nome"), rs.getBoolean("ativo")), id));
         if (achadas.isEmpty() || !achadas.get(0).ativo()) throw new ErroDeNegocio(HttpStatus.UNAUTHORIZED, "Sessão inválida");
         Linha u = achadas.get(0);
-        String novoLogin = d.usuario() == null || d.usuario().isBlank() ? null : d.usuario().trim().toLowerCase(Locale.ROOT);
+        String pedido = d.usuario() == null || d.usuario().isBlank() ? null : d.usuario().trim().toLowerCase(Locale.ROOT);
+        // O usuário `suporte` (criado pelo Admin) nunca troca de nome: pedir o próprio nome é ignorado; qualquer outro é recusado.
+        boolean ehSuporte = Boolean.TRUE.equals(banco.naLoja(jdbc -> jdbc.queryForObject("select identificador = 'suporte' from usuario where id = ?", Boolean.class, id)));
+        if (ehSuporte && pedido != null && !br.com.agendz.validacao.Reservados.reservado(pedido)) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "O usuário de suporte não troca de nome.");
+        String novoLogin = ehSuporte ? null : pedido;
         if (novoLogin != null && !LOGIN.matcher(novoLogin).matches()) {
             throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Usuário: de 2 a 60 caracteres, só letras, números, ponto, hífen e sublinhado");
         }
+        br.com.agendz.validacao.Reservados.exigirLivre(novoLogin);
         if (!encoder.matches(d.senhaAtual(), u.hash())) {
             limite.registrarErro(chave);
             throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Senha atual incorreta");
