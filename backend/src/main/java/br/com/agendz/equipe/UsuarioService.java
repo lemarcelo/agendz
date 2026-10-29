@@ -209,16 +209,23 @@ public class UsuarioService {
         return new ComSenha(obter(id), senha);
     }
 
-    /** GET /api/usuarios/me: a pessoa lê os próprios dados. O usuário reservado `suporte` não tem perfil na loja. */
+    /** GET /api/usuarios/me: a pessoa lê os próprios dados. As contas ocultas (`suporte` e as de fumaça) não têm perfil na loja: recebem só o que já sabem do login (200, sem 404 no console). */
     public MeusDados meusDados(UUID eu) {
-        Usuario u = obter(eu);
-        if (Reservados.reservado(u.usuario())) throw new ErroDeNegocio(HttpStatus.FORBIDDEN, "Sem acesso.");
+        List<Linha> achados = banco.naLoja(jdbc -> jdbc.query("select " + COLUNAS + " from usuario where id = ? and ativo", (rs, i) -> lerLinha(rs), eu));
+        if (achados.isEmpty()) throw naoEncontrado();
+        Linha l = achados.get(0);
+        if (contaOculta(l.login())) return new MeusDados(l.id(), l.nome(), l.apelido(), l.login(), l.papel(), null, null, null, null);
+        Usuario u = paraUsuario(l, true);
         return new MeusDados(u.id(), u.nome(), u.apelido(), u.usuario(), u.papel(), u.email(), u.telefone(), u.nascimento(), u.foto());
+    }
+
+    private static boolean contaOculta(String login) {
+        return login != null && (Reservados.reservado(login) || login.startsWith(Reservados.FUMACA_PREFIXO));
     }
 
     /** PUT /api/usuarios/me: só nome, apelido, e-mail, telefone e nascimento. Passa pela mesma validação e pelas mesmas travas de duplicidade da ficha da equipe. */
     public MeusDados alterarMeusDados(UUID eu, MeusDadosEntrada e) {
-        meusDados(eu); // 404/403 antes de gravar
+        if (contaOculta(meusDados(eu).usuario())) throw new ErroDeNegocio(HttpStatus.FORBIDDEN, "Sem acesso."); // 404/403 antes de gravar
         alterar(eu, new Dados(e.nome(), e.apelido(), null, null, e.nascimento(), e.email(), e.telefone(), null, null, null, null, null, null, null, null));
         return meusDados(eu);
     }
