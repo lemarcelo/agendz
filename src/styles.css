@@ -199,12 +199,23 @@ input:disabled, select:disabled, textarea:disabled { opacity: .6; }
 
 .cartao { text-align: left; width: 100%; border: 1px solid var(--line); border-left: 5px solid var(--st); border-radius: 10px; background: var(--surface); padding: 10px 12px; display: grid; gap: 6px; }
 .cartao:hover { background: var(--surface-2); }
-.cartao-topo { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.cartao-quando { display: grid; gap: 0; line-height: 1.1; min-width: 64px; }
-.cartao-data { font-size: 13px; font-weight: 800; text-transform: lowercase; color: var(--fg); }
-.cartao-hora { font-variant-numeric: tabular-nums; color: var(--st); font-size: 24px; font-weight: 800; letter-spacing: -0.5px; }
+.cartao-topo { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+.cartao-quem { display: grid; gap: 4px; justify-items: start; min-width: 0; } /* nome em cima, situação embaixo: sobra espaço para o nome */
+.cartao-quando { display: grid; gap: 0; line-height: 1.1; min-width: 64px; text-align: right; justify-items: end; } /* à direita do cartão */
+.cartao-data { font-size: 20px; font-weight: 800; text-transform: lowercase; color: var(--fg); font-variant-numeric: tabular-nums; }
+.cartao-hora { font-variant-numeric: tabular-nums; color: var(--st); font-size: 20px; font-weight: 800; letter-spacing: -0.5px; } /* data e hora no mesmo tamanho */
+.quando-hoje .cartao-hora { font-size: 26px; } .quando-hoje .cartao-data { font-size: 18px; }   /* do dia: a hora um pouco maior */
+.quando-proximo .cartao-data { font-size: 26px; } .quando-proximo .cartao-hora { font-size: 20px; } /* dos próximos dias: a data maior */
 .cartao-nome { font-weight: 650; flex: 1; min-width: 80px; }
 .cartao-corpo { display: grid; gap: 1px; font-size: 13px; }
+.cartao-nome { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; max-width: 100%; }
+/* serviço no meio do cartão (maior que o profissional; dois linhas no máximo) e profissional embaixo, com nome abreviado */
+.cartao-servico { text-align: center; font-size: 17px; font-weight: 700; line-height: 1.25; padding: 2px 4px; overflow: hidden; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.cartao-profissional { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 14px; min-width: 0; }
+.cartao-prof { display: inline-flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); }
+.cartao-prof b { font-weight: 700; }
+.cartao-valor { margin-left: auto; flex: none; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--muted); }
+.cartao-veiculo-centro, .cartao-veiculo-real { justify-content: center; text-align: center; }
 .cartao-rodape { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .cartao-ultimo { font-size: 12px; flex-basis: 100%; }
 
@@ -915,3 +926,47 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
 .est-hist-real li > span { display: grid; gap: 1px; min-width: 0; overflow-wrap: anywhere; }
 .est-hist-real li > strong { white-space: nowrap; }
 .est-obs-real { display: block; }
+
+/* Página do cliente: "Seus horários" guardados no navegador (v102) */
+.pub-corpo { display: grid; gap: 14px; min-width: 0; }
+.pub-principal { min-width: 0; }
+.pub-reservas { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; display: grid; gap: 8px; min-width: 0; order: -1; }
+.pub-reservas h2 { margin: 0; font-size: 15px; }
+.pub-reservas ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.pub-reservas li { display: grid; gap: 0; border-left: 4px solid var(--tema-btn, var(--ink)); padding: 2px 0 2px 10px; line-height: 1.15; overflow-wrap: anywhere; }
+.pub-reserva-data { font-weight: 800; font-size: 13px; text-transform: lowercase; }
+.pub-reserva-hora { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -0.5px; }
+.pub-reservas-nota { margin: 0; font-size: 12.5px; }
+@media (min-width: 960px) {
+  .pub:has(.pub-corpo.com-reservas) { max-width: 920px; }
+  .pub-corpo.com-reservas { grid-template-columns: minmax(0, 560px) minmax(220px, 320px); justify-content: center; align-items: start; }
+  .pub-corpo.com-reservas .pub-reservas { order: 2; position: sticky; top: 16px; }
+}
+
+/* ---------- aviso de agendamento novo e Meu perfil (site real) ---------- */
+.usuario-perfil-real { display: inline-flex; align-items: center; gap: 8px; padding: 3px 8px 3px 3px; border: 0; border-radius: 999px; background: transparent; color: inherit; font: inherit; cursor: pointer; min-width: 0; }
+.usuario-perfil-real:hover { background: var(--tema-topo-hover, var(--surface-2)); }
+.usuario-perfil-real .usuario-txt { text-align: left; max-width: 140px; } .usuario-perfil-real .usuario-txt b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.faixa-aviso-real { position: fixed; top: calc(env(safe-area-inset-top, 0px) + 8px); left: 50%; transform: translateX(-50%); z-index: 55; width: min(560px, calc(100vw - 24px)); display: flex; align-items: stretch; gap: 4px; padding: 4px; border-radius: 16px; background: var(--ink); color: var(--ink-fg); box-shadow: 0 10px 30px rgba(0, 0, 0, .35); animation: faixa-entra-real .28s ease-out; }
+.faixa-aviso-ir-real { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 0; border-radius: 12px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.faixa-aviso-ir-real:hover { background: rgba(0, 0, 0, .12); }
+.faixa-aviso-texto-real { display: grid; gap: 1px; min-width: 0; } .faixa-aviso-texto-real b { overflow-wrap: anywhere; } .faixa-aviso-texto-real small { opacity: .8; }
+.faixa-aviso-fechar-real { align-self: center; color: inherit; }
+@keyframes faixa-entra-real { from { opacity: 0; transform: translate(-50%, -14px); } to { opacity: 1; transform: translate(-50%, 0); } }
+/* cartão do agendamento novo: luz de fundo pulsando por alguns segundos (9 s = 7 pulsos de 1,3 s) */
+.cartao-novo-real { border-radius: 14px; box-shadow: 0 0 0 2px color-mix(in srgb, var(--acento) 70%, transparent); animation: pulsa-real 1.3s ease-in-out 7; }
+@keyframes pulsa-real { 0%, 100% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--acento) 35%, transparent), 0 0 0 0 transparent; } 50% { box-shadow: 0 0 0 3px var(--acento), 0 0 22px 6px color-mix(in srgb, var(--acento) 55%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .faixa-aviso-real { animation: none; } .cartao-novo-real { animation: none; box-shadow: 0 0 0 3px var(--acento); } }
+.perfil-fundo-real { position: fixed; inset: 0; z-index: 70; display: grid; place-items: start center; padding: 16px; overflow-y: auto; background: rgba(0, 0, 0, .55); }
+.perfil-real { width: min(480px, 100%); display: grid; gap: 14px; padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); color: var(--fg); outline: none; min-width: 0; }
+.perfil-topo-real { display: flex; align-items: center; justify-content: space-between; gap: 12px; } .perfil-topo-real h2 { margin: 0; font-size: 18px; }
+.perfil-foto-real { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; } .perfil-foto-botoes-real { display: flex; gap: 8px; flex-wrap: wrap; }
+.perfil-foto-real .avatar { width: 64px; height: 64px; font-size: 26px; }
+.perfil-form-real { display: grid; gap: 12px; min-width: 0; } .perfil-form-real h3 { margin: 0; font-size: 15px; }
+.perfil-usuario-real { margin: 0; overflow-wrap: anywhere; }
+.perfil-avisos-real { display: grid; gap: 12px; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin: 0; min-width: 0; }
+.perfil-avisos-real legend { font-size: 12.5px; font-weight: 600; color: var(--muted); padding: 0 6px; }
+.perfil-opcao-real { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; } .perfil-opcao-real input { margin-top: 3px; flex: none; }
+.perfil-opcao-real span { display: grid; gap: 2px; min-width: 0; } .perfil-opcao-real small { overflow-wrap: anywhere; }
+.perfil-nota-real { margin: 0; font-size: 12.5px; }
+.perfil-senha-real { padding-top: 12px; border-top: 1px solid var(--line); }

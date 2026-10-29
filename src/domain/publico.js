@@ -67,11 +67,17 @@ export function diasLivres(s, { profissionalId, servicoIds, porte, deTs, dias, a
   return out;
 }
 
+// Link do mapa da loja: pelas coordenadas, se houver; senão busca pelo endereço (vazio sem nenhum dos dois). Mesma regra do servidor.
+export function mapaDaLoja(e) {
+  if (Number.isFinite(e.latitude) && Number.isFinite(e.longitude)) return `https://maps.google.com/?q=${e.latitude},${e.longitude}`;
+  return e.endereco ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(e.endereco)}` : '';
+}
+
 // Só o que a página pública precisa: nunca CPF, telefone, notas nem dado de outro cliente.
 export function configPublica(s) {
   const cfg = configLink(s);
   return {
-    ativo: cfg.ativo, diasMax: cfg.diasMax, tipo: tipoDe(s.estabelecimento), nome: s.estabelecimento.nome, telefone: s.estabelecimento.telefone || '', endereco: s.estabelecimento.endereco || '',
+    ativo: cfg.ativo, diasMax: cfg.diasMax, tipo: tipoDe(s.estabelecimento), nome: s.estabelecimento.nome, telefone: s.estabelecimento.telefone || '', endereco: s.estabelecimento.enderecoNoLink === false ? '' : s.estabelecimento.endereco || '', mapaUrl: s.estabelecimento.enderecoNoLink === false ? '' : mapaDaLoja(s.estabelecimento),
     ...(cap(s.estabelecimento, 'precoPorPorte') ? { portes: PORTES.map((id) => ({ id, nome: ROTULO_PORTE[id] })) } : {}),
     // preço e duração de cada serviço (por porte quando o tipo cobra por porte; a página mostra os do porte escolhido); nada de custo, material ou comissão
     servicos: s.servicos.filter((x) => x.ativo !== false).map((x) => (cap(s.estabelecimento, 'precoPorPorte')

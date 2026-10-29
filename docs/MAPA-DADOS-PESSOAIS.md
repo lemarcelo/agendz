@@ -81,6 +81,7 @@ Snapshot do estado com senhas e CPFs em texto puro no navegador; senha comparada
 
 ## Foto do esteticista (v45)
 - Campo opcional `foto` do usuário: imagem PNG, JPEG ou WebP recortada em quadrado de 96 px e reduzida no navegador (até ~30 KB). O servidor revalida o tipo pelos primeiros bytes e o tamanho, e **não confia no tipo informado pelo cliente**.
+- **Meu perfil (v103):** cada pessoa lê e muda os próprios nome, apelido, e-mail, telefone, nascimento e foto por `GET/PUT /api/usuarios/me` (e-mail, telefone e nascimento continuam cifrados; o corpo da resposta não traz CPF). As escolhas de aviso (som, faixa, vibração) **não são dado pessoal** e ficam só no `localStorage` do aparelho (`agendz-aviso:<loja>:<usuário>`), nunca no servidor.
 - É dado pessoal (imagem do rosto): fica fora de log e de mensagens do WhatsApp; some do cadastro ao remover a foto ou o usuário; no back-end, guardar em coluna `bytea` ou em armazenamento de objetos privado, nunca em URL pública adivinhável.
 - Quem altera: o próprio usuário (`PUT /usuarios/me/foto`) e o proprietário (`PUT /usuarios/{id}`).
 

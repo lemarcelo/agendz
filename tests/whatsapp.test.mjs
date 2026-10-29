@@ -10,7 +10,7 @@ test('mensagem: nome da Apex e link, sem quebrar com texto estranho', () => {
   assert.equal(textoConvite('Apex', LINK), `Agende seu horário na Apex: ${LINK}`);
   assert.equal(textoConvite('', LINK), `Agende seu horário: ${LINK}`);
   assert.ok(textoConvite('  Apex \n  do   Zé ', LINK).includes('Apex do Zé'));
-  assert.ok(textoConvite('x'.repeat(5000), 'y'.repeat(5000)).length <= 400, 'mensagem limitada');
+  assert.ok(textoConvite('x'.repeat(5000), 'y'.repeat(5000)).length <= 500, 'mensagem limitada');
   assert.ok(textoConvite(null, undefined).startsWith('Agende seu horário'));
 });
 
@@ -50,4 +50,15 @@ test('front: nenhum arquivo do app usa o esquema whatsapp:// (deixa a tela em br
   const ler = (d) => { for (const n of readdirSync(d, { withFileTypes: true })) { const f = `${d}/${n.name}`; if (n.isDirectory()) ler(f); else if (/\.(jsx?|mjs)$/.test(n.name) && /['"`]whatsapp:/.test(readFileSync(f, 'utf8'))) ruins.push(f); } };
   ler(new URL('../src', import.meta.url).pathname);
   assert.deepEqual(ruins, []);
+});
+
+test('convite com a localização: link do mapa em linha própria, só https, e nunca estoura o limite', () => {
+  const MAPA = 'https://maps.google.com/?q=-25.428356,-49.273251';
+  assert.equal(textoConvite('Apex', LINK, MAPA), `Agende seu horário na Apex: ${LINK}\n📍 Como chegar: ${MAPA}`);
+  assert.equal(textoConvite('Apex', LINK, ''), `Agende seu horário na Apex: ${LINK}`);
+  assert.equal(textoConvite('Apex', LINK, undefined), `Agende seu horário na Apex: ${LINK}`);
+  assert.equal(textoConvite('Apex', LINK, 'javascript:alert(1)'), `Agende seu horário na Apex: ${LINK}`);
+  assert.equal(textoConvite('Apex', LINK, 'http://maps.google.com/?q=1,2'), `Agende seu horário na Apex: ${LINK}`);
+  assert.equal(textoConvite('Apex', LINK, 'https://x.com/a b'), `Agende seu horário na Apex: ${LINK}`);
+  assert.ok(textoConvite('x'.repeat(5000), 'y'.repeat(5000), MAPA).length <= 500);
 });

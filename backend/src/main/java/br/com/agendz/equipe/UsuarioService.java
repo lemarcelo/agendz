@@ -65,6 +65,15 @@ public class UsuarioService {
                         @Size(max = 40000) String foto, BigDecimal comissaoProdutoPct, @Size(max = 200) String senhaTemporaria) {
     }
 
+    /** Os dados que a própria pessoa vê e muda em "Meu perfil". Sem CPF, perfil, permissões nem comissão (isso é do proprietário). */
+    public record MeusDados(UUID id, String nome, String apelido, String usuario, String papel, String email, String telefone, String nascimento, String foto) {
+    }
+
+    /** Corpo de PUT /api/usuarios/me: campo ausente não muda; texto vazio apaga e-mail, telefone e nascimento (nome e apelido não podem ficar vazios). */
+    public record MeusDadosEntrada(@Size(max = 150) String nome, @Size(max = 60) String apelido, @Size(max = 150) String email, @Size(max = 100) String telefone,
+                                   @Size(max = 100) String nascimento) {
+    }
+
     /** Resposta de criar e de refazer a senha: a senha temporária aparece só aqui. */
     public record ComSenha(Usuario usuario, String senhaTemporaria) {
     }
@@ -198,6 +207,20 @@ public class UsuarioService {
             return null;
         });
         return new ComSenha(obter(id), senha);
+    }
+
+    /** GET /api/usuarios/me: a pessoa lê os próprios dados. O usuário reservado `suporte` não tem perfil na loja. */
+    public MeusDados meusDados(UUID eu) {
+        Usuario u = obter(eu);
+        if (Reservados.reservado(u.usuario())) throw new ErroDeNegocio(HttpStatus.FORBIDDEN, "Sem acesso.");
+        return new MeusDados(u.id(), u.nome(), u.apelido(), u.usuario(), u.papel(), u.email(), u.telefone(), u.nascimento(), u.foto());
+    }
+
+    /** PUT /api/usuarios/me: só nome, apelido, e-mail, telefone e nascimento. Passa pela mesma validação e pelas mesmas travas de duplicidade da ficha da equipe. */
+    public MeusDados alterarMeusDados(UUID eu, MeusDadosEntrada e) {
+        meusDados(eu); // 404/403 antes de gravar
+        alterar(eu, new Dados(e.nome(), e.apelido(), null, null, e.nascimento(), e.email(), e.telefone(), null, null, null, null, null, null, null, null));
+        return meusDados(eu);
     }
 
     /** Cada pessoa troca só a própria foto; vazio ou null remove. */

@@ -1,4 +1,5 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:44e62ebcd1 */
+import { caminhoHttps } from '../domain/localizacao.js';
 import React, { useMemo, useState } from 'react';
 import { MODO_DEMO, publico, store } from '../services/api.js';
 import { DIAS_CURTOS, fmtDayLong, fmtHM, fmtMoney, startOfDay, ymd } from '../domain/time.js';
@@ -56,7 +57,7 @@ function Cabecalho({ cfg, aba, setAba }) {
       <div className="pub-marca"><LogoMarca comNome tamanho={72} /></div>
       {(cfg.endereco || cfg.telefone) && (
         <p className="pub-contato muted" data-testid="pub-contato">
-          {cfg.endereco && <span>{cfg.endereco} · <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cfg.endereco)}`} target="_blank" rel="noopener noreferrer" data-testid="pub-mapa">Ver no mapa</a></span>}
+          {cfg.endereco && <span>{cfg.endereco} · <a href={`https://${caminhoHttps(cfg.mapaUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cfg.endereco)}`)}`} target="_blank" rel="noopener noreferrer" data-testid="pub-mapa">Ver no mapa</a></span>}
           {cfg.telefone && <span>{cfg.telefone}</span>}
         </p>
       )}

@@ -75,6 +75,17 @@ for (const slug of ['dalforno', 'offbox']) {
   await q.getByTestId('pub-aba-agendar').waitFor();
   const tipos = { apex: 'estetica_automotiva', dalforno: 'barbearia', offbox: 'barbearia' };
   await q.waitForFunction((t) => document.documentElement.getAttribute('data-tipo') === t, tipos[slug]);
+  // aparelho que antes usou outra loja (guardada no navegador): o link manda mais que a loja salva, e o link do profissional também
+  const alt = { dalforno: 'Barbearia Dalforno', offbox: 'Offbox Barbearia' }[slug];
+  assert.equal(await q.locator('img').first().getAttribute('alt'), alt, `${slug}: logo de outra loja na página do cliente`);
+  const cli2 = await b.newContext({ viewport: { width: 390, height: 780 }, locale: 'pt-BR' });
+  await cli2.addInitScript(() => { try { localStorage.setItem('agendz-demo-loja', 'apex'); } catch { /* sem armazenamento */ } });
+  const q2 = await cli2.newPage(); q2.setDefaultTimeout(8000);
+  await q2.goto(`${base}#agendar-u-kiko@${slug}`);
+  await q2.getByTestId('pub-aba-agendar').waitFor();
+  assert.equal(await q2.locator('img').first().getAttribute('alt'), alt, `${slug}: link do profissional caiu na loja salva`);
+  assert.equal(await q2.evaluate(() => document.documentElement.getAttribute('data-tipo')), 'barbearia');
+  await cli2.close();
   const corpo = await q.locator('body').innerText();
   assert.ok(!/lavagem|polimento|veículo/i.test(corpo), `${slug}: página do cliente com serviços da Apex`);
   // o título da aba e o texto do convite trazem o nome da loja certa

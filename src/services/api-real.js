@@ -800,6 +800,53 @@ export const linkAgendamento = {
   },
 };
 
+// ---------- local da loja (endereço e localização; regras no servidor: LocalDaLoja) e comissão geral ----------
+const httpsOuVazio = (v) => (typeof v === 'string' && /^https:\/\/[^\s]{1,300}$/.test(v) ? v : '');
+const opcional = (v, max) => (typeof v === 'string' && v.trim() ? texto(v, max) : '');
+function lerLocal(d) {
+  d = d && typeof d === 'object' ? d : {};
+  return {
+    logradouro: opcional(d.logradouro, 120), numero: opcional(d.numero, 20), complemento: opcional(d.complemento, 60), bairro: opcional(d.bairro, 60),
+    cidade: opcional(d.cidade, 60), uf: opcional(d.uf, 2), cep: typeof d.cep === 'string' ? d.cep.replace(/\D/g, '').slice(0, 8) : '',
+    latitude: numeroOuNulo(d.latitude), longitude: numeroOuNulo(d.longitude), enderecoNoLink: d.enderecoNoLink === true, localizacaoNoWhatsapp: d.localizacaoNoWhatsapp === true,
+    enderecoTexto: opcional(d.enderecoTexto, 300), localizacaoUrl: httpsOuVazio(d.localizacaoUrl), localizacaoWhatsappUrl: httpsOuVazio(d.localizacaoWhatsappUrl),
+  };
+}
+export const local = {
+  // GET /api/estabelecimento/local  (quem edita vê tudo; todos da agenda recebem `localizacaoWhatsappUrl`, o link que vai na mensagem do WhatsApp, e só com o envio ligado)
+  async obter() {
+    const r = await chamar('GET', '/api/estabelecimento/local');
+    return r.ok ? { ok: true, local: lerLocal(r.dados) } : r;
+  },
+  // PUT /api/estabelecimento/local  (proprietário ou seção Estabelecimento; o corpo inteiro substitui o gravado; campo vazio = apaga)
+  async gravar(d) {
+    d = d && typeof d === 'object' ? d : {};
+    const corpo = { enderecoNoLink: d.enderecoNoLink === true, localizacaoNoWhatsapp: d.localizacaoNoWhatsapp === true };
+    for (const [k, max] of [['logradouro', 120], ['numero', 20], ['complemento', 60], ['bairro', 60], ['cidade', 60], ['uf', 2], ['cep', 12]]) if (typeof d[k] === 'string' && d[k].trim()) corpo[k] = d[k].trim().slice(0, max);
+    const lat = typeof d.latitude === 'number' ? d.latitude : null, lng = typeof d.longitude === 'number' ? d.longitude : null;
+    if ((lat === null) !== (lng === null)) return { ok: false, status: 0, erro: 'Informe latitude e longitude juntas (ou deixe as duas vazias).' };
+    if (lat !== null) {
+      if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return { ok: false, status: 0, erro: 'Localização inválida: latitude de -90 a 90 e longitude de -180 a 180.' };
+      corpo.latitude = lat; corpo.longitude = lng;
+    }
+    const r = await chamar('PUT', '/api/estabelecimento/local', corpo);
+    return r.ok ? { ok: true, local: lerLocal(r.dados) } : r;
+  },
+};
+export const comissaoGeral = {
+  // GET /api/estabelecimento/comissao  (só o proprietário; sem valor gravado vale 50)
+  async obter() {
+    const r = await chamar('GET', '/api/estabelecimento/comissao');
+    return r.ok ? { ok: true, comissaoPadrao: numeroOuNulo(r.dados && r.dados.comissaoPadrao) ?? 50 } : r;
+  },
+  // PUT /api/estabelecimento/comissao  { comissaoPadrao }  (0 a 100)
+  async gravar(valor) {
+    if (typeof valor !== 'number' || !Number.isFinite(valor) || valor < 0 || valor > 100) return { ok: false, status: 0, erro: 'A comissão padrão vai de 0 a 100%.' };
+    const r = await chamar('PUT', '/api/estabelecimento/comissao', { comissaoPadrao: valor });
+    return r.ok ? { ok: true, comissaoPadrao: numeroOuNulo(r.dados && r.dados.comissaoPadrao) ?? valor } : r;
+  },
+};
+
 // Rotas do cliente final (SEM login; a loja vem do endereço). O token de acesso a um horário vem na resposta do pedido, UMA vez; quem guarda é a página
 // (localStorage do aparelho do cliente, dentro de try/catch). Nada aqui usa o token do painel.
 const PUB = { publico: true };
@@ -808,6 +855,7 @@ const inteiroOuZero = (v) => (Number.isInteger(v) && v >= 0 ? v : 0);
 function lerPaginaPublica(d) {
   d = d && typeof d === 'object' ? d : {};
   return {
+    endereco: opcional(d.endereco, 300), mapaUrl: httpsOuVazio(d.mapaUrl),
     ativo: d.ativo === true, aviso: texto(d.aviso, 200), diasMax: Number.isInteger(d.diasMax) ? Math.min(60, Math.max(1, d.diasMax)) : 30,
     servicos: listaDe(d.servicos, 200).filter((x) => x && IDV(x.id)).map((x) => ({ id: x.id, nome: texto(x.nome, 120), duracao: inteiroOuZero(x.duracao), preco: dinheiroOuZero(x.preco), antecedenciaH: inteiroOuZero(x.antecedenciaH) })),
     profissionais: listaDe(d.profissionais, 100).filter((x) => x && IDV(x.id)).map((x) => ({ id: x.id, nome: texto(x.nome, 80), foto: typeof x.foto === 'string' && x.foto.startsWith('data:image/') ? x.foto : null })),
@@ -890,6 +938,35 @@ export const publico = {
 
 
 // ---- Avisos do painel (5e-2): o que o cliente fez pelo link (pediu horário, remarcou, cancelou) ----
+// "Meu perfil": a própria pessoa lê e muda só os próprios dados de contato e a foto (qualquer perfil logado). Sem CPF, perfil, permissões nem comissão.
+const lerMeusDados = (d) => {
+  d = d && typeof d === 'object' ? d : {};
+  return { id: texto(d.id, 40), nome: texto(d.nome, 150), apelido: d.apelido ? texto(d.apelido, 60) : '', usuario: texto(d.usuario, 60), papel: texto(d.papel, 20),
+    email: d.email ? texto(d.email, 150) : '', telefone: d.telefone ? texto(d.telefone, 20) : '', nascimento: d.nascimento ? texto(d.nascimento, 10) : '',
+    foto: typeof d.foto === 'string' && d.foto.startsWith('data:image/') && d.foto.length <= 30000 ? d.foto : null };
+};
+export const perfil = {
+  // GET /api/usuarios/me
+  async obter() {
+    const r = await chamar('GET', '/api/usuarios/me');
+    return r.ok ? { ok: true, dados: lerMeusDados(r.dados) } : r;
+  },
+  // PUT /api/usuarios/me  { nome, apelido, email, telefone, nascimento }  (campo ausente não muda; e-mail, telefone e nascimento vazios apagam)
+  async salvar(d) {
+    d = d && typeof d === 'object' ? d : {};
+    const corpo = {};
+    for (const [k, max] of [['nome', 150], ['apelido', 60], ['email', 150], ['telefone', 30], ['nascimento', 10]]) if (typeof d[k] === 'string') corpo[k] = d[k].trim().slice(0, max);
+    const r = await chamar('PUT', '/api/usuarios/me', corpo);
+    return r.ok ? { ok: true, dados: lerMeusDados(r.dados) } : r;
+  },
+  // PUT /api/usuarios/me/foto  { foto }  (data URL PNG/JPEG/WebP; vazio remove)
+  async foto(url) {
+    const v = typeof url === 'string' ? url : '';
+    if (v !== '' && (!v.startsWith('data:image/') || v.length > 30000)) return { ok: false, status: 0, erro: 'Escolha uma imagem PNG, JPEG ou WebP pequena.' };
+    return chamar('PUT', '/api/usuarios/me/foto', { foto: v });
+  },
+};
+
 const TIPOS_AVISO = ['pedido', 'remarcou', 'cancelou'];
 const lerAviso = (d) => {
   d = d && typeof d === 'object' ? d : {};

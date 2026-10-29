@@ -130,6 +130,7 @@ const semRolagem = async (p, onde) => { const l = await p.evaluate(() => ({ doc:
   // remover: produto com histórico é desativado; sem histórico, apagado
   await p.getByTestId(`est-remover-${P1}`).click(); await p.getByTestId(`est-remover-sim-${P1}`).click();
   await p.waitForFunction(() => /desativado em vez de apagado/.test(document.querySelector('[data-testid="est-salvo"]')?.innerText || ''));
+  await p.waitForFunction((i) => /desativado/.test(document.querySelector(`[data-testid="est-${i}"]`)?.innerText || ''), P1);
   assert.match(await textoDe(p, `est-${P1}`), /desativado/);
   await p.getByTestId(`est-remover-${P2}`).click(); await p.getByTestId(`est-remover-sim-${P2}`).click();
   await p.waitForFunction((i) => !document.querySelector(`[data-testid="est-${i}"]`), P2);

@@ -11,7 +11,13 @@ Regra de uso: toda funcionalidade nova pedida "para outro momento" entra aqui co
 - Cada ciclo gera os agendamentos pelo mesmo caminho de hoje (`validarHorario`/`acharConflitos`: horário nunca duplica); o valor do plano entra como `desconto` por `itensDoAgendamento` ou como cobrança do ciclo (decidir), com a comissão sobre o valor realmente cobrado.
 - Pausar, retomar, encerrar e remarcar uma ocorrência sem quebrar o plano; histórico do plano.
 **Onde mexe:** Agendz (servidor + site real + Artifact). Admin só se virar item de cobrança da plataforma (não é o caso).
-**Dúvidas:** D1 (resolvida: o valor é **mensal**, do pacote; falta definir quantos atendimentos o mês inclui e o que acontece com o que sobrar) D2 cobrança (Pix/dinheiro) e inadimplência entram junto ou depois do financeiro? D3 o cliente vê o plano no link de agendamento? D4 como fica a comissão (percentual sobre o valor do ciclo dividido pelos atendimentos)?
+**Exemplos de planos do Marcelo (29/10 10:42; cobrança mensal):**
+- ✂️ **Plano Degradê em Dia — R$ 75/mês:** 2 cortes degradê + 1 pezinho.
+- 💎 **Plano Navalhado Premium — R$ 85/mês:** 2 degradês navalhados + 1 sobrancelha.
+- 🧔 **Plano Visual Completo — R$ 125/mês:** 2 cortes degradê + 2 barbas + 1 sobrancelha.
+- 👑 **Plano Barbeiro VIP — R$ 165/mês:** 2 degradês navalhados + 2 barbas + 1 pomada de 80 g + prioridade no agendamento.
+**Regras pedidas além do cadastro:** (1) o menu **Planos** tem a opção de **mandar o link de planos** para o cliente escolher (página pública com os planos e o valor mensal; pedido entra "a confirmar"); (2) os **horários do plano já ocupam a agenda e têm prioridade** (reservados antes do agendamento avulso; o link comum nunca oferece o horário reservado); (3) **agendamento pelo link com o telefone de um cliente que tem plano ativo conta como corte realizado do plano e reduz o saldo de atendimentos do mês** (cada serviço do plano tem sua cota por mês; ao zerar, cai no preço normal ou avisa); (4) o plano é um **catálogo** (nome, itens com quantidade por mês, valor mensal, produto incluso baixa estoque) e a **assinatura** liga cliente + plano + dia de cobrança; (5) o valor a receber do mês e o pagamento "plano" entram no financeiro.
+**Dúvidas:** D1 (resolvida: o valor é **mensal**, do pacote, com cota de atendimentos por mês; falta definir se o que sobra acumula para o mês seguinte e o que acontece ao zerar a cota) D2 cobrança (Pix/dinheiro) e inadimplência entram junto ou depois do financeiro? D3 o cliente vê o plano no link de agendamento? D4 como fica a comissão (percentual sobre o valor do ciclo dividido pelos atendimentos)?
 
 ## B1. Modo homologação por cliente (pedido de 28/10)
 **Para que serve:** testar o sistema numa loja de verdade sem sujar os dados. O Admin liga e desliga o modo por cliente (loja); vale para qualquer tipo (barbearia, estética, futuros).

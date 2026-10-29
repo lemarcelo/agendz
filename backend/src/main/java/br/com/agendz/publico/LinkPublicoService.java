@@ -3,6 +3,7 @@ package br.com.agendz.publico;
 import br.com.agendz.clientes.ClienteService;
 import br.com.agendz.comissao.ComissaoService;
 import br.com.agendz.configuracao.LinkAgendamento;
+import br.com.agendz.configuracao.LocalDaLoja;
 import br.com.agendz.cupom.CupomService;
 import br.com.agendz.aviso.AvisosPainel;
 import br.com.agendz.erro.ErroDeNegocio;
@@ -74,7 +75,8 @@ public class LinkPublicoService {
     public record ProfissionalPublico(UUID id, String nome, String foto) {
     }
 
-    public record Pagina(boolean ativo, String aviso, int diasMax, List<ServicoPublico> servicos, List<ProfissionalPublico> profissionais) {
+    /** `endereco` e `mapaUrl` só vêm quando o proprietário ligou "mostrar o endereço no link" e há endereço gravado. */
+    public record Pagina(boolean ativo, String aviso, int diasMax, List<ServicoPublico> servicos, List<ProfissionalPublico> profissionais, String endereco, String mapaUrl) {
     }
 
     public record Horario(Instant inicio, UUID profissionalId) {
@@ -136,14 +138,16 @@ public class LinkPublicoService {
         return banco.naLoja(jdbc -> {
             LinkAgendamento.Config cfg = LinkAgendamento.ler(jdbc);
             boolean ativo = cfg.ativo() && LinkAgendamento.tipoSuportado(loja);
-            if (!ativo) return new Pagina(false, ERRO_DESLIGADO, cfg.diasMax(), List.of(), List.of());
+            if (!ativo) return new Pagina(false, ERRO_DESLIGADO, cfg.diasMax(), List.of(), List.of(), null, null);
             List<ServicoPublico> servicos = jdbc.query(
                     "select id, nome, preco, duracao_min, antecedencia_h from servico where ativo and not multi_dia order by lower(nome), id",
                     (rs, i) -> new ServicoPublico(rs.getObject("id", UUID.class), rs.getString("nome"), rs.getInt("duracao_min"), rs.getBigDecimal("preco"), rs.getInt("antecedencia_h")));
             List<ProfissionalPublico> profissionais = jdbc.query(
                     "select id, coalesce(nullif(apelido, ''), nome) as n, foto from usuario where ativo and atende order by lower(coalesce(nullif(apelido, ''), nome)), id",
                     (rs, i) -> new ProfissionalPublico(rs.getObject("id", UUID.class), rs.getString("n"), rs.getString("foto")));
-            return new Pagina(true, null, cfg.diasMax(), servicos, profissionais);
+            LocalDaLoja.Local local = LocalDaLoja.ler(jdbc);
+            boolean mostra = local.enderecoNoLink() && local.temEndereco();
+            return new Pagina(true, null, cfg.diasMax(), servicos, profissionais, mostra ? local.enderecoTexto() : null, mostra ? local.mapaUrl() : null);
         });
     }
 

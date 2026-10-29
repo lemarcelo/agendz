@@ -5,10 +5,11 @@
 // nas lojas com veículo/porte e box (estética) o Atender pede o veículo e deixa escolher o box; o cartão e a ficha mostram veículo, porte e box.
 // Não importa `api.js`, `hooks.js` nem `common.jsx` (tests/estatico.test.mjs).
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { agenda as api, boxes as apiBoxes, clientes as apiClientes, profissionais as apiProf } from '../../services/api-real.js';
+import { agenda as api, boxes as apiBoxes, clientes as apiClientes, local as apiLocal, profissionais as apiProf } from '../../services/api-real.js';
 import { DIAS_CURTOS, addDays, addMonths, fmtDateTime, fmtDayLong, fmtDiaMesSemana, fmtHM, fmtMoney, fmtMonthYear, monthStart, sameDay, startOfDay, weekStart, ymd } from '../../domain/time.js';
 import { ATIVOS, ROTULO_STATUS } from '../../domain/rules.js';
 import { agruparPorDia } from '../../domain/agenda-grupos.js';
+import { abreviarNome } from '../../domain/abreviar.js';
 import { Rot, capAtiva } from '../../domain/tipos.js';
 import { ROTULO_PORTE, rotuloVeiculo } from '../../domain/veiculos.js';
 import { boxesAtivos } from '../../domain/atender-form.js';
@@ -27,21 +28,24 @@ const doLocal = (v) => { const t = new Date(v).getTime(); return Number.isFinite
 
 const rotuloDoGrupo = (dia, agora) => (sameDay(dia, addDays(startOfDay(agora), 1)) ? `Amanhã · ${fmtDayLong(dia)}` : sameDay(dia, agora) ? `Hoje · ${fmtDayLong(dia)}` : fmtDayLong(dia));
 
-function Cartao({ a, nomeCliente, nomeProf, mostraProf, aberto, aoAbrir, testid, children }) {
+function Cartao({ a, nomeCliente, nomeProf, mostraProf, aberto, aoAbrir, testid, destaque = false, children }) {
   const v = visual(a);
   const venda = a.produtos.length ? a.produtos.map((p) => `${p.qtd}× ${p.nome}`).join(', ') : '';
   const servicos = a.servicos.map((s) => s.nome).join(' + ') || (venda ? 'Venda de produtos' : 'Sem serviço');
   return (
-    <div className={`cartao-real st-${v.cor}`} data-testid={testid} data-status={a.status} data-id={a.id}>
+    <div className={`cartao-real st-${v.cor}${destaque ? ' cartao-novo-real' : ''}`} data-testid={testid} data-status={a.status} data-id={a.id} data-destaque={destaque ? 'sim' : undefined}>
       <button type="button" className="cartao" onClick={aoAbrir} aria-expanded={aberto} data-testid={`${testid}-abrir`}>
         <div className="cartao-topo">
-          <div className="cartao-quando"><b className="cartao-data" data-testid="cartao-data">{fmtDiaMesSemana(a.inicio)}</b><strong className="cartao-hora">{fmtHM(a.inicio)}</strong></div>
-          <span className="cartao-nome">{nomeCliente}</span>
-          <span className={`chip chip-p st-${v.cor}`} data-testid={`${testid}-status`}>{v.rotulo}</span>
+          <div className="cartao-quem">
+            <span className="cartao-nome" title={nomeCliente} data-testid={`${testid}-cliente`}>{abreviarNome(nomeCliente, 24)}</span>
+            <span className={`chip chip-p st-${v.cor}`} data-testid={`${testid}-status`}>{v.rotulo}</span>
+          </div>
+          <div className={`cartao-quando ${testid === 'cartao' ? 'quando-hoje' : 'quando-proximo'}`}><b className="cartao-data" data-testid="cartao-data">{fmtDiaMesSemana(a.inicio)}</b><strong className="cartao-hora">{fmtHM(a.inicio)}</strong></div>
         </div>
-        <div className="cartao-corpo">
-          <span>{servicos}</span>
-          <span className="muted cartao-com">{mostraProf ? `com ${nomeProf} · ` : ''}{fmtMoney(a.total - a.desconto + a.totalProdutos)}</span>
+        <div className="cartao-servico" title={servicos} data-testid={`${testid}-servico`}>{servicos}</div>
+        <div className="cartao-profissional">
+          {mostraProf && <span className="cartao-prof" title={nomeProf} data-testid={`${testid}-profissional`}>com <b>{abreviarNome(nomeProf)}</b></span>}
+          <span className="cartao-valor" data-testid={`${testid}-valor`}>{fmtMoney(a.total - a.desconto + a.totalProdutos)}</span>
         </div>
         {a.estetica && (a.estetica.placa || a.estetica.box) && (
           <div className="cartao-veiculo-real muted" data-testid={`${testid}-veiculo`}>{[a.estetica.placa ? [[a.estetica.marca, a.estetica.modelo].filter(Boolean).join(' '), a.estetica.placa].filter(Boolean).join(' · ') : '', a.estetica.box].filter(Boolean).join(' · ')}</div>
@@ -190,7 +194,7 @@ function Calendario({ cursor, lista, aoEscolherDia }) {
   );
 }
 
-export default function Agenda({ ehProprio = false, ehDono = false, meuId = '', nomeLoja = '' }) {
+export default function Agenda({ ehProprio = false, ehDono = false, meuId = '', nomeLoja = '', destaqueIds = [], foco = null, recarregar = 0 }) {
   const [modo, setModo] = useState('horarios');
   const [cursor, setCursor] = useState(() => startOfDay(Date.now()));
   const [diasAdiante, setDiasAdiante] = useState(7);
@@ -204,7 +208,7 @@ export default function Agenda({ ehProprio = false, ehDono = false, meuId = '', 
   const enviarLink = () => {
     const base = `${globalThis.location.origin}${globalThis.location.pathname}`;
     const link = montarLinkAgendamento({ base, profissionalId: ehProprio ? meuId : '' });
-    const abriu = abrirWhatsapp(textoConvite(nomeLoja, link));
+    const abriu = abrirWhatsapp(textoConvite(nomeLoja, link, localizacaoUrl));
     Promise.resolve(globalThis.navigator?.clipboard?.writeText(link)).then(() => { setLinkCopiado(true); setTimeout(() => setLinkCopiado(false), 2000); }, () => { if (!abriu) setErro('Não consegui abrir o WhatsApp nem copiar o link.'); });
   };
   const [versao, setVersao] = useState(0);
@@ -213,11 +217,13 @@ export default function Agenda({ ehProprio = false, ehDono = false, meuId = '', 
   const [clientes, setClientes] = useState(new Map());
   const [profs, setProfs] = useState([]);
   const [boxes, setBoxes] = useState([]);
+  const [localizacaoUrl, setLocalizacaoUrl] = useState(''); // link do mapa: o servidor só o devolve quando a loja ligou o envio da localização no WhatsApp
   const ultima = useRef(0);
 
   useEffect(() => {
     apiClientes.listar().then((r) => { if (r.ok) setClientes(new Map(r.clientes.map((c) => [c.id, c.apelido || c.nome]))); });
     apiProf.listar().then((r) => { if (r.ok) setProfs(r.profissionais); });
+    apiLocal.obter().then((r) => { if (r.ok) setLocalizacaoUrl(r.local.localizacaoWhatsappUrl); });
     if (capAtiva('usaRecursoFisico')) apiBoxes.listar().then((r) => { if (r.ok) setBoxes(boxesAtivos(r.boxes)); });
   }, []);
 
@@ -237,6 +243,34 @@ export default function Agenda({ ehProprio = false, ehDono = false, meuId = '', 
   }, [de, ate, versao]);
   // O cliente pode pedir, remarcar ou cancelar pelo link a qualquer hora: a agenda se atualiza sozinha (aba visível), sem fechar o cartão aberto.
   useAtualizacaoAutomatica(() => { emFundo.current = true; setVersao((v) => v + 1); });
+
+  // Agendamento novo (aviso do Painel): busca na hora, sem esperar o ciclo automático.
+  const primeira = useRef(true);
+  useEffect(() => {
+    if (primeira.current) { primeira.current = false; return; }
+    emFundo.current = true; setVersao((v) => v + 1);
+  }, [recarregar]);
+  // Tocou na faixa de aviso: vai ao dia do agendamento, abre o cartão e rola até ele (a rolagem acontece quando a lista chega).
+  const [rolarPara, setRolarPara] = useState('');
+  useEffect(() => {
+    if (!foco || !foco.id) return undefined;
+    let vivo = true;
+    api.obter(foco.id).then((r) => {
+      if (!vivo) return;
+      if (!r.ok) { setAviso('Não encontrei esse agendamento (pode ter sido apagado).'); return; }
+      setModo('horarios'); setSelecionado('todos'); setCursor(startOfDay(r.agendamento.inicio)); setDiasAdiante(7); setAviso('');
+      setAberto(r.agendamento.id); setRolarPara(r.agendamento.id); setVersao((v) => v + 1);
+    });
+    return () => { vivo = false; };
+  }, [foco]);
+  useEffect(() => {
+    if (!rolarPara || !lista) return;
+    const el = globalThis.document.querySelector(`[data-testid="agenda-real"] [data-id="${rolarPara.replace(/[^0-9A-Za-z-]/g, '')}"]`);
+    if (!el) return; // a lista ainda é a anterior: tenta de novo quando chegar a do dia certo
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    el.querySelector('button.cartao')?.focus({ preventScroll: true });
+    setRolarPara('');
+  }, [rolarPara, lista]);
 
   const atendem = useMemo(() => profs.filter((p) => p.atende), [profs]);
   const nomeProf = (id) => (profs.find((p) => p.id === id) || {}).nome || Rot('profissional');
@@ -264,8 +298,8 @@ export default function Agenda({ ehProprio = false, ehDono = false, meuId = '', 
   const titulo = modo === 'horarios' ? fmtDayLong(cursor) : fmtMonthYear(cursor);
 
   const cartao = (a, testid) => (
-    <Cartao key={a.id} a={a} testid={testid} nomeCliente={nomeCliente(a)} nomeProf={nomeProf(a.profissionalId)} mostraProf={selecionado === 'todos' && atendem.length > 1}
-      aberto={aberto === a.id} aoAbrir={() => setAberto(aberto === a.id ? null : a.id)}>
+    <Cartao key={a.id} a={a} testid={testid} nomeCliente={nomeCliente(a)} nomeProf={nomeProf(a.profissionalId)} mostraProf={!ehProprio && selecionado === 'todos' && atendem.length > 1}
+      aberto={aberto === a.id} aoAbrir={() => setAberto(aberto === a.id ? null : a.id)} destaque={destaqueIds.includes(a.id)}>
       <Detalhe a={a} nomeProf={nomeProf(a.profissionalId)} nomeDe={nomeProf} profissionais={atendem} boxes={boxes} ehDono={ehDono} aoAlterar={alterou} />
     </Cartao>
   );
@@ -288,7 +322,7 @@ export default function Agenda({ ehProprio = false, ehDono = false, meuId = '', 
       {mostrarSeletor && (
         <div className="seletor-chips" role="group" aria-label={Rot('profissional')} data-testid="seletor-profissionais">
           <button type="button" className={`chip${selecionado === 'todos' ? ' on' : ''}`} aria-pressed={selecionado === 'todos'} onClick={() => setSelecionado('todos')} data-testid="sel-todos">Todos</button>
-          {atendem.map((p) => <button key={p.id} type="button" className={`chip${selecionado === p.id ? ' on' : ''}`} aria-pressed={selecionado === p.id} onClick={() => setSelecionado(p.id)} data-testid={`sel-${p.id}`}>{p.nome}</button>)}
+          {atendem.map((p) => <button key={p.id} type="button" className={`chip${selecionado === p.id ? ' on' : ''}`} aria-pressed={selecionado === p.id} onClick={() => setSelecionado(p.id)} title={p.nome} data-testid={`sel-${p.id}`}>{abreviarNome(p.nome, 16)}</button>)}
         </div>
       )}
       {erro && <Aviso tipo="erro" data-testid="agenda-erro">{erro}</Aviso>}

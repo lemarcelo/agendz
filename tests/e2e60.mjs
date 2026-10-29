@@ -86,9 +86,18 @@ const A1 = id(101), A4 = id(104);
   assert.equal(await c1.getByTestId('cartao-data').innerText(), 'qua 28/10');
   const est = await c1.evaluate((el) => ({ peso: Number(getComputedStyle(el.querySelector('.cartao-data')).fontWeight), hora: parseFloat(getComputedStyle(el.querySelector('.cartao-hora')).fontSize), horaPeso: Number(getComputedStyle(el.querySelector('.cartao-hora')).fontWeight), dataTam: parseFloat(getComputedStyle(el.querySelector('.cartao-data')).fontSize) }));
   assert.ok(est.peso >= 700 && est.horaPeso >= 700, 'data e hora em negrito');
-  assert.ok(est.hora >= 20 && est.hora > est.dataTam, `hora grande (${est.hora}px)`);
-  assert.equal(await p.locator('[data-testid="cartao-proximo"]').first().getByTestId('cartao-data').innerText(), 'qui 29/10');
-  ok('cartão: data em negrito com dia da semana e hora grande');
+  assert.ok(est.hora >= 24 && est.hora > est.dataTam, `do dia: hora um pouco maior (${est.hora}px > ${est.dataTam}px)`);
+  const prox = p.locator('[data-testid="cartao-proximo"]').first();
+  assert.equal(await prox.getByTestId('cartao-data').innerText(), 'qui 29/10');
+  const tam = await prox.evaluate((el) => ({ data: parseFloat(getComputedStyle(el.querySelector('.cartao-data')).fontSize), hora: parseFloat(getComputedStyle(el.querySelector('.cartao-hora')).fontSize) }));
+  assert.ok(tam.data >= 24 && tam.data > tam.hora, `dos próximos dias: data maior (${tam.data}px > ${tam.hora}px)`);
+  // data e hora ficam à direita do cartão (depois do nome e do status)
+  for (const el of [c1, prox]) {
+    const r = await el.evaluate((c) => { const q = c.querySelector('.cartao-quando').getBoundingClientRect(), n = c.querySelector('.cartao-nome').getBoundingClientRect(), box = c.getBoundingClientRect(); return { qEsq: q.left, nDir: n.right, qDir: q.right, boxDir: box.right }; });
+    assert.ok(r.qEsq >= r.nDir - 1, 'data e hora depois do nome');
+    assert.ok(r.boxDir - r.qDir < 40, `data e hora encostadas na direita (${Math.round(r.boxDir - r.qDir)}px)`);
+  }
+  ok('cartão: data e hora à direita; hora maior no dia, data maior nos próximos dias');
   // abre o cartão do dia e o cliente cancela a quinta-feira e remarca o horário de hoje pelo link
   await c1.getByTestId('cartao-abrir').click();
   const antes = chamadas.filter((c) => c.u === '/api/agendamentos' && c.m === 'GET').length;

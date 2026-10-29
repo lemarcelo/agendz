@@ -2,6 +2,8 @@ package br.com.agendz.equipe;
 
 import br.com.agendz.equipe.UsuarioService.ComSenha;
 import br.com.agendz.equipe.UsuarioService.Dados;
+import br.com.agendz.equipe.UsuarioService.MeusDados;
+import br.com.agendz.equipe.UsuarioService.MeusDadosEntrada;
 import br.com.agendz.equipe.UsuarioService.Usuario;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -83,6 +85,19 @@ public class UsuarioController {
     public ResponseEntity<Void> remover(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
         usuarios.remover(id, UUID.fromString(jwt.getSubject()));
         return ResponseEntity.noContent().build();
+    }
+
+    /** "Meu perfil": cada pessoa lê e muda os próprios dados de contato (nunca perfil, permissões, CPF nem comissão). */
+    @GetMapping("/api/usuarios/me")
+    @PreAuthorize("hasAnyRole('DONO','ADMIN','ATENDENTE','PROFISSIONAL')")
+    public MeusDados meusDados(@AuthenticationPrincipal Jwt jwt) {
+        return usuarios.meusDados(UUID.fromString(jwt.getSubject()));
+    }
+
+    @PutMapping("/api/usuarios/me")
+    @PreAuthorize("hasAnyRole('DONO','ADMIN','ATENDENTE','PROFISSIONAL')")
+    public MeusDados alterarMeusDados(@Valid @RequestBody MeusDadosEntrada d, @AuthenticationPrincipal Jwt jwt) {
+        return usuarios.alterarMeusDados(UUID.fromString(jwt.getSubject()), d);
     }
 
     /** Cada pessoa troca só a própria foto (qualquer perfil logado); `foto` vazio ou ausente remove. */

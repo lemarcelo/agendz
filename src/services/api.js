@@ -21,6 +21,7 @@ import { cpfMascarado, cpfValido } from '../domain/pix.js';
 import * as PU from '../domain/publico.js';
 import { FERIADOS_NACIONAIS } from '../domain/feriados.js';
 import { LOJAS_DEMO, LOJA_PADRAO, lojaDemo, lojaDoEndereco } from './lojas-demo.js';
+import { lerHashAgendar } from '../domain/link-publico.js';
 
 let offset = 0;
 // Qual loja este navegador atende. Ordem: tipo fixado no build (testes: `AGENDZ_TIPO`) > endereço da página (DNS/URL, `domain/tenant.js`) >
@@ -37,7 +38,9 @@ const ENDERECO = TIPO_DO_BUILD ? { slug: null, via: null, existe: false } : loja
 export const LOJA_NAO_ENCONTRADA = !!ENDERECO.slug && !ENDERECO.existe ? ENDERECO.slug : ''; // o endereço pede uma loja que não existe
 export const LOJA_FIXA = !!TIPO_DO_BUILD || (!!ENDERECO.slug && ENDERECO.existe); // loja decidida pelo build ou pelo endereço: sem seletor
 export const LOJA_TROCAVEL = !LOJA_FIXA && !LOJA_NAO_ENCONTRADA;
-let lojaSlug = (TIPO_DO_BUILD && LOJAS_DEMO.find((l) => l.tipo === TIPO_DO_BUILD)?.slug) || (ENDERECO.existe && ENDERECO.slug) || lerLojaSalva() || LOJA_PADRAO;
+// Demonstração: o link do cliente (#agendar@dalforno) já abre na loja de quem enviou, desde a primeira tela (sem passar antes pela loja salva ou pela padrão).
+const lojaDoLink = () => { try { const l = lerHashAgendar(globalThis.location?.hash)?.loja; return l && lojaDemo(l) ? l : ''; } catch { return ''; } };
+let lojaSlug = (TIPO_DO_BUILD && LOJAS_DEMO.find((l) => l.tipo === TIPO_DO_BUILD)?.slug) || (ENDERECO.existe && ENDERECO.slug) || (LOJA_TROCAVEL && lojaDoLink()) || lerLojaSalva() || LOJA_PADRAO;
 const novoEstado = (slug = lojaSlug) => { const e = lojaDemo(slug).criar(Date.now()); E.tick(e, Date.now()); return e; };
 const estados = new Map();
 let state = novoEstado(); estados.set(lojaSlug, state);
@@ -941,10 +944,23 @@ export const estabelecimento = {
   salvar(entrada) {
     const n = exigir('estabelecimento'); if (n) return n;
     if (entrada && typeof entrada === 'object' && 'tipo' in entrada && entrada.tipo !== tipoDe(state.estabelecimento)) return erro('O tipo do estabelecimento não pode ser alterado depois de criado.');
-    const patch = pegar(entrada, permitidos(['nome', 'telefone', 'endereco', 'email', 'ddds', 'visaoPadrao', 'confirmacaoServico', 'grupoMovimentacaoId', 'notificacoes', 'escala', 'calendario', 'pixCancelamento', 'logo', 'corTema', 'corTema2', 'temaCor', 'linkAgendamento', 'comissaoPadrao', 'usaIntegracaoPix', 'formaPagamentoPadrao', 'contaPorForma', 'camposObrigatorios', 'boxes']));
+    const patch = pegar(entrada, permitidos(['nome', 'telefone', 'endereco', 'enderecoNoLink', 'latitude', 'longitude', 'localizacaoNoWhatsapp', 'email', 'ddds', 'visaoPadrao', 'confirmacaoServico', 'grupoMovimentacaoId', 'notificacoes', 'escala', 'calendario', 'pixCancelamento', 'logo', 'corTema', 'corTema2', 'temaCor', 'linkAgendamento', 'comissaoPadrao', 'usaIntegracaoPix', 'formaPagamentoPadrao', 'contaPorForma', 'camposObrigatorios', 'boxes']));
     if ('comissaoPadrao' in patch && !R.ehDono(usuario())) delete patch.comissaoPadrao;
     if ('comissaoPadrao' in patch) { const c = lerPct(patch.comissaoPadrao); if (!c.ok || c.v === null) return erro('A comissão padrão vai de 0 a 100%.'); patch.comissaoPadrao = c.v; }
     for (const k of ['nome', 'telefone', 'endereco', 'email']) if (k in patch && !texto(patch[k], 200)) return erro('Texto grande demais em ' + k + '.');
+    // Localização (GPS) e interruptores do endereço/WhatsApp (espelho de PUT /api/estabelecimento/local). Latitude e longitude andam juntas.
+    for (const k of ['enderecoNoLink', 'localizacaoNoWhatsapp']) if (k in patch && typeof patch[k] !== 'boolean') return erro('Interruptor inválido.');
+    if ('latitude' in patch || 'longitude' in patch) {
+      const lat = patch.latitude, lng = patch.longitude;
+      if ((lat === null || lat === undefined) !== (lng === null || lng === undefined)) return erro('Informe latitude e longitude juntas (ou deixe as duas vazias).');
+      if (lat !== null && lat !== undefined && !(Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180)) return erro('Localização inválida: latitude de -90 a 90 e longitude de -180 a 180.');
+    }
+    {
+      const e0 = state.estabelecimento;
+      const lat = 'latitude' in patch ? patch.latitude : e0.latitude, endereco = 'endereco' in patch ? patch.endereco : e0.endereco;
+      if (patch.localizacaoNoWhatsapp === true && (lat === null || lat === undefined)) return erro('Informe a localização (latitude e longitude) para enviá-la no WhatsApp.');
+      if (patch.enderecoNoLink === true && !String(endereco || '').trim()) return erro('Informe o endereço para mostrá-lo no link de agendamento.');
+    }
     if ('ddds' in patch) {
       // DDD é número de 11 a 99 (a agenda compara com Number); texto como '51' é convertido, repetidos são descartados.
       if (!(Array.isArray(patch.ddds) && patch.ddds.length <= 100 && patch.ddds.every((d) => (typeof d === 'number' || (typeof d === 'string' && /^\d{2}$/.test(d))) && Number.isInteger(Number(d)) && Number(d) >= 11 && Number(d) <= 99))) return erro('DDDs inválidos.');

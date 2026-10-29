@@ -3,7 +3,7 @@
 // temporária e mostra o painel com o menu. Os módulos entram um a um (Clientes na parte 2, Serviços na 3, Equipe na 4; a agenda na seguinte), cada um só
 // quando o servidor tem a regra inteira. Não importa `api.js` (a simulada) nem `hooks.js`: o estado aqui é só o da sessão real, em memória.
 import React, { useEffect, useMemo, useState } from 'react';
-import { cancelarEspera, carregarLoja, entrar, esperandoRede, loginValido, onboarding, quandoEsperar, sair, sessaoAtual, trocarSenha } from '../../services/api-real.js';
+import { cancelarEspera, carregarLoja, entrar, esperandoRede, loginValido, onboarding, perfil as apiPerfil, quandoEsperar, sair, sessaoAtual, trocarSenha } from '../../services/api-real.js';
 import PrimeiroAcesso from '../leve/PrimeiroAcesso.jsx';
 import Agenda from './Agenda.jsx';
 import Clientes from './Clientes.jsx';
@@ -13,12 +13,17 @@ import Boxes from './Boxes.jsx';
 import Comissoes from './Comissoes.jsx';
 import Relatorios from './Relatorios.jsx';
 import Estoque from './Estoque.jsx';
+import Estabelecimento from './Estabelecimento.jsx';
 import Ganhos from './Ganhos.jsx';
 import RegrasAtendimento from './RegrasAtendimento.jsx';
 import Cupons from './Cupons.jsx';
 import AgendarPublico from './AgendarPublico.jsx';
 import LinkAgendamento from './LinkAgendamento.jsx';
 import Avisos from './Avisos.jsx';
+import AlertaAgenda from './AlertaAgenda.jsx';
+import MeuPerfil, { AvatarReal } from './MeuPerfil.jsx';
+import { lerPrefs } from './alerta.js';
+import { DESTAQUE_MS, podarDestaques } from '../../domain/notificacao.js';
 import { TIPOS, capAtiva, definirTipoAtivo, rotulo, tipoValido } from '../../domain/tipos.js';
 import { cssDaMarca, logoValida } from '../../domain/tema.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
@@ -133,6 +138,30 @@ function Painel({ loja, sessao, aoSair }) {
   // Depois de entrar (e de concluir o assistente) a pessoa cai na Agenda, que é o que ela usa todo dia; quem não tem a agenda abre o Início.
   const [aba, setAba] = useState(() => (sessao.papel === 'dono' || (sessao.secoes || []).includes('agenda') ? 'agenda' : 'inicio'));
   const [reconfigurando, setReconfigurando] = useState(false);
+  // Meu perfil e aviso de agendamento novo: as escolhas de aviso ficam neste aparelho; o cartão novo pulsa na agenda por alguns segundos.
+  const [meus, setMeus] = useState(null);
+  const [perfilAberto, setPerfilAberto] = useState(false);
+  const [prefs, setPrefs] = useState(() => lerPrefs(loja.slug, sessao.id));
+  const [destaques, setDestaques] = useState({});
+  const [foco, setFoco] = useState(null);
+  const [recarregar, setRecarregar] = useState(0);
+  useEffect(() => { apiPerfil.obter().then((r) => { if (r.ok) setMeus(r.dados); }); }, []);
+  useEffect(() => {
+    const ate = Object.values(destaques);
+    if (!ate.length) return undefined;
+    const t = setTimeout(() => setDestaques((d) => podarDestaques(d, Date.now())), Math.max(50, Math.min(...ate) - Date.now() + 50));
+    return () => clearTimeout(t);
+  }, [destaques]);
+  const destacar = (ids) => {
+    if (!ids.length) return;
+    const ate = Date.now() + DESTAQUE_MS;
+    setDestaques((d) => ({ ...d, ...Object.fromEntries(ids.map((id) => [id, ate])) }));
+    setRecarregar((n) => n + 1); // a agenda busca já o agendamento novo, sem esperar os 20 s
+  };
+  const irParaAgendamento = (id) => {
+    setPerfilAberto(false); setAba('agenda');
+    if (id) { destacar([id]); setFoco({ id, n: Date.now() }); }
+  };
   if (reconfigurando) return <PrimeiroAcesso modo="reconfigurar" tipo={loja.tipo} nomeLoja={loja.nome} adaptador={onboarding} aoConcluir={() => setReconfigurando(false)} aoCancelar={() => setReconfigurando(false)} />;
   const papel = sessao.papel === 'dono' ? 'Proprietário' : rotulo({ tipo: loja.tipo }, 'profissional', { capitalizado: true });
   // O menu mostra só o que a pessoa pode usar (o servidor confere de novo em cada rota). Serviços todo perfil pode ler; Equipe é do proprietário.
@@ -145,6 +174,7 @@ function Painel({ loja, sessao, aoSair }) {
   if (dono && capAtiva('usaRecursoFisico')) itens.push(['boxes', 'Boxes', 'box']);
   if (dono || (sessao.secoes || []).includes('estabelecimento')) itens.push(['cupons', 'Cupons', 'key']);
   if (dono || (sessao.secoes || []).includes('estoque')) itens.push(['estoque', 'Estoque', 'tag']);
+  if (dono || (sessao.secoes || []).includes('estabelecimento')) itens.push(['estabelecimento', 'Estabelecimento', 'gauge']);
   if (dono) itens.push(['relatorios', 'Relatórios', 'list']);
   if (dono) itens.push(['comissoes', 'Comissões', 'wallet']);
   else itens.push(['ganhos', 'Meus ganhos', 'wallet']);
@@ -154,15 +184,21 @@ function Painel({ loja, sessao, aoSair }) {
         <LogoPequena loja={loja} />
         <nav className="nav" aria-label="Seções">
           {itens.map(([k, r, ic]) => (
-            <button key={k} type="button" className={aba === k ? 'on' : ''} onClick={() => setAba(k)} aria-current={aba === k ? 'page' : undefined} title={r} data-testid={`nav-${k}`}><Icone n={ic} size={17} /><span>{r}</span></button>
+            <button key={k} type="button" className={aba === k ? 'on' : ''} onClick={() => { setAba(k); setFoco(null); }} aria-current={aba === k ? 'page' : undefined} title={r} data-testid={`nav-${k}`}><Icone n={ic} size={17} /><span>{r}</span></button>
           ))}
         </nav>
         <div className="topo-dir">
           <div className="usuario">
+            <button type="button" className="usuario-perfil-real" onClick={() => setPerfilAberto(true)} aria-label="Meu perfil" title="Meu perfil" data-testid="abrir-perfil">
+              <AvatarReal nome={meus?.apelido || meus?.nome || sessao.nome} foto={meus?.foto} chave={sessao.id} />
+              <span className="usuario-txt"><b data-testid="topo-nome">{meus?.apelido || meus?.nome || sessao.nome}</b><small>{papel}</small></span>
+            </button>
             <button type="button" className="icone-btn" onClick={aoSair} aria-label="Sair" title="Sair" data-testid="sair"><Icone n="logout" size={17} /></button>
           </div>
         </div>
       </header>
+      {(sessao.secoes || []).includes('agenda') && <AlertaAgenda prefs={prefs} aoIr={irParaAgendamento} aoDestacar={destacar} />}
+      {perfilAberto && <MeuPerfil loja={loja} sessao={sessao} dados={meus} prefs={prefs} aoPrefs={setPrefs} aoMudou={(d) => setMeus((antes) => ({ ...(antes || {}), ...d }))} aoFechar={() => setPerfilAberto(false)} />}
       <div className="corpo">
         <main className="principal">
           {aba === 'inicio' && (
@@ -175,13 +211,14 @@ function Painel({ loja, sessao, aoSair }) {
               {sessao.papel === 'dono' && <LinkAgendamento />}
             </section>
           )}
-          {aba === 'agenda' && <Agenda nomeLoja={loja.nome} meuId={sessao.id} ehProprio={sessao.papel === 'profissional'} ehDono={dono || sessao.papel === 'admin' || sessao.papel === 'atendente'} />}
+          {aba === 'agenda' && <Agenda destaqueIds={Object.keys(destaques)} foco={foco} recarregar={recarregar} nomeLoja={loja.nome} meuId={sessao.id} ehProprio={sessao.papel === 'profissional'} ehDono={dono || sessao.papel === 'admin' || sessao.papel === 'atendente'} />}
           {aba === 'clientes' && <Clientes />}
           {aba === 'servicos' && <Servicos ehDono={dono || (sessao.secoes || []).includes('servicos')} />}
           {aba === 'equipe' && dono && <Equipe meuId={sessao.id} />}
           {aba === 'boxes' && dono && <Boxes />}
           {aba === 'cupons' && (dono || (sessao.secoes || []).includes('estabelecimento')) && <Cupons />}
           {aba === 'estoque' && (dono || (sessao.secoes || []).includes('estoque')) && <Estoque ehDono={dono} />}
+          {aba === 'estabelecimento' && (dono || (sessao.secoes || []).includes('estabelecimento')) && <Estabelecimento ehDono={dono} />}
           {aba === 'relatorios' && dono && <Relatorios />}
           {aba === 'comissoes' && dono && <Comissoes />}
           {aba === 'ganhos' && !dono && <Ganhos />}

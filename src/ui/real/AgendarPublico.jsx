@@ -5,6 +5,8 @@
 // ele fica só neste aparelho (localStorage, dentro de try/catch: sem storage a página funciona, só não lembra dos horários na próxima visita).
 // Remarcar entrou na 5e-2 (24 h ou mais, como cancelar). Código por telefone, lembretes e estética (veículo e porte) ficam para a 5e-3.
 // Não importa `api.js`, `hooks.js` nem `common.jsx` (tests/estatico.test.mjs).
+import { caminhoHttps } from '../../domain/localizacao.js';
+import { adicionarReserva, lerReservas, limparReservas, removerReserva, sincronizarReservas } from '../../domain/reservas-local.js';
 import React, { useEffect, useMemo, useState } from 'react';
 import { publico } from '../../services/api-real.js';
 import { fmtMoney } from '../../domain/time.js';
@@ -39,6 +41,23 @@ function lerAcessos(slug) {
 function gravarAcessos(slug, lista) {
   try { localStorage.setItem(chaveStorage(slug), JSON.stringify(lista.slice(-20))); } catch { /* sem storage: vale só nesta visita */ }
 }
+
+// ---- horários pedidos e dados do cliente, só neste navegador (domain/reservas-local.js): sem consultar a agenda; somem quando o horário passa ----
+const chaveReservas = (slug) => `agendz-reservas-${String(slug || 'loja').replace(/[^a-z0-9-]/gi, '').slice(0, 40)}`;
+function carregarReservas(slug) {
+  try {
+    const v = lerReservas(localStorage.getItem(chaveReservas(slug)), Date.now());
+    if (!v.itens.length) localStorage.removeItem(chaveReservas(slug)); // nada que valha: não deixa nem o nome e o telefone para trás
+    return v;
+  } catch { return limparReservas(null, Date.now()); }
+}
+function salvarReservas(slug, dados) {
+  try {
+    if (!dados.itens.length) localStorage.removeItem(chaveReservas(slug));
+    else localStorage.setItem(chaveReservas(slug), JSON.stringify(dados));
+  } catch { /* sem storage: vale só nesta visita */ }
+}
+const diaSemana = (ts) => new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'short', day: '2-digit', month: '2-digit' }).format(new Date(ts)).replace('.', '').replace(',', '');
 
 // Dia + horário livres: os dois vêm do servidor, que só devolve o que está livre. `fonte` ({ dias(de, n), horarios(dia) }) troca a consulta (remarcar um horário já marcado).
 function DiaHora({ chave, diasMax, servicoIds, profissionalId, valor, aoEscolher, fonte }) {
@@ -98,13 +117,13 @@ function DiaHora({ chave, diasMax, servicoIds, profissionalId, valor, aoEscolher
   );
 }
 
-function Agendar({ pagina, loja, profissionalInicial, aoCriar, irParaMeus }) {
+function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMeus }) {
   const [etapa, setEtapa] = useState(1);
   const [srv, setSrv] = useState([]);
   const [barb, setBarb] = useState(profissionalInicial || '');
   const [escolha, setEscolha] = useState(null);
-  const [nome, setNome] = useState('');
-  const [tel, setTel] = useState('');
+  const [nome, setNome] = useState(() => (cliente && cliente.nome) || '');
+  const [tel, setTel] = useState(() => (cliente && cliente.telefone) || '');
   const [cupom, setCupom] = useState('');
   const [isca, setIsca] = useState('');
   const [erro, setErro] = useState('');
@@ -127,7 +146,7 @@ function Agendar({ pagina, loja, profissionalInicial, aoCriar, irParaMeus }) {
       if (r.status === 409 && /ocupado/.test(r.erro)) { setEscolha(null); setEtapa(2); }
       return;
     }
-    if (r.token) aoCriar({ id: r.agendamento.id, token: r.token });
+    if (r.token) aoCriar({ id: r.agendamento.id, token: r.token }, { id: r.agendamento.id, inicio: r.agendamento.inicio, fim: r.agendamento.fim, servicos: r.agendamento.servicos, profissional: r.agendamento.profissional }, { nome, telefone: tel });
     setFeito(r.agendamento);
     setEtapa(4);
   };
@@ -218,7 +237,7 @@ function Agendar({ pagina, loja, profissionalInicial, aoCriar, irParaMeus }) {
   );
 }
 
-function Meus({ loja, acessos, setAcessos, diasMax }) {
+function Meus({ loja, acessos, setAcessos, diasMax, aoSincronizar }) {
   const [lista, setLista] = useState(null);
   const [erro, setErro] = useState('');
   const [aviso, setAviso] = useState('');
@@ -232,7 +251,7 @@ function Meus({ loja, acessos, setAcessos, diasMax }) {
     publico.meus(acessos.map((a) => a.token)).then((r) => {
       if (!vivo) return;
       if (!r.ok) { setErro(r.erro); setLista([]); return; }
-      setErro(''); setLista(r.agendamentos);
+      setErro(''); setLista(r.agendamentos); aoSincronizar(r.agendamentos);
       const ids = new Set(r.agendamentos.map((a) => a.id));
       if (acessos.some((a) => !ids.has(a.id))) { const novos = acessos.filter((a) => ids.has(a.id)); gravarAcessos(loja.slug, novos); setAcessos(novos); } // acesso vencido some do aparelho
     });
@@ -246,7 +265,7 @@ function Meus({ loja, acessos, setAcessos, diasMax }) {
     setConfirmando(null); setAviso(''); setErro('');
     const r = await publico.cancelar(a.id, acesso ? acesso.token : '');
     if (!r.ok) { setErro(r.erro); return; }
-    setLista((l) => l.map((x) => (x.id === a.id ? r.agendamento : x)));
+    setLista((l) => l.map((x) => (x.id === a.id ? r.agendamento : x))); aoSincronizar([r.agendamento]);
     setAviso('Horário cancelado.');
   };
   const fonteDe = (a) => {
@@ -260,7 +279,7 @@ function Meus({ loja, acessos, setAcessos, diasMax }) {
     const r = await publico.remarcar(a.id, acesso ? acesso.token : '', remarcando.escolha.inicio);
     setEnviando(false);
     if (!r.ok) { setErro(r.erro); return; }
-    setLista((l) => l.map((x) => (x.id === a.id ? r.agendamento : x)));
+    setLista((l) => l.map((x) => (x.id === a.id ? r.agendamento : x))); aoSincronizar([r.agendamento]);
     setRemarcando(null);
     setAviso('Pedido de novo horário enviado. A loja confirma em breve.');
   };
@@ -332,7 +351,21 @@ export default function AgendarPublico({ loja, profissionalInicial, logado, aoVo
     publico.pagina().then((r) => { if (!vivo) return; if (r.ok) setPagina(r.pagina); else setErro(r.erro); });
     return () => { vivo = false; };
   }, []);
-  const guardar = (acesso) => { const novos = [...acessos.filter((a) => a.id !== acesso.id), acesso].slice(-20); gravarAcessos(loja.slug, novos); setAcessos(novos); };
+  const guardar = (acesso, item, cliente) => {
+    const novos = [...acessos.filter((a) => a.id !== acesso.id), acesso].slice(-20); gravarAcessos(loja.slug, novos); setAcessos(novos);
+    if (item) atualizarReservas((d) => adicionarReserva(d, { item, cliente }, Date.now()));
+  };
+  // Horários guardados neste navegador (sem consultar a agenda): o horário que passa sai sozinho, a cada minuto e ao voltar para a aba.
+  const [reservas, setReservas] = useState(() => carregarReservas(loja.slug));
+  const atualizarReservas = (f) => setReservas((d) => { const n = f(d); salvarReservas(loja.slug, n); return n; });
+  useEffect(() => {
+    const varrer = () => atualizarReservas((d) => limparReservas(d, Date.now()));
+    const id = setInterval(varrer, 60000);
+    document.addEventListener('visibilitychange', varrer);
+    return () => { clearInterval(id); document.removeEventListener('visibilitychange', varrer); };
+  }, []);
+  const sincronizar = (lista) => atualizarReservas((d) => sincronizarReservas(d, lista.map((a) => ({ id: a.id, inicio: a.inicio, fim: a.fim, ativo: a.ativo })), Date.now()));
+  const esquecer = () => { atualizarReservas(() => limparReservas(null, Date.now())); };
   const barb = pagina && pagina.profissionais.some((b) => b.id === profissionalInicial) ? profissionalInicial : '';
   return (
     <div className="pub" data-testid="pagina-publica">
@@ -354,12 +387,41 @@ export default function AgendarPublico({ loja, profissionalInicial, logado, aoVo
           </div>
         )}
       </header>
+      {pagina && pagina.ativo && pagina.endereco && (
+        <p className="pub-contato muted" data-testid="pub-contato">
+          <span data-testid="pub-endereco">{pagina.endereco}</span>
+          {caminhoHttps(pagina.mapaUrl) && <> · <a href={`https://${caminhoHttps(pagina.mapaUrl)}`} target="_blank" rel="noopener noreferrer" data-testid="pub-mapa">Ver no mapa</a></>}
+        </p>
+      )}
       {erro && <Aviso tipo="erro"><span data-testid="pub-erro-pagina">{erro}</span></Aviso>}
       {!pagina && !erro && <p className="muted" role="status" data-testid="pub-carregando-pagina">Carregando…</p>}
       {pagina && !pagina.ativo && <section className="pub-cartao" data-testid="pub-desligado"><h2>Agendamento indisponível</h2><p className="muted">{pagina.aviso || `O agendamento pelo link não está disponível agora. Fale com ${loja.nome}.`}</p></section>}
-      {pagina && pagina.ativo && (aba === 'agendar'
-        ? <Agendar pagina={pagina} loja={loja} profissionalInicial={barb} aoCriar={guardar} irParaMeus={() => setAba('meus')} />
-        : <Meus loja={loja} acessos={acessos} setAcessos={setAcessos} diasMax={pagina.diasMax} />)}
+      {pagina && pagina.ativo && (
+        <div className={`pub-corpo${aba === 'agendar' && reservas.itens.length ? ' com-reservas' : ''}`}>
+          {aba === 'agendar' && reservas.itens.length > 0 && (
+            <aside className="pub-reservas" aria-label="Seus horários" data-testid="pub-reservas">
+              <h2>Seus horários</h2>
+              <ul>
+                {reservas.itens.map((x) => (
+                  <li key={x.id} data-testid={`pub-reserva-${x.id}`}>
+                    <b className="pub-reserva-data">{diaSemana(x.inicio)}</b>
+                    <strong className="pub-reserva-hora">{horaDe(x.inicio)}</strong>
+                    <span className="muted">{x.servicos.join(', ')}{x.profissional ? ` · ${x.profissional}` : ''}</span>
+                  </li>
+                ))}
+              </ul>
+              <button type="button" className="link" onClick={() => setAba('meus')} data-testid="pub-reservas-ver">Remarcar ou cancelar</button>
+              <p className="muted pub-reservas-nota">Guardados só neste aparelho; somem quando o horário passa. Seu nome e telefone ficam lembrados até lá.</p>
+              <button type="button" className="link" onClick={esquecer} data-testid="pub-reservas-esquecer">Esquecer meus dados neste aparelho</button>
+            </aside>
+          )}
+          <div className="pub-principal">
+            {aba === 'agendar'
+              ? <Agendar pagina={pagina} loja={loja} profissionalInicial={barb} cliente={reservas.cliente} aoCriar={guardar} irParaMeus={() => setAba('meus')} />
+              : <Meus loja={loja} acessos={acessos} setAcessos={setAcessos} diasMax={pagina.diasMax} aoSincronizar={sincronizar} />}
+          </div>
+        </div>
+      )}
       <p className="rodape-plataforma">Agendz</p>
     </div>
   );

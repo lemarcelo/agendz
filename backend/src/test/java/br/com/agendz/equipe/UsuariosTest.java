@@ -260,6 +260,28 @@ class UsuariosTest extends BaseApi {
         mvc.perform(get("/api/usuarios").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi))).andExpect(jsonPath("$[?(@.usuario=='pablo')].foto").isEmpty());
     }
 
+    @Test
+    void meuPerfilLeEMudaSoOsProprioDados() throws Exception {
+        String pablo = token(APEX, "pablo");
+        mvc.perform(get("/api/usuarios/me").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(pablo)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.usuario").value("pablo")).andExpect(jsonPath("$.papel").value("profissional"))
+                .andExpect(jsonPath("$.cpf").doesNotExist()).andExpect(jsonPath("$.comissaoPct").doesNotExist()).andExpect(jsonPath("$.permissoes").doesNotExist());
+        mvc.perform(put("/api/usuarios/me").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(pablo)).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"pablo@exemplo.com\",\"telefone\":\"11987654321\",\"papel\":\"dono\",\"comissaoPct\":100}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.email").value("pablo@exemplo.com")).andExpect(jsonPath("$.papel").value("profissional"));
+        // campo fora da lista é ignorado: o perfil e a comissão continuam os mesmos na ficha do dono
+        mvc.perform(get("/api/usuarios").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)))
+                .andExpect(jsonPath("$[?(@.usuario=='pablo')].papel").value(hasItem("profissional")));
+        // nome reservado e nome vazio são recusados
+        mvc.perform(put("/api/usuarios/me").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(pablo)).contentType(MediaType.APPLICATION_JSON).content("{\"apelido\":\"suporte\"}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(put("/api/usuarios/me").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(pablo)).contentType(MediaType.APPLICATION_JSON).content("{\"nome\":\"  \"}"))
+                .andExpect(status().isBadRequest());
+        // sem login não lê nem muda
+        mvc.perform(get("/api/usuarios/me").with(host(APEX))).andExpect(status().isUnauthorized());
+        mvc.perform(put("/api/usuarios/me").with(host(APEX)).contentType(MediaType.APPLICATION_JSON).content("{}")).andExpect(status().isUnauthorized());
+    }
+
     // ---------- permissões por seção ----------
 
     @Test

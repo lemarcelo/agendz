@@ -15,6 +15,7 @@ import { criarAdaptadorDemo } from '../services/onboarding-demo.js';
 import { nomeCliente, nomeServicos } from './format.js';
 import { toast, useStore } from './hooks.js';
 import { capAtiva, rot, tipoDe, TIPOS, voc, Voc } from '../domain/tipos.js';
+import { coordenadasDeTexto } from '../domain/localizacao.js';
 
 const ORDEM_SEMANA = [1, 2, 3, 4, 5, 6, 0];
 
@@ -183,13 +184,17 @@ export default function Estabelecimento({ user }) {
   const { state: st } = useStore();
   const e = st.estabelecimento;
   const [aba, setAba] = useState('dados');
-  const [dados, setDados] = useState({ nome: e.nome, telefone: e.telefone, endereco: e.endereco || '', email: e.email, visaoPadrao: e.visaoPadrao, grupoMovimentacaoId: e.grupoMovimentacaoId });
+  const [dados, setDados] = useState({ nome: e.nome, telefone: e.telefone, endereco: e.endereco || '', enderecoNoLink: e.enderecoNoLink !== false, localizacaoNoWhatsapp: !!e.localizacaoNoWhatsapp, localizacao: Number.isFinite(e.latitude) ? `${e.latitude}, ${e.longitude}` : '', email: e.email, visaoPadrao: e.visaoPadrao, grupoMovimentacaoId: e.grupoMovimentacaoId });
   const [notifs, setNotifs] = useState(e.notificacoes);
   const [notifSujo, setNotifSujo] = useState(false);
   const [pixCanc, setPixCanc] = useState(e.pixCancelamento || null);
   const [ddd, setDdd] = useState('');
 
-  const salvarDados = () => { const r = apiEst.salvar(dados); if (r.ok) toast('Dados salvos.'); else toast(r.erros[0], 'erro'); };
+  const salvarDados = () => {
+    const { localizacao, ...resto } = dados;
+    const c = localizacao.trim() ? coordenadasDeTexto(localizacao) : null;
+    if (localizacao.trim() && !c) { toast('Não achei coordenadas nesse texto. Use “latitude, longitude” ou o link completo do Google Maps.', 'erro'); return; }
+    const r = apiEst.salvar({ ...resto, latitude: c ? c.lat : null, longitude: c ? c.lng : null }); if (r.ok) toast('Dados salvos.'); else toast(r.erros[0], 'erro'); };
   const addDdd = () => {
     const n = Number(ddd);
     if (!(n >= 11 && n <= 99)) { toast('Informe um DDD com 2 dígitos.', 'erro'); return; }
@@ -207,7 +212,10 @@ export default function Estabelecimento({ user }) {
             <Campo rotulo="Tipo de estabelecimento" dica={`Definido na criação da ${rot('loja')}; não pode ser alterado.`}><input value={TIPOS[tipoDe(st.estabelecimento)].nome} readOnly disabled data-testid="est-tipo" /></Campo>
             <Campo rotulo={`Nome da ${rot('loja')}`}><input value={dados.nome} onChange={(x) => setDados({ ...dados, nome: x.target.value })} /></Campo>
             <Campo rotulo="Telefone"><input value={dados.telefone} onChange={(x) => setDados({ ...dados, telefone: x.target.value })} /></Campo>
-            <Campo rotulo="Endereço" className="campo-largo" dica="Aparece na página de agendamento do cliente."><input value={dados.endereco} maxLength={200} onChange={(x) => setDados({ ...dados, endereco: x.target.value })} data-testid="est-endereco" /></Campo>
+            <Campo rotulo="Endereço" className="campo-largo" dica="Aparece na página de agendamento do cliente quando o interruptor abaixo está ligado."><input value={dados.endereco} maxLength={200} onChange={(x) => setDados({ ...dados, endereco: x.target.value })} data-testid="est-endereco" /></Campo>
+            <label className="pa-check campo-largo"><input type="checkbox" checked={dados.enderecoNoLink} onChange={(x) => setDados({ ...dados, enderecoNoLink: x.target.checked })} data-testid="est-endereco-no-link" /> Mostrar o endereço na página de agendamento do cliente</label>
+            <Campo rotulo="Localização (GPS): latitude, longitude ou link do Google Maps" className="campo-largo" dica="Pode ser preenchida depois de começar a usar."><input value={dados.localizacao} maxLength={500} placeholder="Ex.: -25.428356, -49.273251" onChange={(x) => setDados({ ...dados, localizacao: x.target.value })} data-testid="est-localizacao" /></Campo>
+            <label className="pa-check campo-largo"><input type="checkbox" checked={dados.localizacaoNoWhatsapp} onChange={(x) => setDados({ ...dados, localizacaoNoWhatsapp: x.target.checked })} data-testid="est-localizacao-whatsapp" /> Mandar o link da localização junto da mensagem de WhatsApp com o link de agendamento</label>
             <Campo rotulo={`E-mail (Google Agenda da ${rot('loja')})`}><input type="email" value={dados.email} onChange={(x) => setDados({ ...dados, email: x.target.value })} /></Campo>
             <div className="campo-largo"><SeletorGrupo st={st} valor={dados.grupoMovimentacaoId} onChange={(v) => setDados({ ...dados, grupoMovimentacaoId: v })} rotulo="Grupo de movimentação padrão" dica="A conta responsável por este grupo recebe os serviços e paga as despesas que não têm grupo próprio. Cada serviço e cada despesa pode escolher outro grupo." testid="estab-grupo" /></div>
             <div className="campo-largo"><Btn variante="primario" onClick={salvarDados} data-testid="salvar-dados">Salvar dados</Btn></div>

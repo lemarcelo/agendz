@@ -88,7 +88,7 @@ function AppDaLoja() {
   // Demonstração: o link traz a loja de quem enviou (#agendar@dalforno); `entrarNaLoja` só age sem loja fixa por build ou endereço.
   useLayoutEffect(() => { if (MODO_DEMO && publica?.loja) store.entrarNaLoja(publica.loja); }, [publica?.loja]);
   if (MODO_DEMO && hash === '#primeiro-acesso') return <><TemaMarca /><PreviaPrimeiroAcesso st={st} /></>;
-  if (publica) return <><TemaMarca /><AgendarPublico profissionalInicial={publica.profissionalId} logado={!!user} aoVoltar={() => { window.location.hash = ''; }} /></>;
+  if (publica) return <><TemaMarca /><AgendarPublico key={st.estabelecimento.nome} profissionalInicial={publica.profissionalId} logado={!!user} aoVoltar={() => { window.location.hash = ''; }} /></>;
   if (!user) return <><TemaMarca /><Login /><Toasts /></>;
   return <><TemaMarca /><Shell user={user} st={st} tema={tema} setTema={setTema} /></>;
 }

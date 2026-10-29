@@ -1,7 +1,8 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:b3ec830fb7 */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { abreviarNome } from '../domain/abreviar.js';
 import { LOJA_TROCAVEL, MODO_DEMO, agendamentosVisiveis, profissionaisVisiveis } from '../services/api.js';
-import { montarLinkAgendamento } from '../domain/link-publico.js';
+import { baseDoLink, montarLinkAgendamento } from '../domain/link-publico.js';
 import { ATIVOS, STATUS, boxesAtivos, ocupacaoDe, retiradaDe } from '../domain/rules.js';
 import { faixasDoProfissional, excecaoDoDia, TIPOS_EXCECAO } from '../domain/schedule.js';
 import { DIAS_CURTOS, addDays, addMonths, fmtDate, fmtDayLong, fmtDiaMesSemana, fmtHM, fmtMonthYear, monthStart, sameDay, startOfDay, weekStart, fmtDateShort, fmtMoney } from '../domain/time.js';
@@ -47,14 +48,16 @@ function CartaoAgendamento({ a, st, agora, onClick, mostraBarb, testid = 'cartao
     <button type="button" className={`cartao st-${v.chave}`} onClick={onClick} data-testid={testid} data-status={v.chave}
       title={`${fmtHM(a.inicio)} ${nomeCliente(st, a)} · ${nomeServicos(st, a)}${a.veiculo ? ` · ${textoVeiculo(a)}` : ''} · ${v.rotulo}`}>
       <div className="cartao-topo">
-        <div className="cartao-quando"><b className="cartao-data" data-testid="cartao-data">{fmtDiaMesSemana(a.inicio)}</b><strong className="cartao-hora">{fmtHM(a.inicio)}</strong></div>
-        <span className="cartao-nome">{nomeCliente(st, a)}</span>
-        <StatusChip a={a} agora={agora} pequeno />
+        <div className="cartao-quem">
+          <span className="cartao-nome" title={nomeCliente(st, a)} data-testid="cartao-cliente">{abreviarNome(nomeCliente(st, a), 24)}</span>
+          <StatusChip a={a} agora={agora} pequeno />
+        </div>
+        <div className={`cartao-quando ${testid === 'cartao' ? 'quando-hoje' : 'quando-proximo'}`}><b className="cartao-data" data-testid="cartao-data">{fmtDiaMesSemana(a.inicio)}</b><strong className="cartao-hora">{fmtHM(a.inicio)}</strong></div>
       </div>
-      <div className="cartao-corpo">
-        <span>{nomeServicos(st, a)}</span>
-        {a.veiculo && <span className="cartao-veiculo" data-testid="cartao-veiculo"><Icon n="car" size={13} /> {textoVeiculo(a)}{textoBox(st, a) ? ` · ${textoBox(st, a)}` : ''}</span>}
-        <span className="muted cartao-com">{mostraBarb && <FotoProfissional u={st.usuarios.find((x) => x.id === a.profissionalId)} />}com {nomeProfissional(st, a)} · {fmtDate(a.inicio)} às {fmtHM(a.inicio)}</span>
+      <div className="cartao-servico" title={nomeServicos(st, a)} data-testid="cartao-servico">{nomeServicos(st, a)}</div>
+      {a.veiculo && <div className="cartao-veiculo cartao-veiculo-centro" data-testid="cartao-veiculo"><Icon n="car" size={13} /> {textoVeiculo(a)}{textoBox(st, a) ? ` · ${textoBox(st, a)}` : ''}</div>}
+      <div className="cartao-profissional">
+        <span className="cartao-prof" title={nomeProfissional(st, a)} data-testid="cartao-profissional">{mostraBarb && <FotoProfissional u={st.usuarios.find((x) => x.id === a.profissionalId)} />}com <b>{abreviarNome(nomeProfissional(st, a))}</b></span>
       </div>
       <div className="cartao-rodape">
         <Etiquetas a={a} />
@@ -155,14 +158,14 @@ export default function Agenda({ user, onAbrir, onNovo }) {
   // Link da página do cliente: o dono usa o geral; cada profissional, o da própria agenda (#agendar-<id>). Em Artifact só vale âncora simples, por isso #.
   // Um clique abre o WhatsApp (aba nova, com a mensagem pronta) e copia o link como reserva. Os dois começam já no clique.
   const copiarLink = () => {
-    const base = `${window.location.origin === 'null' ? '' : window.location.origin}${window.location.pathname}`;
+    const base = baseDoLink(window.location);
     // Na demonstração a loja vem de ?loja=<slug>: o link leva junto, senão o cliente cairia na loja padrão. No site real a loja vem do endereço (o build com domínio ignora ?loja=).
     const lojaDemo = new URLSearchParams(window.location.search).get('loja');
     const busca = lojaDemo && /^[a-z0-9-]{1,40}$/.test(lojaDemo) && base ? `?loja=${lojaDemo}` : '';
     // Artifact: sem ?loja= nem endereço por loja, a loja escolhida no login vai dentro do link (#agendar@<loja>).
     const link = montarLinkAgendamento({ base, busca, profissionalId: ehProfissional ? user.id : '', lojaNoLink: MODO_DEMO && LOJA_TROCAVEL ? lojaSlug : '' });
     const copiou = copiarTexto(link);
-    const abriu = abrirWhatsapp(textoConvite(st.estabelecimento.nome, link));
+    const abriu = abrirWhatsapp(textoConvite(st.estabelecimento.nome, link, st.estabelecimento.localizacaoNoWhatsapp && Number.isFinite(st.estabelecimento.latitude) ? `https://maps.google.com/?q=${st.estabelecimento.latitude},${st.estabelecimento.longitude}` : ''));
     copiou.then((ok) => {
       setCopiado(ok); if (ok) setTimeout(() => setCopiado(false), 2000);
       if (!abriu) toast(ok ? 'Não consegui abrir o WhatsApp. O link foi copiado: cole na conversa.' : 'Não consegui abrir o WhatsApp nem copiar o link.', 'erro');

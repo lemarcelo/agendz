@@ -16,3 +16,16 @@ export function montarLinkAgendamento({ base, busca = '', profissionalId = '', l
   const loja = /^[a-z0-9-]{1,40}$/.test(String(lojaNoLink)) ? `@${lojaNoLink}` : '';
   return `${base}${busca}#agendar${prof}${loja}`;
 }
+
+// Endereço do Artifact publicado: reserva para quando a página roda num quadro sem endereço próprio (`about:srcdoc`, origem 'null'), onde origem + caminho
+// não dariam um link que o cliente consiga abrir. Em http(s) vale o endereço real da página.
+export const LINK_ARTEFATO = 'https://claude.ai/artifact/JVXrYoWFyrxi3nAEfo28QQ';
+
+// Base do link (sem ?loja= e sem #): `loc` = window.location.
+export function baseDoLink(loc = {}) {
+  const proto = String(loc.protocol ?? '');
+  const origem = String(loc.origin ?? '');
+  if (proto === 'http:' || proto === 'https:') return origem && origem !== 'null' ? `${origem}${loc.pathname ?? '/'}` : LINK_ARTEFATO;
+  if (proto === 'file:') return String(loc.pathname ?? ''); // abrir o arquivo direto (teste local)
+  return LINK_ARTEFATO;
+}

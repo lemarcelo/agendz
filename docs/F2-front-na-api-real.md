@@ -95,6 +95,8 @@ Decisão sem confirmação: o `tick` do servidor roda por `@Scheduled` (por loja
 
 **Progresso Estoque (29/10):** `ui/real/Estoque.jsx` + `GET|POST /api/produtos/{id}/movimentos` (saldo nunca negativo, motivo, chave de repetição). Testes: `ProdutosTest`, `tests/api-real-estoque.test.mjs`, `tests/e2e59.mjs`. Próximo: Estabelecimento.
 
+**Progresso Estabelecimento (29/10):** `ui/real/Estabelecimento.jsx` (menu "Estabelecimento"): endereço e localização GPS (V27, `LocalDaLoja`), comissão geral (`PUT /api/estabelecimento/comissao` ganhou tela), interruptores do endereço no link e da localização no WhatsApp. Fora do assistente de início. Falta no Estabelecimento: expediente da loja, dados básicos (nome, telefone) e logo/tema.
+
 **Progresso 5d-4c-1 (28/10) — forma de pagamento e regras do Atender:** V21 (`configuracao_loja.forma_pagamento_padrao/campos_*`, `agendamento.forma_pagamento`), `configuracao/RegrasAtendimento` (`GET/PUT /api/estabelecimento/regras-atendimento`), `POST /api/atendimentos` com `formaPagamento` e campos obrigatórios configuráveis; front: forma no `Atender.jsx` e cartão de regras no Início do dono. Falta 5d-4c-2 (cupom).
 
 **Progresso 5d-4c-2 (28/10) — cupom:** V22 (`cupom`, `cupom_servico`, `cupom_tentativa`, `agendamento.cupom_*`, `agendamento_servico.desconto`), `cupom/CupomService`, rotas `/api/cupons` (Estabelecimento) e `POST|DELETE /api/agendamentos/{id}/cupom`, `cupomChave` no `POST /api/atendimentos` (só futuro); tela `ui/real/Cupons.jsx`, campo no Atender, aplicar/retirar na ficha. Testes: `CupomTest`, `tests/api-real-cupons.test.mjs`, `tests/e2e54.mjs`. A 5d fecha aqui; falta 5e.
