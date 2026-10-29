@@ -129,20 +129,11 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
             </label>
           </div>
         )} />
-        {produtos.length > 0 && (
-          <ListaItens titulo="Produtos" testid="atender-lista-produtos" itens={produtos} selecionado={(m) => Number(qtds[m.id]) > 0} renderItem={(m) => (
-            <div key={m.id} className={`servico-linha ${Number(qtds[m.id]) > 0 ? 'on' : ''}`}>
-              <span className="servico-op-lado"><span><b>{m.nome}</b><small className="muted cod">cód. {m.codigo} · {fmtMoney(m.preco)} · restam {m.estoque}</small></span></span>
-              <input type="number" min="0" max="999" step="1" placeholder="0" value={qtds[m.id] ?? ''} onChange={(e) => setQtds({ ...qtds, [m.id]: e.target.value })} aria-label={`Quantidade de ${m.nome}`} style={{ maxWidth: 80 }} data-testid={`atender-prod-${m.id}`} />
-            </div>
-          )} />
-        )}
-
         <div className="campo-largo grupo-hora">
           <div className="campo"><span className="campo-rotulo">Quando</span>
             <div className="linha-campos">
-              <button type="button" className={`btn btn-sm${!personalizar ? ' btn-on' : ''}`} aria-pressed={!personalizar} onClick={() => { setPersonalizar(false); setData(ymd(startOfDay(agora))); }} data-testid="atender-agora"><Icon n="clock" size={15} />Agora</button>
-              <button type="button" className={`btn btn-sm${personalizar ? ' btn-on' : ''}`} aria-pressed={personalizar} onClick={() => { setPersonalizar(true); setTimeout(() => { const el = document.querySelector('[data-testid="atender-data"]'); try { if (el && el.showPicker) el.showPicker(); } catch { /* o navegador pode recusar sem toque do usuário */ } }, 0); }} data-testid="atender-quando"><Icon n="calendar" size={15} />{personalizar ? 'Data e hora' : 'Escolher data'}</button>
+              <button type="button" className={`btn btn-quando${!personalizar ? ' btn-on' : ''}`} aria-pressed={!personalizar} onClick={() => { setPersonalizar(false); setData(ymd(startOfDay(agora))); }} data-testid="atender-agora"><Icon n="clock" size={15} />Agora</button>
+              <button type="button" className={`btn btn-quando${personalizar ? ' btn-on' : ''}`} aria-pressed={personalizar} onClick={() => { setPersonalizar(true); setTimeout(() => { const el = document.querySelector('[data-testid="atender-data"]'); try { if (el && el.showPicker) el.showPicker(); } catch { /* o navegador pode recusar sem toque do usuário */ } }, 0); }} data-testid="atender-quando"><Icon n="calendar" size={15} />{personalizar ? 'Data e hora' : 'Escolher data'}</button>
             </div>
             {personalizar && (
               <div className="linha-campos">
@@ -168,6 +159,14 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
             {v && !v.erros.length && !v.pendentes.length && <p className="msg-ok"><Icon n="check" size={15} /> Horário livre · {v.retirada && v.dias > 1 ? `entrada ${fmtDate(inicio)} ${fmtHM(inicio)}, retirada prevista ${fmtDate(v.retirada)} ${fmtHM(v.retirada)} (${v.dias} dias)` : `${fmtHM(inicio)} às ${fmtHM(v.retirada || inicio + (v.duracao || 0) * MIN)}`}{v.boxId ? ` · ${nomeBox(st, v.boxId)}` : ''}</p>}
           </div>
         </div>
+        {produtos.length > 0 && (
+          <ListaItens titulo="Produtos" testid="atender-lista-produtos" itens={produtos} selecionado={(m) => Number(qtds[m.id]) > 0} renderItem={(m) => (
+            <div key={m.id} className={`servico-linha ${Number(qtds[m.id]) > 0 ? 'on' : ''}`}>
+              <span className="servico-op-lado"><span><b>{m.nome}</b><small className="muted cod">cód. {m.codigo} · {fmtMoney(m.preco)} · restam {m.estoque}</small></span></span>
+              <input type="number" min="0" max="999" step="1" placeholder="0" value={qtds[m.id] ?? ''} onChange={(e) => setQtds({ ...qtds, [m.id]: e.target.value })} aria-label={`Quantidade de ${m.nome}`} style={{ maxWidth: 80 }} data-testid={`atender-prod-${m.id}`} />
+            </div>
+          )} />
+        )}
 
         {!ehProfissional && <PickerCliente clientes={st.clientes} valor={clienteId} onEscolher={escolheCliente} onLimpar={() => setClienteId('')} />}
         <Campo rotulo={`Nome${marca('nome')}`}><input value={nome} onChange={(e) => { setNome(e.target.value); if (clienteId && !(tel.length >= 10)) setClienteId(''); }} maxLength={60} placeholder="Nome ou apelido" data-testid="atender-nome" /></Campo>

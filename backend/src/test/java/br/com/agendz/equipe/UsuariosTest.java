@@ -143,6 +143,22 @@ class UsuariosTest extends BaseApi {
     }
 
     @Test
+    void proprietarioPodeEscolherASenhaTemporariaAoCriarEElaContinuaTemporaria() throws Exception {
+        criar(davi, corpo("UtS", ",\"senhaTemporaria\":\"curta\"")).andExpect(status().isBadRequest()).andExpect(jsonPath("$.mensagem").value("A senha temporária precisa ter de 8 a 100 caracteres."));
+        String json = criar(davi, corpo("UtS", ",\"senhaTemporaria\":\"Minha-Senha-9\"")).andExpect(status().isCreated())
+                .andExpect(jsonPath("$.senhaTemporaria").value("Minha-Senha-9")).andReturn().getResponse().getContentAsString();
+        String usuario = Pattern.compile("\"usuario\":\"([^\"]+)\"").matcher(json).results().map(m -> m.group(1)).findFirst().orElseThrow();
+        mvc.perform(post("/api/auth/login").with(host(APEX)).contentType(MediaType.APPLICATION_JSON).content(corpoLogin(usuario, "Minha-Senha-9")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.deveTrocarSenha").value(true));
+        // vazia = gerada; em edição não existe (a senha só se refaz por "Refazer senha"); `senha` continua não existindo
+        criar(davi, corpo("UtT", ",\"senhaTemporaria\":\"\"")).andExpect(status().isCreated()).andExpect(jsonPath("$.senhaTemporaria").isNotEmpty());
+        String id = criarOk("UtU", "");
+        mvc.perform(put("/api/usuarios/" + id).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON).content("{\"senhaTemporaria\":\"Outra-Senha-1\"}"))
+                .andExpect(status().isBadRequest());
+        criar(davi, corpo("UtV", ",\"senha\":\"Minha-Senha-9\"")).andExpect(status().isBadRequest());
+    }
+
+    @Test
     void comissaoSobreProdutosPorPessoaTemLimiteEFicaSoComODono() throws Exception {
         criar(davi, corpo("UtP", ",\"comissaoProdutoPct\":101")).andExpect(status().isBadRequest());
         String id = criarOk("UtP", ",\"comissaoPct\":10,\"comissaoProdutoPct\":6.5");

@@ -114,22 +114,6 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
         <Btn tamanho="sm" onClick={aoFechar} data-testid="atender-fechar" aria-label="Fechar"><Icone n="x" size={15} /></Btn>
       </div>
 
-      <fieldset className="atender-real-bloco" data-testid="atender-quando-bloco">
-        <legend>Quando</legend>
-        <div className="acoes">
-          <button type="button" className={`btn btn-sm${!personalizar ? ' btn-on' : ''}`} aria-pressed={!personalizar} onClick={() => { setPersonalizar(false); setErro(''); }} data-testid="atender-agora"><Icone n="clock" size={15} />Agora</button>
-          <button type="button" className={`btn btn-sm${personalizar ? ' btn-on' : ''}`} aria-pressed={personalizar} onClick={() => { setPersonalizar(true); setErro(''); }} data-testid="atender-quando"><Icone n="calendar" size={15} />Escolher data e hora</button>
-        </div>
-        {personalizar && <Campo rotulo="Data e hora"><input type="datetime-local" step={300} value={quando} onChange={(e) => { setQuando(e.target.value); setErro(''); }} data-testid="atender-data" /></Campo>}
-        {retro && !bloqueado && (
-          <Campo rotulo="Motivo do lançamento de um dia anterior">
-            <input type="text" maxLength={300} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Por que não foi registrado na hora? (fica no histórico)" data-testid="atender-motivo-retro" />
-          </Campo>
-        )}
-        {bloqueado && <Aviso tipo="erro" data-testid="atender-retro-bloqueado">Lançar um dia anterior é com o proprietário ou a recepção. Peça a eles para registrar.</Aviso>}
-        <p className="muted" data-testid="atender-tipo">{tipo === 'futuro' ? 'Agendamento: o horário fica reservado para o cliente.' : 'Atendimento já feito: entra como concluído.'}</p>
-      </fieldset>
-
       <fieldset className="atender-real-bloco">
         <legend>Cliente</legend>
         {cliente ? (
@@ -186,6 +170,22 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
           ))}
         </ul>
         <p className="muted" data-testid="atender-total">{resumo.qtd ? `${resumo.qtd} serviço${resumo.qtd === 1 ? '' : 's'} · ${resumo.minutos} min · ${fmtMoney(resumo.total)}` : itens.length ? 'Só produtos: registra a venda de agora.' : 'Escolha ao menos um serviço ou um produto.'}</p>
+      </fieldset>
+
+      <fieldset className="atender-real-bloco" data-testid="atender-quando-bloco">
+        <legend>Quando</legend>
+        <div className="acoes">
+          <button type="button" className={`btn btn-quando${!personalizar ? ' btn-on' : ''}`} aria-pressed={!personalizar} onClick={() => { setPersonalizar(false); setErro(''); }} data-testid="atender-agora"><Icone n="clock" size={15} />Agora</button>
+          <button type="button" className={`btn btn-quando${personalizar ? ' btn-on' : ''}`} aria-pressed={personalizar} onClick={() => { setPersonalizar(true); setErro(''); }} data-testid="atender-quando"><Icone n="calendar" size={15} />Escolher data e hora</button>
+        </div>
+        {personalizar && <Campo rotulo="Data e hora"><input type="datetime-local" step={300} value={quando} onChange={(e) => { setQuando(e.target.value); setErro(''); }} data-testid="atender-data" /></Campo>}
+        {retro && !bloqueado && (
+          <Campo rotulo="Motivo do lançamento de um dia anterior">
+            <input type="text" maxLength={300} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Por que não foi registrado na hora? (fica no histórico)" data-testid="atender-motivo-retro" />
+          </Campo>
+        )}
+        {bloqueado && <Aviso tipo="erro" data-testid="atender-retro-bloqueado">Lançar um dia anterior é com o proprietário ou a recepção. Peça a eles para registrar.</Aviso>}
+        <p className="muted" data-testid="atender-tipo">{tipo === 'futuro' ? 'Agendamento: o horário fica reservado para o cliente.' : 'Atendimento já feito: entra como concluído.'}</p>
       </fieldset>
 
       {produtos !== null && produtos.length > 0 && (

@@ -14,7 +14,7 @@ import org.springframework.stereotype.Service;
 
 /**
  * Usuário de FUMAÇA: conta temporária de teste automático no site real (workflow `smoke-producao`). O Admin/CI cria um (`fumaca-` + 8 hexadecimais,
- * perfil `admin`, não atende, não vende, escondido da equipe, já sem troca obrigatória de senha) e o apaga no final. A senha é gerada aqui e devolvida
+ * perfil `dono` (para o teste ver todas as telas; escondido da equipe, não atende nem vende, sem troca obrigatória de senha, e o teste só LÊ) e o apaga no final. A senha é gerada aqui e devolvida
  * UMA vez. O teste só LÊ; por isso o usuário não referencia nada e o `delete` basta; se algo o referenciar, ele é só desativado. Usuários de fumaça com
  * mais de 1 hora (teste que morreu antes de limpar) são apagados a cada nova criação.
  */
@@ -41,7 +41,7 @@ public class FumacaDaLoja {
         String hash = encoder.encode(senha);
         banco.naLoja(lojaId, jdbc -> {
             jdbc.update("delete from usuario where identificador like 'fumaca-%' and criado_em < now() - interval '1 hour'");
-            return jdbc.update("insert into usuario (loja_id, identificador, nome, papel, senha_hash, atende, pode_vender, deve_trocar_senha) values (?::uuid, ?, 'Teste automático', 'admin', ?, false, false, false)",
+            return jdbc.update("insert into usuario (loja_id, identificador, nome, papel, senha_hash, atende, pode_vender, deve_trocar_senha) values (?::uuid, ?, 'Teste automático', 'dono', ?, false, false, false)",
                     lojaId.toString(), login, hash);
         });
         return new Resultado(login, senha);

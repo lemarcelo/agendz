@@ -3,7 +3,7 @@
 // Toda regra (campos, CPF/apelido/e-mail únicos, último dono, histórico, agendamentos futuros) está no servidor; esta tela mostra o que ele devolve.
 // A senha temporária é gerada no servidor e aparece UMA vez, aqui, até a pessoa tocar em "Anotei"; nunca vai para storage nem para a URL.
 // Não importa `api.js`, `hooks.js` nem `common.jsx` (tests/estatico.test.mjs). A foto do cadastro chega numa próxima atualização.
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { equipe as api } from '../../services/api-real.js';
 import { Rot } from '../../domain/tipos.js';
 import { SECOES, SECOES_LIBERAVEIS, formatarCpf, formatarTelefone, somenteDigitos } from '../../domain/rules.js';
@@ -16,8 +16,11 @@ const rotuloPapel = (p) => (p === 'dono' ? 'Proprietário' : p === 'admin' ? 'Ad
 const ESCOLHA = { padrao: '', liberar: 'sim', bloquear: 'nao' };
 
 function PainelSenha({ pessoa, senha, aoFechar }) {
+  const ref = useRef(null);
+  // Depois de salvar no fim de um formulário longo (celular), a lista abre rolada para baixo e a senha ficava fora da tela: traz o painel para o topo.
+  useEffect(() => { try { if (ref.current && ref.current.scrollIntoView) ref.current.scrollIntoView({ block: 'start' }); } catch { /* navegador sem scrollIntoView */ } }, []);
   return (
-    <section className="aviso aviso-info" role="alert" data-testid="equipe-senha">
+    <section ref={ref} className="aviso aviso-info" role="alert" data-testid="equipe-senha">
       <div>
         <p><b>Senha temporária de {pessoa.apelido || pessoa.nome}.</b> Ela aparece só desta vez: anote e entregue à pessoa. No primeiro acesso ela confirma esta senha e escolhe o próprio usuário e a senha definitiva.</p>
         <p>Usuário atual: <b data-testid="equipe-senha-usuario">{pessoa.usuario}</b></p>
@@ -31,7 +34,7 @@ function PainelSenha({ pessoa, senha, aoFechar }) {
 function FormPessoa({ ficha, aoSalvar, aoCancelar }) {
   const novo = !ficha.id;
   const [f, setF] = useState(() => ({
-    nome: ficha.nome || '', apelido: ficha.apelido || '', usuario: '', cpf: ficha.cpf ? formatarCpf(ficha.cpf) : '', nascimento: ficha.nascimento || '',
+    nome: ficha.nome || '', apelido: ficha.apelido || '', usuario: '', senha: '', cpf: ficha.cpf ? formatarCpf(ficha.cpf) : '', nascimento: ficha.nascimento || '',
     email: ficha.email || '', telefone: ficha.telefone ? formatarTelefone(telNacional(ficha.telefone)) : '', papel: ficha.papel || 'profissional',
     atende: novo ? true : !!ficha.atende, podeVender: ficha.podeVender !== false, comissao: txt(ficha.comissaoPct), comissaoProduto: txt(ficha.comissaoProdutoPct),
     permissoes: Object.fromEntries(SECOES_LIBERAVEIS.map((k) => [k, typeof (ficha.permissoes || {})[k] === 'boolean' ? (ficha.permissoes[k] ? ESCOLHA.liberar : ESCOLHA.bloquear) : ESCOLHA.padrao])),
@@ -45,6 +48,10 @@ function FormPessoa({ ficha, aoSalvar, aoCancelar }) {
     setEnviando(true); setErro('');
     const corpo = { nome: f.nome, apelido: f.apelido, cpf: f.cpf, nascimento: f.nascimento, email: f.email, telefone: f.telefone, papel: f.papel, atende: f.atende, podeVender: f.podeVender };
     if (novo && f.usuario.trim()) corpo.usuario = f.usuario.trim().toLowerCase();
+    if (novo && f.senha) {
+      if (f.senha.length < 8 || f.senha.length > 100) { setEnviando(false); setErro('A senha temporária precisa ter de 8 a 100 caracteres.'); return; }
+      corpo.senhaTemporaria = f.senha;
+    }
     const c = num(f.comissao); if (c !== null) corpo.comissaoPct = c;
     const cp = num(f.comissaoProduto); if (cp !== null) corpo.comissaoProdutoPct = cp;
     if (f.papel !== 'dono') corpo.permissoes = Object.fromEntries(SECOES_LIBERAVEIS.filter((k) => f.permissoes[k] !== ESCOLHA.padrao).map((k) => [k, f.permissoes[k] === ESCOLHA.liberar]));
@@ -61,6 +68,7 @@ function FormPessoa({ ficha, aoSalvar, aoCancelar }) {
         <Campo rotulo="Nome completo"><input value={f.nome} maxLength={150} onChange={mudar('nome')} data-testid="eq-nome" /></Campo>
         <Campo rotulo="Apelido (como aparece na agenda)"><input value={f.apelido} maxLength={60} onChange={mudar('apelido')} data-testid="eq-apelido" /></Campo>
         {novo && <Campo rotulo="Usuário para entrar (opcional; vazio = gerado pelo apelido)"><input value={f.usuario} maxLength={60} autoComplete="off" autoCapitalize="none" onChange={mudar('usuario')} data-testid="eq-usuario" /></Campo>}
+        {novo && <Campo rotulo="Senha temporária (opcional; vazio = gerada pelo sistema)"><input value={f.senha} maxLength={100} autoComplete="off" autoCapitalize="none" spellCheck={false} onChange={mudar('senha')} data-testid="eq-senha" /></Campo>}
         <Campo rotulo="Perfil">
           <select value={f.papel} onChange={mudar('papel')} data-testid="eq-papel">
             {['profissional', 'atendente', 'admin', 'dono'].map((p) => <option key={p} value={p}>{rotuloPapel(p)}</option>)}
@@ -87,7 +95,7 @@ function FormPessoa({ ficha, aoSalvar, aoCancelar }) {
             ))}
           </fieldset>
         )}
-        {novo && <Aviso>A senha é gerada pelo sistema e aparece uma única vez depois de salvar.</Aviso>}
+        {novo && <Aviso>{f.senha ? 'Esta senha é temporária: a pessoa é obrigada a trocá-la no primeiro acesso. Ela aparece de novo uma única vez depois de salvar.' : 'Sem senha digitada, o sistema gera uma e ela aparece uma única vez depois de salvar. A pessoa troca no primeiro acesso.'}</Aviso>}
         {erro && <Aviso tipo="erro" data-testid="eq-erro">{erro}</Aviso>}
         <div className="acoes">
           <Btn onClick={aoCancelar} data-testid="eq-cancelar">Cancelar</Btn>

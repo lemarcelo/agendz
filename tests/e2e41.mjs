@@ -94,6 +94,12 @@ const semRolagem = async (p, nome) => assert.ok(await p.evaluate(() => document.
   assert.match(await p.getByTestId('eq-papel').innerText(), /Esteticista/, 'rótulo do tipo, não texto fixo');
   await p.getByTestId('eq-comissao').fill('12,5');
   await p.getByTestId('eq-perm-servicos').selectOption('sim');
+  // senha temporária escolhida pelo dono (opcional): curta é recusada na tela, sem ir ao servidor; vazia = gerada
+  const postsAntes = chamadas.filter((c) => c.m === 'POST' && c.u === '/api/usuarios').length;
+  await p.getByTestId('eq-senha').fill('curta'); await p.getByTestId('salvar-pessoa').click();
+  assert.match(await p.getByTestId('eq-erro').innerText(), /de 8 a 100 caracteres/);
+  assert.equal(chamadas.filter((c) => c.m === 'POST' && c.u === '/api/usuarios').length, postsAntes, 'senha curta nem vai ao servidor');
+  await p.getByTestId('eq-senha').fill('');
   await p.getByTestId('salvar-pessoa').click();
   await p.getByTestId('equipe-senha').waitFor();
   assert.equal(await p.getByTestId('equipe-senha-valor').innerText(), SENHA);
@@ -202,8 +208,13 @@ const semRolagem = async (p, nome) => assert.ok(await p.evaluate(() => document.
   assert.ok(!/esteticista/i.test(await p.getByTestId('eq-form').innerText()), 'nenhum rótulo de outro tipo');
   await semRolagem(p, 'formulário');
   await p.getByTestId('eq-nome').fill('Beto da Silva Sauro Rex Muito Comprido'); await p.getByTestId('eq-apelido').fill('Beto');
+  await p.getByTestId('eq-senha').fill('Minha-Senha-9');
+  await semRolagem(p, 'formulário com senha');
   await p.getByTestId('salvar-pessoa').click();
   await p.getByTestId('equipe-senha').waitFor(); await semRolagem(p, 'senha temporária');
+  const cx = await p.getByTestId('equipe-senha').boundingBox();
+  assert.ok(cx.y >= -1 && cx.y < 700, `a senha temporária aparece na tela depois de salvar (y=${cx.y})`);
+  assert.equal(chamadas.filter((c) => c.m === 'POST' && c.u === '/api/usuarios').at(-1).corpo.senhaTemporaria, 'Minha-Senha-9', 'a senha escolhida vai no corpo (campo senhaTemporaria)');
   ok('barbearia: rótulo do tipo; 390 px sem rolagem lateral');
   await ctx.close();
 }

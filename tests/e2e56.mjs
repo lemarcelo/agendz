@@ -16,6 +16,7 @@ const AGORA = new Date('2026-10-28T10:00:00-03:00');
 const OCUPADO = 'Esse horário acabou de ser ocupado. Escolha outro.';
 const chamadas = [];
 let avisosAcesso = true;
+let secoesLogin = ['agenda', 'clientes'];
 let falhaOcupado = true;
 const resumo = (agId, inicio, extra = {}) => ({ id: agId, inicio, fim: new Date(Date.parse(inicio) + 1800000).toISOString(), status: 'confirmado', rotulo: 'Confirmado', servicos: ['Corte'], duracao: 30, total: 40, desconto: 0, cupom: null, profissional: 'Alan', ativo: true, podeCancelar: true, ...extra });
 const ags = { [AG1]: resumo(AG1, '2026-11-03T12:00:00Z'), [AG2]: resumo(AG2, '2026-10-28T15:00:00Z', { podeCancelar: false }) };
@@ -35,7 +36,7 @@ const servidor = http.createServer((req, res) => {
     const c = corpo ? JSON.parse(corpo) : null;
     chamadas.push({ m: req.method, u: u.pathname, q: u.search, corpo: c, auth: req.headers.authorization || '', acesso: req.headers['x-acesso'] || '' });
     if (u.pathname === '/api/publico/loja') return json(200, { slug: 'dalforno', nome: 'Dalforno', tipo: 'barbearia', logo: null, temaCor: null, temaCor2: null });
-    if (u.pathname === '/api/auth/login') return json(200, { token: 'tok', id: ALAN, nome: 'Alan', papel: 'dono', deveTrocarSenha: false, onboardingPendente: false, secoes: ['agenda', 'clientes'] });
+    if (u.pathname === '/api/auth/login') return json(200, { token: 'tok', id: ALAN, nome: 'Alan', papel: 'dono', deveTrocarSenha: false, onboardingPendente: false, secoes: secoesLogin });
     if (u.pathname === '/api/estabelecimento/regras-atendimento') return json(200, { formaPagamentoPadrao: 'pix', futuro: ['nome', 'telefone'], local: [] });
     if (u.pathname === '/api/estabelecimento/link-agendamento') return json(200, { ativo: true, diasMax: 30, disponivel: true });
     if (u.pathname === '/api/avisos') return avisosAcesso ? json(200, avisos) : json(403, { mensagem: 'Acesso negado.' });
@@ -127,13 +128,17 @@ const deHoje = (m, u) => chamadas.filter((c) => c.m === m && c.u === u);
   await ctx.close();
 }
 {
-  avisosAcesso = false;
+  secoesLogin = ['clientes']; // sem a seção Agenda (ex.: perfil admin): o cartão nem pede os avisos
+  const pedidosAntes = deHoje('GET', '/api/avisos').length;
   const { ctx, p } = await abrir({ width: 1280, height: 860 }, '');
   await p.getByTestId('login-id').fill('alan'); await p.getByTestId('login-senha').fill('Minha-senha'); await p.getByTestId('login-entrar').click();
   await p.getByTestId('nav-inicio').click(); await p.getByTestId('painel-real').waitFor();
   await p.waitForFunction(() => !document.querySelector('[data-testid="avisos-real"]'));
-  ok('sem acesso à agenda (403): o cartão de avisos some');
+  await p.waitForTimeout(800);
+  assert.equal(deHoje('GET', '/api/avisos').length, pedidosAntes, 'sem a seção Agenda o painel não pede avisos (evita 403 no console)');
+  ok('sem a seção Agenda: o cartão de avisos some e nem pede (sem 403)');
   await ctx.close();
+  secoesLogin = ['agenda', 'clientes'];
   avisosAcesso = true;
 }
 

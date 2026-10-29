@@ -55,9 +55,9 @@ class FumacaTest extends BaseApi {
                 .andExpect(jsonPath("$.usuario", startsWith("fumaca-"))).andReturn().getResponse().getContentAsString();
         String usuario = campo(json, "usuario");
         String senha = campo(json, "senha");
-        // entra direto (sem troca obrigatória) e tem perfil de gestão
+        // entra direto (sem troca obrigatória) e com perfil de dono (o teste vê todas as telas)
         mvc.perform(post("/api/auth/login").with(host(OFFBOX)).contentType(MediaType.APPLICATION_JSON).content(corpoLogin(usuario, senha)))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.deveTrocarSenha").value(false));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.deveTrocarSenha").value(false)).andExpect(jsonPath("$.papel").value("dono"));
         // escondido da equipe e dos profissionais
         String dono = token(OFFBOX, "proprietario");
         mvc.perform(get("/api/usuarios").with(host(OFFBOX)).header(HttpHeaders.AUTHORIZATION, bearer(dono))).andExpect(jsonPath("$[*].usuario").value(not(hasItem(usuario))));

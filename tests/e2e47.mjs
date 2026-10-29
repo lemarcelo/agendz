@@ -88,6 +88,12 @@ const textoDe = (p, t) => p.getByTestId(t).innerText();
   const { ctx, p } = await abrir();
   await p.getByTestId('atender-abrir').click();
   await p.getByTestId('atender-form').waitFor();
+  // ordem (pedido do Marcelo): Cliente → Serviços → Quando (Agora / Escolher data) → Produtos…; botões de Quando com alvo de toque maior
+  const y = async (rotulo) => (await p.locator('.atender-real legend', { hasText: rotulo }).first().boundingBox()).y;
+  const [yc, ys, yq] = [await y('Cliente'), await y('Serviços'), await y('Quando')];
+  assert.ok(yc < ys && ys < yq, `ordem dos blocos: Cliente ${yc}, Serviços ${ys}, Quando ${yq}`);
+  if (await p.getByTestId('atender-produtos-bloco').count()) assert.ok(yq < await y('Produtos'), 'Produtos vem depois de Quando');
+  for (const id of ['atender-agora', 'atender-quando']) assert.ok((await p.getByTestId(id).boundingBox()).height >= 44, `${id}: altura de toque`);
   assert.match(await textoDe(p, 'atender-tipo'), /Atendimento já feito/);
   assert.equal(await p.getByTestId(`atender-srv-${id(52)}`).count(), 0, 'serviço desativado não é oferecido');
   assert.match(await textoDe(p, 'atender-total'), /Escolha ao menos um serviço/);

@@ -57,11 +57,12 @@ public class UsuarioService {
                           String nascimento, boolean deveTrocarSenha) {
     }
 
-    /** Corpo de POST/PUT. Campo ausente não muda; texto vazio apaga (CPF, e-mail, telefone, nascimento, foto). A senha não entra aqui. */
+    /** Corpo de POST/PUT. Campo ausente não muda; texto vazio apaga (CPF, e-mail, telefone, nascimento, foto). `senhaTemporaria` (opcional, só ao CRIAR, 8 a 100 caracteres): o proprietário escolhe a senha de
+     *  entrada; vazia = gerada pelo sistema. Em qualquer caso é temporária (a pessoa troca no primeiro acesso). Não existe campo `senha` (400). */
     public record Dados(@Size(max = 300) String nome, @Size(max = 300) String apelido, @Size(max = 100) String usuario, @Size(max = 100) String cpf,
                         @Size(max = 100) String nascimento, @Size(max = 300) String email, @Size(max = 100) String telefone, @Size(max = 40) String papel,
                         @Size(max = 20) Map<String, Boolean> permissoes, Boolean atende, Boolean podeVender, BigDecimal comissaoPct,
-                        @Size(max = 40000) String foto, BigDecimal comissaoProdutoPct) {
+                        @Size(max = 40000) String foto, BigDecimal comissaoProdutoPct, @Size(max = 200) String senhaTemporaria) {
     }
 
     /** Resposta de criar e de refazer a senha: a senha temporária aparece só aqui. */
@@ -103,7 +104,7 @@ public class UsuarioService {
     public ComSenha criar(Dados d) {
         Loja loja = LojaContext.exigir();
         Validado v = validar(d, true);
-        String senha = Temporarias.senha();
+        String senha = v.senhaTemporaria != null ? v.senhaTemporaria : Temporarias.senha();
         String hash = encoder.encode(senha);
         try {
             UUID id = banco.naLoja(jdbc -> {
@@ -233,6 +234,7 @@ public class UsuarioService {
         BigDecimal comissao, comissaoProduto;
         Boolean podeVender;
         Map<String, Boolean> permissoes;
+        String senhaTemporaria;
         boolean comissaoVeio, comissaoProdutoVeio, cpfVeio, emailVeio, telefoneVeio, nascimentoVeio;
     }
 
@@ -243,6 +245,14 @@ public class UsuarioService {
 
     private Validado validar(Dados d, boolean criando) {
         Validado v = new Validado();
+        if (d.senhaTemporaria() != null) {
+            if (!criando) throw ruim("A senha não se altera por aqui: use \"Refazer senha\".");
+            String t = d.senhaTemporaria();
+            if (!t.isEmpty()) {
+                if (t.length() < 8 || t.length() > 100) throw ruim("A senha temporária precisa ter de 8 a 100 caracteres.");
+                v.senhaTemporaria = t;
+            }
+        }
         Reservados.exigirLivre(d.usuario(), d.nome(), d.apelido()); // `suporte` é só do Admin da plataforma
         if (d.comissaoPct() != null) {
             if (d.comissaoPct().signum() < 0 || d.comissaoPct().compareTo(new BigDecimal("100")) > 0) throw ruim("A comissão vai de 0 a 100%.");

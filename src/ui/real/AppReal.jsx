@@ -165,7 +165,7 @@ function Painel({ loja, sessao, aoSair }) {
             <section className="tela" data-testid="painel-real">
               <p><b data-testid="painel-nome">{sessao.nome}</b> · <span data-testid="painel-papel">{papel}</span></p>
               <Aviso>Sua conta está pronta e o acesso é seguro. Clientes, serviços, equipe, a agenda (horários, calendário, status, remarcar e o botão Atender) e as comissões já estão aqui.</Aviso>
-              <Avisos />
+              {(sessao.secoes || []).includes('agenda') && <Avisos />}
               {sessao.papel === 'dono' && <Btn onClick={() => setReconfigurando(true)} data-testid="reconfigurar-abrir">Reconfigurar estabelecimento</Btn>}
               {sessao.papel === 'dono' && <RegrasAtendimento />}
               {sessao.papel === 'dono' && <LinkAgendamento />}

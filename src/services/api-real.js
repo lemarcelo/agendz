@@ -348,6 +348,7 @@ export const equipe = {
     d = d && typeof d === 'object' ? d : {};
     const corpo = {};
     for (const [k, max] of [['nome', 150], ['apelido', 60], ['usuario', 60], ['cpf', 20], ['nascimento', 10], ['email', 150], ['telefone', 30], ['papel', 20]]) if (typeof d[k] === 'string') corpo[k] = d[k].slice(0, max);
+    if (typeof d.senhaTemporaria === 'string' && d.senhaTemporaria !== '' && !(d.id !== undefined && d.id !== null && d.id !== '')) corpo.senhaTemporaria = d.senhaTemporaria.slice(0, 100); // só ao criar; vazia = o servidor gera
     if (typeof d.atende === 'boolean') corpo.atende = d.atende;
     if (typeof d.podeVender === 'boolean') corpo.podeVender = d.podeVender;
     if (typeof d.comissaoPct === 'number' && Number.isFinite(d.comissaoPct)) corpo.comissaoPct = d.comissaoPct;
