@@ -159,7 +159,8 @@ const A200 = id(300), A201 = id(301), A202 = id(302); // ag(n) cria o id 100 + n
   assert.equal(await p.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('agendz-aviso:')).length), 1);
   ok('as escolhas ficam guardadas neste aparelho');
 
-  // dados próprios
+  // dados próprios (espera o perfil carregar: no CI lento a resposta chegava depois e apagava o que foi digitado)
+  await p.waitForFunction(() => document.querySelector('[data-testid="perfil-apelido"]')?.value === 'Alan');
   await p.getByTestId('perfil-apelido').fill('Alan B');
   await p.getByTestId('perfil-email').fill('alan@exemplo.com');
   await p.getByTestId('perfil-telefone').fill('11999990001');
