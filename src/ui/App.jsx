@@ -1,9 +1,10 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:a6fe1e7410 */
 import React, { useEffect, useLayoutEffect, useState } from 'react';
-import { LOJA_NAO_ENCONTRADA, MODO_DEMO, auth, avisosDoUsuario, equipe, store } from '../services/api.js';
+import { LOJA_NAO_ENCONTRADA, MODO_DEMO, auth, avisosDoUsuario, equipe, naoLidasDoSuporte, store, suporte } from '../services/api.js';
 import { lerHashAgendar } from '../domain/link-publico.js';
 import { criarAdaptadorDemo } from '../services/onboarding-demo.js';
 import PrimeiroAcesso from './leve/PrimeiroAcesso.jsx';
+import Suporte from './leve/Suporte.jsx';
 import { ehDono, ehGestor, papelRotulo, pode } from '../domain/rules.js';
 import { iconeServicosAtivo, temaPadraoAtivo, tipoDe } from '../domain/tipos.js';
 import Agenda from './Agenda.jsx';
@@ -21,6 +22,14 @@ import { PainelWhats } from './Whats.jsx';
 import AgendarPublico from './AgendarPublico.jsx';
 import { toast, useLocal, useMedia, useStore, useToasts, useUser } from './hooks.js';
 import { restaurarOrdens, useOrdem, useTemOrdemPersonalizada } from './ordem.jsx';
+
+// Adaptador do Suporte para a API simulada (o do site real usa api-real.js): mesmas chamadas, sempre assíncronas.
+const adaptadorSuporte = {
+  listar: async () => suporte.listar(),
+  abrir: async (d) => { const r = suporte.abrir(d); return r.ok ? r : { ok: false, erro: (r.erros || [])[0] || 'Não foi possível abrir o chamado.' }; },
+  obter: async (id) => { const r = suporte.obter(id); return r.ok ? r : { ok: false, erro: (r.erros || [])[0] || 'Chamado não encontrado.' }; },
+  responder: async (id, t) => { const r = suporte.responder(id, t); return r.ok ? r : { ok: false, erro: (r.erros || [])[0] || 'Não foi possível enviar.' }; },
+};
 
 function AlterarSenha({ onClose }) {
   const [a, setA] = useState('');
@@ -102,6 +111,7 @@ function Shell({ user, st, tema, setTema }) {
   const largo = useMedia('(min-width: 1320px)');
 
   const avisos = avisosDoUsuario(st, user).filter((a) => !a.lido).length;
+  const chamadosNovos = naoLidasDoSuporte(st, user);
   const itens = [
     pode(user, 'agenda') && ['agenda', 'Agenda', 'calendar'],
     pode(user, 'clientes') && ['clientes', 'Clientes', 'users'],
@@ -115,6 +125,7 @@ function Shell({ user, st, tema, setTema }) {
     user.papel === 'profissional' && ['escala', 'Minha escala', 'clock'],
     ['mensagens', 'Mensagens', 'msg'],
     pode(user, 'agenda') && ['avisos', 'Avisos', 'bell'],
+    ['suporte', 'Suporte', 'info'],
   ].filter(Boolean);
   const abaAtual = itens.some((i) => i[0] === aba) ? aba : itens[0][0];
   // O simulador de WhatsApp (conversa com o robô da loja) existe SÓ na tela Mensagens: nas outras telas nem o painel nem o botão aparecem.
@@ -135,7 +146,7 @@ function Shell({ user, st, tema, setTema }) {
         <nav className="nav" aria-label="Seções">
           {itensOrdenados.map(([k, r, ic]) => (
             <button key={k} type="button" className={`${abaAtual === k ? 'on' : ''} ${ordemMenu.classe(k)}`.trim()} {...ordemMenu.props(k)} onClick={() => setAba(k)} aria-current={abaAtual === k ? "page" : undefined} title={r} data-testid={`nav-${k}`}>
-              <Icon n={ic} size={17} /><span>{r}</span>{k === 'avisos' && avisos > 0 && <i className="badge" data-testid="badge-avisos">{avisos}</i>}
+              <Icon n={ic} size={17} /><span>{r}</span>{k === 'avisos' && avisos > 0 && <i className="badge" data-testid="badge-avisos">{avisos}</i>}{k === 'suporte' && chamadosNovos > 0 && <i className="badge" data-testid="badge-suporte">{chamadosNovos}</i>}
             </button>
           ))}
         </nav>
@@ -165,6 +176,7 @@ function Shell({ user, st, tema, setTema }) {
           {abaAtual === 'escala' && <MinhaEscala user={user} />}
           {abaAtual === 'mensagens' && <Modelos user={user} />}
           {abaAtual === 'avisos' && <Avisos user={user} onAbrir={abrir} />}
+          {abaAtual === 'suporte' && <Suporte adaptador={adaptadorSuporte} ehDono={ehDono(user)} />}
         </main>
         {dockAberto && <div className="dock"><PainelWhats onFechar={() => setDockPref(false)} /></div>}
       </div>

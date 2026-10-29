@@ -27,6 +27,9 @@ agendz:
   dominios-base: ${AGENDZ_DOMINIOS_BASE:agendz.io,localhost}
   # ?loja=slug: só demonstração e desenvolvimento. Em produção fica false.
   permitir-query: ${AGENDZ_PERMITIR_QUERY:false}
+  admin:
+    # Admin API (chamados do Suporte; rede interna do Docker). Vazio = o Suporte responde 503. Usa a mesma INTERNO_CHAVE de agendz.interno.chave.
+    url: ${ADMIN_INTERNO_URL:}
   interno:
     # Chave das rotas internas do Admin (/interno/plataforma/**, cabeçalho X-Interno-Chave). Sem ela (16+ caracteres) essas rotas respondem 503. A VPS a gera em .env (preparar-api.sh).
     chave: ${INTERNO_CHAVE:}

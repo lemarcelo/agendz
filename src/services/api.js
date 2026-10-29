@@ -22,6 +22,7 @@ import * as PU from '../domain/publico.js';
 import { FERIADOS_NACIONAIS } from '../domain/feriados.js';
 import { LOJAS_DEMO, LOJA_PADRAO, lojaDemo, lojaDoEndereco } from './lojas-demo.js';
 import { lerHashAgendar } from '../domain/link-publico.js';
+import * as SU from '../domain/suporte.js';
 
 let offset = 0;
 // Qual loja este navegador atende. Ordem: tipo fixado no build (testes: `AGENDZ_TIPO`) > endereço da página (DNS/URL, `domain/tenant.js`) >
@@ -145,6 +146,9 @@ const lerPct = (v) => (v === null || v === undefined || v === '' ? { ok: true, v
 const semUsuarioSenha = (u) => { if (!u) return u; const { senha, ...resto } = u; return resto; };
 
 // ---------- consultas (GET) ----------
+// Suporte (chamados do usuário; o dono vê os da loja toda). Só o resumo: a conversa vem de `suporte.obter`.
+export const chamadosDoUsuario = (st, user) => SU.chamadosVisiveis(st, user).map(SU.resumoDoChamado);
+export const naoLidasDoSuporte = (st, user) => SU.naoLidasDoUsuario(st, user);
 export function agendamentosVisiveis(st, user) {
   if (!user) return [];
   if (user.papel === 'profissional') return st.agendamentos.filter((a) => a.profissionalId === user.id);
@@ -1336,5 +1340,33 @@ export const publico = {
   lembretes(token, quer) {
     if (!tokenOk(token) || typeof quer !== 'boolean') return erro(PU.ERRO_ACESSO);
     return mutate((s, agora) => PU.definirLembretes(s, token, quer, agora), P('/publico/lembretes', 'PUT'));
+  },
+};
+
+// ---------- suporte (chamados com a equipe da plataforma) ----------
+// No sistema real isto fala com a Admin API pelo servidor (`/api/suporte/*`); aqui o chamado fica no estado da loja e a demonstração responde sozinha.
+// Loja e usuário vêm da sessão, nunca da entrada.
+export const suporte = {
+  // GET /suporte/chamados
+  listar() { const u = usuario(); return u ? { ok: true, chamados: chamadosDoUsuario(state, u) } : semPermissao(); },
+  // GET /suporte/chamados/nao-lidas
+  naoLidas() { const u = usuario(); return u ? { ok: true, naoLidas: SU.naoLidasDoUsuario(state, u) } : semPermissao(); },
+  // POST /suporte/chamados  { assunto, categoria, texto }
+  abrir(entrada) {
+    const u = usuario(); if (!u) return semPermissao();
+    return mutate((s, agora) => SU.abrirChamado(s, s.usuarios.find((x) => x.id === u.id), pegar(entrada, ['assunto', 'categoria', 'texto']), agora), { metodo: 'POST', rota: '/suporte/chamados' });
+  },
+  // GET /suporte/chamados/{id}  (abrir marca como lido)
+  obter(id) {
+    const u = usuario(); if (!u) return semPermissao();
+    if (!texto(id, 40)) return erro('Chamado não encontrado.');
+    return mutate((s) => SU.lerChamado(s, s.usuarios.find((x) => x.id === u.id), id), { metodo: 'GET', rota: `/suporte/chamados/${String(id).slice(0, 20)}`, silencioso: true });
+  },
+  // POST /suporte/chamados/{id}/mensagens  { texto }
+  responder(id, textoNovo) {
+    const u = usuario(); if (!u) return semPermissao();
+    if (!texto(id, 40)) return erro('Chamado não encontrado.');
+    if (typeof textoNovo !== 'string') return erro('A mensagem é obrigatória.');
+    return mutate((s, agora) => SU.responderChamado(s, s.usuarios.find((x) => x.id === u.id), id, textoNovo, agora), { metodo: 'POST', rota: `/suporte/chamados/${String(id).slice(0, 20)}/mensagens` });
   },
 };

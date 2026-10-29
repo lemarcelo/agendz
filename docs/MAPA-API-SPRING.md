@@ -319,4 +319,18 @@ Só pela rede interna (o Caddy não publica `/interno`) e com `X-Interno-Chave` 
 | `PUT …/usuarios/{id}/ativo` | ativa ou desativa | a loja nunca fica sem proprietário ativo (409) |
 | `GET/PUT …/regras` | `limiteAgendas`, `limiteUsuarios`, `mensagensAtivas`, `limiteMensagensMes`, `cadastroObrigatorios` (`cpf`, `nascimento`) | faixas conferidas (400); **a loja aplica**: `UsuarioService.criar` (limite de usuários), `BoxController.gravar` (só barra quem aumenta as agendas ativas) e `ClienteService.criar` (campos obrigatórios); a recusa diz o motivo |
 | `GET/PUT …/status` | `em_teste`, `ativo`, `em_atraso`, `suspenso`, `encerrado` | `suspenso` e `encerrado` = **402** em toda rota `/api/**` da loja, menos `/api/auth/**`, `/api/publico/loja` e `/api/suporte/**` (`LojaFilter`) |
-Banco: V28 (`loja.status`, `loja.status_em`, `loja_regra_plataforma`, `usuario.ultimo_acesso`, gravado no login). Redefinir senha **não derruba** as sessões já abertas (o token vale até expirar); decisão registrada no prompt v106.
+| `GET/POST …/dominios` | domínio próprio da loja (A5, v108; `DominiosTest`) | cadastrar `{host}`: formato de domínio (sem http/porta/barra/IP/localhost), fora do domínio da plataforma, até 3 por loja, único no sistema (409); devolve o TXT a criar (`_agendz-verificacao.<host>` = `agendz-verificacao=<token>`, token aleatório de 24 bytes) |
+| `POST …/dominios/verificar?host=` | consulta o TXT no DNS (`ConsultaTxt`) | só com o token certo `verificado = true` (e `verificado_em`); sem registro = 200 com `acabouDeVerificar: false`; DNS fora do ar = 503 sem detalhe; outra loja = 404 |
+| `DELETE …/dominios?host=` | remove o domínio | a loja continua; o Caddy (`/interno/dominio-permitido`) passa a negar certificado |
+Banco: V28 (`loja.status`, `loja.status_em`, `loja_regra_plataforma`, `usuario.ultimo_acesso`, gravado no login). Redefinir senha **não derruba** as sessões já abertas (o token vale até expirar); decisão registrada no prompt v106. V29 (`loja_dominio.token`, `verificado_em`).
+
+## 10l. Suporte: chamados dentro do sistema da loja (v107, A4; `SuporteChamadosTest`; `ChamadosTest` no repositório `agendz-admin`)
+Qualquer usuário logado (menos o que ainda está com senha temporária). O servidor da loja **não guarda** chamados: repassa à Admin API (`http://admin-api:8080/interno/chamados`, `ADMIN_INTERNO_URL`, mesma chave `INTERNO_CHAVE`) com a **loja do Host** e o **usuário e o papel do token** — nunca do corpo (campo de loja ou usuário no corpo = 400). O dono vê todos os chamados da loja; os demais, só os que abriram; chamado de outro usuário ou de outra loja = 404. Nota interna, prioridade e atribuição não chegam aqui. Fica liberado com a loja suspensa (`/api/suporte`). Admin fora do ar ou sem chave = 503 genérico; 400/404/409/429 do Admin voltam com a mensagem.
+| Método da simulação | Rota | Regras |
+|---|---|---|
+| `suporte.listar` | `GET /api/suporte/chamados` | do usuário; o dono vê a loja toda; resumo (sem mensagens) |
+| `suporte.naoLidas` | `GET /api/suporte/chamados/nao-lidas` | `{ naoLidas }`; selo do menu; consulta de fundo a cada 20 s no site real |
+| `suporte.abrir` | `POST /api/suporte/chamados` | `{ assunto ≤ 120, categoria duvida\|problema\|sugestao\|cobranca\|outro, texto ≤ 4000 }`; 5 novos por hora por usuário (429); texto acima do limite é recusado, nunca cortado |
+| `suporte.obter` | `GET /api/suporte/chamados/{id}` | conversa; **abrir marca como lido**; id que não é UUID = 404 sem chamar o Admin |
+| `suporte.responder` | `POST /api/suporte/chamados/{id}/mensagens` | `{ texto ≤ 4000 }`; 20 por hora por chamado (429); resolvido ou aguardando volta a "em atendimento"; **fechado = 409** (abrir outro) |
+Situação: aberto → em atendimento → aguardando cliente → resolvido (vale 7 dias para o cliente reabrir respondendo; depois fecha sozinho com aviso do sistema) → fechado (só o administrador fecha à mão, com motivo).

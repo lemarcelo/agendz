@@ -32,6 +32,7 @@ services:
       CIFRA_CHAVE: ${CIFRA_CHAVE:?defina CIFRA_CHAVE no .env (rode preparar-api.sh)}
       CIFRA_PEPPER: ${CIFRA_PEPPER:?defina CIFRA_PEPPER no .env (rode preparar-api.sh)}
       INTERNO_CHAVE: ${INTERNO_CHAVE:-}   # rotas internas do Admin; vazio = desligadas (503)
+      ADMIN_INTERNO_URL: http://admin-api:8080   # chamados do Suporte (Admin API na mesma rede); sem o Admin no ar o Suporte responde 503
       AGENDZ_DOMINIOS_BASE: ${DOMINIO}
       AGENDZ_PERMITIR_QUERY: "false"
     # sem ports: só o Caddy fala com a API (reverse_proxy api:8080)

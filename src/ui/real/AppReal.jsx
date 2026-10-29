@@ -3,7 +3,7 @@
 // temporária e mostra o painel com o menu. Os módulos entram um a um (Clientes na parte 2, Serviços na 3, Equipe na 4; a agenda na seguinte), cada um só
 // quando o servidor tem a regra inteira. Não importa `api.js` (a simulada) nem `hooks.js`: o estado aqui é só o da sessão real, em memória.
 import React, { useEffect, useMemo, useState } from 'react';
-import { cancelarEspera, carregarLoja, entrar, esperandoRede, loginValido, onboarding, perfil as apiPerfil, quandoEsperar, sair, sessaoAtual, trocarSenha } from '../../services/api-real.js';
+import { cancelarEspera, carregarLoja, entrar, esperandoRede, loginValido, onboarding, perfil as apiPerfil, quandoEsperar, sair, sessaoAtual, suporte as apiSuporte, trocarSenha } from '../../services/api-real.js';
 import PrimeiroAcesso from '../leve/PrimeiroAcesso.jsx';
 import Agenda from './Agenda.jsx';
 import Clientes from './Clientes.jsx';
@@ -20,6 +20,8 @@ import Cupons from './Cupons.jsx';
 import AgendarPublico from './AgendarPublico.jsx';
 import LinkAgendamento from './LinkAgendamento.jsx';
 import Avisos from './Avisos.jsx';
+import Suporte from '../leve/Suporte.jsx';
+import { useAtualizacaoAutomatica } from './atualizar.js';
 import AlertaAgenda from './AlertaAgenda.jsx';
 import MeuPerfil, { AvatarReal } from './MeuPerfil.jsx';
 import { lerPrefs } from './alerta.js';
@@ -146,6 +148,11 @@ function Painel({ loja, sessao, aoSair }) {
   const [foco, setFoco] = useState(null);
   const [recarregar, setRecarregar] = useState(0);
   useEffect(() => { apiPerfil.obter().then((r) => { if (r.ok) setMeus(r.dados); }); }, []);
+  // Selo do Suporte: respostas novas da equipe da plataforma (consulta de fundo; se falhar, o selo só não muda).
+  const [chamadosNovos, setChamadosNovos] = useState(0);
+  const lerChamadosNovos = () => { apiSuporte.naoLidas().then((r) => { if (r.ok) setChamadosNovos(r.naoLidas); }); };
+  useEffect(lerChamadosNovos, []);
+  useAtualizacaoAutomatica(lerChamadosNovos);
   useEffect(() => {
     const ate = Object.values(destaques);
     if (!ate.length) return undefined;
@@ -178,13 +185,14 @@ function Painel({ loja, sessao, aoSair }) {
   if (dono) itens.push(['relatorios', 'Relatórios', 'list']);
   if (dono) itens.push(['comissoes', 'Comissões', 'wallet']);
   else itens.push(['ganhos', 'Meus ganhos', 'wallet']);
+  itens.push(['suporte', 'Suporte', 'info']);
   return (
     <div className="app">
       <header className="topo">
         <LogoPequena loja={loja} />
         <nav className="nav" aria-label="Seções">
           {itens.map(([k, r, ic]) => (
-            <button key={k} type="button" className={aba === k ? 'on' : ''} onClick={() => { setAba(k); setFoco(null); }} aria-current={aba === k ? 'page' : undefined} title={r} data-testid={`nav-${k}`}><Icone n={ic} size={17} /><span>{r}</span></button>
+            <button key={k} type="button" className={aba === k ? 'on' : ''} onClick={() => { setAba(k); setFoco(null); }} aria-current={aba === k ? 'page' : undefined} title={r} data-testid={`nav-${k}`}><Icone n={ic} size={17} /><span>{r}</span>{k === 'suporte' && chamadosNovos > 0 && <i className="badge" data-testid="badge-suporte">{chamadosNovos}</i>}</button>
           ))}
         </nav>
         <div className="topo-dir">
@@ -222,6 +230,7 @@ function Painel({ loja, sessao, aoSair }) {
           {aba === 'relatorios' && dono && <Relatorios />}
           {aba === 'comissoes' && dono && <Comissoes />}
           {aba === 'ganhos' && !dono && <Ganhos />}
+          {aba === 'suporte' && <Suporte adaptador={apiSuporte} ehDono={dono} aoMudar={lerChamadosNovos} />}
         </main>
       </div>
     </div>

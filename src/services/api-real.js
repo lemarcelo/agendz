@@ -1004,3 +1004,52 @@ export const avisos = {
     return r.ok ? { ok: true, aviso: lerAviso(r.dados) } : r;
   },
 };
+
+// ---------- Suporte (chamados com a equipe da plataforma; A4) ----------
+// O servidor da loja repassa à Admin API com a loja (Host) e o usuário (token): nada disso vai no corpo. Nota interna, prioridade e atribuição não chegam aqui.
+const ST_SUP = ['aberto', 'em_atendimento', 'aguardando_cliente', 'resolvido', 'fechado'];
+const CAT_SUP = ['duvida', 'problema', 'sugestao', 'cobranca', 'outro'];
+const TIPO_MSG = ['cliente', 'suporte', 'sistema'];
+const lerMsgSuporte = (m) => {
+  m = m && typeof m === 'object' ? m : {};
+  return { id: texto(String(m.id ?? ''), 30), autorTipo: TIPO_MSG.includes(m.autorTipo) ? m.autorTipo : 'sistema', autorNome: texto(m.autorNome, 100), texto: texto(m.texto, 4000), criadoEm: texto(m.criadoEm, 40) };
+};
+const lerChamado = (c) => {
+  c = c && typeof c === 'object' ? c : {};
+  const o = {
+    id: texto(c.id, 40), usuarioNome: texto(c.usuarioNome, 100), assunto: texto(c.assunto, 120), categoria: CAT_SUP.includes(c.categoria) ? c.categoria : 'outro',
+    status: ST_SUP.includes(c.status) ? c.status : 'aberto', criadoEm: texto(c.criadoEm, 40), atualizadoEm: texto(c.atualizadoEm, 40), naoLidas: Number.isInteger(c.naoLidas) && c.naoLidas > 0 ? Math.min(c.naoLidas, 9999) : 0,
+  };
+  if (Array.isArray(c.msgs)) o.msgs = listaDe(c.msgs, 500).map(lerMsgSuporte);
+  return o;
+};
+export const suporte = {
+  // GET /api/suporte/chamados  (o dono vê os da loja; os demais, só os próprios)
+  async listar() {
+    const r = await chamar('GET', '/api/suporte/chamados');
+    return r.ok ? { ok: true, chamados: listaDe(r.dados, 200).map(lerChamado).filter((c) => c.id) } : r;
+  },
+  // GET /api/suporte/chamados/nao-lidas
+  async naoLidas() {
+    const r = await chamar('GET', '/api/suporte/chamados/nao-lidas');
+    return r.ok ? { ok: true, naoLidas: Number.isInteger(r.dados && r.dados.naoLidas) && r.dados.naoLidas > 0 ? Math.min(r.dados.naoLidas, 9999) : 0 } : r;
+  },
+  // POST /api/suporte/chamados  { assunto, categoria, texto }
+  async abrir(d) {
+    d = d || {};
+    const r = await chamar('POST', '/api/suporte/chamados', { assunto: texto(d.assunto, 120).trim(), categoria: d.categoria, texto: texto(d.texto, 4000).trim() });
+    return r.ok ? { ok: true, chamado: lerChamado(r.dados) } : r;
+  },
+  // GET /api/suporte/chamados/{id}  (abrir marca como lido)
+  async obter(id) {
+    if (!ID.test(String(id))) return { ok: false, status: 0, erro: 'Chamado não encontrado.' };
+    const r = await chamar('GET', `/api/suporte/chamados/${id}`);
+    return r.ok ? { ok: true, chamado: lerChamado(r.dados) } : r;
+  },
+  // POST /api/suporte/chamados/{id}/mensagens  { texto }
+  async responder(id, t) {
+    if (!ID.test(String(id))) return { ok: false, status: 0, erro: 'Chamado não encontrado.' };
+    const r = await chamar('POST', `/api/suporte/chamados/${id}/mensagens`, { texto: texto(t, 4000).trim() });
+    return r.ok ? { ok: true, chamado: lerChamado(r.dados) } : r;
+  },
+};

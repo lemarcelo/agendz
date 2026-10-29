@@ -10,12 +10,14 @@ import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -28,6 +30,9 @@ import org.springframework.web.bind.annotation.RestController;
  *   PUT  /interno/plataforma/lojas/{slug}/usuarios/{id}/ativo    → {ativo}; nunca deixa a loja sem proprietário ativo
  *   GET|PUT /interno/plataforma/lojas/{slug}/regras              → limites e campos obrigatórios (a loja aplica no servidor)
  *   GET|PUT /interno/plataforma/lojas/{slug}/status              → em_teste | ativo | em_atraso | suspenso | encerrado (suspenso/encerrado = 402 na loja)
+ *   GET|POST /interno/plataforma/lojas/{slug}/dominios           → domínio próprio (A5): lista / cadastra {host} e devolve o TXT a criar
+ *   POST /interno/plataforma/lojas/{slug}/dominios/verificar?host=  → consulta o TXT no DNS; só então o domínio passa a valer
+ *   DELETE /interno/plataforma/lojas/{slug}/dominios?host=       → remove (a loja continua)
  */
 @RestController
 public class PlataformaInternaController {
@@ -41,11 +46,16 @@ public class PlataformaInternaController {
     public record CorpoRegras(Integer limiteAgendas, Integer limiteUsuarios, Boolean mensagensAtivas, Integer limiteMensagensMes, List<String> cadastroObrigatorios) {
     }
 
+    public record CorpoDominio(String host) {
+    }
+
     private final PlataformaService servico;
+    private final DominiosDaLoja dominios;
     private final String chave;
 
-    public PlataformaInternaController(PlataformaService servico, @Value("${agendz.interno.chave:}") String chave) {
+    public PlataformaInternaController(PlataformaService servico, DominiosDaLoja dominios, @Value("${agendz.interno.chave:}") String chave) {
         this.servico = servico;
+        this.dominios = dominios;
         this.chave = chave == null ? "" : chave.trim();
     }
 
@@ -106,6 +116,31 @@ public class PlataformaInternaController {
     public ResponseEntity<Map<String, String>> mudarStatus(@PathVariable String slug, @RequestBody CorpoStatus c, @RequestHeader(value = "X-Interno-Chave", required = false) String enviada) {
         conferir(enviada);
         return ResponseEntity.ok().header("Cache-Control", "no-store").body(Map.of("status", servico.mudarStatus(servico.loja(slug), c == null ? null : c.status())));
+    }
+
+    @GetMapping("/interno/plataforma/lojas/{slug}/dominios")
+    public ResponseEntity<List<DominiosDaLoja.Dominio>> dominios(@PathVariable String slug, @RequestHeader(value = "X-Interno-Chave", required = false) String enviada) {
+        conferir(enviada);
+        return ResponseEntity.ok().header("Cache-Control", "no-store").body(dominios.listar(servico.loja(slug)));
+    }
+
+    @PostMapping("/interno/plataforma/lojas/{slug}/dominios")
+    public ResponseEntity<DominiosDaLoja.Dominio> cadastrarDominio(@PathVariable String slug, @RequestBody CorpoDominio c, @RequestHeader(value = "X-Interno-Chave", required = false) String enviada) {
+        conferir(enviada);
+        return ResponseEntity.status(HttpStatus.CREATED).header("Cache-Control", "no-store").body(dominios.cadastrar(servico.loja(slug), c == null ? null : c.host()));
+    }
+
+    @PostMapping("/interno/plataforma/lojas/{slug}/dominios/verificar")
+    public ResponseEntity<DominiosDaLoja.Resultado> verificarDominio(@PathVariable String slug, @RequestParam("host") String host, @RequestHeader(value = "X-Interno-Chave", required = false) String enviada) {
+        conferir(enviada);
+        return ResponseEntity.ok().header("Cache-Control", "no-store").body(dominios.verificar(servico.loja(slug), host));
+    }
+
+    @DeleteMapping("/interno/plataforma/lojas/{slug}/dominios")
+    public ResponseEntity<Void> removerDominio(@PathVariable String slug, @RequestParam("host") String host, @RequestHeader(value = "X-Interno-Chave", required = false) String enviada) {
+        conferir(enviada);
+        dominios.remover(servico.loja(slug), host);
+        return ResponseEntity.noContent().build();
     }
 
     private void conferir(String enviada) {
