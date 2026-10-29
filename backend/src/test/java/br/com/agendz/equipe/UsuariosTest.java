@@ -266,10 +266,14 @@ class UsuariosTest extends BaseApi {
         mvc.perform(get("/api/usuarios/me").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(pablo)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.usuario").value("pablo")).andExpect(jsonPath("$.papel").value("profissional"))
                 .andExpect(jsonPath("$.cpf").doesNotExist()).andExpect(jsonPath("$.comissaoPct").doesNotExist()).andExpect(jsonPath("$.permissoes").doesNotExist());
+        // campo que não é da pessoa (perfil, comissão) é recusado de vez, nada é gravado
         mvc.perform(put("/api/usuarios/me").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(pablo)).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"pablo@exemplo.com\",\"telefone\":\"11987654321\",\"papel\":\"dono\",\"comissaoPct\":100}"))
+                        .content("{\"email\":\"pablo@exemplo.com\",\"papel\":\"dono\",\"comissaoPct\":100}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(put("/api/usuarios/me").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(pablo)).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"pablo@exemplo.com\",\"telefone\":\"11987654321\"}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.email").value("pablo@exemplo.com")).andExpect(jsonPath("$.papel").value("profissional"));
-        // campo fora da lista é ignorado: o perfil e a comissão continuam os mesmos na ficha do dono
+        // o perfil continua o mesmo na ficha do dono
         mvc.perform(get("/api/usuarios").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)))
                 .andExpect(jsonPath("$[?(@.usuario=='pablo')].papel").value(hasItem("profissional")));
         // nome reservado e nome vazio são recusados
