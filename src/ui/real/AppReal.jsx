@@ -11,6 +11,8 @@ import Servicos from './Servicos.jsx';
 import Equipe from './Equipe.jsx';
 import Boxes from './Boxes.jsx';
 import Comissoes from './Comissoes.jsx';
+import Relatorios from './Relatorios.jsx';
+import Estoque from './Estoque.jsx';
 import Ganhos from './Ganhos.jsx';
 import RegrasAtendimento from './RegrasAtendimento.jsx';
 import Cupons from './Cupons.jsx';
@@ -142,6 +144,8 @@ function Painel({ loja, sessao, aoSair }) {
   if (dono) itens.push(['equipe', 'Equipe', 'team']);
   if (dono && capAtiva('usaRecursoFisico')) itens.push(['boxes', 'Boxes', 'box']);
   if (dono || (sessao.secoes || []).includes('estabelecimento')) itens.push(['cupons', 'Cupons', 'key']);
+  if (dono || (sessao.secoes || []).includes('estoque')) itens.push(['estoque', 'Estoque', 'tag']);
+  if (dono) itens.push(['relatorios', 'Relatórios', 'list']);
   if (dono) itens.push(['comissoes', 'Comissões', 'wallet']);
   else itens.push(['ganhos', 'Meus ganhos', 'wallet']);
   return (
@@ -177,6 +181,8 @@ function Painel({ loja, sessao, aoSair }) {
           {aba === 'equipe' && dono && <Equipe meuId={sessao.id} />}
           {aba === 'boxes' && dono && <Boxes />}
           {aba === 'cupons' && (dono || (sessao.secoes || []).includes('estabelecimento')) && <Cupons />}
+          {aba === 'estoque' && (dono || (sessao.secoes || []).includes('estoque')) && <Estoque ehDono={dono} />}
+          {aba === 'relatorios' && dono && <Relatorios />}
           {aba === 'comissoes' && dono && <Comissoes />}
           {aba === 'ganhos' && !dono && <Ganhos />}
         </main>

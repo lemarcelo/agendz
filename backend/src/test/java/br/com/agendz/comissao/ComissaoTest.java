@@ -178,6 +178,44 @@ class ComissaoTest extends BaseApi {
         relatorio(davi).andExpect(jsonPath("$.profissionais[?(@.id == '" + pabloId + "')].comissao").value(12.5));
     }
 
+    // ---------------------------------------------------------------- relatório do período (só o proprietário)
+
+    @Test
+    void relatorioSomaServicosEProdutosConcluidosPorProfissionalServicoProdutoEForma() throws Exception {
+        criar(davi, pabloId, ",\"formaPagamento\":\"cartao\""); // 80
+        criar(davi, marceloId, ",\"produtos\":[{\"materialId\":\"" + pomada + "\",\"qtd\":2}],\"vendedorId\":\"" + pabloId + "\",\"formaPagamento\":\"dinheiro\""); // 80 + 90
+        ler(davi, "/api/relatorios?de=" + hoje() + "&ate=" + hoje()).andExpect(status().isOk())
+                .andExpect(jsonPath("$.totais.atendimentos").value(2)).andExpect(jsonPath("$.totais.servicos").value(160.0)).andExpect(jsonPath("$.totais.produtos").value(90.0))
+                .andExpect(jsonPath("$.totais.descontos").value(0.0)).andExpect(jsonPath("$.totais.total").value(250.0)).andExpect(jsonPath("$.totais.ticketMedio").value(125.0))
+                .andExpect(jsonPath("$.porServico", hasSize(1))).andExpect(jsonPath("$.porServico[0].nome").value("Lavagem")).andExpect(jsonPath("$.porServico[0].qtd").value(2))
+                .andExpect(jsonPath("$.porServico[0].valor").value(160.0))
+                .andExpect(jsonPath("$.porProduto[0].nome").value("Pomada")).andExpect(jsonPath("$.porProduto[0].qtd").value(2)).andExpect(jsonPath("$.porProduto[0].valor").value(90.0))
+                .andExpect(jsonPath("$.porProfissional", hasSize(2))).andExpect(jsonPath("$.porProfissional[0].total").value(170.0))
+                .andExpect(jsonPath("$.porForma[?(@.forma == 'cartao')].total").value(80.0)).andExpect(jsonPath("$.porForma[?(@.forma == 'dinheiro')].total").value(170.0))
+                .andExpect(jsonPath("$.porDia", hasSize(1))).andExpect(jsonPath("$.porDia[0].total").value(250.0));
+    }
+
+    @Test
+    void relatorioUsaOPrecoCongeladoDeCadaAtendimento() throws Exception {
+        criar(davi, pabloId, ""); // 80
+        mvc.perform(put("/api/servicos/" + lavagem).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"nome\":\"Lavagem\",\"preco\":500,\"duracaoMin\":60,\"intervaloMin\":0}")).andExpect(status().isOk());
+        criar(davi, pabloId, ""); // 500; o primeiro continua 80
+        ler(davi, "/api/relatorios?de=" + hoje() + "&ate=" + hoje()).andExpect(status().isOk())
+                .andExpect(jsonPath("$.totais.atendimentos").value(2)).andExpect(jsonPath("$.totais.total").value(580.0)).andExpect(jsonPath("$.porServico[0].valor").value(580.0));
+    }
+
+    @Test
+    void relatorioSoParaOProprietarioEComPeriodoValido() throws Exception {
+        ler(pablo, "/api/relatorios?de=" + hoje() + "&ate=" + hoje()).andExpect(status().isForbidden());
+        ler(davi, "/api/relatorios").andExpect(status().isBadRequest());
+        ler(davi, "/api/relatorios?de=2026-01-01&ate=2027-12-31").andExpect(status().isBadRequest());
+        ler(davi, "/api/relatorios?de=2026-02-10&ate=2026-02-01").andExpect(status().isBadRequest());
+        ler(davi, "/api/relatorios?de=" + hoje() + "&ate=" + hoje()).andExpect(status().isOk()).andExpect(jsonPath("$.totais.atendimentos").value(0)).andExpect(jsonPath("$.totais.ticketMedio").value(0.0));
+        mvc.perform(get("/api/relatorios?mes=" + hoje().toString().substring(0, 7)).with(host(APEX))).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/relatorios?mes=" + hoje().toString().substring(0, 7)).with(host(DALFORNO)).header(HttpHeaders.AUTHORIZATION, bearer(davi))).andExpect(status().is4xxClientError()); // token de outra loja não vale
+    }
+
     // ---------------------------------------------------------------- meus ganhos e permissão
 
     @Test

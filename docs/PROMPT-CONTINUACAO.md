@@ -81,3 +81,6 @@ Feito · decisões tomadas sem confirmação · o que depende do Marcelo (com o 
 
 - v101 (29/10): reservar `suporte` + rota interna `/interno/plataforma/lojas/{slug}/suporte` prontas; próximo: front real da estética (Atender com veículo/box, tela de Boxes, remover o bloqueio em `ui/real/Agenda.jsx` `podeAtender`), link do cliente para estética (E3), Admin A3.
 - v102 (29/10): comissão por pessoa (serviços e produtos) na Equipe do assistente; estética no site real (Atender, Boxes). Próximo: revisão visual (celular/computador) e A3 do Admin.
+
+## 29/10 (manhã)
+- Relatórios, Estoque e atualização automática da agenda/avisos no site real; cartão da agenda com data em negrito e hora grande; planos de serviço anotados (backlog B0). Falta: Estabelecimento real (endereço e localização, comissão geral, expediente, regras e link num lugar só), Financeiro, Admin A3 a A5, visual (#61).

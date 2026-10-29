@@ -6,7 +6,7 @@
 // Não importa `api.js`, `hooks.js` nem `common.jsx` (tests/estatico.test.mjs).
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { agenda as api, boxes as apiBoxes, clientes as apiClientes, profissionais as apiProf } from '../../services/api-real.js';
-import { DIAS_CURTOS, addDays, addMonths, fmtDateTime, fmtDayLong, fmtHM, fmtMoney, fmtMonthYear, monthStart, sameDay, startOfDay, weekStart, ymd } from '../../domain/time.js';
+import { DIAS_CURTOS, addDays, addMonths, fmtDateTime, fmtDayLong, fmtDiaMesSemana, fmtHM, fmtMoney, fmtMonthYear, monthStart, sameDay, startOfDay, weekStart, ymd } from '../../domain/time.js';
 import { ATIVOS, ROTULO_STATUS } from '../../domain/rules.js';
 import { agruparPorDia } from '../../domain/agenda-grupos.js';
 import { Rot, capAtiva } from '../../domain/tipos.js';
@@ -17,6 +17,7 @@ import { montarLinkAgendamento } from '../../domain/link-publico.js';
 import { textoConvite } from '../../domain/whatsapp.js';
 import { abrirWhatsapp } from '../whatsapp.js';
 import Atender from './Atender.jsx';
+import { useAtualizacaoAutomatica } from './atualizar.js';
 
 const CHAVE_COR = { a_confirmar: 'amarelo', confirmado: 'azul', concluido: 'verde', cancelado: 'cinza' };
 // "Cliente agendou": pediu pelo link e aguarda o estabelecimento confirmar (só visual, sobre "a confirmar").
@@ -34,7 +35,7 @@ function Cartao({ a, nomeCliente, nomeProf, mostraProf, aberto, aoAbrir, testid,
     <div className={`cartao-real st-${v.cor}`} data-testid={testid} data-status={a.status} data-id={a.id}>
       <button type="button" className="cartao" onClick={aoAbrir} aria-expanded={aberto} data-testid={`${testid}-abrir`}>
         <div className="cartao-topo">
-          <strong className="cartao-hora">{fmtHM(a.inicio)}</strong>
+          <div className="cartao-quando"><b className="cartao-data" data-testid="cartao-data">{fmtDiaMesSemana(a.inicio)}</b><strong className="cartao-hora">{fmtHM(a.inicio)}</strong></div>
           <span className="cartao-nome">{nomeCliente}</span>
           <span className={`chip chip-p st-${v.cor}`} data-testid={`${testid}-status`}>{v.rotulo}</span>
         </div>
@@ -222,15 +223,20 @@ export default function Agenda({ ehProprio = false, ehDono = false, meuId = '', 
 
   const de = modo === 'horarios' ? cursor : weekStart(monthStart(cursor));
   const ate = modo === 'horarios' ? addDays(cursor, 1 + diasAdiante) : addDays(de, 42);
+  const emFundo = useRef(false); // consulta automática: se falhar, mantém a lista na tela (sem erro) e tenta de novo na próxima
   useEffect(() => {
     const n = ++ultima.current;
+    const fundo = emFundo.current; emFundo.current = false;
     (async () => {
       const r = await api.listar({ de, ate });
       if (n !== ultima.current) return; // chegou resposta de uma consulta antiga
-      if (!r.ok) { setErro(r.erro); setLista([]); return; }
-      setErro(''); setLista(r.agendamentos);
+      if (!r.ok) { if (!fundo) { setErro(r.erro); setLista([]); } return; }
+      setErro('');
+      setLista((antes) => (antes && JSON.stringify(antes) === JSON.stringify(r.agendamentos) ? antes : r.agendamentos)); // igual: não redesenha
     })();
   }, [de, ate, versao]);
+  // O cliente pode pedir, remarcar ou cancelar pelo link a qualquer hora: a agenda se atualiza sozinha (aba visível), sem fechar o cartão aberto.
+  useAtualizacaoAutomatica(() => { emFundo.current = true; setVersao((v) => v + 1); });
 
   const atendem = useMemo(() => profs.filter((p) => p.atende), [profs]);
   const nomeProf = (id) => (profs.find((p) => p.id === id) || {}).nome || Rot('profissional');

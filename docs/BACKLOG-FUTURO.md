@@ -2,6 +2,17 @@
 
 Regra de uso: toda funcionalidade nova pedida "para outro momento" entra aqui com **o que é**, **onde mexe** (só Admin, só Agendz, ou os dois) e **dúvidas**. Não implementar antes de a fila principal (`docs/PROMPT-CONTINUACAO.md`) chegar nela, salvo se o Marcelo pedir.
 
+## B0. Planos de serviços (pedido de 29/10 — topo da fila)
+**Para que serve:** vender um plano recorrente a um cliente (ex.: lavagem mensal, corte quinzenal): menu **Planos**, onde o proprietário escolhe o **cliente**, o **serviço**, a **recorrência** e o **valor** do plano. **Decisões do Marcelo (29/10, 09:56):** a **cobrança é por mês**; cada mês gera um **valor a receber** pelo pacote (cliente + plano + mês, em aberto até pagar); o pagamento fica informado como **"plano"** (nova forma de pagamento, ao lado de Pix/dinheiro/cartão), e os atendimentos do plano não geram cobrança avulsa.
+**Já existe algo parecido?** Não. Existe cupom (desconto por agendamento) e serviço com preço fixo/por porte; nada que repita agendamento nem cobre valor combinado por período.
+**Como seria (rascunho):**
+- Menu **Planos** (permissão própria; liberável pelo dono). Lista de planos por situação (ativo, pausado, encerrado) e busca por cliente.
+- Novo plano: cliente (picker existente) + serviço(s) + recorrência (semanal, quinzenal, mensal, dia/horário preferido e profissional) + **valor do plano** (fixo por ciclo, independente do preço de tabela) + início e término opcional.
+- Cada ciclo gera os agendamentos pelo mesmo caminho de hoje (`validarHorario`/`acharConflitos`: horário nunca duplica); o valor do plano entra como `desconto` por `itensDoAgendamento` ou como cobrança do ciclo (decidir), com a comissão sobre o valor realmente cobrado.
+- Pausar, retomar, encerrar e remarcar uma ocorrência sem quebrar o plano; histórico do plano.
+**Onde mexe:** Agendz (servidor + site real + Artifact). Admin só se virar item de cobrança da plataforma (não é o caso).
+**Dúvidas:** D1 (resolvida: o valor é **mensal**, do pacote; falta definir quantos atendimentos o mês inclui e o que acontece com o que sobrar) D2 cobrança (Pix/dinheiro) e inadimplência entram junto ou depois do financeiro? D3 o cliente vê o plano no link de agendamento? D4 como fica a comissão (percentual sobre o valor do ciclo dividido pelos atendimentos)?
+
 ## B1. Modo homologação por cliente (pedido de 28/10)
 **Para que serve:** testar o sistema numa loja de verdade sem sujar os dados. O Admin liga e desliga o modo por cliente (loja); vale para qualquer tipo (barbearia, estética, futuros).
 **Já existe algo parecido?** Não. Existe só histórico por agendamento (`agendamento_evento`) e o Reconfigurar reversível (serviços/equipe/expediente do assistente). Nenhum dos dois cobre lançamentos de teste.

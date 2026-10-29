@@ -200,7 +200,9 @@ input:disabled, select:disabled, textarea:disabled { opacity: .6; }
 .cartao { text-align: left; width: 100%; border: 1px solid var(--line); border-left: 5px solid var(--st); border-radius: 10px; background: var(--surface); padding: 10px 12px; display: grid; gap: 6px; }
 .cartao:hover { background: var(--surface-2); }
 .cartao-topo { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.cartao-hora { font-variant-numeric: tabular-nums; color: var(--st); }
+.cartao-quando { display: grid; gap: 0; line-height: 1.1; min-width: 64px; }
+.cartao-data { font-size: 13px; font-weight: 800; text-transform: lowercase; color: var(--fg); }
+.cartao-hora { font-variant-numeric: tabular-nums; color: var(--st); font-size: 24px; font-weight: 800; letter-spacing: -0.5px; }
 .cartao-nome { font-weight: 650; flex: 1; min-width: 80px; }
 .cartao-corpo { display: grid; gap: 1px; font-size: 13px; }
 .cartao-rodape { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
@@ -891,3 +893,25 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
 .boxes-real-linha input[type="text"], .boxes-real-linha input:not([type]) { min-width: 0; width: 100%; }
 .cartao-veiculo-real { font-size: 12.5px; overflow-wrap: anywhere; }
 .detalhe-veiculo-real { margin: 0; overflow-wrap: anywhere; }
+
+/* Relatórios no site real (v102) */
+.relatorios-real { display: grid; gap: 12px; min-width: 0; }
+.rel-cartoes-real { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.rel-cartao-real { display: grid; gap: 2px; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--surface-2); min-width: 0; }
+.rel-cartao-real small { color: var(--muted); font-size: 12px; }
+.rel-cartao-real strong { font-size: 18px; overflow-wrap: anywhere; }
+.rel-bloco-real { display: grid; gap: 6px; min-width: 0; }
+.rel-bloco-real > h2 { margin: 0; font-size: 15px; }
+.rel-lista-real { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.rel-lista-real li { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; min-width: 0; }
+.rel-nome-real { display: grid; gap: 1px; min-width: 0; overflow-wrap: anywhere; }
+.rel-nome-real small { font-size: 12.5px; }
+.rel-lista-real li > strong { white-space: nowrap; }
+
+/* Estoque no site real (v102) */
+.est-subtitulo-real { margin: 8px 0 0; font-size: 15px; }
+.est-hist-real { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.est-hist-real li { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; min-width: 0; }
+.est-hist-real li > span { display: grid; gap: 1px; min-width: 0; overflow-wrap: anywhere; }
+.est-hist-real li > strong { white-space: nowrap; }
+.est-obs-real { display: block; }

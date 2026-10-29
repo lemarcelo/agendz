@@ -8,6 +8,9 @@ import br.com.agendz.validacao.Texto;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.dao.DuplicateKeyException;
@@ -42,6 +45,14 @@ public class ProdutoService {
     }
 
     public record Remocao(boolean desativado) {
+    }
+
+    /** Uma linha do histórico de estoque. `delta` positivo entrou, negativo saiu; `saldo` é o estoque depois do movimento. `autor` é o nome de quem fez (nulo = o sistema). */
+    public record Movimento(UUID id, Instant em, String tipo, BigDecimal delta, BigDecimal saldo, String obs, String autor, UUID agendamentoId) {
+    }
+
+    /** Corpo de POST /api/produtos/{id}/movimentos: `entrada` e `saida` somam ou tiram `qtd`; `ajuste` diz o estoque certo (contagem) e o servidor calcula a diferença. */
+    public record MovimentoDados(@Size(max = 20) String tipo, BigDecimal qtd, @Size(max = 500) String obs) {
     }
 
     private static final class Validado {
@@ -221,5 +232,53 @@ public class ProdutoService {
 
     private static ErroDeNegocio ruim(String mensagem) {
         return new ErroDeNegocio(HttpStatus.BAD_REQUEST, mensagem);
+    }
+
+    // ---------- movimentos de estoque (entrada, saída e contagem feitas à mão; a venda baixa sozinha em EstoqueDaVenda) ----------
+
+    /** Últimos 100 movimentos do produto, do mais novo ao mais antigo. */
+    public List<Movimento> movimentos(UUID id) {
+        return banco.naLoja(jdbc -> {
+            if (buscar(jdbc, id) == null) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, "Material não encontrado.");
+            return jdbc.query("select m.id, m.em, m.tipo, m.delta, m.saldo, m.obs, m.agendamento_id, u.nome as autor from movimento_estoque m left join usuario u on u.id = m.autor_id "
+                            + "where m.material_id = ? order by m.em desc, m.id desc limit 100",
+                    (rs, i) -> new Movimento(rs.getObject("id", UUID.class), rs.getTimestamp("em").toInstant(), rs.getString("tipo"), rs.getBigDecimal("delta"), rs.getBigDecimal("saldo"),
+                            rs.getString("obs"), rs.getString("autor"), rs.getObject("agendamento_id", UUID.class)), id);
+        });
+    }
+
+    /**
+     * Entrada, saída ou contagem. Quantidade positiva e finita (contagem pode ser 0); saída e contagem pedem o motivo (3 a 200 letras); saída nunca deixa o
+     * estoque negativo. A linha do movimento e a mudança do saldo gravam na mesma transação, com a linha do produto travada (duas saídas ao mesmo tempo não furam o saldo).
+     */
+    public Movimento movimentar(UUID id, MovimentoDados d, UUID autorId, Instant agora) {
+        Loja loja = LojaContext.exigir();
+        String tipo = d.tipo() == null ? "" : d.tipo().trim();
+        if (!List.of("entrada", "saida", "ajuste").contains(tipo)) throw ruim("Escolha entrada, saída ou contagem.");
+        BigDecimal qtd = d.qtd();
+        if (qtd == null || qtd.signum() < 0 || qtd.compareTo(TETO_ESTOQUE) > 0 || (qtd.signum() == 0 && !tipo.equals("ajuste"))) throw ruim("Informe uma quantidade válida.");
+        qtd = qtd.setScale(3, RoundingMode.HALF_UP);
+        String obs = d.obs() == null ? "" : Texto.limpar(d.obs());
+        if (obs.length() > 200) throw ruim("O motivo pode ter até 200 letras.");
+        if (!tipo.equals("entrada") && obs.length() < 3) throw ruim("Informe o motivo (pelo menos 3 letras).");
+        final BigDecimal quantidade = qtd;
+        return banco.naLoja(jdbc -> {
+            List<BigDecimal> atual = jdbc.query("select estoque from material where id = ? and tipo = 'produto' for update", (rs, i) -> rs.getBigDecimal(1), id);
+            if (atual.isEmpty()) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, "Material não encontrado.");
+            BigDecimal antes = atual.get(0);
+            BigDecimal delta = switch (tipo) {
+                case "entrada" -> quantidade;
+                case "saida" -> quantidade.negate();
+                default -> quantidade.subtract(antes);
+            };
+            BigDecimal saldo = antes.add(delta);
+            if (saldo.signum() < 0) throw ruim("Estoque insuficiente: há " + antes.stripTrailingZeros().toPlainString() + " em estoque.");
+            if (delta.signum() == 0) throw ruim("O estoque já está com essa quantidade.");
+            jdbc.update("update material set estoque = ? where id = ?", saldo, id);
+            UUID mov = jdbc.queryForObject("insert into movimento_estoque (loja_id, material_id, em, tipo, delta, saldo, obs, autor_id) values (?::uuid, ?, ?, ?, ?, ?, ?, ?) returning id",
+                    UUID.class, loja.id().toString(), id, OffsetDateTime.ofInstant(agora, ZoneOffset.UTC), tipo, delta, saldo, obs.isEmpty() ? null : obs, autorId);
+            String autor = autorId == null ? null : jdbc.query("select nome from usuario where id = ?", (rs, i) -> rs.getString(1), autorId).stream().findFirst().orElse(null);
+            return new Movimento(mov, agora, tipo, delta, saldo, obs.isEmpty() ? null : obs, autor, null);
+        });
     }
 }

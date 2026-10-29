@@ -57,6 +57,12 @@ export function minutesOfDay(ts) {
   return d.getHours() * 60 + d.getMinutes();
 }
 
+// "sáb 31/10": dia da semana abreviado + dia/mês (cartões da agenda).
+export function fmtDiaMesSemana(ts) {
+  const d = new Date(ts);
+  return `${DIAS_CURTOS[d.getDay()]} ${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
 export function fmtHM(ts) {
   const d = new Date(ts);
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;

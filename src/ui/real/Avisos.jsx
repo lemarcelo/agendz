@@ -2,9 +2,10 @@
 // Avisos do painel no site real (5e-2): o que o cliente fez pelo link (pediu horário, remarcou, cancelou). Lê GET /api/avisos (o profissional vê só os
 // do próprio horário; dono e equipe veem todos) e marca como lido com PUT /api/avisos/{id}/lido. Quem não tem acesso à agenda não vê o cartão.
 // Não importa `api.js`, `hooks.js` nem `common.jsx` (tests/estatico.test.mjs). Classes de CSS terminam em `-real`.
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { avisos as api } from '../../services/api-real.js';
 import { Aviso, Btn, Icone } from '../leve/mini.jsx';
+import { useAtualizacaoAutomatica } from './atualizar.js';
 
 const quando = (ts) => (ts === null ? '' : new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(ts)));
 const ICONE = { pedido: 'plus', remarcou: 'calendar', cancelou: 'x' };
@@ -14,11 +15,20 @@ export default function Avisos() {
   const [erro, setErro] = useState('');
   const [marcando, setMarcando] = useState(null);
 
+  const [versao, setVersao] = useState(0);
+  const emFundo = useRef(false);
   useEffect(() => {
     let vivo = true;
-    api.listar().then((r) => { if (!vivo) return; if (r.ok) setLista(r.avisos); else if (r.status === 403) setLista(false); else { setErro(r.erro); setLista([]); } });
+    const fundo = emFundo.current; emFundo.current = false;
+    api.listar().then((r) => {
+      if (!vivo) return;
+      if (r.ok) { setErro(''); setLista((antes) => (Array.isArray(antes) && JSON.stringify(antes) === JSON.stringify(r.avisos) ? antes : r.avisos)); }
+      else if (r.status === 403) setLista(false);
+      else if (!fundo) { setErro(r.erro); setLista([]); }
+    });
     return () => { vivo = false; };
-  }, []);
+  }, [versao]);
+  useAtualizacaoAutomatica(() => { emFundo.current = true; setVersao((v) => v + 1); }); // aviso novo (cliente pediu, remarcou, cancelou) aparece sem recarregar
 
   if (lista === false) return null; // sem acesso à agenda: não há o que mostrar
   if (lista === null) return <section className="avisos-real" data-testid="avisos-real"><p className="muted" role="status">Carregando avisos…</p></section>;

@@ -4,7 +4,7 @@ import { LOJA_TROCAVEL, MODO_DEMO, agendamentosVisiveis, profissionaisVisiveis }
 import { montarLinkAgendamento } from '../domain/link-publico.js';
 import { ATIVOS, STATUS, boxesAtivos, ocupacaoDe, retiradaDe } from '../domain/rules.js';
 import { faixasDoProfissional, excecaoDoDia, TIPOS_EXCECAO } from '../domain/schedule.js';
-import { DIAS_CURTOS, addDays, addMonths, fmtDate, fmtDayLong, fmtHM, fmtMonthYear, monthStart, sameDay, startOfDay, weekStart, fmtDateShort, fmtMoney } from '../domain/time.js';
+import { DIAS_CURTOS, addDays, addMonths, fmtDate, fmtDayLong, fmtDiaMesSemana, fmtHM, fmtMonthYear, monthStart, sameDay, startOfDay, weekStart, fmtDateShort, fmtMoney } from '../domain/time.js';
 import { cobrancasDoAgendamento } from '../domain/financeiro.js';
 import { totalAcrescimos } from '../domain/reports.js';
 import { Avatar, Btn, Etiquetas, Icon, StatusChip, Vazio } from './common.jsx';
@@ -47,7 +47,7 @@ function CartaoAgendamento({ a, st, agora, onClick, mostraBarb, testid = 'cartao
     <button type="button" className={`cartao st-${v.chave}`} onClick={onClick} data-testid={testid} data-status={v.chave}
       title={`${fmtHM(a.inicio)} ${nomeCliente(st, a)} · ${nomeServicos(st, a)}${a.veiculo ? ` · ${textoVeiculo(a)}` : ''} · ${v.rotulo}`}>
       <div className="cartao-topo">
-        <strong className="cartao-hora">{fmtHM(a.inicio)}</strong>
+        <div className="cartao-quando"><b className="cartao-data" data-testid="cartao-data">{fmtDiaMesSemana(a.inicio)}</b><strong className="cartao-hora">{fmtHM(a.inicio)}</strong></div>
         <span className="cartao-nome">{nomeCliente(st, a)}</span>
         <StatusChip a={a} agora={agora} pequeno />
       </div>

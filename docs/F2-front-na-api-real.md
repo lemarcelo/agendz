@@ -91,6 +91,10 @@ Decisão sem confirmação: o `tick` do servidor roda por `@Scheduled` (por loja
 
 **Progresso 5d-4b (28/10) — comissão no site real:** V20 (`comissao_pagamento`, percentual do serviço congelado, pago/cancelado por linha, `agendamento.comissao_em`), `comissao/ComissaoService`, rotas `/api/comissoes`, `/meu`, `/pagamentos` e `comissao/cancelar|restaurar`; telas Comissões (dono) e Meus ganhos. Testes: `ComissaoTest`, `tests/e2e52.mjs`. Próxima: 5d-4c (forma de pagamento, campos obrigatórios, cupom).
 
+**Progresso Relatórios (29/10):** `GET /api/relatorios` (só o dono) + `ui/real/Relatorios.jsx`; faturamento dos concluídos com cupom abatido, previsto, ticket médio e quebras. Testes: `ComissaoTest`, `tests/api-real-relatorios.test.mjs`, `tests/e2e58.mjs`. Próximos: Estoque e Estabelecimento.
+
+**Progresso Estoque (29/10):** `ui/real/Estoque.jsx` + `GET|POST /api/produtos/{id}/movimentos` (saldo nunca negativo, motivo, chave de repetição). Testes: `ProdutosTest`, `tests/api-real-estoque.test.mjs`, `tests/e2e59.mjs`. Próximo: Estabelecimento.
+
 **Progresso 5d-4c-1 (28/10) — forma de pagamento e regras do Atender:** V21 (`configuracao_loja.forma_pagamento_padrao/campos_*`, `agendamento.forma_pagamento`), `configuracao/RegrasAtendimento` (`GET/PUT /api/estabelecimento/regras-atendimento`), `POST /api/atendimentos` com `formaPagamento` e campos obrigatórios configuráveis; front: forma no `Atender.jsx` e cartão de regras no Início do dono. Falta 5d-4c-2 (cupom).
 
 **Progresso 5d-4c-2 (28/10) — cupom:** V22 (`cupom`, `cupom_servico`, `cupom_tentativa`, `agendamento.cupom_*`, `agendamento_servico.desconto`), `cupom/CupomService`, rotas `/api/cupons` (Estabelecimento) e `POST|DELETE /api/agendamentos/{id}/cupom`, `cupomChave` no `POST /api/atendimentos` (só futuro); tela `ui/real/Cupons.jsx`, campo no Atender, aplicar/retirar na ficha. Testes: `CupomTest`, `tests/api-real-cupons.test.mjs`, `tests/e2e54.mjs`. A 5d fecha aqui; falta 5e.

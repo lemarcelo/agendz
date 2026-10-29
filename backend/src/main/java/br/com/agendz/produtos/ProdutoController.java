@@ -3,7 +3,9 @@ package br.com.agendz.produtos;
 import br.com.agendz.produtos.ProdutoService.Dados;
 import br.com.agendz.produtos.ProdutoService.Produto;
 import br.com.agendz.seguranca.Permissoes;
+import br.com.agendz.tenant.Idempotencia;
 import jakarta.validation.Valid;
+import java.time.Clock;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -18,6 +20,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -29,9 +32,13 @@ import org.springframework.web.bind.annotation.RestController;
 public class ProdutoController {
 
     private final ProdutoService produtos;
+    private final Idempotencia idempotencia;
+    private final Clock relogio;
 
-    public ProdutoController(ProdutoService produtos) {
+    public ProdutoController(ProdutoService produtos, Idempotencia idempotencia, Clock relogio) {
         this.produtos = produtos;
+        this.idempotencia = idempotencia;
+        this.relogio = relogio;
     }
 
     private static boolean gerente(Jwt jwt) {
@@ -71,5 +78,23 @@ public class ProdutoController {
     @PreAuthorize("@perm.pode(authentication, 'estoque')")
     public ResponseEntity<?> remover(@PathVariable UUID id) {
         return produtos.remover(id).desativado() ? ResponseEntity.ok(Map.of("desativado", true)) : ResponseEntity.noContent().build();
+    }
+
+    /** GET /api/produtos/{id}/movimentos: histórico de estoque (entradas, saídas, contagens e baixas das vendas). */
+    @GetMapping("/api/produtos/{id}/movimentos")
+    @PreAuthorize("@perm.pode(authentication, 'estoque')")
+    public ResponseEntity<List<ProdutoService.Movimento>> movimentos(@PathVariable UUID id) {
+        return ResponseEntity.ok().cacheControl(org.springframework.http.CacheControl.noStore()).body(produtos.movimentos(id));
+    }
+
+    /** POST /api/produtos/{id}/movimentos { tipo: entrada|saida|ajuste, qtd, obs }: quantidade não pode duplicar, então leva Idempotency-Key. */
+    @PostMapping("/api/produtos/{id}/movimentos")
+    @PreAuthorize("@perm.pode(authentication, 'estoque')")
+    public ResponseEntity<ProdutoService.Movimento> movimentar(@PathVariable UUID id, @Valid @RequestBody ProdutoService.MovimentoDados d,
+                                                               @RequestHeader(value = "Idempotency-Key", required = false) String chave, @AuthenticationPrincipal Jwt jwt) {
+        UUID eu = UUID.fromString(jwt.getSubject());
+        ProdutoService.Movimento m = idempotencia.executar(chave, eu, "POST /api/produtos/" + id + "/movimentos", d, ProdutoService.Movimento.class,
+                () -> produtos.movimentar(id, d, eu, relogio.instant()));
+        return ResponseEntity.status(HttpStatus.CREATED).body(m);
     }
 }

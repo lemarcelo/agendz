@@ -102,3 +102,6 @@ Tipo imutável; loja pelo endereço; um código só com pastas por tipo; capacid
 - v100: primeiro acesso: a tela de entrada pede usuário + senha enviada e a redefinição pede só usuário novo + senha definitiva (a enviada fica em memória, `senhaEnviada`), depois entra sozinho no assistente (dono) ou na Agenda. **WhatsApp/Pix não serão configurados agora**: no futuro serão por cliente, via Admin, com as chaves da Meta de cada loja; 5e-3 adiado. Testes: `tests/e2e36.mjs`, `tests/e2e37.mjs`.
 - **29/10 (v101):** nome `suporte` reservado ("Nome reservado.") e usuário `suporte` criado pelo Admin por rota interna com chave (`INTERNO_CHAVE`); escondido da equipe da loja. Estética no servidor escrita (V25, boxes, veículo, blocos), aguardando o CI; falta o front real da estética e o link do cliente. Veja o prompt v101.
 - **29/10 (v102):** comissão por pessoa na Equipe do assistente (serviços e produtos; V26), estética no site real (Atender, Boxes). Dúvida: comissão geral sem tela. Em verificação/CI.
+
+## 29/10 (manhã)
+- Relatórios, Estoque e atualização automática da agenda/avisos no site real; cartão da agenda com data em negrito e hora grande; planos de serviço anotados (backlog B0). Falta: Estabelecimento real (endereço e localização, comissão geral, expediente, regras e link num lugar só), Financeiro, Admin A3 a A5, visual (#61).

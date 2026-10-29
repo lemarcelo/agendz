@@ -389,6 +389,63 @@ export const produtos = {
   },
 };
 
+// ---------- estoque (produtos: lista completa, cadastro, entrada/saída/contagem e histórico; regras no servidor: ProdutoService) ----------
+const lerProdutoEstoque = (p) => ({
+  id: texto(p && p.id, 40), codigo: texto(p && p.codigo, 60), nome: texto(p && p.nome, 150), unidade: texto(p && p.unidade, 20) || 'un',
+  preco: numeroOuNulo(p && p.preco) ?? 0, comissaoPct: numeroOuNulo(p && p.comissaoPct), estoque: numeroOuNulo(p && p.estoque) ?? 0,
+  minimo: numeroOuNulo(p && p.minimo), custo: numeroOuNulo(p && p.custo), ativo: !(p && p.ativo === false),
+});
+const lerMovimento = (m) => ({
+  id: texto(m && m.id, 40), em: typeof (m && m.em) === 'string' ? Date.parse(m.em) || null : (typeof (m && m.em) === 'number' ? m.em * 1000 : null),
+  tipo: ['entrada', 'saida', 'ajuste'].includes(m && m.tipo) ? m.tipo : 'ajuste', delta: numeroOuNulo(m && m.delta) ?? 0, saldo: numeroOuNulo(m && m.saldo) ?? 0,
+  obs: m && m.obs ? texto(m.obs, 200) : '', autor: m && m.autor ? texto(m.autor, 120) : '', venda: ID.test(String(m && m.agendamentoId)),
+});
+let ultimoMovimento = { assinatura: '', chave: '' };
+export const estoque = {
+  // GET /api/produtos  (dono e quem tem a seção estoque veem todos, inclusive desativados, com comissão, custo e mínimo)
+  async listar() {
+    const r = await chamar('GET', '/api/produtos');
+    return r.ok ? { ok: true, produtos: listaDe(r.dados, 500).map(lerProdutoEstoque).filter((p) => ID.test(p.id)) } : r;
+  },
+  // POST /api/produtos  |  PUT /api/produtos/{id}  (o estoque inicial só vale na criação; depois, só por movimento)
+  async salvar(d) {
+    d = d && typeof d === 'object' ? d : {};
+    const corpo = {};
+    for (const [k, max] of [['nome', 100], ['codigo', 20], ['unidade', 20]]) if (typeof d[k] === 'string') corpo[k] = d[k].slice(0, max);
+    for (const k of ['preco', 'comissaoPct', 'minimo', 'custo', 'estoque']) if (typeof d[k] === 'number' && Number.isFinite(d[k])) corpo[k] = d[k];
+    if (typeof d.ativo === 'boolean') corpo.ativo = d.ativo;
+    const edicao = d.id !== undefined && d.id !== null && d.id !== '';
+    if (edicao && !ID.test(String(d.id))) return { ok: false, status: 0, erro: 'Produto não encontrado.' };
+    if (edicao) delete corpo.estoque;
+    const r = await chamar(edicao ? 'PUT' : 'POST', edicao ? `/api/produtos/${d.id}` : '/api/produtos', corpo);
+    return r.ok ? { ok: true, produto: lerProdutoEstoque(r.dados) } : r;
+  },
+  // DELETE /api/produtos/{id}  (nunca vendido nem movimentado: apaga; senão só desativa → { desativado: true })
+  async remover(id) {
+    if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Produto não encontrado.' };
+    const r = await chamar('DELETE', `/api/produtos/${id}`);
+    return r.ok ? { ok: true, desativado: !!(r.dados && r.dados.desativado === true) } : r;
+  },
+  // GET /api/produtos/{id}/movimentos  (últimos 100)
+  async movimentos(id) {
+    if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Produto não encontrado.' };
+    const r = await chamar('GET', `/api/produtos/${id}/movimentos`);
+    return r.ok ? { ok: true, movimentos: listaDe(r.dados, 100).map(lerMovimento) } : r;
+  },
+  // POST /api/produtos/{id}/movimentos  { tipo: entrada|saida|ajuste, qtd, obs }  (leva Idempotency-Key: o mesmo pedido de novo nunca soma duas vezes)
+  async movimentar(id, { tipo, qtd, obs } = {}) {
+    if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Produto não encontrado.' };
+    if (!['entrada', 'saida', 'ajuste'].includes(tipo)) return { ok: false, status: 0, erro: 'Escolha entrada, saída ou contagem.' };
+    if (typeof qtd !== 'number' || !Number.isFinite(qtd) || qtd < 0 || (qtd === 0 && tipo !== 'ajuste')) return { ok: false, status: 0, erro: 'Informe uma quantidade válida.' };
+    const corpo = { tipo, qtd, ...(typeof obs === 'string' && obs.trim() ? { obs: obs.trim().slice(0, 200) } : {}) };
+    const assinatura = `${id}|${JSON.stringify(corpo)}`;
+    if (ultimoMovimento.assinatura !== assinatura) ultimoMovimento = { assinatura, chave: novaChave() };
+    const r = await chamar('POST', `/api/produtos/${id}/movimentos`, corpo, ultimoMovimento.chave);
+    if (r.ok) ultimoMovimento = { assinatura: '', chave: '' };
+    return r.ok ? { ok: true, movimento: lerMovimento(r.dados) } : r;
+  },
+};
+
 // ---------- agenda (F2 parte 5b; regras no servidor: AgendaController) ----------
 const STATUS_AGENDA = ['a_confirmar', 'confirmado', 'concluido', 'cancelado'];
 const instante = (v) => { const t = typeof v === 'string' ? Date.parse(v) : NaN; return Number.isFinite(t) ? t : null; };
@@ -600,6 +657,29 @@ const lerParteDono = (l) => ({ agendamentoId: texto(l && l.agendamentoId, 40), i
   servicos: listaDe(l && l.servicos, 30).map((x) => texto(x, 120)), base: dinheiroOuZero(l && l.base), comissao: dinheiroOuZero(l && l.comissao), casa: dinheiroOuZero(l && l.casa), paga: !!(l && l.paga === true), pagaEm: instante(l && l.pagaEm),
   cancelada: !!(l && l.cancelada === true), motivoCancelada: l && l.motivoCancelada ? texto(l.motivoCancelada, 300) : '', comissaoOriginal: numeroOuNulo(l && l.comissaoOriginal) });
 let ultimoPagamento = { assinatura: '', chave: '' };
+// ---------------------------------------------------------------- relatórios (só o proprietário)
+const itemRel = (x) => ({ nome: texto(x && x.nome, 200), qtd: numeroOuNulo(x && x.qtd) ?? 0, valor: dinheiroOuZero(x && x.valor) });
+export const relatorios = {
+  // GET /api/relatorios?mes= | ?de=&ate=  (faturamento do que foi concluído: serviços com o desconto do cupom abatido + produtos)
+  async obter(periodo) {
+    const c = consultaDoPeriodo(periodo);
+    if (c.erro) return { ok: false, status: 0, erro: c.erro };
+    const r = await chamar('GET', `/api/relatorios?${c.q}`);
+    if (!r.ok) return r;
+    const d = r.dados || {}; const t = d.totais || {}; const pv = d.previsto || {};
+    return {
+      ok: true, de: texto(d.de, 10), ate: texto(d.ate, 10),
+      totais: { atendimentos: numeroOuNulo(t.atendimentos) ?? 0, servicos: dinheiroOuZero(t.servicos), descontos: dinheiroOuZero(t.descontos), produtos: dinheiroOuZero(t.produtos), total: dinheiroOuZero(t.total), ticketMedio: dinheiroOuZero(t.ticketMedio) },
+      previsto: { atendimentos: numeroOuNulo(pv.atendimentos) ?? 0, total: dinheiroOuZero(pv.total) },
+      porProfissional: listaDe(d.porProfissional, 200).map((p) => ({ id: texto(p && p.id, 40), nome: texto(p && p.nome, 150), atendimentos: numeroOuNulo(p && p.atendimentos) ?? 0, servicos: dinheiroOuZero(p && p.servicos), produtos: dinheiroOuZero(p && p.produtos), total: dinheiroOuZero(p && p.total) })),
+      porServico: listaDe(d.porServico, 200).map(itemRel),
+      porProduto: listaDe(d.porProduto, 200).map(itemRel),
+      porForma: listaDe(d.porForma, 10).map((f) => ({ forma: texto(f && f.forma, 20), atendimentos: numeroOuNulo(f && f.atendimentos) ?? 0, total: dinheiroOuZero(f && f.total) })),
+      porDia: listaDe(d.porDia, 400).map((x) => ({ dia: texto(x && x.dia, 10), atendimentos: numeroOuNulo(x && x.atendimentos) ?? 0, total: dinheiroOuZero(x && x.total) })),
+    };
+  },
+};
+
 export const comissoes = {
   // GET /api/comissoes?mes= | ?de=&ate=  (só o proprietário: por pessoa, com a parte do estabelecimento)
   async relatorio(periodo) {
