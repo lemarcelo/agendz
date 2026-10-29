@@ -56,10 +56,16 @@ class PlataformaTest extends BaseApi {
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
     }
 
+    private static final String SENHA_DEFINITIVA = "SenhaDefinitiva2026";
+
+    /** Entra com a senha temporária, troca por uma definitiva (a temporária só serve para isso) e devolve o token já liberado. */
     private String tokenDaDona(String senha) throws Exception {
         String json = mvc.perform(post("/api/auth/login").with(host(HOST)).contentType(MediaType.APPLICATION_JSON).content(corpoLogin("dona", senha)))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
-        return campo(json, "token");
+        String troca = mvc.perform(put("/api/usuarios/me/senha").with(host(HOST)).header(HttpHeaders.AUTHORIZATION, bearer(campo(json, "token")))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"senhaAtual\":\"" + senha + "\",\"nova\":\"" + SENHA_DEFINITIVA + "\"}"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        return campo(troca, "token");
     }
 
     @Test
@@ -169,7 +175,7 @@ class PlataformaTest extends BaseApi {
                 .andExpect(jsonPath("$.mensagem").value(org.hamcrest.Matchers.containsString("suspenso")));
         mvc.perform(get("/api/publico/agendar").with(host(HOST))).andExpect(status().isPaymentRequired());
         // entrar e a identidade da loja continuam (a tela de pagamento e o suporte precisam)
-        mvc.perform(post("/api/auth/login").with(host(HOST)).contentType(MediaType.APPLICATION_JSON).content(corpoLogin("dona", senha))).andExpect(status().isOk());
+        mvc.perform(post("/api/auth/login").with(host(HOST)).contentType(MediaType.APPLICATION_JSON).content(corpoLogin("dona", SENHA_DEFINITIVA))).andExpect(status().isOk());
         mvc.perform(get("/api/publico/loja").with(host(HOST))).andExpect(status().isOk());
         // a lista do Admin mostra a situação; reativar devolve a loja
         mvc.perform(get(BASE).header("X-Interno-Chave", CHAVE)).andExpect(jsonPath("$[?(@.slug=='" + SLUG + "')].status").value(hasItem("suspenso")));
