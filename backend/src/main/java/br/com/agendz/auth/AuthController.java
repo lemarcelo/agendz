@@ -61,6 +61,7 @@ public class AuthController {
             throw new ErroDeNegocio(HttpStatus.UNAUTHORIZED, "Usuário ou senha inválidos");
         }
         limite.limpar(chave);
+        banco.naLoja(jdbc -> jdbc.update("update usuario set ultimo_acesso = now() where id = ?", u.id()));
         return sessao.abrir(u.id(), loja, u.papel(), u.nome(), u.deveTrocarSenha());
     }
 }

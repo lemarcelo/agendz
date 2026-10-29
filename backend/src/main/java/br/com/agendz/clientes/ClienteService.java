@@ -62,10 +62,19 @@ public class ClienteService {
 
     private final LojaJdbc banco;
     private final Cifra cifra;
+    private final br.com.agendz.interno.RegrasDaLoja regras;
 
-    public ClienteService(LojaJdbc banco, Cifra cifra) {
+    public ClienteService(LojaJdbc banco, Cifra cifra, br.com.agendz.interno.RegrasDaLoja regras) {
+        this.regras = regras;
         this.banco = banco;
         this.cifra = cifra;
+    }
+
+    /** Campos que o Admin tornou obrigatórios no cadastro (só CPF e nascimento são ligáveis; telefone e nome sempre). Vale no cadastro pelo painel. */
+    private void exigirCamposDaLoja(Loja loja, String cpf, String nasc) {
+        List<String> obrig = regras.ler(loja.id()).cadastroObrigatorios();
+        if (obrig.contains("cpf") && (cpf == null || cpf.isBlank())) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe o CPF: este estabelecimento exige.");
+        if (obrig.contains("nascimento") && (nasc == null || nasc.isBlank())) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe a data de nascimento: este estabelecimento exige.");
     }
 
     /** Capacidade `usaVeiculo` (src/tipos/estetica_automotiva/definicao.js). Tipo novo que usa veículo entra aqui. */
@@ -121,6 +130,7 @@ public class ClienteService {
         String tel = telefoneObrigatorio(e.telefone());
         String cpf = cpfOpcional(e.cpf());
         String nasc = nascimentoOpcional(e.nascimento());
+        exigirCamposDaLoja(loja, cpf, nasc);
         List<Veiculo> veiculos = usaVeiculo(loja) && e.veiculos() != null ? veiculosValidos(e.veiculos()) : List.of();
         try {
             return banco.naLoja(jdbc -> {

@@ -1,6 +1,7 @@
 package br.com.agendz.configuracao;
 
 import br.com.agendz.erro.ErroDeNegocio;
+import br.com.agendz.interno.RegrasDaLoja;
 import br.com.agendz.tenant.Capacidades;
 import br.com.agendz.tenant.Loja;
 import br.com.agendz.tenant.LojaContext;
@@ -41,9 +42,11 @@ public class BoxController {
     }
 
     private final LojaJdbc banco;
+    private final RegrasDaLoja regras;
 
-    public BoxController(LojaJdbc banco) {
+    public BoxController(LojaJdbc banco, RegrasDaLoja regras) {
         this.banco = banco;
+        this.regras = regras;
     }
 
     public static List<Box> ler(JdbcTemplate jdbc) {
@@ -68,16 +71,19 @@ public class BoxController {
         List<String> nomes = new ArrayList<>();
         Set<String> chaves = new HashSet<>();
         boolean algumAtivo = false;
+        int ativosDepois = 0;
         for (EntradaBox b : entrada) {
             String nome = b == null || b.nome() == null ? "" : Texto.limpar(b.nome()).trim();
             if (nome.isEmpty() || nome.length() > 30) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Boxes inválidos: de 1 a " + MAXIMO + ", cada um com nome de até 30 letras.");
             if (!chaves.add(nome.toLowerCase(Locale.ROOT))) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Dois boxes têm o mesmo nome.");
             nomes.add(nome);
-            if (b.ativo() == null || b.ativo()) algumAtivo = true;
+            if (b.ativo() == null || b.ativo()) { algumAtivo = true; ativosDepois++; }
         }
         if (!algumAtivo) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Deixe ao menos um box ativo.");
+        final int ativos = ativosDepois;
         return banco.naLoja(jdbc -> {
             List<Box> atuais = jdbc.query("select id, nome, ativo from box order by ordem, criado_em, id for update", (rs, i) -> new Box(rs.getObject("id", UUID.class), rs.getString("nome"), rs.getBoolean("ativo")));
+            if (ativos > atuais.stream().filter(Box::ativo).count()) regras.exigirAgendas(loja.id(), ativos); // o limite só barra quem AUMENTA as agendas ativas
             Set<UUID> conhecidos = new HashSet<>();
             for (Box a : atuais) conhecidos.add(a.id());
             // quem fica (id conhecido), em que posição e com que nome/situação

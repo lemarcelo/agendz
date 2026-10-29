@@ -38,6 +38,16 @@ public class LojaFilter extends OncePerRequestFilter {
         return p.startsWith("/interno/") || p.startsWith("/actuator/");
     }
 
+    private static boolean fechada(String status) {
+        return "suspenso".equals(status) || "encerrado".equals(status);
+    }
+
+    /** Com a loja suspensa só o que não é da agenda continua: página inicial, entrar, identidade da loja e o Suporte (chamados). */
+    static boolean liberadaComLojaFechada(String caminho) {
+        if (!caminho.startsWith("/api/")) return true;
+        return caminho.startsWith("/api/auth/") || caminho.equals("/api/publico/loja") || caminho.startsWith("/api/suporte");
+    }
+
     @Override
     protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res, FilterChain chain)
             throws ServletException, IOException {
@@ -50,6 +60,13 @@ public class LojaFilter extends OncePerRequestFilter {
             res.setContentType("application/json");
             res.setCharacterEncoding(StandardCharsets.UTF_8.name());
             res.getWriter().write("{\"mensagem\":\"Loja não encontrada\"}");
+            return;
+        }
+        if (fechada(lojas.status(loja.get().id())) && !liberadaComLojaFechada(req.getRequestURI())) {
+            res.setStatus(402);
+            res.setContentType("application/json");
+            res.setCharacterEncoding(StandardCharsets.UTF_8.name());
+            res.getWriter().write("{\"mensagem\":\"Sistema suspenso por falta de pagamento. Fale com o suporte.\"}");
             return;
         }
         LojaContext.definir(loja.get());

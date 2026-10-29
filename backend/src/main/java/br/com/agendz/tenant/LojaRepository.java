@@ -30,6 +30,11 @@ public class LojaRepository {
         return jdbc.query(COLUNAS + "where slug = ?", MAPA, slug).stream().findFirst();
     }
 
+    /** Situação da loja no Admin (em_teste, ativo, em_atraso, suspenso, encerrado); suspenso e encerrado fecham a loja (402). */
+    public String status(UUID lojaId) {
+        return jdbc.query("select status from loja where id = ?", (rs, i) -> rs.getString(1), lojaId).stream().findFirst().orElse("ativo");
+    }
+
     /** Domínio próprio só vale VERIFICADO. */
     public Optional<String> slugDoDominioVerificado(String host) {
         return jdbc.query(

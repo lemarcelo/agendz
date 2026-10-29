@@ -86,8 +86,10 @@ public class UsuarioService {
     private final Cifra cifra;
     private final PasswordEncoder encoder;
     private final ObjectMapper json;
+    private final br.com.agendz.interno.RegrasDaLoja regras;
 
-    public UsuarioService(LojaJdbc banco, Cifra cifra, PasswordEncoder encoder, ObjectMapper json) {
+    public UsuarioService(LojaJdbc banco, Cifra cifra, PasswordEncoder encoder, ObjectMapper json, br.com.agendz.interno.RegrasDaLoja regras) {
+        this.regras = regras;
         this.banco = banco;
         this.cifra = cifra;
         this.encoder = encoder;
@@ -117,6 +119,8 @@ public class UsuarioService {
         String hash = encoder.encode(senha);
         try {
             UUID id = banco.naLoja(jdbc -> {
+                Integer ativos = jdbc.queryForObject("select count(*) from usuario where ativo and " + br.com.agendz.validacao.Reservados.OCULTOS_SQL, Integer.class);
+                regras.exigirVagaDeUsuario(loja.id(), ativos == null ? 0 : ativos);
                 conferirDuplicados(jdbc, loja.id(), v, null);
                 Set<String> logins = new HashSet<>(jdbc.queryForList("select identificador from usuario", String.class));
                 String login = v.usuario != null ? v.usuario : Temporarias.loginLivre(v.apelido, logins);
