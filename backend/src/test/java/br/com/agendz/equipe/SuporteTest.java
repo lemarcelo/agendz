@@ -128,7 +128,7 @@ class SuporteTest extends BaseApi {
     @Test
     void semChaveConfiguradaARotaFicaDesligada() {
         // contrato do construtor: chave curta = 503 (coberto aqui sem subir outro contexto)
-        SuporteInternoController c = new SuporteInternoController(null, null, "curta");
+        SuporteInternoController c = new SuporteInternoController(null, null, null, "curta");
         org.junit.jupiter.api.Assertions.assertThrows(br.com.agendz.erro.ErroDeNegocio.class, () -> c.garantir("offbox", "curta"));
     }
 }
