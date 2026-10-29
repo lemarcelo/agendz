@@ -53,7 +53,7 @@ const NOMES_DO_SEED = ['Igor', 'Marcos', 'Rafael'];
   await T('copiar-link').click();
   await p.getByText('Link copiado').waitFor();
   const copiado = await p.evaluate(() => navigator.clipboard.readText());
-  assert.ok(copiado.endsWith('#agendar'), 'copiou o link: ' + copiado);
+  assert.ok(copiado.endsWith('#agendar@apex'), 'copiou o link: ' + copiado);
   const aba = await popup; assert.ok(aba.url().startsWith('https://wa.me/?text='), aba.url());
   const msg = decodeURIComponent(aba.url().split('text=')[1]);
   assert.ok(msg.includes('Apex') && msg.endsWith(copiado), 'mensagem com o nome e o link: ' + msg);

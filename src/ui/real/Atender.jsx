@@ -3,11 +3,12 @@
 // A regra toda (cliente por telefone, conflito, expediente, dia anterior com motivo, quem pode lançar) está no servidor (POST /api/atendimentos);
 // a tela mostra as mensagens dele. Produtos (5d-4a): venda com serviço ou só de produto (só no atendimento de agora), com vendedor; forma de pagamento (5d-4c) é a escolhida ou o padrão da loja e os campos obrigatórios vêm das regras da loja. Não importa `api.js`, `hooks.js` nem `common.jsx`.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { agenda as api, clientes as apiClientes, produtos as apiProdutos, regras as apiRegras, servicos as apiServicos } from '../../services/api-real.js';
+import { agenda as api, boxes as apiBoxes, clientes as apiClientes, produtos as apiProdutos, regras as apiRegras, servicos as apiServicos } from '../../services/api-real.js';
 import { fmtMoney, startOfDay } from '../../domain/time.js';
 import { formatarTelefone, somenteDigitos } from '../../domain/rules.js';
-import { Rot } from '../../domain/tipos.js';
-import { REGRAS_DE_FABRICA, FORMAS_PAGAMENTO, camposFaltando, ehRetroativo, exige, faltaItem, formaEfetiva, filtrarProdutos, filtrarServicos, qtdValida, resumoDosProdutos, resumoDosServicos, tipoDoAtendimento, vendedorPadrao } from '../../domain/atender-form.js';
+import { Rot, capAtiva } from '../../domain/tipos.js';
+import { PORTES, ROTULO_PORTE, rotuloVeiculo } from '../../domain/veiculos.js';
+import { REGRAS_DE_FABRICA, FORMAS_PAGAMENTO, boxesAtivos, camposFaltando, ehRetroativo, exige, faltaItem, faltaVeiculo, porteDoAtendimento, formaEfetiva, filtrarProdutos, filtrarServicos, qtdValida, resumoDosProdutos, resumoDosServicos, servicoNoPorte, tipoDoAtendimento, vendedorPadrao } from '../../domain/atender-form.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
 
 const aoLocal = (ts) => { const d = new Date(ts); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
@@ -37,6 +38,13 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
   const [status, setStatus] = useState('a_confirmar');
   const [encaixe, setEncaixe] = useState(false);
   const [cupomChave, setCupomChave] = useState('');
+  // estética: veículo (do cadastro do cliente ou novo) e box (só no agendamento futuro; vazio = o servidor escolhe um livre)
+  const usaVeiculo = capAtiva('usaVeiculo');
+  const usaBox = capAtiva('usaRecursoFisico');
+  const [veiculoId, setVeiculoId] = useState(''); // '' = outro veículo (digitar)
+  const [novoVeic, setNovoVeic] = useState({ placa: '', marca: '', modelo: '', cor: '', porte: '' });
+  const [boxes, setBoxes] = useState([]);
+  const [boxId, setBoxId] = useState('');
   const [motivo, setMotivo] = useState('');
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
@@ -44,6 +52,7 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
 
   useEffect(() => { let vivo = true; apiServicos.listar().then((r) => { if (vivo) { if (r.ok) setServicos(r.servicos.filter((s) => s.ativo !== false)); else { setServicos([]); setErro(r.erro); } } }); return () => { vivo = false; }; }, []);
   useEffect(() => { let vivo = true; apiRegras.obter().then((r) => { if (vivo && r.ok) setRegras(r.regras); }); return () => { vivo = false; }; }, []);
+  useEffect(() => { if (!usaBox) return undefined; let vivo = true; apiBoxes.listar().then((r) => { if (vivo && r.ok) setBoxes(boxesAtivos(r.boxes)); }); return () => { vivo = false; }; }, [usaBox]);
   useEffect(() => { let vivo = true; apiProdutos.listar().then((r) => { if (vivo) setProdutos(r.ok ? r.produtos : []); }); return () => { vivo = false; }; }, []);
   useEffect(() => {
     const q = busca.trim();
@@ -62,16 +71,20 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
   const retro = personalizar && ehRetroativo(inicio, agora);
   const bloqueado = retro && ehProprio;
   const lista = useMemo(() => filtrarServicos(servicos || [], buscaSrv), [servicos, buscaSrv]);
-  const resumo = resumoDosServicos(servicos || [], ids);
+  const doCliente = (cliente && cliente.veiculos) || [];
+  const veiculoEscolhido = usaVeiculo && veiculoId ? doCliente.find((v) => v.id === veiculoId) || null : null;
+  const digitando = usaVeiculo && !veiculoEscolhido;
+  const porte = porteDoAtendimento(veiculoEscolhido, digitando ? novoVeic : null);
+  const resumo = resumoDosServicos(servicos || [], ids, usaVeiculo ? porte : undefined);
   const listaProd = useMemo(() => filtrarProdutos(produtos || [], buscaProd), [produtos, buscaProd]);
   const resumoProd = resumoDosProdutos(produtos || [], itens);
   const vendedor = vendem.some((p) => p.id === vendedorEscolhido) ? vendedorEscolhido : vendedorPadrao(vendem, meuId, profId);
-  const falta = faltaItem(tipo, ids, itens);
+  const falta = faltaItem(tipo, ids, itens) || faltaVeiculo(usaVeiculo, ids, veiculoEscolhido, digitando ? novoVeic : null);
   const forma = formaEfetiva(regras, formaEscolhida);
   const faltam = camposFaltando(tipo, { nome, telefone, cliente, profissionalId: profId, vendedorId: itens.length ? vendedor : '', temProdutos: itens.length > 0, forma }, regras);
   const marca = (campo) => (exige(regras, tipo, campo) ? ' *' : '');
 
-  const escolher = (c) => { setCliente(c); setNome(c.apelido || c.nome); setTelefone(c.telefone ? formatarTelefone(telNacional(c.telefone)) : ''); setBusca(''); setAchados([]); setErro(''); };
+  const escolher = (c) => { setCliente(c); setVeiculoId(c.veiculos && c.veiculos.length === 1 ? c.veiculos[0].id : ''); setNome(c.apelido || c.nome); setTelefone(c.telefone ? formatarTelefone(telNacional(c.telefone)) : ''); setBusca(''); setAchados([]); setErro(''); };
   const marcar = (id) => setIds((x) => (x.includes(id) ? x.filter((i) => i !== id) : [...x, id]));
   const marcarProd = (id) => setItens((x) => (x.some((i) => i.materialId === id) ? x.filter((i) => i.materialId !== id) : [...x, { materialId: id, qtd: 1 }]));
   const trocarQtd = (id, v) => setItens((x) => x.map((i) => (i.materialId === id ? { ...i, qtd: qtdValida(v) } : i)));
@@ -84,6 +97,8 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
     setEnviando(true); setErro('');
     const r = await api.atender({
       servicoIds: ids, ...(itens.length ? { produtos: itens, vendedorId: vendedor } : {}), nome, telefone, ...(cliente ? { clienteId: cliente.id } : {}), profissionalId: profId,
+      ...(usaVeiculo && ids.length ? (veiculoEscolhido ? { veiculoId: veiculoEscolhido.id } : { veiculo: novoVeic }) : {}),
+      ...(usaBox && tipo === 'futuro' && boxId ? { boxId } : {}),
       ...(personalizar ? { inicio } : {}), ...(retro ? { motivoRetroativo: motivo } : {}),
       ...(tipo === 'futuro' ? { status, encaixe, ...(cupomChave.trim() ? { cupomChave } : {}) } : { formaPagamento: forma }),
     });
@@ -118,7 +133,7 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
       <fieldset className="atender-real-bloco">
         <legend>Cliente</legend>
         {cliente ? (
-          <p className="msg-ok" data-testid="atender-vinculo">Cadastro escolhido: {cliente.apelido || cliente.nome}. <button type="button" className="link" onClick={() => { setCliente(null); }} data-testid="atender-trocar-cliente">Trocar</button></p>
+          <p className="msg-ok" data-testid="atender-vinculo">Cadastro escolhido: {cliente.apelido || cliente.nome}. <button type="button" className="link" onClick={() => { setCliente(null); setVeiculoId(''); }} data-testid="atender-trocar-cliente">Trocar</button></p>
         ) : (
           <Campo rotulo="Buscar cliente cadastrado (opcional)"><input value={busca} onChange={(e) => setBusca(e.target.value)} maxLength={60} placeholder="Nome ou telefone" autoComplete="off" data-testid="atender-busca" /></Campo>
         )}
@@ -134,6 +149,30 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
         <p className="muted">Com telefone, o cadastro é achado ou criado. Só com o nome, nada é cadastrado.</p>
       </fieldset>
 
+      {usaVeiculo && (
+        <fieldset className="atender-real-bloco" data-testid="atender-veiculo-bloco">
+          <legend>Veículo</legend>
+          {doCliente.length > 0 && (
+            <div className="acoes" role="group" aria-label="Veículos do cliente">
+              {doCliente.map((v) => (
+                <label key={v.id} className={`radio-op ${veiculoId === v.id ? 'on' : ''}`}><input type="radio" name="atender-veiculo" checked={veiculoId === v.id} onChange={() => { setVeiculoId(v.id); setErro(''); }} data-testid={`atender-veiculo-${v.id}`} />{rotuloVeiculo(v)}</label>
+              ))}
+              <label className={`radio-op ${!veiculoId ? 'on' : ''}`}><input type="radio" name="atender-veiculo" checked={!veiculoId} onChange={() => { setVeiculoId(''); setErro(''); }} data-testid="atender-veiculo-outro" />Outro veículo</label>
+            </div>
+          )}
+          {digitando && (
+            <div className="form-grade" data-testid="atender-veiculo-novo">
+              <Campo rotulo="Placa *"><input value={novoVeic.placa} onChange={(e) => { setNovoVeic({ ...novoVeic, placa: e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 8) }); setErro(''); }} maxLength={8} autoComplete="off" placeholder="ABC1D23" data-testid="atender-v-placa" /></Campo>
+              <Campo rotulo="Modelo *"><input value={novoVeic.modelo} onChange={(e) => setNovoVeic({ ...novoVeic, modelo: e.target.value })} maxLength={40} autoComplete="off" data-testid="atender-v-modelo" /></Campo>
+              <Campo rotulo="Marca"><input value={novoVeic.marca} onChange={(e) => setNovoVeic({ ...novoVeic, marca: e.target.value })} maxLength={30} autoComplete="off" data-testid="atender-v-marca" /></Campo>
+              <Campo rotulo="Cor"><input value={novoVeic.cor} onChange={(e) => setNovoVeic({ ...novoVeic, cor: e.target.value })} maxLength={20} autoComplete="off" data-testid="atender-v-cor" /></Campo>
+              <Campo rotulo="Porte *"><select value={novoVeic.porte} onChange={(e) => { setNovoVeic({ ...novoVeic, porte: e.target.value }); setErro(''); }} data-testid="atender-v-porte"><option value="">Escolha…</option>{PORTES.map((k) => <option key={k} value={k}>{ROTULO_PORTE[k]}</option>)}</select></Campo>
+            </div>
+          )}
+          <p className="muted">{veiculoEscolhido ? `Porte ${ROTULO_PORTE[veiculoEscolhido.porte] || ROTULO_PORTE[porte]}: define o preço e o tempo dos serviços.` : 'O veículo novo fica salvo no cadastro do cliente (quando há telefone). O porte define o preço e o tempo dos serviços.'}</p>
+        </fieldset>
+      )}
+
       <fieldset className="atender-real-bloco">
         <legend>Serviços</legend>
         <Campo rotulo="Buscar serviço"><input value={buscaSrv} onChange={(e) => setBuscaSrv(e.target.value)} maxLength={40} placeholder="Nome ou código" data-testid="atender-busca-servico" /></Campo>
@@ -142,7 +181,7 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
         <ul className="atender-real-servicos" data-testid="atender-lista-servicos">
           {lista.map((s) => (
             <li key={s.id}>
-              <label className="check-linha"><input type="checkbox" checked={ids.includes(s.id)} onChange={() => marcar(s.id)} data-testid={`atender-srv-${s.id}`} /><span className="atender-real-item"><b>{s.nome}</b><small className="muted">{s.duracaoMin} min · {fmtMoney(s.preco)}</small></span></label>
+              <label className="check-linha"><input type="checkbox" checked={ids.includes(s.id)} onChange={() => marcar(s.id)} data-testid={`atender-srv-${s.id}`} /><span className="atender-real-item"><b>{s.nome}</b><small className="muted">{usaVeiculo ? `${servicoNoPorte(s, porte).duracaoMin} min · ${fmtMoney(servicoNoPorte(s, porte).preco)}` : `${s.duracaoMin} min · ${fmtMoney(s.preco)}`}</small></span></label>
             </li>
           ))}
         </ul>
@@ -205,6 +244,14 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
           </div>
           <p className="muted">Só fica registrado (a cobrança e o financeiro vêm depois).</p>
         </fieldset>
+      )}
+      {usaBox && tipo === 'futuro' && boxes.length > 0 && (
+        <Campo rotulo="Box">
+          <select value={boxId} onChange={(e) => { setBoxId(e.target.value); setErro(''); }} data-testid="atender-box">
+            <option value="">Automático (um box livre)</option>
+            {boxes.map((b) => <option key={b.id} value={b.id}>{b.nome}</option>)}
+          </select>
+        </Campo>
       )}
       {tipo === 'futuro' && (
         <Campo rotulo="Cupom (chave, opcional)">

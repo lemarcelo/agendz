@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 
 // Depois dos serviços o assistente passa por Produtos e Comissão (opcionais): estes testes só querem chegar à Equipe.
-const passarProdutosEComissao = async (p) => { await p.getByTestId('pa-pular-produtos').click(); await p.getByTestId('pa-pular-comissao').click(); };
+const passarProdutosEComissao = async (p) => { await p.getByTestId('pa-pular-produtos').click(); };
 import { readFileSync } from 'node:fs';
 
 const ok = (m) => console.log('✓', m);

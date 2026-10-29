@@ -2,15 +2,20 @@
 // Agenda do site real (F2 parte 5b): Horários (cartões do dia + próximos agendamentos por dia) e Calendário (mês), troca de profissional, status e remarcar.
 // Toda a regra (conflito, expediente, reativar, confirmar cancela "a confirmar" que cobrem, concluído nunca remarca) está no servidor: a tela mostra o que ele
 // devolve, com as mensagens dele. O profissional só recebe os próprios agendamentos (o servidor filtra). Atender (atendimento local e novo agendamento) é o `Atender.jsx` (5c);
-// nas lojas com veículo/porte (estética) o botão ainda não aparece: veículo e porte no Atender real são da fatia 5a restante.
+// nas lojas com veículo/porte e box (estética) o Atender pede o veículo e deixa escolher o box; o cartão e a ficha mostram veículo, porte e box.
 // Não importa `api.js`, `hooks.js` nem `common.jsx` (tests/estatico.test.mjs).
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { agenda as api, clientes as apiClientes, profissionais as apiProf } from '../../services/api-real.js';
+import { agenda as api, boxes as apiBoxes, clientes as apiClientes, profissionais as apiProf } from '../../services/api-real.js';
 import { DIAS_CURTOS, addDays, addMonths, fmtDateTime, fmtDayLong, fmtHM, fmtMoney, fmtMonthYear, monthStart, sameDay, startOfDay, weekStart, ymd } from '../../domain/time.js';
 import { ATIVOS, ROTULO_STATUS } from '../../domain/rules.js';
 import { agruparPorDia } from '../../domain/agenda-grupos.js';
 import { Rot, capAtiva } from '../../domain/tipos.js';
+import { ROTULO_PORTE, rotuloVeiculo } from '../../domain/veiculos.js';
+import { boxesAtivos } from '../../domain/atender-form.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
+import { montarLinkAgendamento } from '../../domain/link-publico.js';
+import { textoConvite } from '../../domain/whatsapp.js';
+import { abrirWhatsapp } from '../whatsapp.js';
 import Atender from './Atender.jsx';
 
 const CHAVE_COR = { a_confirmar: 'amarelo', confirmado: 'azul', concluido: 'verde', cancelado: 'cinza' };
@@ -37,6 +42,9 @@ function Cartao({ a, nomeCliente, nomeProf, mostraProf, aberto, aoAbrir, testid,
           <span>{servicos}</span>
           <span className="muted cartao-com">{mostraProf ? `com ${nomeProf} · ` : ''}{fmtMoney(a.total - a.desconto + a.totalProdutos)}</span>
         </div>
+        {a.estetica && (a.estetica.placa || a.estetica.box) && (
+          <div className="cartao-veiculo-real muted" data-testid={`${testid}-veiculo`}>{[a.estetica.placa ? [[a.estetica.marca, a.estetica.modelo].filter(Boolean).join(' '), a.estetica.placa].filter(Boolean).join(' · ') : '', a.estetica.box].filter(Boolean).join(' · ')}</div>
+        )}
         <div className="cartao-rodape">
           {a.encaixe && <span className="chip chip-p chip-encaixe">Encaixe</span>}
           {a.reagendado && <span className="chip chip-p chip-reag">Reagendado</span>}
@@ -49,7 +57,7 @@ function Cartao({ a, nomeCliente, nomeProf, mostraProf, aberto, aoAbrir, testid,
 }
 
 // Detalhes e ações de um agendamento aberto: status, cancelar com confirmação na tela, remarcar e histórico.
-function Detalhe({ a, nomeProf, nomeDe, profissionais, ehDono, aoAlterar }) {
+function Detalhe({ a, nomeProf, nomeDe, profissionais, boxes, ehDono, aoAlterar }) {
   const [hist, setHist] = useState(null);
   const [erro, setErro] = useState('');
   const [ocupado, setOcupado] = useState(false);
@@ -57,6 +65,7 @@ function Detalhe({ a, nomeProf, nomeDe, profissionais, ehDono, aoAlterar }) {
   const [remarcando, setRemarcando] = useState(false);
   const [quando, setQuando] = useState(() => aoLocal(a.inicio));
   const [prof, setProf] = useState(a.profissionalId);
+  const [boxEscolhido, setBoxEscolhido] = useState(''); // '' = manter o box atual (o servidor tenta o mesmo e, se ocupado, outro livre)
   const [cupomAberto, setCupomAberto] = useState(false);
   const [chave, setChave] = useState('');
   useEffect(() => { let vivo = true; api.obter(a.id).then((r) => { if (vivo && r.ok) setHist(r.agendamento.historico); }); return () => { vivo = false; }; }, [a.id, a.status, a.inicio]);
@@ -74,7 +83,7 @@ function Detalhe({ a, nomeProf, nomeDe, profissionais, ehDono, aoAlterar }) {
     e.preventDefault();
     const ts = doLocal(quando);
     if (ts === null) { setErro('Informe a nova data e hora.'); return; }
-    executar(() => api.remarcar(a.id, { inicio: ts, ...(ehDono && prof !== a.profissionalId ? { profissionalId: prof } : {}) }), 'Agendamento remarcado.');
+    executar(() => api.remarcar(a.id, { inicio: ts, ...(ehDono && prof !== a.profissionalId ? { profissionalId: prof } : {}), ...(boxEscolhido ? { boxId: boxEscolhido } : {}) }), 'Agendamento remarcado.');
   };
   const ativoStatus = a.status;
   const podeCupom = (ativoStatus === 'a_confirmar' || ativoStatus === 'confirmado') && a.origem !== 'atendimento'; // atendimento local nunca usa cupom
@@ -84,6 +93,9 @@ function Detalhe({ a, nomeProf, nomeDe, profissionais, ehDono, aoAlterar }) {
         {a.servicos.map((s, i) => <li key={`${s.servicoId}-${i}`}>{s.nome} · {s.duracaoMin} min · {fmtMoney(s.preco)}{s.desconto > 0 ? ` (cupom −${fmtMoney(s.desconto)})` : ''}</li>)}
         {a.produtos.map((p) => <li key={p.materialId} data-testid="detalhe-produto">{p.qtd}× {p.nome} · {fmtMoney(p.preco * p.qtd)}{p.vendedorId && p.vendedorId !== a.profissionalId ? ` · vendeu ${nomeDe(p.vendedorId)}` : ''}</li>)}
       </ul>
+      {a.estetica && (a.estetica.placa || a.estetica.box) && (
+        <p className="detalhe-veiculo-real" data-testid="detalhe-veiculo"><Icone n="car" size={14} /> {rotuloVeiculo({ marca: a.estetica.marca, modelo: a.estetica.modelo, cor: a.estetica.cor, placa: a.estetica.placa })}{a.estetica.porte ? ` · porte ${ROTULO_PORTE[a.estetica.porte] || a.estetica.porte}` : ''}{a.estetica.box ? ` · ${a.estetica.box}` : ''}</p>
+      )}
       <p className="muted">{fmtDateTime(a.inicio)} até {fmtHM(a.fim ?? a.inicio)} · com {nomeProf}{a.motivoCancelamento ? ` · cancelado (${a.motivoCancelamento})` : ''}</p>
       {erro && <Aviso tipo="erro" data-testid="agendamento-erro">{erro}</Aviso>}
       {a.cupom && <p data-testid="detalhe-cupom"><Icone n="key" size={14} /> Cupom {a.cupom.nome}: −{fmtMoney(a.desconto)} · a pagar {fmtMoney(a.total - a.desconto + a.totalProdutos)}</p>}
@@ -121,6 +133,14 @@ function Detalhe({ a, nomeProf, nomeDe, profissionais, ehDono, aoAlterar }) {
           {ehDono && profissionais.length > 1 && (
             <Campo rotulo={Rot('profissional')}>
               <select value={prof} onChange={(e) => setProf(e.target.value)} data-testid="remarcar-prof">{profissionais.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}</select>
+            </Campo>
+          )}
+          {a.estetica && a.estetica.boxId && boxes.length > 0 && (
+            <Campo rotulo="Box">
+              <select value={boxEscolhido} onChange={(e) => setBoxEscolhido(e.target.value)} data-testid="remarcar-box">
+                <option value="">Manter {a.estetica.box || 'o box atual'}</option>
+                {boxes.filter((b) => b.id !== a.estetica.boxId).map((b) => <option key={b.id} value={b.id}>{b.nome}</option>)}
+              </select>
             </Campo>
           )}
           <div className="acoes">
@@ -169,7 +189,7 @@ function Calendario({ cursor, lista, aoEscolherDia }) {
   );
 }
 
-export default function Agenda({ ehProprio = false, ehDono = false, meuId = '' }) {
+export default function Agenda({ ehProprio = false, ehDono = false, meuId = '', nomeLoja = '' }) {
   const [modo, setModo] = useState('horarios');
   const [cursor, setCursor] = useState(() => startOfDay(Date.now()));
   const [diasAdiante, setDiasAdiante] = useState(7);
@@ -177,16 +197,27 @@ export default function Agenda({ ehProprio = false, ehDono = false, meuId = '' }
   const [lista, setLista] = useState(null); // null = carregando
   const [erro, setErro] = useState('');
   const [aviso, setAviso] = useState('');
+  const [linkCopiado, setLinkCopiado] = useState(false);
+  // Link da página do cliente: o geral (#agendar) ou, para o profissional, o da própria agenda (#agendar-<id>). A loja vem do endereço, então não vai no link.
+  // Um clique abre o WhatsApp (aba nova, mensagem pronta; sem await antes, senão o navegador bloqueia) e copia o link como reserva.
+  const enviarLink = () => {
+    const base = `${globalThis.location.origin}${globalThis.location.pathname}`;
+    const link = montarLinkAgendamento({ base, profissionalId: ehProprio ? meuId : '' });
+    const abriu = abrirWhatsapp(textoConvite(nomeLoja, link));
+    Promise.resolve(globalThis.navigator?.clipboard?.writeText(link)).then(() => { setLinkCopiado(true); setTimeout(() => setLinkCopiado(false), 2000); }, () => { if (!abriu) setErro('Não consegui abrir o WhatsApp nem copiar o link.'); });
+  };
   const [versao, setVersao] = useState(0);
   const [aberto, setAberto] = useState(null);
   const [atendendo, setAtendendo] = useState(false);
   const [clientes, setClientes] = useState(new Map());
   const [profs, setProfs] = useState([]);
+  const [boxes, setBoxes] = useState([]);
   const ultima = useRef(0);
 
   useEffect(() => {
     apiClientes.listar().then((r) => { if (r.ok) setClientes(new Map(r.clientes.map((c) => [c.id, c.apelido || c.nome]))); });
     apiProf.listar().then((r) => { if (r.ok) setProfs(r.profissionais); });
+    if (capAtiva('usaRecursoFisico')) apiBoxes.listar().then((r) => { if (r.ok) setBoxes(boxesAtivos(r.boxes)); });
   }, []);
 
   const de = modo === 'horarios' ? cursor : weekStart(monthStart(cursor));
@@ -223,14 +254,13 @@ export default function Agenda({ ehProprio = false, ehDono = false, meuId = '' }
   };
   const irPara = (ts) => { setCursor(startOfDay(ts)); setAberto(null); setAviso(''); setDiasAdiante(7); };
   const passo = (n) => (modo === 'horarios' ? irPara(addDays(cursor, n)) : irPara(addMonths(cursor, n)));
-  const podeAtender = !capAtiva('usaVeiculo');
   const mostrarSeletor = !ehProprio && atendem.length > 1;
   const titulo = modo === 'horarios' ? fmtDayLong(cursor) : fmtMonthYear(cursor);
 
   const cartao = (a, testid) => (
     <Cartao key={a.id} a={a} testid={testid} nomeCliente={nomeCliente(a)} nomeProf={nomeProf(a.profissionalId)} mostraProf={selecionado === 'todos' && atendem.length > 1}
       aberto={aberto === a.id} aoAbrir={() => setAberto(aberto === a.id ? null : a.id)}>
-      <Detalhe a={a} nomeProf={nomeProf(a.profissionalId)} nomeDe={nomeProf} profissionais={atendem} ehDono={ehDono} aoAlterar={alterou} />
+      <Detalhe a={a} nomeProf={nomeProf(a.profissionalId)} nomeDe={nomeProf} profissionais={atendem} boxes={boxes} ehDono={ehDono} aoAlterar={alterou} />
     </Cartao>
   );
 
@@ -245,7 +275,8 @@ export default function Agenda({ ehProprio = false, ehDono = false, meuId = '' }
         <Btn tamanho="sm" onClick={() => irPara(Date.now())} data-testid="agenda-hoje">Hoje</Btn>
         <Btn tamanho="sm" onClick={() => passo(1)} aria-label={modo === 'horarios' ? 'Próximo dia' : 'Próximo mês'} data-testid="agenda-proximo"><Icone n="right" size={15} /></Btn>
         <h2 className="agenda-titulo-real" data-testid="agenda-titulo">{titulo}</h2>
-        {podeAtender && <Btn variante="primario" tamanho="sm" onClick={() => { setAtendendo(true); setAviso(''); }} disabled={atendendo || atendem.length === 0} data-testid="atender-abrir"><Icone n="plus" size={15} />Atender</Btn>}
+        {!capAtiva('usaVeiculo') && <Btn tamanho="sm" onClick={enviarLink} aria-label="Enviar o link de agendamento pelo WhatsApp" title="Abre o WhatsApp com o link da página do cliente (o link também é copiado)" data-testid="agenda-link"><Icone n={linkCopiado ? 'check' : 'link'} size={15} />{linkCopiado ? 'Copiado' : 'Link'}</Btn>}
+        <Btn variante="primario" tamanho="sm" onClick={() => { setAtendendo(true); setAviso(''); }} disabled={atendendo || atendem.length === 0} data-testid="atender-abrir"><Icone n="plus" size={15} />Atender</Btn>
       </div>
       {atendendo && <Atender profissionais={atendem} equipe={profs} meuId={meuId} ehProprio={ehProprio} aoSalvar={atendeu} aoFechar={() => setAtendendo(false)} />}
       {mostrarSeletor && (

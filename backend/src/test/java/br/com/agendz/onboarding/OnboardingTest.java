@@ -164,6 +164,13 @@ class OnboardingTest extends BaseApi {
         assertEquals(30.0, jdbc.queryForObject("select comissao_pct::float8 from usuario where identificador = 'zeferino'", Double.class));
         assertEquals(null, jdbc.queryForObject("select comissao_pct from usuario where identificador = 'zulmira'", java.math.BigDecimal.class));
 
+        // comissão sobre produtos, também por pessoa (v102): vazio = sem comissão (vale a do produto, se tiver); fora de 0 a 100 é recusado
+        enviar(DALFORNO, t, "/api/onboarding/equipe", "{\"pessoas\":[{\"nome\":\"Zilda\",\"comissaoProdutoPct\":101}]}").andExpect(status().isBadRequest());
+        assertEquals(0, jdbc.queryForObject("select count(*) from usuario where identificador like 'zilda%'", Integer.class));
+        enviar(DALFORNO, t, "/api/onboarding/equipe", "{\"pessoas\":[{\"nome\":\"Zilda\",\"comissaoPct\":20,\"comissaoProdutoPct\":7.5},{\"nome\":\"Zoraide\"}]}").andExpect(status().isOk());
+        assertEquals(7.5, jdbc.queryForObject("select comissao_produto_pct::float8 from usuario where identificador = 'zilda'", Double.class));
+        assertEquals(null, jdbc.queryForObject("select comissao_produto_pct from usuario where identificador = 'zoraide'", java.math.BigDecimal.class));
+
         // produtos: nome, preço de 0 a 100.000, comissão de 0 a 100, estoque inicial; campo desconhecido é recusado
         enviar(DALFORNO, t, "/api/onboarding/produtos", "{\"itens\":[{\"nome\":\"\",\"preco\":10}]}").andExpect(status().isBadRequest());
         enviar(DALFORNO, t, "/api/onboarding/produtos", "{\"itens\":[{\"nome\":\"Pomada\",\"preco\":-1}]}").andExpect(status().isBadRequest());

@@ -226,12 +226,13 @@ const textoDe = (p, t) => p.getByTestId(t).innerText();
   await ctx.close();
 }
 
-// 7. loja com veículo e porte (estética): o botão Atender ainda não aparece (veículo e porte no Atender real são da fatia 5a restante)
+// 7. loja com veículo e porte (estética): o botão Atender aparece e o formulário ganha o bloco do veículo (o fluxo completo está em e2e57)
 {
   tipoLoja = 'estetica_automotiva';
   const { ctx, p } = await abrir();
-  assert.equal(await p.getByTestId('atender-abrir').count(), 0);
-  ok('estética: sem botão Atender enquanto veículo e porte não existem no Atender real');
+  await p.getByTestId('atender-abrir').click();
+  await p.getByTestId('atender-veiculo-bloco').waitFor();
+  ok('estética: o botão Atender existe e o formulário pede o veículo');
   await ctx.close();
   tipoLoja = 'barbearia';
 }

@@ -33,7 +33,7 @@ function FormPessoa({ ficha, aoSalvar, aoCancelar }) {
   const [f, setF] = useState(() => ({
     nome: ficha.nome || '', apelido: ficha.apelido || '', usuario: '', cpf: ficha.cpf ? formatarCpf(ficha.cpf) : '', nascimento: ficha.nascimento || '',
     email: ficha.email || '', telefone: ficha.telefone ? formatarTelefone(telNacional(ficha.telefone)) : '', papel: ficha.papel || 'profissional',
-    atende: novo ? true : !!ficha.atende, podeVender: ficha.podeVender !== false, comissao: txt(ficha.comissaoPct),
+    atende: novo ? true : !!ficha.atende, podeVender: ficha.podeVender !== false, comissao: txt(ficha.comissaoPct), comissaoProduto: txt(ficha.comissaoProdutoPct),
     permissoes: Object.fromEntries(SECOES_LIBERAVEIS.map((k) => [k, typeof (ficha.permissoes || {})[k] === 'boolean' ? (ficha.permissoes[k] ? ESCOLHA.liberar : ESCOLHA.bloquear) : ESCOLHA.padrao])),
   }));
   const [erro, setErro] = useState('');
@@ -46,6 +46,7 @@ function FormPessoa({ ficha, aoSalvar, aoCancelar }) {
     const corpo = { nome: f.nome, apelido: f.apelido, cpf: f.cpf, nascimento: f.nascimento, email: f.email, telefone: f.telefone, papel: f.papel, atende: f.atende, podeVender: f.podeVender };
     if (novo && f.usuario.trim()) corpo.usuario = f.usuario.trim().toLowerCase();
     const c = num(f.comissao); if (c !== null) corpo.comissaoPct = c;
+    const cp = num(f.comissaoProduto); if (cp !== null) corpo.comissaoProdutoPct = cp;
     if (f.papel !== 'dono') corpo.permissoes = Object.fromEntries(SECOES_LIBERAVEIS.filter((k) => f.permissoes[k] !== ESCOLHA.padrao).map((k) => [k, f.permissoes[k] === ESCOLHA.liberar]));
     if (!novo) corpo.id = ficha.id;
     const r = await api.salvar(corpo);
@@ -69,7 +70,8 @@ function FormPessoa({ ficha, aoSalvar, aoCancelar }) {
         <Campo rotulo="Nascimento (opcional)"><input type="date" value={f.nascimento} onChange={mudar('nascimento')} data-testid="eq-nasc" /></Campo>
         <Campo rotulo="E-mail (opcional)"><input type="email" value={f.email} maxLength={150} autoComplete="off" onChange={mudar('email')} data-testid="eq-email" /></Campo>
         <Campo rotulo="Telefone (opcional)"><input value={f.telefone} inputMode="tel" maxLength={20} onChange={(e) => setF({ ...f, telefone: formatarTelefone(e.target.value) })} data-testid="eq-tel" /></Campo>
-        <Campo rotulo="Comissão da pessoa (%, opcional)"><input value={f.comissao} inputMode="decimal" onChange={mudar('comissao')} data-testid="eq-comissao" /></Campo>
+        <Campo rotulo="Comissão sobre serviços (%, opcional)"><input value={f.comissao} inputMode="decimal" onChange={mudar('comissao')} data-testid="eq-comissao" /></Campo>
+        <Campo rotulo="Comissão sobre produtos (%, opcional)"><input value={f.comissaoProduto} inputMode="decimal" onChange={mudar('comissaoProduto')} data-testid="eq-comissao-produto" /></Campo>
         <label className="pa-check"><input type="checkbox" checked={f.atende} onChange={(e) => setF({ ...f, atende: e.target.checked })} data-testid="eq-atende" /> Atende clientes (aparece na agenda)</label>
         <label className="pa-check"><input type="checkbox" checked={f.podeVender} onChange={(e) => setF({ ...f, podeVender: e.target.checked })} data-testid="eq-vender" /> Pode vender produtos</label>
         {f.papel !== 'dono' && (

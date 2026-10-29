@@ -84,7 +84,8 @@ public class OnboardingController {
     public record Resultado(int criados, int jaExistiam) {
     }
 
-    public record NovaPessoa(@NotBlank @Size(max = 80) String nome, Boolean atende, @DecimalMin("0") @DecimalMax("100") BigDecimal comissaoPct) {
+    public record NovaPessoa(@NotBlank @Size(max = 80) String nome, Boolean atende, @DecimalMin("0") @DecimalMax("100") BigDecimal comissaoPct,
+                             @DecimalMin("0") @DecimalMax("100") BigDecimal comissaoProdutoPct) {
     }
 
     public record Equipe(@NotNull @Size(max = 10) List<@Valid @NotNull NovaPessoa> pessoas) {
@@ -235,8 +236,10 @@ public class OnboardingController {
                 boolean atende = p.atende() == null || p.atende();
                 if (p.comissaoPct() != null && !Comissao.valido(p.comissaoPct())) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "A comissão vai de 0 a 100%.");
                 BigDecimal comissao = p.comissaoPct() == null ? null : p.comissaoPct().setScale(2, RoundingMode.HALF_UP); // null = usa a comissão geral da loja
-                UUID novo = jdbc.queryForObject("insert into usuario (loja_id, identificador, nome, papel, senha_hash, atende, deve_trocar_senha, comissao_pct) values (?::uuid, ?, ?, 'profissional', ?, ?, true, ?) returning id",
-                        UUID.class, loja.id().toString(), login, nome, encoder.encode(senha), atende, comissao);
+                if (p.comissaoProdutoPct() != null && !Comissao.valido(p.comissaoProdutoPct())) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "A comissão vai de 0 a 100%.");
+                BigDecimal comissaoProduto = p.comissaoProdutoPct() == null ? null : p.comissaoProdutoPct().setScale(2, RoundingMode.HALF_UP); // null = sem comissão sobre produtos (a menos que o produto tenha a sua)
+                UUID novo = jdbc.queryForObject("insert into usuario (loja_id, identificador, nome, papel, senha_hash, atende, deve_trocar_senha, comissao_pct, comissao_produto_pct) values (?::uuid, ?, ?, 'profissional', ?, ?, true, ?, ?) returning id",
+                        UUID.class, loja.id().toString(), login, nome, encoder.encode(senha), atende, comissao, comissaoProduto);
                 reconfiguracoes.anotarPessoa(jdbc, reconf, novo);
                 saida.add(new PessoaCriada(nome, login, senha, atende));
             }

@@ -685,10 +685,17 @@ public class AgendaController {
         return ids.isEmpty() ? null : ids.get(0);
     }
 
+    /** Percentual de comissão sobre produtos da pessoa que vendeu (definido na equipe); vazio ou 0 = nenhum. */
+    private static BigDecimal comissaoDeProdutoDe(JdbcTemplate jdbc, UUID vendedor) {
+        if (vendedor == null) return BigDecimal.ZERO;
+        List<BigDecimal> achado = jdbc.query("select coalesce(comissao_produto_pct, 0) from usuario where id = ?", (rs, i) -> rs.getBigDecimal(1), vendedor); // coalesce: findFirst() não aceita null
+        return achado.isEmpty() || achado.get(0).signum() <= 0 ? BigDecimal.ZERO : achado.get(0);
+    }
+
     /**
      * Confere e grava os produtos do atendimento (espelho de `incluirProduto` em src/domain/engine.js): material do tipo produto e ativo, quantidade inteira de
      * 1 a 999 (a mesma linha repetida soma), estoque suficiente (a linha do material fica travada até o fim da transação: duas vendas ao mesmo tempo não passam
-     * do estoque). Preço e percentual de comissão do produto ficam congelados na linha. Se o atendimento já está concluído (atendimento local), o estoque sai na hora.
+     * do estoque). Preço e percentual de comissão ficam congelados na linha (o do produto, se tem; senão o da pessoa que vendeu). Se o atendimento já está concluído (atendimento local), o estoque sai na hora.
      * Devolve o texto "2× Pomada, 1× Óleo" para o histórico.
      */
     private String lancarProdutos(JdbcTemplate jdbc, Loja loja, UUID agendamentoId, List<ProdutoPedido> pedidos, UUID vendedor, Jwt jwt) {
@@ -713,7 +720,8 @@ public class AgendaController {
         List<String> textos = new ArrayList<>();
         for (Map.Entry<UUID, Integer> e : quantidades.entrySet()) {
             MaterialLinha m = materiais.get(e.getKey());
-            BigDecimal pct = m.comissaoPct() != null && m.comissaoPct().signum() > 0 ? m.comissaoPct() : BigDecimal.ZERO;
+            // percentual do produto (se tem) e, senão, o da pessoa que vendeu (usuario.comissao_produto_pct, definido na equipe); nenhum dos dois = sem comissão
+            BigDecimal pct = m.comissaoPct() != null && m.comissaoPct().signum() > 0 ? m.comissaoPct() : comissaoDeProdutoDe(jdbc, vendedor);
             jdbc.update("insert into agendamento_produto (loja_id, agendamento_id, material_id, nome, qtd, preco, comissao_pct, vendedor_id) values (?::uuid, ?, ?, ?, ?, ?, ?, ?)",
                     loja.id().toString(), agendamentoId, m.id(), m.nome(), e.getValue(), m.preco(), pct, vendedor);
             textos.add(e.getValue() + "× " + m.nome());

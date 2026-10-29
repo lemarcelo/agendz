@@ -13,6 +13,10 @@ import org.springframework.http.HttpStatus;
 public final class Reservados {
 
     public static final String SUPORTE = "suporte";
+    /** Usuários de fumaça (teste automático no site real, criados e apagados pelo Admin/CI): prefixo reservado e escondido da equipe. */
+    public static final String FUMACA_PREFIXO = "fumaca-";
+    /** Trecho de SQL (sobre a tabela usuario) que esconde os usuários da plataforma (suporte e fumaça) das listas e fichas da loja. */
+    public static final String OCULTOS_SQL = "identificador <> 'suporte' and identificador not like 'fumaca-%'";
     public static final String MENSAGEM = "Nome reservado.";
 
     private Reservados() {
@@ -21,7 +25,7 @@ public final class Reservados {
     public static boolean reservado(String texto) {
         if (texto == null) return false;
         String t = Normalizer.normalize(texto, Normalizer.Form.NFD).replaceAll("\\p{M}", "").trim().toLowerCase(Locale.ROOT);
-        return t.equals(SUPORTE);
+        return t.equals(SUPORTE) || t.startsWith(FUMACA_PREFIXO);
     }
 
     /** Recusa com 400 "Nome reservado." se algum dos textos é reservado. */

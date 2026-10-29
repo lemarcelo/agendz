@@ -1,6 +1,7 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:b3ec830fb7 */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { agendamentosVisiveis, profissionaisVisiveis } from '../services/api.js';
+import { LOJA_TROCAVEL, MODO_DEMO, agendamentosVisiveis, profissionaisVisiveis } from '../services/api.js';
+import { montarLinkAgendamento } from '../domain/link-publico.js';
 import { ATIVOS, STATUS, boxesAtivos, ocupacaoDe, retiradaDe } from '../domain/rules.js';
 import { faixasDoProfissional, excecaoDoDia, TIPOS_EXCECAO } from '../domain/schedule.js';
 import { DIAS_CURTOS, addDays, addMonths, fmtDate, fmtDayLong, fmtHM, fmtMonthYear, monthStart, sameDay, startOfDay, weekStart, fmtDateShort, fmtMoney } from '../domain/time.js';
@@ -112,7 +113,7 @@ function Mes({ cursor, evs, st, agora, onDia, onEvento, mostraBarb }) {
 const ultimaRolagem = new Map(); // rolagem da Agenda por usuário, em memória (na mesma sessão)
 
 export default function Agenda({ user, onAbrir, onNovo }) {
-  const { state: st, agora } = useStore();
+  const { state: st, agora, loja: lojaSlug } = useStore();
   const ehProfissional = user.papel === 'profissional';
   // Duas formas de ver a agenda (v73): Horários (cartões do dia) e Calendário (só o mês). O modo escolhido fica lembrado por usuário neste navegador.
   const [modoSalvo, salvarModo] = useLocal(`agenda-modo:${user.id}`, 'horarios');
@@ -158,7 +159,8 @@ export default function Agenda({ user, onAbrir, onNovo }) {
     // Na demonstração a loja vem de ?loja=<slug>: o link leva junto, senão o cliente cairia na loja padrão. No site real a loja vem do endereço (o build com domínio ignora ?loja=).
     const lojaDemo = new URLSearchParams(window.location.search).get('loja');
     const busca = lojaDemo && /^[a-z0-9-]{1,40}$/.test(lojaDemo) && base ? `?loja=${lojaDemo}` : '';
-    const link = `${base}${busca}#agendar${ehProfissional ? `-${user.id}` : ''}`;
+    // Artifact: sem ?loja= nem endereço por loja, a loja escolhida no login vai dentro do link (#agendar@<loja>).
+    const link = montarLinkAgendamento({ base, busca, profissionalId: ehProfissional ? user.id : '', lojaNoLink: MODO_DEMO && LOJA_TROCAVEL ? lojaSlug : '' });
     const copiou = copiarTexto(link);
     const abriu = abrirWhatsapp(textoConvite(st.estabelecimento.nome, link));
     copiou.then((ok) => {

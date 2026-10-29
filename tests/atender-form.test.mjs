@@ -97,3 +97,43 @@ test('campos obrigatórios seguem as regras, na ordem delas, com o rótulo da te
   assert.equal(exige(regras, 'futuro', 'telefone'), false);
   assert.equal(exige(undefined, 'futuro', 'telefone'), true);
 });
+
+// ---------- estética: veículo, porte e box ----------
+import { servicoNoPorte, faltaVeiculo, faltaVeiculoNovo, porteDoAtendimento, boxesAtivos, erroDosBoxes } from '../src/domain/atender-form.js';
+
+const SRV = { id: 's1', preco: 80, duracaoMin: 60, precos: { pequeno: 60, medio: 80, grande: 100, suv: 120, pickup: 150 }, duracoes: { pequeno: 45, medio: 60, grande: 75, suv: 90, pickup: 120 } };
+
+test('preço e tempo seguem o porte; sem porte vale o médio; serviço sem mapa por porte fica como está', () => {
+  assert.deepEqual(servicoNoPorte(SRV, 'pickup'), { preco: 150, duracaoMin: 120 });
+  assert.deepEqual(servicoNoPorte(SRV, 'invalido'), { preco: 80, duracaoMin: 60 });
+  assert.deepEqual(servicoNoPorte(SRV, undefined), { preco: 80, duracaoMin: 60 });
+  assert.deepEqual(servicoNoPorte({ preco: 40, duracaoMin: 30 }, 'suv'), { preco: 40, duracaoMin: 30 });
+  assert.deepEqual(resumoDosServicos([SRV, { id: 's2', preco: 20, duracaoMin: 10 }], ['s1', 's2'], 'suv'), { qtd: 2, total: 140, minutos: 100 });
+  assert.equal(resumoDosServicos([SRV], ['s1']).total, 80, 'sem porte (barbearia) a soma é a do cadastro');
+});
+
+test('veículo: serviço exige; só produto não; novo precisa de placa válida, modelo e porte', () => {
+  assert.equal(faltaVeiculo(false, ['s1'], null, null), '', 'tipo sem veículo nunca pede');
+  assert.equal(faltaVeiculo(true, [], null, null), '', 'só produto não pede veículo');
+  assert.match(faltaVeiculo(true, ['s1'], null, null), /Escolha o veículo/);
+  assert.equal(faltaVeiculo(true, ['s1'], { id: 'v1' }, null), '');
+  assert.match(faltaVeiculo(true, ['s1'], null, { placa: '', modelo: 'Onix', porte: 'medio' }), /placa/);
+  assert.match(faltaVeiculoNovo({ placa: 'ABC', modelo: 'Onix', porte: 'medio' }), /Placa inválida/);
+  assert.match(faltaVeiculoNovo({ placa: 'ABC1D23', modelo: ' ', porte: 'medio' }), /modelo/);
+  assert.match(faltaVeiculoNovo({ placa: 'ABC-1234', modelo: 'Gol', porte: '' }), /porte/);
+  assert.equal(faltaVeiculoNovo({ placa: 'ABC-1234', modelo: 'Gol', porte: 'pequeno' }), '');
+  assert.equal(porteDoAtendimento({ porte: 'suv' }, null), 'suv');
+  assert.equal(porteDoAtendimento(null, { porte: 'grande' }), 'grande');
+  assert.equal(porteDoAtendimento(null, { porte: '' }), 'medio');
+});
+
+test('boxes: só os ativos entram no formulário; o editor barra vazio, repetido (sem diferenciar maiúscula), nome longo e todos inativos', () => {
+  assert.deepEqual(boxesAtivos([{ id: 'a', ativo: true }, { id: 'b', ativo: false }, { id: 'c' }]).map((b) => b.id), ['a', 'c']);
+  assert.match(erroDosBoxes([]), /ao menos um box/);
+  assert.match(erroDosBoxes([{ nome: 'Box 1' }, { nome: 'box 1' }]), /mesmo nome/);
+  assert.match(erroDosBoxes([{ nome: '' }]), /nome/);
+  assert.match(erroDosBoxes([{ nome: 'x'.repeat(31) }]), /nome/);
+  assert.match(erroDosBoxes([{ nome: 'A', ativo: false }]), /ao menos um box ativo/);
+  assert.match(erroDosBoxes(Array.from({ length: 21 }, (_, i) => ({ nome: `B${i}` }))), /20/);
+  assert.equal(erroDosBoxes([{ nome: 'A' }, { nome: 'B', ativo: false }]), '');
+});

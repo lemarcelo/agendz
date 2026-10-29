@@ -880,3 +880,12 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
 .atender-real-item { display: grid; gap: 2px; min-width: 0; }
 .atender-real-item small { font-size: 12.5px; }
 .agenda-barra .btn-primario { margin-left: auto; }
+/* Boxes e dados de estética no site real (v102) */
+.boxes-real { display: grid; gap: 10px; min-width: 0; }
+.boxes-real > h2 { margin: 0; }
+.boxes-real-form { display: grid; gap: 12px; min-width: 0; }
+.boxes-real-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.boxes-real-linha { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; background: var(--surface); }
+.boxes-real-linha input[type="text"], .boxes-real-linha input:not([type]) { min-width: 0; width: 100%; }
+.cartao-veiculo-real { font-size: 12.5px; overflow-wrap: anywhere; }
+.detalhe-veiculo-real { margin: 0; overflow-wrap: anywhere; }

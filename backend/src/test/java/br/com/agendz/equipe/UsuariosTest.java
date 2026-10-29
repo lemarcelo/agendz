@@ -143,6 +143,17 @@ class UsuariosTest extends BaseApi {
     }
 
     @Test
+    void comissaoSobreProdutosPorPessoaTemLimiteEFicaSoComODono() throws Exception {
+        criar(davi, corpo("UtP", ",\"comissaoProdutoPct\":101")).andExpect(status().isBadRequest());
+        String id = criarOk("UtP", ",\"comissaoPct\":10,\"comissaoProdutoPct\":6.5");
+        mvc.perform(get("/api/usuarios/" + id).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)))
+                .andExpect(jsonPath("$.comissaoPct").value(10.0)).andExpect(jsonPath("$.comissaoProdutoPct").value(6.5));
+        // alterar outro campo mantém o percentual
+        mvc.perform(put("/api/usuarios/" + id).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON).content("{\"nome\":\"Outro P\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.comissaoProdutoPct").value(6.5));
+    }
+
+    @Test
     void alterarMantemOQueNaoVemEPermiteLimparCpf() throws Exception {
         String id = criarOk("UtE", ",\"cpf\":\"39053344705\",\"email\":\"e@teste.com\",\"comissaoPct\":8");
         mvc.perform(put("/api/usuarios/" + id).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON).content("{\"nome\":\"Outro Nome\"}"))

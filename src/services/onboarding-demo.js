@@ -105,7 +105,7 @@ export function criarAdaptadorDemo({ reconfigurar = false } = {}) {
     },
     async equipe(pessoas) {
       if (!Array.isArray(pessoas) || pessoas.length > 10) return { ok: false, erro: 'No máximo 10 pessoas por vez' };
-      if (pessoas.some((p) => p && p.comissaoPct != null && !(Number(p.comissaoPct) >= 0 && Number(p.comissaoPct) <= 100))) return { ok: false, erro: 'A comissão vai de 0 a 100%.' };
+      if (pessoas.some((p) => p && ((p.comissaoPct != null && !(Number(p.comissaoPct) >= 0 && Number(p.comissaoPct) <= 100)) || (p.comissaoProdutoPct != null && !(Number(p.comissaoProdutoPct) >= 0 && Number(p.comissaoProdutoPct) <= 100))))) return { ok: false, erro: 'A comissão vai de 0 a 100%.' };
       const saida = pessoas.map((p) => { const login = loginDe(String(p.nome || ''), usados); usados.add(login); return { nome: String(p.nome || '').slice(0, 80), login, senhaTemporaria: senha(), atende: p.atende !== false }; });
       passo = 'expediente';
       if (reconfigurar && saida.length) nova().pessoasCriadas += saida.length;

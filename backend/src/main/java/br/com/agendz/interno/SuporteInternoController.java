@@ -1,5 +1,6 @@
 package br.com.agendz.interno;
 
+import br.com.agendz.equipe.FumacaDaLoja;
 import br.com.agendz.equipe.SuporteDaLoja;
 import br.com.agendz.erro.ErroDeNegocio;
 import br.com.agendz.tenant.Loja;
@@ -19,17 +20,21 @@ import org.springframework.web.bind.annotation.RestController;
  * `X-Interno-Chave` (variável INTERNO_CHAVE, 16+ caracteres); sem chave configurada as rotas respondem 503, nunca abertas.
  * POST /interno/plataforma/lojas/{slug}/suporte        → cria o `suporte` se a loja não tem (idempotente); a senha temporária vem só ao criar.
  * POST /interno/plataforma/lojas/{slug}/suporte/senha  → refaz a senha do `suporte` (aparece uma vez).
+ * POST /interno/plataforma/lojas/{slug}/fumaca          → cria um usuário de fumaça (teste automático no site real); a senha vem só aqui.
+ * POST /interno/plataforma/lojas/{slug}/fumaca/{usuario}/apagar → apaga esse usuário de fumaça (outro login = 400; POST porque o wget da VPS não faz DELETE).
  */
 @RestController
 public class SuporteInternoController {
 
     private final LojaRepository lojas;
     private final SuporteDaLoja suporte;
+    private final FumacaDaLoja fumaca;
     private final String chave;
 
-    public SuporteInternoController(LojaRepository lojas, SuporteDaLoja suporte, @Value("${agendz.interno.chave:}") String chave) {
+    public SuporteInternoController(LojaRepository lojas, SuporteDaLoja suporte, FumacaDaLoja fumaca, @Value("${agendz.interno.chave:}") String chave) {
         this.lojas = lojas;
         this.suporte = suporte;
+        this.fumaca = fumaca;
         this.chave = chave == null ? "" : chave.trim();
     }
 
@@ -44,6 +49,18 @@ public class SuporteInternoController {
     public ResponseEntity<SuporteDaLoja.Resultado> refazer(@PathVariable String slug, @RequestHeader(value = "X-Interno-Chave", required = false) String enviada) {
         Loja loja = conferir(slug, enviada);
         return ResponseEntity.ok().header("Cache-Control", "no-store").body(suporte.refazerSenha(loja.id()));
+    }
+
+    @PostMapping("/interno/plataforma/lojas/{slug}/fumaca")
+    public ResponseEntity<FumacaDaLoja.Resultado> criarFumaca(@PathVariable String slug, @RequestHeader(value = "X-Interno-Chave", required = false) String enviada) {
+        Loja loja = conferir(slug, enviada);
+        return ResponseEntity.status(HttpStatus.CREATED).header("Cache-Control", "no-store").body(fumaca.criar(loja.id()));
+    }
+
+    @PostMapping("/interno/plataforma/lojas/{slug}/fumaca/{usuario}/apagar")
+    public ResponseEntity<Void> apagarFumaca(@PathVariable String slug, @PathVariable String usuario, @RequestHeader(value = "X-Interno-Chave", required = false) String enviada) {
+        Loja loja = conferir(slug, enviada);
+        return fumaca.apagar(loja.id(), usuario) ? ResponseEntity.noContent().build() : ResponseEntity.notFound().build();
     }
 
     private Loja conferir(String slug, String enviada) {

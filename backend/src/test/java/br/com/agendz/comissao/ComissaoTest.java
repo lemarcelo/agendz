@@ -158,6 +158,26 @@ class ComissaoTest extends BaseApi {
                 .andExpect(jsonPath("$.totais.comissao").value(44.5));
     }
 
+    @Test
+    void produtoSemPercentualUsaOPercentualDaPessoaQueVendeEFicaCongelado() throws Exception {
+        String cera = id(mvc.perform(post("/api/produtos").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"nome\":\"Cera\",\"preco\":100,\"estoque\":50}")).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
+        String vendaCera = ",\"produtos\":[{\"materialId\":\"" + cera + "\",\"qtd\":1}],\"vendedorId\":\"" + pabloId + "\"";
+        // sem percentual no produto nem na pessoa: a venda não comissiona
+        String a1 = criar(davi, marceloId, vendaCera);
+        assertEquals(0.0, jdbc.queryForObject("select coalesce(max(comissao_pct),0)::float8 from agendamento_produto where agendamento_id = ?::uuid", Double.class, a1));
+        // a pessoa passa a ter 8% sobre produtos: vale para a próxima venda; a anterior não muda
+        jdbc.update("update usuario set comissao_produto_pct = 8 where id = ?", pabloId);
+        String a2 = criar(davi, marceloId, vendaCera);
+        assertEquals(8.0, jdbc.queryForObject("select comissao_pct::float8 from agendamento_produto where agendamento_id = ?::uuid", Double.class, a2));
+        assertEquals(0.0, jdbc.queryForObject("select coalesce(max(comissao_pct),0)::float8 from agendamento_produto where agendamento_id = ?::uuid", Double.class, a1));
+        // o percentual do próprio produto vence o da pessoa (pomada: 10%)
+        String a3 = criar(davi, marceloId, ",\"produtos\":[{\"materialId\":\"" + pomada + "\",\"qtd\":1}],\"vendedorId\":\"" + pabloId + "\"");
+        assertEquals(10.0, jdbc.queryForObject("select comissao_pct::float8 from agendamento_produto where agendamento_id = ?::uuid", Double.class, a3));
+        // Pablo recebe 8% de 100 pela cera e 10% de 45 pela pomada (os serviços são do Marcelo)
+        relatorio(davi).andExpect(jsonPath("$.profissionais[?(@.id == '" + pabloId + "')].comissao").value(12.5));
+    }
+
     // ---------------------------------------------------------------- meus ganhos e permissão
 
     @Test

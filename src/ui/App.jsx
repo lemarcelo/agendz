@@ -1,6 +1,7 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:a6fe1e7410 */
-import React, { useEffect, useState } from 'react';
-import { LOJA_NAO_ENCONTRADA, MODO_DEMO, auth, avisosDoUsuario, equipe } from '../services/api.js';
+import React, { useEffect, useLayoutEffect, useState } from 'react';
+import { LOJA_NAO_ENCONTRADA, MODO_DEMO, auth, avisosDoUsuario, equipe, store } from '../services/api.js';
+import { lerHashAgendar } from '../domain/link-publico.js';
 import { criarAdaptadorDemo } from '../services/onboarding-demo.js';
 import PrimeiroAcesso from './leve/PrimeiroAcesso.jsx';
 import { ehDono, ehGestor, papelRotulo, pode } from '../domain/rules.js';
@@ -83,9 +84,11 @@ function AppDaLoja() {
   const user = useUser();
   const hash = useHash();
   const [tema, setTema] = useTema();
-  const publica = /^#agendar(-[\w-]{1,40})?$/.exec(hash);
+  const publica = lerHashAgendar(hash);
+  // Demonstração: o link traz a loja de quem enviou (#agendar@dalforno); `entrarNaLoja` só age sem loja fixa por build ou endereço.
+  useLayoutEffect(() => { if (MODO_DEMO && publica?.loja) store.entrarNaLoja(publica.loja); }, [publica?.loja]);
   if (MODO_DEMO && hash === '#primeiro-acesso') return <><TemaMarca /><PreviaPrimeiroAcesso st={st} /></>;
-  if (publica) return <><TemaMarca /><AgendarPublico profissionalInicial={publica[1] ? publica[1].slice(1) : ''} logado={!!user} aoVoltar={() => { window.location.hash = ''; }} /></>;
+  if (publica) return <><TemaMarca /><AgendarPublico profissionalInicial={publica.profissionalId} logado={!!user} aoVoltar={() => { window.location.hash = ''; }} /></>;
   if (!user) return <><TemaMarca /><Login /><Toasts /></>;
   return <><TemaMarca /><Shell user={user} st={st} tema={tema} setTema={setTema} /></>;
 }

@@ -517,7 +517,9 @@ function incluirProduto(s, a, materialId, qtd, vendedorId) {
   // Concluído já baixou o que tinha; o resto precisa existir no estoque. Ainda não concluído: reserva só ao concluir, mas confere se há o suficiente.
   const falta = a.status === STATUS.CONCLUIDO && a.estoqueBaixado ? n : total;
   if (m.estoque < falta) return `Estoque insuficiente de ${m.nome} (restam ${m.estoque}).`;
-  if (ja) ja.qtd = total; else a.produtos.push({ materialId: m.id, qtd: n, preco: Number(m.preco) || 0, pct: Number(m.comissaoPct) > 0 ? Number(m.comissaoPct) : 0, vendedorId: vend });
+  // percentual congelado na linha: o do produto (se tem) e, senão, o da pessoa que vendeu (Equipe > Comissão sobre produtos); nenhum dos dois = sem comissão
+  const pctVendedor = Number((s.usuarios.find((u) => u.id === vend) || {}).comissaoProdutoPct);
+  if (ja) ja.qtd = total; else a.produtos.push({ materialId: m.id, qtd: n, preco: Number(m.preco) || 0, pct: Number(m.comissaoPct) > 0 ? Number(m.comissaoPct) : pctVendedor > 0 ? pctVendedor : 0, vendedorId: vend });
   return null;
 }
 

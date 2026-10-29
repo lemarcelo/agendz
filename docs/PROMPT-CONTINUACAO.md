@@ -80,3 +80,4 @@ Feito · decisões tomadas sem confirmação · o que depende do Marcelo (com o 
 - v100: primeiro acesso: entrada pede usuário + senha enviada; a redefinição pede só usuário novo + senha definitiva (a enviada fica em memória) e depois entra sozinho no assistente (dono) ou na Agenda. WhatsApp/Pix não serão configurados agora: no futuro por cliente, via Admin, com as chaves da Meta de cada loja; 5e-3 adiado.
 
 - v101 (29/10): reservar `suporte` + rota interna `/interno/plataforma/lojas/{slug}/suporte` prontas; próximo: front real da estética (Atender com veículo/box, tela de Boxes, remover o bloqueio em `ui/real/Agenda.jsx` `podeAtender`), link do cliente para estética (E3), Admin A3.
+- v102 (29/10): comissão por pessoa (serviços e produtos) na Equipe do assistente; estética no site real (Atender, Boxes). Próximo: revisão visual (celular/computador) e A3 do Admin.

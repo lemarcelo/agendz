@@ -181,9 +181,9 @@ export const onboarding = {
     const r = await chamar('POST', '/api/onboarding/servicos', { itens: listaDe(itens, 40), proprios: listaDe(proprios, 20) });
     return r.ok ? { ok: true, resultado: { criados: Number(r.dados && r.dados.criados) || 0, jaExistiam: Number(r.dados && r.dados.jaExistiam) || 0 } } : r;
   },
-  // POST /api/onboarding/equipe  { pessoas: [{ nome, atende, comissaoPct? }] }  (comissaoPct ausente = usa a comissão geral)  → logins e senhas temporárias (aparecem UMA vez)
+  // POST /api/onboarding/equipe  { pessoas: [{ nome, atende, comissaoPct?, comissaoProdutoPct? }] }  (comissaoPct ausente = usa a comissão geral; comissaoProdutoPct ausente = sem comissão sobre produtos, a menos que o produto tenha a sua)  → logins e senhas temporárias (aparecem UMA vez)
   async equipe(pessoas) {
-    const lista = listaDe(pessoas, 10).map((p) => ({ nome: texto(p && p.nome, 80), atende: !(p && p.atende === false), ...(p && p.comissaoPct != null ? { comissaoPct: Number(p.comissaoPct) } : {}) }));
+    const lista = listaDe(pessoas, 10).map((p) => ({ nome: texto(p && p.nome, 80), atende: !(p && p.atende === false), ...(p && p.comissaoPct != null ? { comissaoPct: Number(p.comissaoPct) } : {}), ...(p && p.comissaoProdutoPct != null ? { comissaoProdutoPct: Number(p.comissaoProdutoPct) } : {}) }));
     const r = await chamar('POST', '/api/onboarding/equipe', { pessoas: lista });
     if (!r.ok) return r;
     return { ok: true, pessoas: listaDe(r.dados && r.dados.pessoas, 10).map((p) => ({ nome: texto(p && p.nome, 80), login: texto(p && p.login, 60), senhaTemporaria: texto(p && p.senhaTemporaria, 40), atende: !(p && p.atende === false) })) };
@@ -324,7 +324,7 @@ function lerUsuario(d) {
   if (d.permissoes && typeof d.permissoes === 'object') for (const k of SECOES_API) if (typeof d.permissoes[k] === 'boolean') perm[k] = d.permissoes[k];
   return {
     id: texto(d.id, 40), nome: texto(d.nome, 150), apelido: d.apelido ? texto(d.apelido, 60) : '', usuario: texto(d.usuario, 60), papel: PAPEIS.includes(d.papel) ? d.papel : 'profissional',
-    atende: d.atende === true, podeVender: d.podeVender !== false, comissaoPct: numeroOuNulo(d.comissaoPct), permissoes: perm, corSlot: Number.isInteger(d.corSlot) ? d.corSlot : null,
+    atende: d.atende === true, podeVender: d.podeVender !== false, comissaoPct: numeroOuNulo(d.comissaoPct), comissaoProdutoPct: numeroOuNulo(d.comissaoProdutoPct), permissoes: perm, corSlot: Number.isInteger(d.corSlot) ? d.corSlot : null,
     foto: typeof d.foto === 'string' && d.foto.length <= 30000 ? d.foto : null, email: d.email ? texto(d.email, 150) : '', telefone: d.telefone ? texto(d.telefone, 20) : '',
     cpfMascarado: d.cpfMascarado ? texto(d.cpfMascarado, 14) : '', cpf: d.cpf ? texto(d.cpf, 11) : '', nascimento: d.nascimento ? texto(d.nascimento, 10) : '', deveTrocarSenha: d.deveTrocarSenha === true,
   };
@@ -351,6 +351,7 @@ export const equipe = {
     if (typeof d.atende === 'boolean') corpo.atende = d.atende;
     if (typeof d.podeVender === 'boolean') corpo.podeVender = d.podeVender;
     if (typeof d.comissaoPct === 'number' && Number.isFinite(d.comissaoPct)) corpo.comissaoPct = d.comissaoPct;
+    if (typeof d.comissaoProdutoPct === 'number' && Number.isFinite(d.comissaoProdutoPct)) corpo.comissaoProdutoPct = d.comissaoProdutoPct; // comissão sobre produtos da pessoa (vale quando o produto não tem a sua)
     if (d.permissoes && typeof d.permissoes === 'object') corpo.permissoes = Object.fromEntries(SECOES_API.filter((k) => typeof d.permissoes[k] === 'boolean').map((k) => [k, d.permissoes[k]]));
     const edicao = d.id !== undefined && d.id !== null && d.id !== '';
     if (edicao && !ID.test(String(d.id))) return { ok: false, status: 0, erro: 'Usuário não encontrado.' };
@@ -409,6 +410,8 @@ function lerAgendamento(d) {
     // cupom (5d-4c-2): só o nome e o tipo; a chave nunca volta na agenda. `total` é o bruto dos serviços; o que o cliente paga é total − desconto (+ produtos).
     cupom: d.cupom && typeof d.cupom === 'object' ? { nome: texto(d.cupom.nome, 60), tipo: ['servico', 'percentual', 'valor'].includes(d.cupom.tipo) ? d.cupom.tipo : 'percentual' } : null,
     desconto: numeroOuNulo(d.desconto) ?? 0,
+    // estética (V25): box, veículo e porte congelados no agendamento; barbearia e atendimento local sem veículo vêm sem o bloco
+    estetica: d.estetica && typeof d.estetica === 'object' ? { boxId: ID.test(String(d.estetica.boxId)) ? d.estetica.boxId : null, box: texto(d.estetica.box, 30), veiculoId: ID.test(String(d.estetica.veiculoId)) ? d.estetica.veiculoId : null, porte: texto(d.estetica.porte, 16), placa: texto(d.estetica.placa, 8), marca: texto(d.estetica.marca, 30), modelo: texto(d.estetica.modelo, 40), cor: texto(d.estetica.cor, 20) } : null,
   };
 }
 const soDia = (ts) => (Number.isFinite(ts) ? new Date(ts).toISOString() : null);
@@ -460,6 +463,10 @@ export const agenda = {
       if (!['pix', 'dinheiro', 'cartao'].includes(d.formaPagamento)) return { ok: false, status: 0, erro: 'Forma de pagamento inválida.' };
       corpo.formaPagamento = d.formaPagamento; // só vale no atendimento local (o servidor guarda; no agendamento futuro é ignorada)
     }
+    // estética: veículo já cadastrado do cliente (`veiculoId`) ou um novo (`veiculo`: placa, marca, modelo, cor, porte); `boxId` opcional (sem ele o servidor escolhe um livre)
+    if (d.veiculoId !== undefined && d.veiculoId !== null && d.veiculoId !== '') { if (!ID.test(String(d.veiculoId))) return { ok: false, status: 0, erro: 'Veículo não encontrado.' }; corpo.veiculoId = d.veiculoId; }
+    if (d.veiculo && typeof d.veiculo === 'object' && !Array.isArray(d.veiculo)) corpo.veiculo = { placa: texto(d.veiculo.placa, 16), marca: texto(d.veiculo.marca, 30), modelo: texto(d.veiculo.modelo, 40), cor: texto(d.veiculo.cor, 20), porte: texto(d.veiculo.porte, 16) };
+    if (d.boxId !== undefined && d.boxId !== null && d.boxId !== '') { if (!ID.test(String(d.boxId))) return { ok: false, status: 0, erro: 'Box não encontrado.' }; corpo.boxId = d.boxId; }
     if (typeof d.cupomChave === 'string' && d.cupomChave.trim()) corpo.cupomChave = d.cupomChave.trim().slice(0, 40); // só no agendamento futuro; chave errada = nada é criado
     // Mesmo pedido de novo (clique repetido depois de um erro de rede) usa a mesma chave: o servidor devolve o que já fez e não grava duas vezes.
     // Pedido diferente, ou depois de um sucesso, ganha chave nova (dois atendimentos iguais de propósito continuam possíveis).
@@ -491,16 +498,35 @@ export const agenda = {
     return r.ok ? { ok: true, agendamento: lerAgendamento(r.dados) } : r;
   },
   // PUT /api/agendamentos/{id}/remarcar  { inicio, profissionalId?, encaixe?, status? }   (concluído nunca; cancelado só junto com um status não cancelado)
-  async remarcar(id, { inicio, profissionalId, encaixe, status } = {}) {
+  async remarcar(id, { inicio, profissionalId, encaixe, status, boxId } = {}) {
     if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Agendamento não encontrado.' };
     const novo = soDia(inicio);
     if (!novo) return { ok: false, status: 0, erro: 'Informe a nova data e hora.' };
     const corpo = { inicio: novo };
     if (profissionalId !== undefined && profissionalId !== null && profissionalId !== '') { if (!ID.test(String(profissionalId))) return { ok: false, status: 0, erro: 'Profissional não encontrado.' }; corpo.profissionalId = profissionalId; }
+    if (boxId !== undefined && boxId !== null && boxId !== '') { if (!ID.test(String(boxId))) return { ok: false, status: 0, erro: 'Box não encontrado.' }; corpo.boxId = boxId; }
     if (typeof encaixe === 'boolean') corpo.encaixe = encaixe;
     if (status !== undefined) { if (!STATUS_AGENDA.includes(status)) return { ok: false, status: 0, erro: 'Status inválido.' }; corpo.status = status; }
     const r = await chamar('PUT', `/api/agendamentos/${id}/remarcar`, corpo);
     return r.ok ? { ok: true, agendamento: lerAgendamento(r.dados) } : r;
+  },
+};
+
+// ---------- boxes (estética; regras no servidor: BoxController) ----------
+const lerBox = (b) => ({ id: texto(b && b.id, 40), nome: texto(b && b.nome, 30), ativo: !(b && b.ativo === false) });
+export const boxes = {
+  // GET /api/boxes  (quem tem a agenda; lista vazia no tipo sem box)
+  async listar() {
+    const r = await chamar('GET', '/api/boxes');
+    return r.ok ? { ok: true, boxes: listaDe(r.dados, 20).map(lerBox).filter((b) => ID.test(b.id)) } : r;
+  },
+  // PUT /api/estabelecimento/boxes  { boxes: [{ id?, nome, ativo }] }  (só o proprietário; a lista inteira substitui a anterior, por id; 1 a 20; box com histórico só se desativa)
+  async gravar(lista) {
+    const itens = Array.isArray(lista) ? lista.slice(0, 20) : [];
+    if (itens.length === 0) return { ok: false, status: 0, erro: 'Cadastre ao menos um box.' };
+    const corpo = { boxes: itens.map((b) => ({ ...(ID.test(String(b && b.id)) ? { id: b.id } : {}), nome: texto(b && b.nome, 30), ativo: !(b && b.ativo === false) })) };
+    const r = await chamar('PUT', '/api/estabelecimento/boxes', corpo);
+    return r.ok ? { ok: true, boxes: listaDe(r.dados, 20).map(lerBox).filter((b) => ID.test(b.id)) } : r;
   },
 };
 

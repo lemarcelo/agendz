@@ -33,6 +33,12 @@ test('equipe: comissaoPct só vai quando a pessoa tem percentual próprio (vazio
   assert.deepEqual(chamadas[0].corpo, { pessoas: [{ nome: 'Zé', atende: true, comissaoPct: 30 }, { nome: 'Ana', atende: false }] });
 });
 
+test('equipe: comissaoProdutoPct (v102) só vai quando a pessoa tem percentual próprio sobre produtos, junto do de serviços', async () => {
+  servidor({ pessoas: [] });
+  await onboarding.equipe([{ nome: 'Zé', atende: true, comissaoPct: 30, comissaoProdutoPct: 8.5, senha: 'x' }, { nome: 'Ana', atende: false, comissaoProdutoPct: 0 }, { nome: 'Bia', atende: true, comissaoProdutoPct: null }]);
+  assert.deepEqual(chamadas[0].corpo, { pessoas: [{ nome: 'Zé', atende: true, comissaoPct: 30, comissaoProdutoPct: 8.5 }, { nome: 'Ana', atende: false, comissaoProdutoPct: 0 }, { nome: 'Bia', atende: true }] });
+});
+
 test('estado e histórico: leitura defensiva dos campos novos', async () => {
   servidor({ tipo: 'barbearia', passo: 'servicos', concluido: false, servicos: [], jaCadastrados: [], comissaoPadrao: 35, produtosCadastrados: ['Pomada', 7, null] });
   let r = await onboarding.carregar();

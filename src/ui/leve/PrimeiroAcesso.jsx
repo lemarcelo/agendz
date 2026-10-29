@@ -1,5 +1,5 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
-// Assistente de primeiro acesso do dono (docs/F3-primeiro-acesso.md): Serviços → Produtos → Comissão → Equipe → Expediente → Pronto. Cada passo é opcional (Pular).
+// Assistente de primeiro acesso do dono (docs/F3-primeiro-acesso.md): Serviços → Produtos → Equipe (com a comissão de cada pessoa) → Expediente → Pronto. Cada passo é opcional (Pular).
 // Fala com um `adaptador` (async, { ok, erro, ... }): no site real é o de api-real.js (/api/onboarding); no Artifact, a pré-visualização
 // de services/onboarding-demo.js (nada é gravado). Não importa a API simulada: textos do tipo vêm de `rotulo`.
 import React, { useEffect, useMemo, useState } from 'react';
@@ -10,9 +10,11 @@ import { Aviso, Btn, Campo, Icone } from './mini.jsx';
 const dinheiro = (v) => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const lerNumero = (t) => { const n = Number(String(t).replace(/\./g, '').replace(',', '.')); return Number.isFinite(n) ? n : NaN; };
 const faixa = (mapa) => { const v = Object.values(mapa || {}); return v.length ? [Math.min(...v), Math.max(...v)] : null; };
-const ETAPAS = [['servicos', 'Serviços'], ['produtos', 'Produtos'], ['comissao', 'Comissão'], ['equipe', 'Equipe'], ['expediente', 'Expediente'], ['pronto', 'Pronto']];
+const ETAPAS = [['servicos', 'Serviços'], ['produtos', 'Produtos'], ['equipe', 'Equipe'], ['expediente', 'Expediente'], ['pronto', 'Pronto']];
 const pctTxt = (n) => String(n).replace('.', ',');
-const linhaNova = () => ({ nome: '', atende: true, modo: 'geral', pct: '' }); // modo: 'geral' (usa a comissão geral da loja) ou 'propria' (percentual da pessoa)
+// Comissão de cada pessoa (pedido do Marcelo, v102): sobre serviços (modo 'geral' = usa a geral da loja, 'propria' = percentual da pessoa) e sobre produtos
+// (modoProd 'sem' = nenhuma, a menos que o próprio produto tenha a sua; 'propria' = percentual da pessoa).
+const linhaNova = () => ({ nome: '', atende: true, modo: 'geral', pct: '', modoProd: 'sem', pctProd: '' });
 const DIAS = [[1, 'Seg'], [2, 'Ter'], [3, 'Qua'], [4, 'Qui'], [5, 'Sex'], [6, 'Sáb'], [0, 'Dom']];
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 // Do expediente sugerido (um por dia) para os campos da tela: dias abertos, abre/fecha e a pausa (quando o dia tem duas faixas).
@@ -38,11 +40,10 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
   const [proprios, setProprios] = useState([]); // serviços que o dono descreve na hora: { nome, categoria, preco, duracao } (textos)
   const [novo, setNovo] = useState({ nome: '', categoria: '', preco: '', duracao: '' });
   const [linhas, setLinhas] = useState([linhaNova()]);
-  const [prods, setProds] = useState({}); // chave → { on, preco, comissao, estoque } (textos dos campos) dos produtos sugeridos
-  const [propriosProd, setPropriosProd] = useState([]); // produtos que o dono descreve: { nome, preco, comissao, estoque } (números ou null)
-  const [novoProd, setNovoProd] = useState({ nome: '', preco: '', comissao: '', estoque: '' });
-  const [comTxt, setComTxt] = useState('50'); // comissão geral (texto do campo)
-  const [comGeral, setComGeral] = useState(50); // comissão geral vigente (para mostrar "usar a geral (X%)")
+  const [prods, setProds] = useState({}); // chave → { on, preco, estoque } (textos dos campos) dos produtos sugeridos
+  const [propriosProd, setPropriosProd] = useState([]); // produtos que o dono descreve: { nome, preco, estoque } (números ou null)
+  const [novoProd, setNovoProd] = useState({ nome: '', preco: '', estoque: '' });
+  const [comGeral, setComGeral] = useState(50); // comissão geral vigente da loja (para mostrar "usar a geral (X%)"); o assistente não a altera
   const [criadas, setCriadas] = useState(null);
   const [aviso, setAviso] = useState('');
   const [erro, setErro] = useState('');
@@ -65,9 +66,9 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
     setExp(camposDoExpediente(r.estado.expediente || r.estado.expedienteSugerido));
     setEtapa(reconf ? 'servicos' : r.estado.concluido ? 'pronto' : etapaDoPasso(r.estado.passo));
     setMarcas(Object.fromEntries(r.estado.servicos.map((s) => [s.chave, { on: false, preco: String(s.preco).replace('.', ','), duracao: String(s.duracaoMin) }])));
-    setProds(Object.fromEntries(produtosDoTipo(tipo).map((p) => [p.chave, { on: false, preco: pctTxt(p.preco), comissao: '', estoque: '' }])));
+    setProds(Object.fromEntries(produtosDoTipo(tipo).map((p) => [p.chave, { on: false, preco: pctTxt(p.preco), estoque: '' }])));
     const g = Number.isFinite(r.estado.comissaoPadrao) ? r.estado.comissaoPadrao : 50;
-    setComGeral(g); setComTxt(pctTxt(g));
+    setComGeral(g);
     if (reconf && adaptador.historico) { const h = await adaptador.historico(); setHist(h.ok ? h.itens : []); }
     setFase('ok');
   };
@@ -143,15 +144,13 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
   const sugEscolhidos = sugeridos.filter((p) => prods[p.chave]?.on && !nomesProd.has(p.nome.toLowerCase()));
   const mudarProd = (chave, campo, valor) => { setProds((m) => ({ ...m, [chave]: { ...m[chave], [campo]: valor } })); setErro(''); };
   const mudarNovoProd = (campo, valor) => { setNovoProd((n) => ({ ...n, [campo]: valor })); setErro(''); };
-  // Lê comissão (0 a 100, vazio = sem) e estoque (vazio = 0) de um produto; devolve { erro } ou os números.
+  // Lê preço e estoque (vazio = 0) de um produto; devolve { erro } ou os números. A comissão sobre produtos é de cada pessoa (etapa Equipe).
   const lerProduto = (nome, t) => {
     const preco = lerNumero(t.preco);
     if (!(preco >= 0 && preco <= 100000)) return { erro: `Confira o preço de “${nome}” (de R$ 0 a R$ 100.000).` };
-    const comissao = String(t.comissao).trim() === '' ? null : lerNumero(t.comissao);
-    if (comissao !== null && !(comissao >= 0 && comissao <= 100)) return { erro: `Confira a comissão de “${nome}” (de 0 a 100%, ou deixe vazio).` };
     const estoque = String(t.estoque).trim() === '' ? null : lerNumero(t.estoque);
     if (estoque !== null && !(estoque >= 0 && estoque <= 1000000)) return { erro: `Confira o estoque de “${nome}” (zero ou mais, ou deixe vazio).` };
-    return { dados: { nome, preco: Math.round(preco * 100) / 100, ...(comissao ? { comissaoPct: Math.round(comissao * 100) / 100 } : {}), ...(estoque ? { estoque } : {}) } };
+    return { dados: { nome, preco: Math.round(preco * 100) / 100, ...(estoque ? { estoque } : {}) } };
   };
   const adicionarProdutoProprio = () => {
     const nome = novoProd.nome.trim().replace(/\s+/g, ' ');
@@ -162,7 +161,7 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
     const r = lerProduto(nome, novoProd);
     if (r.erro) { setErro(r.erro); return; }
     setPropriosProd((l) => [...l, r.dados]);
-    setNovoProd({ nome: '', preco: '', comissao: '', estoque: '' }); setErro('');
+    setNovoProd({ nome: '', preco: '', estoque: '' }); setErro('');
   };
   const enviarProdutos = async () => {
     if (enviando) return;
@@ -175,22 +174,10 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
     if (!r.ok) { falha(r); return; }
     setPropriosProd([]);
     setAviso(itens.length ? `${r.resultado.criados} ${r.resultado.criados === 1 ? 'produto criado' : 'produtos criados'}.` : '');
-    setEtapa('comissao');
-  };
-
-  // ----- comissão geral -----
-  const enviarComissao = async () => {
-    if (enviando) return;
-    const v = lerNumero(comTxt);
-    if (String(comTxt).trim() === '' || !(v >= 0 && v <= 100)) { setErro('Confira a comissão (de 0 a 100%).'); return; }
-    setEnviando(true); setErro('');
-    const r = await adaptador.comissao(Math.round(v * 100) / 100);
-    setEnviando(false);
-    if (!r.ok) { falha(r); return; }
-    setComGeral(r.padrao); setComTxt(pctTxt(r.padrao)); setAviso(`Comissão geral definida em ${pctTxt(r.padrao)}%.`);
     setEtapa('equipe');
   };
 
+  // ----- equipe (com a comissão de cada pessoa) -----
   const mudarLinha = (i, campo, valor) => { setLinhas((l) => l.map((x, j) => (j === i ? { ...x, [campo]: valor } : x))); setErro(''); };
   const enviarEquipe = async () => {
     if (enviando) return;
@@ -204,6 +191,11 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
         const v = lerNumero(l.pct);
         if (!(String(l.pct).trim() !== '' && v >= 0 && v <= 100)) { setErro(`Confira a comissão de “${nome}” (de 0 a 100%).`); return; }
         pessoa.comissaoPct = Math.round(v * 100) / 100;
+      }
+      if (l.modoProd === 'propria') {
+        const v = lerNumero(l.pctProd);
+        if (!(String(l.pctProd).trim() !== '' && v >= 0 && v <= 100)) { setErro(`Confira a comissão sobre produtos de “${nome}” (de 0 a 100%).`); return; }
+        pessoa.comissaoProdutoPct = Math.round(v * 100) / 100;
       }
       pessoas.push(pessoa);
     }
@@ -264,7 +256,7 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
         <header className="pa-topo">
           {reconf && aoCancelar && <div className="acoes"><Btn tamanho="sm" onClick={aoCancelar} data-testid="pa-voltar">Voltar</Btn></div>}
           <h1>{reconf ? `Reconfigurar ${nomeLoja || 'sua loja'}` : `Vamos preparar ${nomeLoja || 'sua loja'}`}</h1>
-          {reconf && <p className="muted" data-testid="pa-reconf-nota">Aqui você só adiciona: serviços, produtos e pessoas que já existem continuam como estão e ninguém é excluído. O horário de funcionamento e a comissão geral, se você salvar, substituem os atuais. Dá para desfazer pelo histórico abaixo (por 30 dias).</p>}
+          {reconf && <p className="muted" data-testid="pa-reconf-nota">Aqui você só adiciona: serviços, produtos e pessoas que já existem continuam como estão e ninguém é excluído. O horário de funcionamento, se você salvar, substitui o atual. Dá para desfazer pelo histórico abaixo (por 30 dias).</p>}
           {previa && <Aviso data-testid="pa-previa">Pré-visualização: nada do que você marcar aqui é gravado.</Aviso>}
           {!precisaSenha && <ol className="pa-passos" aria-label="Etapas">
             {ETAPAS.map(([id, nome], i) => <li key={id} className={i === indice ? 'atual' : i < indice ? 'feito' : ''} aria-current={i === indice ? 'step' : undefined} data-testid={`pa-etapa-${id}`}><span>{i + 1}</span> {nome}</li>)}
@@ -295,7 +287,7 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
                 </li>
               ))}
             </ul>
-            <p className="muted">Desfazer devolve o horário de funcionamento e a comissão geral de antes e desativa os serviços, os produtos e as pessoas criados naquela vez (nada é excluído). Só a mais recente pode ser desfeita, e por 30 dias.</p>
+            <p className="muted">Desfazer devolve o horário de funcionamento de antes e desativa os serviços, os produtos e as pessoas criados naquela vez (nada é excluído). Só a mais recente pode ser desfeita, e por 30 dias.</p>
           </section>
         )}
 
@@ -360,7 +352,7 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
         {fase === 'ok' && !precisaSenha && etapa === 'produtos' && (
           <section data-testid="pa-produtos">
             {aviso && <Aviso data-testid="pa-aviso">{aviso}</Aviso>}
-            <p>Vende produtos além dos serviços? Marque os que a loja vende e ajuste o preço. A comissão de quem vende é opcional (vazio = sem comissão) e o estoque inicial também. Nada vem marcado; dá para mudar tudo depois, em Estoque.</p>
+            <p>Vende produtos além dos serviços? Marque os que a loja vende e ajuste o preço. O estoque inicial é opcional. A comissão sobre produtos é de cada pessoa e você define na etapa Equipe. Nada vem marcado; dá para mudar tudo depois, em Estoque.</p>
             {sugeridos.length > 0 && (
               <ul className="pa-lista">
                 {sugeridos.map((p) => {
@@ -375,7 +367,6 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
                       {m.on && !existe && (
                         <div className="pa-campos">
                           <Campo rotulo="Preço (R$)"><input inputMode="decimal" value={m.preco} onChange={(e) => mudarProd(p.chave, 'preco', e.target.value)} maxLength={9} data-testid={`pa-prod-preco-${p.chave}`} /></Campo>
-                          <Campo rotulo="Comissão (%)"><input inputMode="decimal" value={m.comissao} onChange={(e) => mudarProd(p.chave, 'comissao', e.target.value)} maxLength={6} placeholder="sem" data-testid={`pa-prod-comissao-${p.chave}`} /></Campo>
                           <Campo rotulo="Estoque"><input inputMode="decimal" value={m.estoque} onChange={(e) => mudarProd(p.chave, 'estoque', e.target.value)} maxLength={9} placeholder="0" data-testid={`pa-prod-estoque-${p.chave}`} /></Campo>
                         </div>
                       )}
@@ -390,7 +381,7 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
                 <ul className="pa-lista" data-testid="pa-prod-proprios-lista">
                   {propriosProd.map((p, i) => (
                     <li className="pa-item marcado" key={p.nome} data-testid={`pa-prod-proprio-${i}`}>
-                      <span><b>{p.nome}</b><small className="muted"> · {dinheiro(p.preco)}{p.comissaoPct ? ` · comissão ${pctTxt(p.comissaoPct)}%` : ''}{p.estoque ? ` · estoque ${pctTxt(p.estoque)}` : ''}</small></span>
+                      <span><b>{p.nome}</b><small className="muted"> · {dinheiro(p.preco)}{p.estoque ? ` · estoque ${pctTxt(p.estoque)}` : ''}</small></span>
                       <Btn tamanho="sm" onClick={() => setPropriosProd((l) => l.filter((_, j) => j !== i))} aria-label={`Remover ${p.nome}`} data-testid={`pa-prod-proprio-remover-${i}`}>Remover</Btn>
                     </li>
                   ))}
@@ -399,29 +390,14 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
               <div className="pa-campos">
                 <Campo rotulo="Nome do produto"><input value={novoProd.nome} onChange={(e) => mudarNovoProd('nome', e.target.value)} maxLength={100} data-testid="pa-prod-nome" /></Campo>
                 <Campo rotulo="Preço (R$)"><input inputMode="decimal" value={novoProd.preco} onChange={(e) => mudarNovoProd('preco', e.target.value)} maxLength={9} data-testid="pa-prod-novo-preco" /></Campo>
-                <Campo rotulo="Comissão (%)"><input inputMode="decimal" value={novoProd.comissao} onChange={(e) => mudarNovoProd('comissao', e.target.value)} maxLength={6} placeholder="sem" data-testid="pa-prod-novo-comissao" /></Campo>
                 <Campo rotulo="Estoque"><input inputMode="decimal" value={novoProd.estoque} onChange={(e) => mudarNovoProd('estoque', e.target.value)} maxLength={9} placeholder="0" data-testid="pa-prod-novo-estoque" /></Campo>
               </div>
               <div className="acoes"><Btn tamanho="sm" onClick={adicionarProdutoProprio} data-testid="pa-prod-adicionar">Adicionar à lista</Btn></div>
             </div>
             {erro && <Aviso tipo="erro" data-testid="pa-erro">{erro}</Aviso>}
             <div className="acoes pa-acoes">
-              <Btn onClick={() => { setErro(''); setEtapa('comissao'); }} data-testid="pa-pular-produtos">Pular</Btn>
+              <Btn onClick={() => { setErro(''); setEtapa('equipe'); }} data-testid="pa-pular-produtos">Pular</Btn>
               <Btn variante="primario" disabled={enviando || !(sugEscolhidos.length + propriosProd.length)} onClick={enviarProdutos} data-testid="pa-continuar-produtos">{enviando ? 'Salvando…' : `Continuar${sugEscolhidos.length + propriosProd.length ? ` (${sugEscolhidos.length + propriosProd.length})` : ''}`}</Btn>
-            </div>
-          </section>
-        )}
-
-        {fase === 'ok' && !precisaSenha && etapa === 'comissao' && (
-          <section data-testid="pa-comissao">
-            {aviso && <Aviso data-testid="pa-aviso">{aviso}</Aviso>}
-            <p>Quanto cada pessoa recebe sobre os serviços que faz? Defina aqui a <b>comissão geral</b> da loja. Na próxima etapa, cada pessoa pode usar a geral ou ter um percentual próprio.</p>
-            <Campo rotulo="Comissão geral (%)"><input inputMode="decimal" value={comTxt} onChange={(e) => { setComTxt(e.target.value); setErro(''); }} maxLength={6} data-testid="pa-comissao-geral" /></Campo>
-            <p className="muted">Ordem: a comissão do serviço (quando o serviço tem uma) vale sobre a da pessoa, e a da pessoa vale sobre a geral. 0% é sem comissão. O proprietário que atende fica com 100% a menos que tenha percentual próprio.</p>
-            {erro && <Aviso tipo="erro" data-testid="pa-erro">{erro}</Aviso>}
-            <div className="acoes pa-acoes">
-              <Btn onClick={() => { setErro(''); setEtapa('equipe'); }} data-testid="pa-pular-comissao">Pular</Btn>
-              <Btn variante="primario" disabled={enviando} onClick={enviarComissao} data-testid="pa-continuar-comissao">{enviando ? 'Salvando…' : 'Continuar'}</Btn>
             </div>
           </section>
         )}
@@ -441,13 +417,20 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
                       <option value="propria">Percentual próprio</option>
                     </select>
                   </Campo>
-                  {l.modo === 'propria' && <Campo rotulo="Percentual (%)"><input inputMode="decimal" value={l.pct} onChange={(e) => mudarLinha(i, 'pct', e.target.value)} maxLength={6} data-testid={`pa-comissao-pct-${i}`} /></Campo>}
+                  {l.modo === 'propria' && <Campo rotulo="Percentual sobre serviços (%)"><input inputMode="decimal" value={l.pct} onChange={(e) => mudarLinha(i, 'pct', e.target.value)} maxLength={6} data-testid={`pa-comissao-pct-${i}`} /></Campo>}
+                  <Campo rotulo="Comissão sobre os produtos">
+                    <select value={l.modoProd} onChange={(e) => mudarLinha(i, 'modoProd', e.target.value)} data-testid={`pa-comissao-prod-modo-${i}`}>
+                      <option value="sem">Sem comissão sobre produtos</option>
+                      <option value="propria">Percentual próprio</option>
+                    </select>
+                  </Campo>
+                  {l.modoProd === 'propria' && <Campo rotulo="Percentual sobre produtos (%)"><input inputMode="decimal" value={l.pctProd} onChange={(e) => mudarLinha(i, 'pctProd', e.target.value)} maxLength={6} data-testid={`pa-comissao-prod-pct-${i}`} /></Campo>}
                   {linhas.length > 1 && <button type="button" className="btn btn-neutro btn-sm" onClick={() => setLinhas((x) => x.filter((_, j) => j !== i))} aria-label={`Remover o nome ${i + 1}`} data-testid={`pa-remover-${i}`}><Icone n="x" size={15} /></button>}
                 </li>
               ))}
             </ul>
             {linhas.length < 10 && <div className="acoes"><Btn tamanho="sm" onClick={() => setLinhas((l) => [...l, linhaNova()])} data-testid="pa-add">Adicionar pessoa</Btn></div>}
-            <p className="muted">Os {profissionais} que “atendem clientes” aparecem na agenda.</p>
+            <p className="muted">Os {profissionais} que “atendem clientes” aparecem na agenda. Comissão sobre serviços: o serviço com percentual próprio vale sobre o da pessoa, e o da pessoa vale sobre o geral da loja (0% é sem comissão). Sobre produtos: vale o percentual do próprio produto, se ele tiver; senão o da pessoa que vendeu. O proprietário que atende fica com 100% a menos que tenha percentual próprio.</p>
             {erro && <Aviso tipo="erro" data-testid="pa-erro">{erro}</Aviso>}
             <div className="acoes pa-acoes">
               <Btn onClick={() => { setAviso(''); setEtapa('expediente'); }} data-testid="pa-pular-equipe">Pular</Btn>

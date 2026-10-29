@@ -231,3 +231,51 @@ test('regras do Atender: o erro do servidor chega com a mensagem dele (profissio
   const r = await regras.gravar({ formaPagamentoPadrao: 'pix' });
   assert.deepEqual([r.ok, r.status, r.erro], [false, 403, 'Acesso negado.']);
 });
+
+// ---------- estética: veículo, box e a tela de Boxes ----------
+import { boxes } from '../src/services/api-real.js';
+const BX = '00000000-0000-4000-8000-000000000060';
+const VEI = '00000000-0000-4000-8000-000000000031';
+const SRVID = '00000000-0000-4000-8000-000000000050';
+
+test('atender com veículo: veiculoId ou veículo novo (texto limpo e cortado) e boxId; id ruim não sai do cliente', async () => {
+  servidor({ id: ID, profissionalId: PROF, inicio: '2026-10-30T13:00:00Z', status: 'a_confirmar', estetica: { boxId: BX, box: 'Box 1', veiculoId: VEI, porte: 'suv', placa: 'ABC1D23', marca: 'Jeep', modelo: 'Compass', cor: 'Cinza' } }, 201);
+  const r = await agenda.atender({ servicoIds: [SRVID], veiculoId: VEI, boxId: BX, inicio: Date.parse('2026-10-30T13:00:00Z') });
+  assert.equal(chamadas[0].corpo.veiculoId, VEI); assert.equal(chamadas[0].corpo.boxId, BX);
+  assert.deepEqual(r.agendamento.estetica, { boxId: BX, box: 'Box 1', veiculoId: VEI, porte: 'suv', placa: 'ABC1D23', marca: 'Jeep', modelo: 'Compass', cor: 'Cinza' });
+  await agenda.atender({ servicoIds: [SRVID], veiculo: { placa: 'ABC1D23', modelo: 'x'.repeat(100), porte: 'suv', extra: 'ignorado' } });
+  assert.equal(chamadas[1].corpo.veiculo.modelo.length, 40); assert.ok(!('extra' in chamadas[1].corpo.veiculo)); assert.equal(chamadas[1].corpo.veiculoId, undefined);
+  assert.equal((await agenda.atender({ servicoIds: [SRVID], veiculoId: 'lixo' })).ok, false);
+  assert.equal((await agenda.atender({ servicoIds: [SRVID], veiculoId: VEI, boxId: '../x' })).ok, false);
+  assert.equal(chamadas.length, 2);
+});
+
+test('agendamento sem bloco de estética (barbearia, produto) vem com estetica nula; bloco ruim é cortado e id ruim some', async () => {
+  servidor([{ id: ID, profissionalId: PROF, inicio: '2026-10-30T13:00:00Z', status: 'confirmado' }, { id: ID, profissionalId: PROF, inicio: '2026-10-30T13:00:00Z', status: 'confirmado', estetica: { boxId: 'x', box: 'B'.repeat(80), placa: 'P'.repeat(30) } }]);
+  const [a, b] = (await agenda.listar({ de: 1, ate: 2 })).agendamentos;
+  assert.equal(a.estetica, null);
+  assert.equal(b.estetica.boxId, null); assert.equal(b.estetica.box.length, 30); assert.equal(b.estetica.placa.length, 8);
+});
+
+test('remarcar leva boxId só quando informado e válido', async () => {
+  servidor({ id: ID, profissionalId: PROF, inicio: '2026-10-30T13:00:00Z', status: 'confirmado' });
+  await agenda.remarcar(ID, { inicio: Date.parse('2026-10-30T13:00:00Z') });
+  assert.equal(chamadas[0].corpo.boxId, undefined);
+  await agenda.remarcar(ID, { inicio: Date.parse('2026-10-30T13:00:00Z'), boxId: BX });
+  assert.equal(chamadas[1].corpo.boxId, BX);
+  assert.equal((await agenda.remarcar(ID, { inicio: Date.parse('2026-10-30T13:00:00Z'), boxId: 'lixo' })).ok, false);
+  assert.equal(chamadas.length, 2);
+});
+
+test('boxes: listar lê defensivamente; gravar envia a lista por id e barra lista vazia antes da rede', async () => {
+  servidor([{ id: BX, nome: 'Box 1', ativo: true }, { id: 'ruim', nome: 'X' }, { id: BX, nome: 'N'.repeat(60), ativo: false }]);
+  const l = (await boxes.listar()).boxes;
+  assert.equal(chamadas[0].url, 'https://loja.teste/api/boxes'); assert.equal(l.length, 2); assert.equal(l[1].nome.length, 30); assert.equal(l[1].ativo, false);
+  servidor([{ id: BX, nome: 'Box 1', ativo: true }]);
+  const g = await boxes.gravar([{ id: BX, nome: 'Box 1' }, { nome: 'Box 2', ativo: false }, { id: 'lixo', nome: 'Box 3' }]);
+  assert.equal(chamadas[0].metodo, 'PUT'); assert.equal(chamadas[0].url, 'https://loja.teste/api/estabelecimento/boxes');
+  assert.deepEqual(chamadas[0].corpo.boxes, [{ id: BX, nome: 'Box 1', ativo: true }, { nome: 'Box 2', ativo: false }, { nome: 'Box 3', ativo: true }]);
+  assert.equal(g.ok, true);
+  assert.equal((await boxes.gravar([])).ok, false);
+  assert.equal(chamadas.length, 1);
+});

@@ -12,3 +12,5 @@ deploy/site/
 id_*
 target/
 .DS_Store
+shots-smoke/
+smoke-relatorio.*

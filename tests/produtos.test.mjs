@@ -1,7 +1,7 @@
 // Adicionar serviços (sem mudar o status) e produtos (material do tipo produto) a agendamentos e atendimentos locais.
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
-import { store, auth, agenda, estoque, servicos, comissoes } from '../src/services/api.js';
+import { store, auth, agenda, estoque, servicos, comissoes, equipe } from '../src/services/api.js';
 import { reiniciar } from './helpers.mjs';
 import { relatorioMensal, totalProdutos, totalAgendamento } from '../src/domain/reports.js';
 import { comissaoDoAgendamento } from '../src/domain/comissao.js';
@@ -194,4 +194,27 @@ test('remarcar libera o status manual de volta ao fluxo automático', () => {
   const r = agenda.remarcar(passado.id, { inicio: novoInicio, profissionalId: passado.profissionalId, status: 'a_confirmar' });
   assert.ok(r.ok, JSON.stringify(r.erros));
   store.avancar(40 * 24 * 60 * 60 * 1000); assert.equal(ag(passado.id).status, 'cancelado', 'volta a valer a regra automática');
+});
+
+test('comissão de produto por pessoa (v102): vale quando o produto não tem a sua; a do produto vence; só o proprietário define; congela ao vender', () => {
+  const pablo = () => st().usuarios.find((u) => u.id === 'u-pablo');
+  assert.ok(!(Number(pablo().comissaoProdutoPct) > 0), 'começa sem comissão sobre produtos');
+  assert.ok(equipe.salvar({ ...pablo(), comissaoProdutoPct: 12 }).ok);
+  assert.equal(pablo().comissaoProdutoPct, 12);
+  // produto sem percentual (cera): vale o da pessoa que vende
+  const id = local({ produtos: [{ materialId: 'pr-cera-spray', qtd: 1 }] });
+  assert.equal(ag(id).produtos[0].pct, 12);
+  assert.equal(comissaoDoAgendamento(st(), ag(id)).produtos[0].comissao, 4.56); // 12% de 38
+  // produto com percentual (aromatizante, 10%): o do produto vence o da pessoa
+  const id2 = local({ produtos: [{ materialId: 'pr-aromatizante', qtd: 1 }] });
+  assert.equal(ag(id2).produtos[0].pct, 10);
+  // trocar depois não muda o que já foi vendido
+  assert.ok(equipe.salvar({ ...pablo(), comissaoProdutoPct: 30 }).ok);
+  assert.equal(ag(id).produtos[0].pct, 12);
+  // limites
+  for (const v of [101, -1, 'abc']) assert.equal(equipe.salvar({ ...pablo(), comissaoProdutoPct: v }).ok, false, String(v));
+  assert.ok(equipe.salvar({ ...pablo(), comissaoProdutoPct: '' }).ok);
+  // quem não é dono não define
+  como('pablo');
+  assert.equal(equipe.salvar({ ...pablo(), comissaoProdutoPct: 50 }).ok, false);
 });

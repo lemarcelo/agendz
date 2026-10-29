@@ -868,10 +868,12 @@ export const equipe = {
   // POST /usuarios  |  PUT /usuarios/{id}
   salvar(entrada) {
     if (!R.ehDono(usuario())) return erro('Somente o dono cadastra e altera a equipe.');
-    const u = pegar(entrada, ['id', 'nome', 'apelido', 'cpf', 'nascimento', 'email', 'telefone', 'senha', 'papel', 'permissoes', 'atende', 'foto', 'comissaoPct', 'podeVender']);
+    const u = pegar(entrada, ['id', 'nome', 'apelido', 'cpf', 'nascimento', 'email', 'telefone', 'senha', 'papel', 'permissoes', 'atende', 'foto', 'comissaoPct', 'comissaoProdutoPct', 'podeVender']);
     if ('comissaoPct' in u && !R.ehDono(usuario())) delete u.comissaoPct;
+    if ('comissaoProdutoPct' in u && !R.ehDono(usuario())) delete u.comissaoProdutoPct;
     if ('podeVender' in u && typeof u.podeVender !== 'boolean') return erro('Escolha se a pessoa pode vender produtos.');
     if ('comissaoPct' in u) { const c = lerPct(u.comissaoPct); if (!c.ok) return erro('A comissão vai de 0 a 100%.'); u.comissaoPct = c.v; }
+    if ('comissaoProdutoPct' in u) { const c = lerPct(u.comissaoProdutoPct); if (!c.ok) return erro('A comissão vai de 0 a 100%.'); u.comissaoProdutoPct = c.v; } // sobre produtos: vale quando o produto não tem a sua
     if ('foto' in u && u.foto !== null && !fotoValida(u.foto)) return erro('Foto inválida: use uma imagem PNG, JPEG ou WebP pequena.');
     for (const k of ['nome', 'apelido', 'cpf', 'nascimento', 'email', 'telefone', 'senha']) if (k in u && !texto(u[k], 150)) return erro('Texto inválido ou grande demais em ' + k + '.');
     if (('papel' in u || !u.id) && !['dono', 'admin', 'atendente', 'profissional'].includes(u.papel)) return erro('Escolha o perfil da pessoa.');

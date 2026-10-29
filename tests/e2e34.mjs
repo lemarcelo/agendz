@@ -53,6 +53,38 @@ for (const slug of LOJAS) {
   ok(`${slug}: Link Agenda funciona (computador e celular)`);
 }
 
+// 1b. Artifact (sem ?loja= no endereço): a loja escolhida no login vai dentro do link (#agendar@loja) e o cliente cai nela, nunca na Apex
+for (const slug of ['dalforno', 'offbox']) {
+  const ctx = await b.newContext({ viewport: { width: 390, height: 780 }, hasTouch: true, isMobile: true, locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' });
+  await ctx.route(/^https:\/\/(wa\.me|web\.whatsapp\.com)\//, (r) => r.fulfill({ contentType: 'text/html', body: '<title>wa</title>' }));
+  await ctx.clock.setFixedTime(new Date('2026-10-12T07:00:00-03:00'));
+  const p = await ctx.newPage(); p.setDefaultTimeout(8000);
+  p.on('pageerror', (e) => erros.push('PAGE: ' + e.message));
+  await p.goto(base);
+  await p.getByTestId(`demo-loja-${slug}`).click();
+  await entrarComoDono(p);
+  const aba = ctx.waitForEvent('page', { timeout: 6000 });
+  await p.getByTestId('copiar-link').tap();
+  const msg = decodeURIComponent((await aba).url().split('text=')[1]);
+  assert.ok(msg.endsWith(`#agendar@${slug}`), `${slug}: o link não leva a loja: ${msg}`);
+  const link = msg.slice(msg.indexOf('http') >= 0 ? msg.indexOf('http') : msg.indexOf('file'));
+  // cliente: sessão nova, endereço sem ?loja=, só o hash do link
+  const cli = await b.newContext({ viewport: { width: 390, height: 780 }, locale: 'pt-BR' });
+  const q = await cli.newPage(); q.setDefaultTimeout(8000);
+  await q.goto(`${base}#agendar@${slug}`);
+  await q.getByTestId('pub-aba-agendar').waitFor();
+  const tipos = { apex: 'estetica_automotiva', dalforno: 'barbearia', offbox: 'barbearia' };
+  await q.waitForFunction((t) => document.documentElement.getAttribute('data-tipo') === t, tipos[slug]);
+  const corpo = await q.locator('body').innerText();
+  assert.ok(!/lavagem|polimento|veículo/i.test(corpo), `${slug}: página do cliente com serviços da Apex`);
+  // o título da aba e o texto do convite trazem o nome da loja certa
+  const nomeLoja = { dalforno: 'Dalforno', offbox: 'Offbox' }[slug];
+  assert.ok(msg.includes(nomeLoja), `${slug}: convite sem o nome da loja: ${msg}`);
+  assert.ok(link.length > 0);
+  await cli.close(); await ctx.close();
+  ok(`${slug}: sem ?loja=, o link leva a loja (#agendar@${slug}) e a página do cliente é dela`);
+}
+
 // 2. seletor único de profissionais: sem sobreposição, seta à direita, recolhe ao escolher, "Todos", seleção inicial
 for (const slug of LOJAS) {
   for (const [vp, fonteLarga] of [[{ width: 1440, height: 900 }, false], [{ width: 390, height: 780 }, false], [{ width: 390, height: 780 }, true], [{ width: 360, height: 740 }, true]]) {

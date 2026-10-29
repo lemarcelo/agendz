@@ -49,11 +49,11 @@ public class UsuarioService {
     private static final int FOTO_MAX = 30000;
     private static final TypeReference<Map<String, Boolean>> MAPA = new TypeReference<>() {
     };
-    private static final String COLUNAS = "id, identificador, nome, apelido, papel, atende, pode_vender, comissao_pct, permissoes::text as permissoes, cor_slot, foto, "
+    private static final String COLUNAS = "id, identificador, nome, apelido, papel, atende, pode_vender, comissao_pct, comissao_produto_pct, permissoes::text as permissoes, cor_slot, foto, "
             + "email_cif, telefone_cif, cpf_cif, nascimento_cif, deve_trocar_senha";
 
     public record Usuario(UUID id, String nome, String apelido, String usuario, String papel, boolean atende, boolean podeVender, BigDecimal comissaoPct,
-                          Map<String, Boolean> permissoes, Integer corSlot, String foto, String email, String telefone, String cpfMascarado, String cpf,
+                          BigDecimal comissaoProdutoPct, Map<String, Boolean> permissoes, Integer corSlot, String foto, String email, String telefone, String cpfMascarado, String cpf,
                           String nascimento, boolean deveTrocarSenha) {
     }
 
@@ -61,14 +61,14 @@ public class UsuarioService {
     public record Dados(@Size(max = 300) String nome, @Size(max = 300) String apelido, @Size(max = 100) String usuario, @Size(max = 100) String cpf,
                         @Size(max = 100) String nascimento, @Size(max = 300) String email, @Size(max = 100) String telefone, @Size(max = 40) String papel,
                         @Size(max = 20) Map<String, Boolean> permissoes, Boolean atende, Boolean podeVender, BigDecimal comissaoPct,
-                        @Size(max = 40000) String foto) {
+                        @Size(max = 40000) String foto, BigDecimal comissaoProdutoPct) {
     }
 
     /** Resposta de criar e de refazer a senha: a senha temporária aparece só aqui. */
     public record ComSenha(Usuario usuario, String senhaTemporaria) {
     }
 
-    private record Linha(UUID id, String login, String nome, String apelido, String papel, boolean atende, boolean podeVender, BigDecimal comissao,
+    private record Linha(UUID id, String login, String nome, String apelido, String papel, boolean atende, boolean podeVender, BigDecimal comissao, BigDecimal comissaoProduto,
                          String permissoes, Integer corSlot, String foto, String emailCif, String telefoneCif, String cpfCif, String nascimentoCif, boolean deve) {
     }
 
@@ -87,7 +87,7 @@ public class UsuarioService {
     // ---------- leitura ----------
 
     public List<Usuario> listar() {
-        return banco.naLoja(jdbc -> jdbc.query("select " + COLUNAS + " from usuario where ativo and identificador <> 'suporte' order by lower(coalesce(apelido, nome)), id limit 200",
+        return banco.naLoja(jdbc -> jdbc.query("select " + COLUNAS + " from usuario where ativo and " + Reservados.OCULTOS_SQL + " order by lower(coalesce(apelido, nome)), id limit 200",
                 (rs, i) -> lerLinha(rs)).stream().map(l -> paraUsuario(l, false)).toList());
     }
 
@@ -113,10 +113,10 @@ public class UsuarioService {
                 if (logins.contains(login)) throw new ErroDeNegocio(HttpStatus.CONFLICT, "Esse usuário já existe.");
                 boolean atende = d.atende() != null ? d.atende() : !Permissoes.ehGestor(v.papel);
                 return jdbc.queryForObject(
-                        "insert into usuario (loja_id, identificador, nome, apelido, papel, senha_hash, atende, deve_trocar_senha, pode_vender, comissao_pct, permissoes, cor_slot, "
+                        "insert into usuario (loja_id, identificador, nome, apelido, papel, senha_hash, atende, deve_trocar_senha, pode_vender, comissao_pct, comissao_produto_pct, permissoes, cor_slot, "
                                 + "foto, email_cif, email_hash, telefone_cif, cpf_cif, cpf_hash, nascimento_cif) "
-                                + "values (?::uuid, ?, ?, ?, ?, ?, ?, true, ?, ?, cast(? as jsonb), ?, ?, ?, ?, ?, ?, ?, ?) returning id",
-                        UUID.class, loja.id().toString(), login, v.nome, v.apelido, v.papel, hash, atende, v.podeVender == null || v.podeVender, v.comissao,
+                                + "values (?::uuid, ?, ?, ?, ?, ?, ?, true, ?, ?, ?, cast(? as jsonb), ?, ?, ?, ?, ?, ?, ?, ?) returning id",
+                        UUID.class, loja.id().toString(), login, v.nome, v.apelido, v.papel, hash, atende, v.podeVender == null || v.podeVender, v.comissao, v.comissaoProduto,
                         escrever(v.permissoes == null ? Map.of() : v.permissoes), proximaCor(jdbc), v.foto == null || v.foto.isEmpty() ? null : v.foto,
                         cif(v.email), hashDe(loja.id(), "email", v.email == null ? null : v.email.toLowerCase(Locale.ROOT)), cif(v.telefone),
                         cif(v.cpf), hashDe(loja.id(), "cpf", v.cpf), cif(v.nascimento));
@@ -160,10 +160,10 @@ public class UsuarioService {
                 String nascCif = v.nascimentoVeio ? cif(v.nascimento) : atual.nascimentoCif();
                 String foto = v.foto != null ? (v.foto.isEmpty() ? null : v.foto) : atual.foto();
                 // hash só é recalculado quando o campo veio; senão mantém o que está gravado
-                jdbc.update("update usuario set identificador = ?, nome = ?, apelido = ?, papel = ?, atende = ?, pode_vender = ?, comissao_pct = case when ? then ? else comissao_pct end, "
+                jdbc.update("update usuario set identificador = ?, nome = ?, apelido = ?, papel = ?, atende = ?, pode_vender = ?, comissao_pct = case when ? then ? else comissao_pct end, comissao_produto_pct = case when ? then ? else comissao_produto_pct end, "
                                 + "permissoes = cast(? as jsonb), foto = ?, email_cif = ?, email_hash = case when ? then ? else email_hash end, telefone_cif = ?, "
                                 + "cpf_cif = ?, cpf_hash = case when ? then ? else cpf_hash end, nascimento_cif = ? where id = ?",
-                        login, nome, apelido, papel, atende, v.podeVender != null ? v.podeVender : atual.podeVender(), v.comissaoVeio, v.comissao, escrever(permissoes), foto,
+                        login, nome, apelido, papel, atende, v.podeVender != null ? v.podeVender : atual.podeVender(), v.comissaoVeio, v.comissao, v.comissaoProdutoVeio, v.comissaoProduto, escrever(permissoes), foto,
                         emailCif, v.emailVeio, emailHash, telCif, cpfCif, v.cpfVeio, cpfHash, nascCif, id);
                 return null;
             });
@@ -230,10 +230,10 @@ public class UsuarioService {
 
     private static final class Validado {
         String nome, apelido, usuario, papel, cpf, email, telefone, nascimento, foto;
-        BigDecimal comissao;
+        BigDecimal comissao, comissaoProduto;
         Boolean podeVender;
         Map<String, Boolean> permissoes;
-        boolean comissaoVeio, cpfVeio, emailVeio, telefoneVeio, nascimentoVeio;
+        boolean comissaoVeio, comissaoProdutoVeio, cpfVeio, emailVeio, telefoneVeio, nascimentoVeio;
     }
 
     private static String vazioParaNulo(String s) {
@@ -249,6 +249,11 @@ public class UsuarioService {
             v.comissao = d.comissaoPct().setScale(2, RoundingMode.HALF_UP);
         }
         v.comissaoVeio = d.comissaoPct() != null;
+        if (d.comissaoProdutoPct() != null) { // comissão sobre produtos desta pessoa (vale quando o produto não tem a sua própria)
+            if (d.comissaoProdutoPct().signum() < 0 || d.comissaoProdutoPct().compareTo(new BigDecimal("100")) > 0) throw ruim("A comissão vai de 0 a 100%.");
+            v.comissaoProduto = d.comissaoProdutoPct().setScale(2, RoundingMode.HALF_UP);
+        }
+        v.comissaoProdutoVeio = d.comissaoProdutoPct() != null;
         v.podeVender = d.podeVender();
         if (d.foto() != null && !d.foto().isEmpty() && !fotoValida(d.foto())) throw ruim(MSG_FOTO);
         v.foto = d.foto();
@@ -378,7 +383,7 @@ public class UsuarioService {
     // ---------- linhas ----------
 
     private Linha buscar(JdbcTemplate jdbc, UUID id) {
-        List<Linha> achados = jdbc.query("select " + COLUNAS + " from usuario where id = ? and ativo and identificador <> 'suporte'", (rs, i) -> lerLinha(rs), id);
+        List<Linha> achados = jdbc.query("select " + COLUNAS + " from usuario where id = ? and ativo and " + Reservados.OCULTOS_SQL, (rs, i) -> lerLinha(rs), id);
         return achados.isEmpty() ? null : achados.get(0);
     }
 
@@ -386,14 +391,14 @@ public class UsuarioService {
         int cor = rs.getInt("cor_slot");
         Integer corSlot = rs.wasNull() ? null : cor; // wasNull vale para a última coluna lida: conferir logo depois do getInt
         return new Linha(rs.getObject("id", UUID.class), rs.getString("identificador"), rs.getString("nome"), rs.getString("apelido"), rs.getString("papel"),
-                rs.getBoolean("atende"), rs.getBoolean("pode_vender"), rs.getBigDecimal("comissao_pct"), rs.getString("permissoes"), corSlot,
+                rs.getBoolean("atende"), rs.getBoolean("pode_vender"), rs.getBigDecimal("comissao_pct"), rs.getBigDecimal("comissao_produto_pct"), rs.getString("permissoes"), corSlot,
                 rs.getString("foto"), rs.getString("email_cif"), rs.getString("telefone_cif"), rs.getString("cpf_cif"), rs.getString("nascimento_cif"),
                 rs.getBoolean("deve_trocar_senha"));
     }
 
     private Usuario paraUsuario(Linha l, boolean ficha) {
         String cpf = l.cpfCif() == null ? null : cifra.decifrar(l.cpfCif());
-        return new Usuario(l.id(), l.nome(), l.apelido(), l.login(), l.papel(), l.atende(), l.podeVender(), l.comissao(), lerMapa(l.permissoes()), l.corSlot(), l.foto(),
+        return new Usuario(l.id(), l.nome(), l.apelido(), l.login(), l.papel(), l.atende(), l.podeVender(), l.comissao(), l.comissaoProduto(), lerMapa(l.permissoes()), l.corSlot(), l.foto(),
                 l.emailCif() == null ? null : cifra.decifrar(l.emailCif()), l.telefoneCif() == null ? null : cifra.decifrar(l.telefoneCif()),
                 cpf == null ? null : Documentos.cpfMascarado(cpf), ficha ? cpf : null,
                 ficha && l.nascimentoCif() != null ? cifra.decifrar(l.nascimentoCif()) : null, l.deve());

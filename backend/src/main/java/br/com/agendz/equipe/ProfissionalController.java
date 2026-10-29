@@ -4,6 +4,7 @@ import br.com.agendz.erro.ErroDeNegocio;
 import br.com.agendz.tenant.Loja;
 import br.com.agendz.tenant.LojaContext;
 import br.com.agendz.tenant.LojaJdbc;
+import br.com.agendz.validacao.Reservados;
 import br.com.agendz.validacao.Texto;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -63,7 +64,7 @@ public class ProfissionalController {
     @GetMapping("/api/profissionais")
     public List<Pessoa> listar() {
         return banco.naLoja(jdbc -> jdbc.query(
-                "select id, nome, papel, atende, pode_vender from usuario where ativo and identificador <> 'suporte' order by nome limit 200",
+                "select id, nome, papel, atende, pode_vender from usuario where ativo and " + Reservados.OCULTOS_SQL + " order by nome limit 200",
                 (rs, i) -> new Pessoa(rs.getObject("id", UUID.class), rs.getString("nome"), rs.getString("papel"), rs.getBoolean("atende"), rs.getBoolean("pode_vender"))));
     }
 

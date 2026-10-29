@@ -1,0 +1,84 @@
+name: Fumaça no site real
+# Cria na VPS um usuário de FUMAÇA temporário (rota interna, chave lida do .env da própria VPS), entra no site publicado com o Chromium, olha uma tela por módulo
+# em celular e computador (claro e escuro), e APAGA o usuário no final (passo `always`). Só leitura; relatório só com as falhas. Usa os mesmos segredos do deploy
+# (VPS_HOST, VPS_USER, VPS_SSH_KEY, VPS_KNOWN_HOSTS). Variáveis opcionais: SMOKE_LOJA (padrão dalforno) e DOMINIO (padrão agendz.io).
+on:
+  workflow_dispatch:
+    inputs:
+      loja:
+        description: "Loja (slug) a testar"
+        default: "dalforno"
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+jobs:
+  fumaca:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TEM_CHAVE: ${{ secrets.VPS_SSH_KEY != '' && secrets.VPS_HOST != '' }}
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER || 'agendz' }}
+      VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+      DOMINIO: ${{ vars.DOMINIO || 'agendz.io' }}
+      LOJA: ${{ github.event.inputs.loja || vars.SMOKE_LOJA || 'dalforno' }}
+    steps:
+      - name: Aviso (sem segredos de deploy)
+        if: env.TEM_CHAVE != 'true'
+        run: echo "::notice::Fumaça pulada. Cadastre VPS_HOST e VPS_SSH_KEY em Settings > Secrets and variables > Actions."
+      - uses: actions/checkout@v4
+        if: env.TEM_CHAVE == 'true'
+      - uses: actions/setup-node@v4
+        if: env.TEM_CHAVE == 'true'
+        with:
+          node-version: 22
+      - name: Instala o Chromium
+        if: env.TEM_CHAVE == 'true'
+        run: npm install --no-audit --no-fund && npx playwright install --with-deps chromium
+      - name: Espera o deploy assentar
+        if: env.TEM_CHAVE == 'true' && github.event_name == 'workflow_run'
+        run: sleep 90
+      - name: Prepara o acesso à VPS
+        if: env.TEM_CHAVE == 'true'
+        run: |
+          [[ "$LOJA" =~ ^[a-z0-9-]{1,40}$ ]] || { echo "slug inválido"; exit 1; }
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
+          if [ -n "$VPS_KNOWN_HOSTS" ]; then printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts; else ssh-keyscan -T 10 "$VPS_HOST" > ~/.ssh/known_hosts; fi
+          OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+          echo "OPTS=$OPTS" >> "$GITHUB_ENV"
+          scp $OPTS deploy/fumaca.sh "$VPS_USER@$VPS_HOST:/opt/agendz/fumaca.sh"
+      - name: Cria o usuário de fumaça
+        if: env.TEM_CHAVE == 'true'
+        run: |
+          json=$(ssh $OPTS "$VPS_USER@$VPS_HOST" "cd /opt/agendz && bash fumaca.sh criar $LOJA")
+          usuario=$(printf '%s' "$json" | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).usuario")
+          senha=$(printf '%s' "$json" | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).senha")
+          echo "::add-mask::$senha"
+          echo "SMOKE_USUARIO=$usuario" >> "$GITHUB_ENV"
+          echo "SMOKE_SENHA=$senha" >> "$GITHUB_ENV"
+          echo "Usuário de fumaça criado: $usuario"
+      - name: Fumaça
+        if: env.TEM_CHAVE == 'true'
+        env:
+          SMOKE_URL: https://${{ env.LOJA }}.${{ env.DOMINIO }}
+          SMOKE_IP: ${{ secrets.VPS_HOST }}
+        run: node tools/smoke-producao.mjs
+      - name: Apaga o usuário de fumaça
+        if: always() && env.TEM_CHAVE == 'true' && env.SMOKE_USUARIO != ''
+        run: |
+          ssh $OPTS "$VPS_USER@$VPS_HOST" "cd /opt/agendz && bash fumaca.sh apagar $LOJA $SMOKE_USUARIO" || echo "::warning::Não consegui apagar $SMOKE_USUARIO; ele expira sozinho em 1 h na próxima criação."
+          rm -f ~/.ssh/deploy_key
+      - uses: actions/upload-artifact@v4
+        if: always() && env.TEM_CHAVE == 'true'
+        with:
+          name: fumaca-site-real
+          path: |
+            shots-smoke/
+            smoke-relatorio.json
+            smoke-relatorio.md
+          if-no-files-found: ignore

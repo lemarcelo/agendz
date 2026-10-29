@@ -2,6 +2,7 @@
 // Regras puras do formulário Atender do site real (F2 parte 5c). A decisão de verdade é do servidor (POST /api/atendimentos); aqui só o que a tela
 // precisa saber antes de enviar: se é atendimento já feito ou agendamento, se o dia é anterior a hoje (pede motivo) e o resumo de serviços.
 import { startOfDay } from './time.js';
+import { PORTE_PADRAO, placaValida, porteValido } from './veiculos.js';
 
 const MARGEM_MS = 60000; // mesma tolerância do servidor: até 1 minuto à frente ainda é "agora"
 
@@ -44,10 +45,58 @@ export function camposFaltando(tipo, { nome, telefone, cliente, profissionalId, 
 // Campos que as regras exigem em cada tipo (para marcar com * no formulário).
 export const exige = (regras, tipo, campo) => ((regras && regras[tipo]) || REGRAS_DE_FABRICA[tipo] || []).includes(campo);
 
-// Soma de preço e minutos dos serviços marcados (só para mostrar; o servidor recalcula).
-export function resumoDosServicos(servicos, ids) {
-  const marcados = servicos.filter((s) => ids.includes(s.id));
-  return { qtd: marcados.length, total: marcados.reduce((t, s) => t + (Number(s.preco) || 0), 0), minutos: marcados.reduce((t, s) => t + (Number(s.duracaoMin) || 0), 0) };
+// Preço e duração do serviço no porte do veículo (estética: `precos`/`duracoes` por porte; sem o mapa ou sem porte, os do cadastro, que são os do médio).
+// Só para mostrar: o servidor recalcula e congela.
+export function servicoNoPorte(s, porte) {
+  if (!s.precos && !s.duracoes) return { preco: Number(s.preco) || 0, duracaoMin: Number(s.duracaoMin) || 0 };
+  const p = porteValido(porte) ? porte : PORTE_PADRAO;
+  const preco = s.precos ? Number(s.precos[p]) : NaN;
+  const dur = s.duracoes ? Number(s.duracoes[p]) : NaN;
+  return { preco: Number.isFinite(preco) && preco >= 0 ? preco : Number(s.preco) || 0, duracaoMin: Number.isFinite(dur) && dur > 0 ? dur : Number(s.duracaoMin) || 0 };
+}
+
+// Soma de preço e minutos dos serviços marcados (só para mostrar; o servidor recalcula). `porte` só conta onde o serviço tem preço por porte.
+export function resumoDosServicos(servicos, ids, porte) {
+  const marcados = servicos.filter((s) => ids.includes(s.id)).map((s) => servicoNoPorte(s, porte));
+  return { qtd: marcados.length, total: marcados.reduce((t, s) => t + s.preco, 0), minutos: marcados.reduce((t, s) => t + s.duracaoMin, 0) };
+}
+
+// ---------- estética: veículo e box (V25) ----------
+// Veículo novo digitado no Atender: placa válida (antiga ou Mercosul), modelo e porte. Devolve o aviso ou ''. O servidor confere de novo.
+export function faltaVeiculoNovo(v) {
+  if (!v || !String(v.placa || '').trim()) return 'Informe a placa do veículo.';
+  if (!placaValida(v.placa)) return 'Placa inválida. Use o formato antigo (ABC-1234) ou Mercosul (ABC1D23).';
+  if (!String(v.modelo || '').trim()) return 'Informe o modelo do veículo.';
+  if (!porteValido(v.porte)) return 'Escolha o porte do veículo.';
+  return '';
+}
+
+// Serviço exige veículo; só produto, não. Devolve o aviso ou '' (`escolhido` = veículo já cadastrado, `novo` = o digitado).
+export function faltaVeiculo(usaVeiculo, servicoIds, escolhido, novo) {
+  if (!usaVeiculo || servicoIds.length === 0) return '';
+  if (escolhido) return '';
+  return novo ? faltaVeiculoNovo(novo) : 'Escolha o veículo do atendimento.';
+}
+
+// Porte que vale para o resumo: o do veículo escolhido, o do digitado ou o médio.
+export const porteDoAtendimento = (escolhido, novo) => (escolhido && porteValido(escolhido.porte) ? escolhido.porte : novo && porteValido(novo.porte) ? novo.porte : PORTE_PADRAO);
+
+// Boxes que o formulário pode oferecer: só os ativos.
+export const boxesAtivos = (boxes) => (boxes || []).filter((b) => b.ativo !== false);
+
+// Editor de boxes (Estabelecimento > Boxes): devolve o aviso ou '' antes de enviar. O servidor confere de novo (1 a 20, nome até 30, sem repetir, ao menos um ativo).
+export function erroDosBoxes(lista) {
+  if (!Array.isArray(lista) || lista.length === 0) return 'Cadastre ao menos um box.';
+  if (lista.length > 20) return 'No máximo 20 boxes.';
+  const vistos = new Set();
+  for (const b of lista) {
+    const nome = String(b.nome || '').trim();
+    if (!nome || nome.length > 30) return 'Dê um nome de até 30 letras a cada box.';
+    if (vistos.has(nome.toLowerCase())) return 'Dois boxes têm o mesmo nome.';
+    vistos.add(nome.toLowerCase());
+  }
+  if (!lista.some((b) => b.ativo !== false)) return 'Deixe ao menos um box ativo.';
+  return '';
 }
 
 // Busca por nome ou código na lista de serviços (sem diferenciar acento nem maiúscula).

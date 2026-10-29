@@ -1,6 +1,7 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
-// Assistente de início (pré-visualização) com Produtos e Comissão (5d-3), nas duas lojas de exemplo (barbearia e estética), no computador e no celular
-// (390 px), sem rolagem lateral: sugestões por tipo, validações na tela, comissão geral, comissão por pessoa (usar a geral ou percentual próprio).
+// Assistente de início (pré-visualização) com Produtos e a comissão de cada pessoa na Equipe (v102: não há mais etapa de comissão geral), nas duas lojas de
+// exemplo (barbearia e estética), no computador e no celular (390 px), sem rolagem lateral: sugestões por tipo, validações na tela, comissão sobre serviços
+// (usar a geral ou percentual próprio) e sobre produtos (sem comissão ou percentual próprio) de cada pessoa.
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 
@@ -19,7 +20,8 @@ for (const loja of ['dalforno', 'apex']) {
     await p.goto(`${base}?loja=${loja}`);
     await T('ver-primeiro-acesso').click();
     await T('pa-servicos').waitFor();
-    for (const e of ['servicos', 'produtos', 'comissao', 'equipe', 'expediente', 'pronto']) assert.equal(await T(`pa-etapa-${e}`).count(), 1, `etapa ${e}`);
+    for (const e of ['servicos', 'produtos', 'equipe', 'expediente', 'pronto']) assert.equal(await T(`pa-etapa-${e}`).count(), 1, `etapa ${e}`);
+    assert.equal(await T('pa-etapa-comissao').count(), 0, 'não existe mais a etapa de comissão geral');
     await semRolagem('etapas');
 
     // Produtos: sugestões do tipo, nada marcado, Continuar travado
@@ -31,10 +33,9 @@ for (const loja of ['dalforno', 'apex']) {
     assert.equal(await T('pa-continuar-produtos').isDisabled(), true);
     const primeiro = (await itens.first().getAttribute('data-testid')).replace('pa-prod-item-', '');
     await T(`pa-prod-marcar-${primeiro}`).check();
-    await T(`pa-prod-preco-${primeiro}`).fill('49,90'); await T(`pa-prod-comissao-${primeiro}`).fill('150');
-    await T('pa-continuar-produtos').click();
-    assert.match(await T('pa-erro').innerText(), /comissão/);
-    await T(`pa-prod-comissao-${primeiro}`).fill('10'); await T(`pa-prod-estoque-${primeiro}`).fill('3');
+    await T(`pa-prod-preco-${primeiro}`).fill('49,90');
+    assert.equal(await T(`pa-prod-comissao-${primeiro}`).count(), 0, 'a comissão sobre produtos é da pessoa, não do produto');
+    await T(`pa-prod-estoque-${primeiro}`).fill('3');
     // produto próprio: validações e lista
     await T('pa-prod-adicionar').click();
     assert.match(await T('pa-erro').innerText(), /nome do produto/);
@@ -51,25 +52,11 @@ for (const loja of ['dalforno', 'apex']) {
     assert.match(await T('pa-continuar-produtos').innerText(), /\(2\)/);
     await semRolagem('produtos');
     await T('pa-continuar-produtos').click();
-    await T('pa-comissao').waitFor();
+    await T('pa-equipe').waitFor();
     assert.match(await T('pa-aviso').innerText(), /2 produtos criados/);
 
-    // Comissão geral: 0 a 100
-    await T('pa-comissao-geral').fill('');
-    await T('pa-continuar-comissao').click();
-    assert.match(await T('pa-erro').innerText(), /0 a 100/);
-    await T('pa-comissao-geral').fill('120');
-    await T('pa-continuar-comissao').click();
-    assert.match(await T('pa-erro').innerText(), /0 a 100/);
-    assert.equal(await T('pa-comissao-geral').inputValue(), '120');
-    await T('pa-comissao-geral').fill('40');
-    await semRolagem('comissão');
-    await T('pa-continuar-comissao').click();
-    await T('pa-equipe').waitFor();
-    assert.match(await T('pa-aviso').innerText(), /definida em 40%/);
-
     // Equipe: usar a geral (mostra o valor) ou percentual próprio
-    assert.match(await T('pa-comissao-modo-0').innerText(), /40%/);
+    assert.match(await T('pa-comissao-modo-0').innerText(), /Usar a geral da loja \(\d+(,\d+)?%\)/);
     assert.equal(await T('pa-comissao-pct-0').count(), 0);
     await T('pa-nome-0').fill('Zé Maria');
     await T('pa-comissao-modo-0').selectOption('propria');
@@ -77,12 +64,23 @@ for (const loja of ['dalforno', 'apex']) {
     await T('pa-criar-acessos').click();
     assert.match(await T('pa-erro').innerText(), /comissão de “Zé Maria”/);
     await T('pa-comissao-pct-0').fill('25,5');
+    // comissão sobre produtos: sem comissão por padrão; percentual próprio pede um valor de 0 a 100
+    assert.match(await T('pa-comissao-prod-modo-0').innerText(), /Sem comissão sobre produtos/);
+    assert.equal(await T('pa-comissao-prod-pct-0').count(), 0);
+    await T('pa-comissao-prod-modo-0').selectOption('propria');
+    await T('pa-comissao-prod-pct-0').waitFor();
+    await T('pa-criar-acessos').click();
+    assert.match(await T('pa-erro').innerText(), /comissão sobre produtos de “Zé Maria”/);
+    await T('pa-comissao-prod-pct-0').fill('120');
+    await T('pa-criar-acessos').click();
+    assert.match(await T('pa-erro').innerText(), /comissão sobre produtos de “Zé Maria”/);
+    await T('pa-comissao-prod-pct-0').fill('8');
     await semRolagem('equipe');
     await T('pa-criar-acessos').click();
     await T('pa-acessos').waitFor();
     await T('pa-anotei').click();
     await T('pa-expediente').waitFor();
-    ok(`${loja} ${vp.width}px: produtos, comissão geral e comissão por pessoa no assistente`);
+    ok(`${loja} ${vp.width}px: produtos e comissão (serviços e produtos) por pessoa no assistente`);
     await ctx.close();
   }
 }
