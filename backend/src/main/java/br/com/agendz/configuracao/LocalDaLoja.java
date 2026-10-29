@@ -132,13 +132,14 @@ public class LocalDaLoja {
         boolean noLink = Boolean.TRUE.equals(c.enderecoNoLink()), noWhats = Boolean.TRUE.equals(c.localizacaoNoWhatsapp());
         if (noLink && logradouro == null) throw ruim("Informe o endereço (rua e cidade) para mostrá-lo no link de agendamento.");
         if (noWhats && lat == null) throw ruim("Informe a localização (latitude e longitude) para enviá-la no WhatsApp.");
-        Local novo = new Local(logradouro, numero, complemento, bairro, cidade, uf, cep, noLink, lat, lng, noWhats);
+        final String ufFinal = uf, cepFinal = cep;
+        Local novo = new Local(logradouro, numero, complemento, bairro, cidade, ufFinal, cepFinal, noLink, lat, lng, noWhats);
         banco.naLoja(jdbc -> jdbc.update("insert into configuracao_loja (loja_id, endereco_logradouro, endereco_numero, endereco_complemento, endereco_bairro, endereco_cidade, endereco_uf, endereco_cep, "
                         + "endereco_no_link, latitude, longitude, localizacao_no_whatsapp) values (?::uuid, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
                         + "on conflict (loja_id) do update set endereco_logradouro = excluded.endereco_logradouro, endereco_numero = excluded.endereco_numero, endereco_complemento = excluded.endereco_complemento, "
                         + "endereco_bairro = excluded.endereco_bairro, endereco_cidade = excluded.endereco_cidade, endereco_uf = excluded.endereco_uf, endereco_cep = excluded.endereco_cep, "
                         + "endereco_no_link = excluded.endereco_no_link, latitude = excluded.latitude, longitude = excluded.longitude, localizacao_no_whatsapp = excluded.localizacao_no_whatsapp, atualizado_em = now()",
-                loja.id().toString(), logradouro, numero, complemento, bairro, cidade, uf, cep, noLink, lat, lng, noWhats));
+                loja.id().toString(), logradouro, numero, complemento, bairro, cidade, ufFinal, cepFinal, noLink, lat, lng, noWhats));
         return completa(novo);
     }
 
