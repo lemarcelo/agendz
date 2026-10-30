@@ -138,3 +138,15 @@ Lista simples. Cada item está no histórico do `prompt-agendz-regras.md` (v84 a
 - **Decidi:** nome opcional no link sem nome digitado = "Sem nome"; nome de uma letra continua recusado.
 - **Dúvida:** o atendimento sem veículo na estética usa o preço do porte médio; talvez o dono prefira exigir o porte (ele marca em Regras).
 
+## v122 (30/10): portes de veículo cadastráveis
+- **Decidi:** o Médio é fixo (nome editável, nunca sai nem desativa): é o porte de quem não informa e a base do preço.
+- **Decidi:** porte novo sem preço no serviço usa o preço e a duração do Médio, em vez de bloquear a gravação do serviço.
+- **Decidi:** porte usado (veículo de cliente ou agendamento) só desativa; desativar com agendamento futuro ativo é recusado.
+- **Dúvida:** o dono talvez queira definir o preço do porte novo por serviço na tela do serviço (hoje só os portes de fábrica têm campo de preço).
+
+## v123 (30/10): ordem dos serviços
+- **Decidi:** padrão "mais usados primeiro" em toda loja; a ordem manual (setas) é o desempate e vale integral no modo "minha ordem".
+- **Decidi:** a contagem de uso é calculada na hora a partir dos agendamentos não cancelados (nunca guardada, nunca mostrada ao cliente).
+- **Decidi:** a lista de Serviços sempre mostra a ordem manual; "mais usados" só vale onde se escolhe serviço (Atender, agendamento, link).
+- **Dúvida:** talvez valha contar só os últimos 90 dias de uso, para serviço antigo não dominar para sempre.
+

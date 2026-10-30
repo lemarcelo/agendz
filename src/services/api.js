@@ -15,7 +15,8 @@ import * as T from '../domain/tema.js';
 import { capAtiva, definirTipoAtivo, exemploAtivo, rot, Rot, TIPO_PADRAO, tipoDe, tipoValido, Voc } from '../domain/tipos.js';
 import { fotoValida, proximoSlot } from '../domain/foto.js';
 import { diasDaExcecao } from '../domain/schedule.js';
-import { CAMPOS_VEICULO_EXIGIVEIS, LIMITE_VEICULOS, PORTES, ROTULO_PORTE, chavePlaca, limparVeiculo, porteValido } from '../domain/veiculos.js';
+import { aplicarOrdemManual, modoOrdemValido } from '../domain/ordem-servicos.js';
+import { CAMPOS_VEICULO_EXIGIVEIS, LIMITE_VEICULOS, PORTES, PORTES_DE_FABRICA, ROTULO_PORTE, chavePlaca, definirPortes, limparVeiculo, porteValido, portesAtivos, sanearPortes } from '../domain/veiculos.js';
 import { validarModelo } from '../domain/templates.js';
 import { addDays, fromYmd, startOfDay, ymd } from '../domain/time.js';
 import { itensDoAgendamento } from '../domain/reports.js';
@@ -56,6 +57,7 @@ const listeners = new Set();
 const now = () => Date.now() + offset;
 const emit = () => {
   definirTipoAtivo(state.estabelecimento); // textos e telas seguem o tipo da loja
+  definirPortes(state.estabelecimento.portes); // portes cadastrados pelo dono (v122); sem cadastro, os cinco de fábrica
   snap = { state, agora: now(), sessao, apiLog, offset, loja: lojaSlug };
   listeners.forEach((l) => l());
 };
@@ -146,7 +148,7 @@ const notificacaoValida = (n) => !!n && typeof n === 'object' && !Array.isArray(
 const notificacoesValidas = (l) => l == null || (Array.isArray(l) && l.length <= 10 && l.every(notificacaoValida));
 const texto = (v, max) => typeof v === 'string' && v.length <= max;
 // Campos que só existem em tipos com veículo/box (estética). Em outro tipo (barbearia) a API não os aceita: `pegar` os descarta como qualquer campo desconhecido.
-const CAMPOS_VEICULO = ['veiculoId', 'veiculo', 'veiculos', 'placa', 'marca', 'modelo', 'cor', 'porte'];
+const CAMPOS_VEICULO = ['veiculoId', 'veiculo', 'veiculos', 'placa', 'marca', 'modelo', 'cor', 'porte', 'portes'];
 const CAMPOS_RECURSO = ['boxId', 'boxes'];
 const permitidos = (campos) => campos.filter((k) => (capAtiva('usaVeiculo') || !CAMPOS_VEICULO.includes(k)) && (capAtiva('usaRecursoFisico') || !CAMPOS_RECURSO.includes(k)));
 const porteOk = (p) => !capAtiva('precoPorPorte') || porteValido(p);
@@ -555,7 +557,14 @@ export const servicos = {
         if (bruto === undefined || bruto === null) return finito(unico) ? (ok(Number(unico)) ? { v: Object.fromEntries(PORTES.map((p) => [p, Number(unico)])) } : { erro: `Informe ${rotulo}.`, final: true }) : { erro: `Informe ${rotulo}.`, ausente: true };
         if (typeof bruto !== 'object' || Array.isArray(bruto) || Object.keys(bruto).some((k) => !PORTES.includes(k))) return { erro: `Tabela de ${plural} inválida.` };
         const v = {};
-        for (const p of PORTES) { if (!finito(bruto[p]) || !ok(Number(bruto[p]))) return { erro: `Informe ${rotulo} para o porte ${ROTULO_PORTE[p]}.` }; v[p] = Number(bruto[p]); }
+        const ativos = portesAtivos().map((x) => x.id).filter((id) => PORTES_DE_FABRICA.some((f) => f.id === id));
+        // Os portes de fábrica ativos precisam de valor; porte cadastrado pelo dono e porte desativado podem ficar sem valor (vale o do Médio).
+        for (const p of PORTES) {
+          const dado = bruto[p] !== undefined && bruto[p] !== null && bruto[p] !== '';
+          if (!dado && !ativos.includes(p)) continue;
+          if (!finito(bruto[p]) || !ok(Number(bruto[p]))) return { erro: `Informe ${rotulo} para o porte ${ROTULO_PORTE[p]}.` };
+          v[p] = Number(bruto[p]);
+        }
         return { v };
       };
       if (sv.preco !== undefined && sv.preco !== null && (!finito(sv.preco) || Number(sv.preco) < 0 || Number(sv.preco) > 100000)) return erro('Informe o preço.');
@@ -596,9 +605,20 @@ export const servicos = {
         return { ok: true, servico: s.servicos[i] };
       }
       const novo = { ativo: true, notificacoes: null, confirmacaoServico: null, grupoMovimentacaoId: null, materiais: [], multiDia: false, combo: false, componentes: [], categoria: '', ...dados, id: `s${++s.seq}` };
+      novo.ordem = Math.max(0, ...s.servicos.map((x) => (Number.isFinite(x.ordem) ? x.ordem : 0))) + 1; // serviço novo entra no fim da ordem manual
       s.servicos.push(novo);
       return { ok: true, servico: novo };
     }, { metodo: sv.id ? 'PUT' : 'POST', rota: sv.id ? `/servicos/${sv.id}` : '/servicos' });
+  },
+  // PUT /servicos/ordem  { ids: [...] }  (ordem manual dos serviços; ids desconhecidos ou repetidos são ignorados e os que faltam seguem depois)
+  reordenar(ids) {
+    const n = exigir('servicos'); if (n) return n;
+    if (!Array.isArray(ids) || ids.length > 300 || !ids.every((x) => typeof x === 'string' && x.length <= 60)) return erro('Ordem dos serviços inválida.');
+    return mutate((s) => {
+      const nova = aplicarOrdemManual(s.servicos, ids);
+      for (const sv of s.servicos) sv.ordem = nova.get(sv.id);
+      return { ok: true };
+    }, { metodo: 'PUT', rota: '/servicos/ordem' });
   },
   // DELETE /servicos/{id}  (com histórico, só desativa)
   remover(id) {
@@ -1047,7 +1067,7 @@ export const estabelecimento = {
   salvar(entrada) {
     const n = exigir('estabelecimento'); if (n) return n;
     if (entrada && typeof entrada === 'object' && 'tipo' in entrada && entrada.tipo !== tipoDe(state.estabelecimento)) return erro('O tipo do estabelecimento não pode ser alterado depois de criado.');
-    const patch = pegar(entrada, permitidos(['nome', 'telefone', 'endereco', 'enderecoNoLink', 'latitude', 'longitude', 'localizacaoNoWhatsapp', 'email', 'ddds', 'visaoPadrao', 'confirmacaoServico', 'grupoMovimentacaoId', 'notificacoes', 'escala', 'calendario', 'pixCancelamento', 'logo', 'corTema', 'corTema2', 'temaCor', 'linkAgendamento', 'comissaoPadrao', 'usaIntegracaoPix', 'formaPagamentoPadrao', 'contaPorForma', 'camposObrigatorios', 'boxes']));
+    const patch = pegar(entrada, permitidos(['nome', 'telefone', 'endereco', 'enderecoNoLink', 'latitude', 'longitude', 'localizacaoNoWhatsapp', 'email', 'ddds', 'visaoPadrao', 'confirmacaoServico', 'grupoMovimentacaoId', 'notificacoes', 'escala', 'calendario', 'pixCancelamento', 'logo', 'corTema', 'corTema2', 'temaCor', 'linkAgendamento', 'comissaoPadrao', 'usaIntegracaoPix', 'formaPagamentoPadrao', 'contaPorForma', 'camposObrigatorios', 'boxes', 'portes', 'ordemServicos']));
     if ('comissaoPadrao' in patch && !R.ehDono(usuario())) delete patch.comissaoPadrao;
     if ('comissaoPadrao' in patch) { const c = lerPct(patch.comissaoPadrao); if (!c.ok || c.v === null) return erro('A comissão padrão vai de 0 a 100%.'); patch.comissaoPadrao = c.v; }
     for (const k of ['nome', 'telefone', 'endereco', 'email']) if (k in patch && !texto(patch[k], 200)) return erro('Texto grande demais em ' + k + '.');
@@ -1100,6 +1120,7 @@ export const estabelecimento = {
       if (!ok) return erro('Campos obrigatórios inválidos.');
       patch.camposObrigatorios = { futuro: [...c.futuro], local: [...c.local] };
     }
+    if ('ordemServicos' in patch && !modoOrdemValido(patch.ordemServicos)) return erro('Ordem dos serviços inválida: mais usados primeiro ou a ordem que você definiu.');
     if ('visaoPadrao' in patch && !['dia', 'semana', 'mes'].includes(patch.visaoPadrao)) return erro('Visão padrão inválida.');
     if ('confirmacaoServico' in patch && typeof patch.confirmacaoServico !== 'boolean') return erro(`${Voc('confirmacao')} inválida.`);
     if ('boxes' in patch) {
@@ -1110,6 +1131,20 @@ export const estabelecimento = {
       patch.boxes = b.map((x) => pegar(x, ['id', 'nome', 'ativo']));
     }
     return mutate((s, agora) => {
+      if (patch.portes) {
+        // Porte é por id: o nome pode mudar. Porte já usado (veículo de cliente ou agendamento) não é apagado, só desativado; o Médio fica sempre.
+        const r = sanearPortes(patch.portes, () => `pt${++s.seq}`);
+        if (!r.ok) return erro(r.erro);
+        const atuais = s.estabelecimento.portes || PORTES_DE_FABRICA;
+        for (const antigo of atuais) {
+          const depois = r.portes.find((x) => x.id === antigo.id);
+          const usado = s.clientes.some((c) => (c.veiculos || []).some((v) => v.porte === antigo.id)) || s.agendamentos.some((a) => a.porte === antigo.id);
+          if (!depois && usado) return erro(`O porte ${antigo.nome} já foi usado: desative em vez de remover.`);
+          if (depois && !depois.ativo && antigo.ativo !== false && s.agendamentos.some((a) => a.porte === antigo.id && [R.STATUS.A_CONFIRMAR, R.STATUS.CONFIRMADO].includes(a.status) && a.inicio > agora)) return erro(`O porte ${antigo.nome} tem agendamentos futuros: desative depois deles.`);
+        }
+        s.estabelecimento.portes = r.portes;
+        delete patch.portes;
+      }
       if (patch.boxes) {
         // Box é por id: o nome pode mudar. Box usado por algum agendamento não é apagado (só desativado) e não é desativado com carro agendado.
         const atuais = s.estabelecimento.boxes || [];

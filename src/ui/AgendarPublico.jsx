@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { MODO_DEMO, publico, store } from '../services/api.js';
 import { DIAS_CURTOS, fmtDayLong, fmtHM, fmtMoney, maiuscula1, startOfDay, ymd } from '../domain/time.js';
 import { formatarTelefone, telefoneBrasileiro } from '../domain/rules.js';
-import { EXEMPLO_PORTE, PORTE_PADRAO, formatarPlaca, limparVeiculoComRegras, placaValida, resumoVeiculo, tipoPlaca } from '../domain/veiculos.js';
+import { PORTE_PADRAO, formatarPlaca, limparVeiculoComRegras, placaValida, resumoVeiculo, tipoPlaca } from '../domain/veiculos.js';
 import { Aviso, Btn, Campo, Icon } from './common.jsx';
 import { LogoMarca, RodapePlataforma } from './Marca.jsx';
 import { useLocal, useStore } from './hooks.js';
@@ -181,7 +181,7 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
               <div className="pub-portes" role="group" aria-labelledby="pub-porte-r">
                 {cfg.portes.map((x) => (
                   <button type="button" key={x.id} className={`pub-porte ${porte === x.id ? 'on' : ''}`} aria-pressed={porte === x.id} onClick={() => { setPorte(x.id); setEscolha(null); }} data-testid={`pub-porte-${x.id}`}>
-                    <b>{x.nome}</b><small>{EXEMPLO_PORTE[x.id].replace('Ex.: ', '')}</small>
+                    <b>{x.nome}</b><small>{(x.exemplo || '').replace('Ex.: ', '')}</small>
                   </button>
                 ))}
               </div>

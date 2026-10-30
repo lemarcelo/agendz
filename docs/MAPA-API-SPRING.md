@@ -73,6 +73,7 @@ Convenções: **Perm.** = quem pode. `agenda`, `clientes`, `servicos`, `estoque`
 | Método JS | Endpoint | Perm. | Validação | Regra | Testes |
 |---|---|---|---|---|---|
 | `servicos.salvar` | `POST /servicos`, `PUT /servicos/{id}` | `servicos` | **`precos` e `duracoes` por porte** (pequeno, medio, grande, suv, pickup; sem tabela, vale `preco`/`duracao` único; `preco`/`duracao` espelham o médio), duração 1–1440 (serviço `multiDia`: até 10 dias), preço 0–100 mil, `multiDia` e `categoria` só mudam quando vêm na chamada, `combo` + `componentes` (2–10 serviços comuns, sem combo dentro de combo), intervalo e antecedência ≥ 0, notificações ≤ 10; `codigo` opcional (≤ 20, `[A-Za-z0-9._-]`, único entre serviços, vazio = próximo número); `comissaoPct` 0–100 ou vazio (só o dono grava; para os outros o campo é ignorado) | mudar duração não pode sobrepor confirmados | `domain`, `conflitos` |
+| `servicos.reordenar` | `PUT /servicos/ordem` `{ids[]}` | `servicos` | ids: texto até 60, no máximo 300 | grava `servico.ordem` 1, 2, 3… na ordem enviada; id desconhecido ou repetido é ignorado e os que faltam vão para o fim | `domain` |
 | `servicos.remover` | `DELETE /servicos/{id}` | `servicos` | — | com histórico ou dentro de combo, só desativa (200 `{desativado:true}`); nunca usado = apaga (204) | `domain` |
 
 > **Servidor real (v82):** `servicos.listar/obter/salvar/remover` já existem em `backend/.../servicos/` (dono e profissional leem, só o dono escreve), com as regras acima e casos compartilhados em `equivalencia/servicos.json`. Faltam as partes que dependem de outros módulos: notificações próprias, materiais, confirmação do serviço e grupo/Pix.
@@ -259,8 +260,8 @@ O catálogo (`backend/src/main/resources/catalogo/<tipo>.json`) é gerado dos se
 ## 10h. Forma de pagamento e regras do Atender (v95, 5d-4c-1; `AtendimentoTest`)
 | Rota | Quem | O que faz | Regras |
 |---|---|---|---|
-| `GET /api/estabelecimento/regras-atendimento` | dono, admin, atendente, profissional (seção agenda) | `{formaPagamentoPadrao, futuro[], local[]}` | sem linha gravada: Pix, futuro = nome e telefone, local = nada |
-| `PUT /api/estabelecimento/regras-atendimento` `{formaPagamentoPadrao?, camposObrigatorios?: {futuro, local}}` | dono | grava; o que não vem fica como estava | forma: pix, dinheiro, cartao ou vazio (sem padrão); campos: nome, telefone, profissional, vendedor, formaPagamento (esta só no local) e, na estética, veiculo, placa, modelo, porte (v121), sem repetir, até 9; vazio = nada obrigatório |
+| `GET /api/estabelecimento/regras-atendimento` | dono, admin, atendente, profissional (seção agenda) | `{formaPagamentoPadrao, futuro[], local[], ordemServicos}` (v123: `uso` padrão ou `manual`) | sem linha gravada: Pix, futuro = nome e telefone, local = nada |
+| `PUT /api/estabelecimento/regras-atendimento` `{formaPagamentoPadrao?, camposObrigatorios?: {futuro, local}, ordemServicos?}` | dono | grava; o que não vem fica como estava | forma: pix, dinheiro, cartao ou vazio (sem padrão); campos: nome, telefone, profissional, vendedor, formaPagamento (esta só no local) e, na estética, veiculo, placa, modelo, porte (v121), sem repetir, até 9; vazio = nada obrigatório |
 | `POST /api/atendimentos` `formaPagamento?` | quem já tinha | atendimento feito guarda a forma (escolhida ou padrão); campos obrigatórios das regras valem nos dois tipos | sem padrão e nada escolhido = 400 "Escolha a forma de pagamento."; futuro ignora a forma |
 
 ## 10i. Cupons e vales (v96, 5d-4c-2; `CupomTest`, `CupomEquivalenciaTest`, `equivalencia/cupons.json`)
@@ -421,3 +422,12 @@ Cliente ganha `semMensagens` (booleano, `clientes.salvar`; `POST|PUT /api/client
 |---|---|---|
 | `GET/PUT /api/estabelecimento/escala` | ler: agenda; gravar: só o dono | até 6 faixas por dia, sem sobreposição, início antes do fim; `tests/expediente.test.mjs` |
 | `GET/PUT /api/estabelecimento/marca` | só o dono grava | logo PNG/JPEG/WebP até 100 KB conferida pelo **conteúdo**; cores `#rrggbb` juntas ou as duas nulas; `MarcaDaLoja`, `MarcaDaLojaTest`, `tests/marca-loja.test.mjs` |
+
+## 10r. Portes de veículo e ordem dos serviços (v122 e v123; `tests/portes.test.mjs`, `tests/ordem-servicos.test.mjs`, `tests/ordem-api.test.mjs`, `PortesTest`, `OrdemServicosTest`)
+| Rota | Quem | Regra |
+|---|---|---|
+| `GET /api/estabelecimento/portes` | dono, admin, atendente, profissional | `[{id, nome, exemplo, ativo}]` na ordem de exibição; sem lista gravada valem os 5 de fábrica (pequeno, medio, grande, suv, pickup). V36: `configuracao_loja.portes` (texto JSON) e os CHECKs de porte em `agendamento` e `cliente_veiculo` viram o padrão `^[a-z0-9-]{2,24}$` |
+| `PUT /api/estabelecimento/portes` `{portes:[…]}` | dono | só tipo com `precoPorPorte`; até 12; nome 2 a 20 sem repetir (sem diferenciar maiúsculas); o **Médio** fica e ativo (só o nome muda); id novo gerado no servidor (`p` + 8 hex); porte usado por veículo de cliente ou agendamento só se **desativa** (nunca some); desativar com agendamento futuro ativo é 409; preço e duração só são obrigatórios nos portes de fábrica ativos (porte novo sem valor usa o do Médio) |
+| `GET /api/servicos?para=atender` | os mesmos de `GET /api/servicos` | mesma lista, na ordem do Atender: modo da loja (`uso` = mais usados primeiro, contagem **derivada** dos agendamentos não cancelados e nunca devolvida; `manual` = ordem do dono); sem o parâmetro, a ordem manual da lista de Serviços |
+| `PUT /api/servicos/ordem` `{ids[]}` | seção `servicos` | grava `servico.ordem` 1, 2, 3…; id desconhecido ou repetido é ignorado e os que faltam vão depois; serviço novo vai para o fim. V37: `servico.ordem`, `configuracao_loja.ordem_servicos` |
+| `GET /api/publico/agendar` | sem login | a lista de serviços já sai na ordem do modo da loja (sem contagem); portes só os ativos, com `exemplo` |

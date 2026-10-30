@@ -3,7 +3,7 @@
 // temporária e mostra o painel com o menu. Os módulos entram um a um (Clientes na parte 2, Serviços na 3, Equipe na 4; a agenda na seguinte), cada um só
 // quando o servidor tem a regra inteira. Não importa `api.js` (a simulada) nem `hooks.js`: o estado aqui é só o da sessão real, em memória.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { cancelarEspera, carregarLoja, entrar, esperandoRede, onboarding, passkey, perfil as apiPerfil, quandoEsperar, redes as apiRedes, restaurar, sair, sessaoAtual, suporte as apiSuporte, tokenDeRedeConfiavel, trocarSenha } from '../../services/api-real.js';
+import { cancelarEspera, carregarLoja, entrar, esperandoRede, onboarding, passkey, perfil as apiPerfil, portes as apiPortes, quandoEsperar, redes as apiRedes, restaurar, sair, sessaoAtual, suporte as apiSuporte, tokenDeRedeConfiavel, trocarSenha } from '../../services/api-real.js';
 import { esquecerSessaoDaRede, lembrarSessaoDaRede, sessaoGuardada } from './sessao-rede.js';
 import PrimeiroAcesso from '../leve/PrimeiroAcesso.jsx';
 import Agenda from './Agenda.jsx';
@@ -29,6 +29,7 @@ import MeuPerfil, { AvatarReal } from './MeuPerfil.jsx';
 import { lerPrefs } from './alerta.js';
 import { DESTAQUE_MS, podarDestaques } from '../../domain/notificacao.js';
 import { TIPOS, capAtiva, definirTipoAtivo, rotulo, tipoValido } from '../../domain/tipos.js';
+import { definirPortes } from '../../domain/veiculos.js';
 import { cssDaMarca, logoValida } from '../../domain/tema.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
 
@@ -200,6 +201,12 @@ function Painel({ loja, sessao, aoSair, aoMudarMarca }) {
   const [foco, setFoco] = useState(null);
   const [recarregar, setRecarregar] = useState(0);
   useEffect(() => { apiPerfil.obter().then((r) => { if (r.ok) setMeus(r.dados); }); }, []);
+  // Portes de veículo cadastrados pelo dono (estética): as telas usam a lista da loja, não a de fábrica. Se a consulta falhar, valem os de fábrica.
+  const [versaoPortes, setVersaoPortes] = useState(0);
+  useEffect(() => {
+    if (!capAtiva('precoPorPorte')) return;
+    apiPortes.listar().then((r) => { if (r.ok && r.portes.length) { definirPortes(r.portes); setVersaoPortes((v) => v + 1); } });
+  }, []);
   // Selo do Suporte: respostas novas da equipe da plataforma (consulta de fundo; se falhar, o selo só não muda).
   const [chamadosNovos, setChamadosNovos] = useState(0);
   const lerChamadosNovos = () => { if (!(sessao.papel === 'dono' || (sessao.secoes || []).includes('suporte'))) return; apiSuporte.naoLidas().then((r) => { if (r.ok) setChamadosNovos(r.naoLidas); }); };
@@ -264,7 +271,7 @@ function Painel({ loja, sessao, aoSair, aoMudarMarca }) {
       {(sessao.secoes || []).includes('agenda') && <AlertaAgenda prefs={prefs} aoIr={irParaAgendamento} aoDestacar={destacar} />}
       {perfilAberto && <MeuPerfil loja={loja} sessao={sessao} dados={meus} prefs={prefs} aoPrefs={setPrefs} aoMudou={(d) => setMeus((antes) => ({ ...(antes || {}), ...d }))} aoFechar={() => setPerfilAberto(false)} />}
       <div className="corpo">
-        <main className="principal">
+        <main className="principal" data-portes={versaoPortes}>
           {aba === 'avisos' && (dono || (sessao.secoes || []).includes('agenda')) && (
             <section className="tela" data-testid="tela-avisos">
               <header className="tela-topo"><h1>Avisos</h1></header>

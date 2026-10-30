@@ -2,12 +2,13 @@
 // Autoagendamento pelo link: o cliente (sem login) vê só horários livres, pede um horário e depois gerencia só os próprios agendamentos.
 // Tudo aqui é regra pura. A API pública (`publico.*` em api.js) acrescenta os limites de uso; nada daqui devolve dado de outro cliente.
 import { STATUS, acharConflitos, errosServicoIds, limparTexto, retiradaDe, semBoxAtivo, servicosDoAg, statusVisual, telefoneBrasileiro, telefoneNacional, validarHorario } from './rules.js';
-import { PORTES, ROTULO_PORTE, porteValido, resumoVeiculo } from './veiculos.js';
+import { PORTE_PADRAO, porteAtivo, portesAtivos, resumoVeiculo } from './veiculos.js';
 import { faixasDoProfissional } from './schedule.js';
 import { DIA, MIN, fmtDate, fmtHM, startOfDay } from './time.js';
 import * as E from './engine.js';
 import { CAMPOS_VEICULO_EXIGIVEIS, limparVeiculoComRegras } from './veiculos.js';
 import { cap, rot, tipoDe } from './tipos.js';
+import { servicosNaOrdemDaLoja } from './ordem-servicos.js';
 
 export const PASSO_PUBLICO_MIN = 30; // os horários do link saem de 30 em 30 minutos
 export const MAX_ABERTOS_LINK = 3; // agendamentos futuros em aberto por cliente
@@ -42,7 +43,7 @@ export function horarioLivre(s, { profissionalId, inicio, servicoIds, porte, ago
 // O porte do veículo define a duração; sem ele não há horário para mostrar. Um horário só aparece se houver profissional E box livres.
 export function horariosPublicos(s, { profissionalId, servicoIds, porte, dayTs, agora, ignoreId, boxPreferido, limite = Infinity }) {
   const cfg = configLink(s);
-  if (!cfg.ativo || semBoxAtivo(s) || (cap(s.estabelecimento, 'precoPorPorte') && !porteValido(porte)) || errosServicoIds(s, servicoIds, { ativos: true }) || !Number.isFinite(dayTs)) return [];
+  if (!cfg.ativo || semBoxAtivo(s) || (cap(s.estabelecimento, 'precoPorPorte') && !porteAtivo(porte || PORTE_PADRAO)) || errosServicoIds(s, servicoIds, { ativos: true }) || !Number.isFinite(dayTs)) return [];
   const dia = startOfDay(dayTs);
   if (dia > agora + cfg.diasMax * DIA) return [];
   const barbs = s.usuarios.filter((u) => u.atende && (!profissionalId || u.id === profissionalId));
@@ -81,9 +82,9 @@ export function configPublica(s) {
   const cfg = configLink(s);
   return {
     ativo: cfg.ativo && !semBoxAtivo(s), diasMax: cfg.diasMax, exigeTelefone: cfg.telefoneObrigatorio, exigeNome: cfg.nomeObrigatorio, ...(cap(s.estabelecimento, 'usaVeiculo') ? { exigeVeiculo: cfg.veiculoObrigatorio } : {}), tipo: tipoDe(s.estabelecimento), nome: s.estabelecimento.nome, telefone: s.estabelecimento.telefone || '', endereco: s.estabelecimento.enderecoNoLink === false ? '' : s.estabelecimento.endereco || '', mapaUrl: s.estabelecimento.enderecoNoLink === false ? '' : mapaDaLoja(s.estabelecimento),
-    ...(cap(s.estabelecimento, 'precoPorPorte') ? { portes: PORTES.map((id) => ({ id, nome: ROTULO_PORTE[id] })) } : {}),
+    ...(cap(s.estabelecimento, 'precoPorPorte') ? { portes: portesAtivos().map((x) => ({ id: x.id, nome: x.nome, exemplo: x.exemplo })) } : {}),
     // preço e duração de cada serviço (por porte quando o tipo cobra por porte; a página mostra os do porte escolhido); nada de custo, material ou comissão
-    servicos: s.servicos.filter((x) => x.ativo !== false).map((x) => (cap(s.estabelecimento, 'precoPorPorte')
+    servicos: servicosNaOrdemDaLoja(s, s.servicos.filter((x) => x.ativo !== false)).map((x) => (cap(s.estabelecimento, 'precoPorPorte')
       ? { id: x.id, nome: x.nome, precos: { ...x.precos }, duracoes: { ...x.duracoes }, combo: !!x.combo, multiDia: !!x.multiDia, categoria: x.categoria || '' }
       : { id: x.id, nome: x.nome, duracao: x.duracao, preco: x.preco })),
     profissionais: s.usuarios.filter((u) => u.atende).map((u) => ({ id: u.id, nome: u.apelido || u.nome, foto: u.foto || null })),
@@ -154,6 +155,7 @@ export function agendarPorLink(s, d, agora) {
   const usaVeiculo = cap(s.estabelecimento, 'usaVeiculo');
   const lv = usaVeiculo ? limparVeiculoComRegras({ placa: d.placa, marca: d.marca, modelo: d.modelo, cor: d.cor, porte: d.porte }, cfg.veiculoObrigatorio) : { ok: true, veiculo: null };
   if (!lv.ok) return { ok: false, erros: [lv.erro] };
+  if (lv.veiculo?.porte && !porteAtivo(lv.veiculo.porte)) return { ok: false, erros: ['Escolha o porte do veículo.'] };
   { const e = errosServicoIds(s, d.servicoIds, { ativos: true }); if (e) return { ok: false, erros: [e] }; }
   if (!Number.isInteger(d.inicio) || d.inicio > agora + cfg.diasMax * DIA) return { ok: false, erros: ['Escolha um dia e um horário.'] };
   const candidatos = s.usuarios.filter((u) => u.atende && (!d.profissionalId || u.id === d.profissionalId));

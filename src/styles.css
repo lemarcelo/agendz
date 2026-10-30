@@ -916,6 +916,12 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
 .boxes-real-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .boxes-real-linha { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; background: var(--surface); }
 .boxes-real-linha input[type="text"], .boxes-real-linha input:not([type]) { min-width: 0; width: 100%; }
+/* Portes de veículo no site real (v122) */
+.portes-real { display: grid; gap: 10px; min-width: 0; }
+.portes-real-form { display: grid; gap: 12px; min-width: 0; }
+.portes-real-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.portes-real-linha { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; background: var(--surface); min-width: 0; }
+.portes-real-linha input[type="text"], .portes-real-linha input:not([type]) { min-width: 0; flex: 1 1 140px; }
 .cartao-veiculo-real { font-size: 12.5px; overflow-wrap: anywhere; }
 .detalhe-veiculo-real { margin: 0; overflow-wrap: anywhere; }
 

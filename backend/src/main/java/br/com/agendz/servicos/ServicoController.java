@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -45,8 +46,16 @@ public class ServicoController {
     }
 
     @GetMapping("/api/servicos")
-    public List<Servico> listar(@AuthenticationPrincipal Jwt jwt) {
-        return servico.listar(dono(jwt));
+    public List<Servico> listar(@AuthenticationPrincipal Jwt jwt, @RequestParam(required = false) String para) {
+        return servico.listar(dono(jwt), "atender".equals(para)); // ?para=atender = ordem do Atender (modo da loja); sem parâmetro = ordem manual da lista de Serviços
+    }
+
+    /** Ordem manual dos serviços (v123): lista de ids na ordem desejada. */
+    @PutMapping("/api/servicos/ordem")
+    @PreAuthorize("@perm.pode(authentication, 'servicos')")
+    public ResponseEntity<Void> reordenar(@RequestBody Map<String, List<UUID>> corpo) {
+        servico.reordenar(corpo == null ? null : corpo.get("ids"));
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/api/servicos/{id}")

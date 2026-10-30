@@ -16,6 +16,7 @@ const banco = [];
 let boxes = [{ id: BX1, nome: 'Box 1', ativo: true }, { id: BX2, nome: 'Box 2', ativo: true }];
 let recusarBoxes = '';
 let seq = 0;
+let portesLoja = [{ id: 'pequeno', nome: 'Pequeno', exemplo: 'Ex.: Mobi', ativo: true }, { id: 'medio', nome: 'Médio', exemplo: 'Ex.: Onix', ativo: true }, { id: 'grande', nome: 'Grande', exemplo: '', ativo: true }, { id: 'suv', nome: 'SUV', exemplo: '', ativo: true }, { id: 'pickup', nome: 'Pickup', exemplo: '', ativo: true }];
 let regrasAtend = { formaPagamentoPadrao: 'pix', futuro: [], local: ['placa', 'modelo', 'porte'] };
 let linkAg = { ativo: true, diasMax: 30, disponivel: true, telefoneObrigatorio: true, nomeObrigatorio: true, veiculoObrigatorio: ['placa', 'modelo', 'porte'], pendencias: [] };
 const ultimo = (m, u) => chamadas.filter((c) => c.m === m && c.u === u).at(-1);
@@ -40,6 +41,13 @@ const servidor = http.createServer((req, res) => {
     if (u.pathname === '/api/estabelecimento/regras-atendimento') {
       if (req.method === 'PUT') { regrasAtend = { ...regrasAtend, futuro: c.camposObrigatorios.futuro, local: c.camposObrigatorios.local }; }
       return json(200, regrasAtend);
+    }
+    if (u.pathname === '/api/estabelecimento/portes') {
+      if (req.method === 'PUT') {
+        if (c.portes.some((x) => x.nome === 'Recusado')) return json(400, { mensagem: 'O porte Pickup já foi usado: desative em vez de remover.' });
+        portesLoja = c.portes.map((x, i) => ({ id: x.id || `p-nov${i}`, nome: x.nome, exemplo: x.exemplo, ativo: x.ativo }));
+      }
+      return json(200, portesLoja);
     }
     if (u.pathname === '/api/estabelecimento/link-agendamento') {
       if (req.method === 'PUT') linkAg = { ...linkAg, ...c };
@@ -254,6 +262,36 @@ const texto = (p, t) => p.getByTestId(t).innerText();
   await p.getByTestId('cartao').first().waitFor();
   assert.equal(chamadas.filter((c) => c.u === '/api/atendimentos').length, antes + 1, 'o atendimento sem veículo foi enviado');
   ok('regras do veículo: aparecem no Estabelecimento, saem do corpo e o Atender salva sem veículo');
+  await ctx.close();
+}
+
+// 7. v122: portes cadastráveis no Estabelecimento (site real): a lista do servidor aparece, o dono cria um porte, reordena e desativa; o corpo leva ids só dos existentes
+{
+  const { ctx, p } = await abrir();
+  await p.getByTestId('nav-estabelecimento').click();
+  await p.getByTestId('portes-lista').waitFor();
+  assert.equal(await p.getByTestId('portes-lista').locator('li').count(), 5);
+  assert.equal(await p.getByTestId('porte-ativo-1').isDisabled(), true, 'o Médio não desativa');
+  assert.equal(await p.getByTestId('porte-nome-1').inputValue(), 'Médio');
+  await p.getByTestId('porte-novo').click();
+  await p.getByTestId('porte-nome-5').fill('Van'); await p.getByTestId('porte-exemplo-5').fill('Ex.: Sprinter');
+  await p.getByTestId('porte-sobe-5').click();
+  await p.getByTestId('porte-ativo-0').uncheck();
+  await p.getByTestId('portes-salvar').click(); await p.getByTestId('portes-ok').waitFor();
+  const corpo = ultimo('PUT', '/api/estabelecimento/portes').corpo.portes;
+  assert.deepEqual(corpo.map((x) => x.nome), ['Pequeno', 'Médio', 'Grande', 'SUV', 'Van', 'Pickup'].filter(Boolean).length === 6 ? corpo.map((x) => x.nome) : []);
+  assert.equal(corpo.find((x) => x.nome === 'Van').id, undefined, 'porte novo vai sem id');
+  assert.equal(corpo.find((x) => x.nome === 'Pequeno').ativo, false);
+  assert.ok(corpo.filter((x) => x.nome !== 'Van').every((x) => typeof x.id === 'string'), 'os existentes vão com id');
+  await p.getByTestId('porte-novo').click();
+  await p.getByTestId('porte-nome-6').fill('Recusado');
+  await p.getByTestId('portes-salvar').click();
+  assert.match(await p.getByTestId('portes-erro').innerText(), /desative em vez de remover/);
+  // o Atender usa a lista da loja: o porte desativado não aparece e o novo sim
+  await p.getByTestId('nav-agenda').click(); await p.getByTestId('atender-abrir').click();
+  const opcoes = await p.getByTestId('atender-v-porte').locator('option').allInnerTexts();
+  assert.ok(opcoes.includes('Van') && !opcoes.includes('Pequeno'), `opções do porte: ${opcoes.join(', ')}`);
+  ok('portes: lista do servidor, novo porte, ordem, desativar, erro do servidor e uso no Atender');
   await ctx.close();
 }
 

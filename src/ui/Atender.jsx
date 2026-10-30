@@ -2,12 +2,13 @@
 import ListaItens from './ListaItens.jsx';
 import PickerCliente from './PickerCliente.jsx';
 import { porUltimoUso } from '../domain/codigo.js';
+import { servicosNaOrdemDaLoja } from '../domain/ordem-servicos.js';
 import React, { useMemo, useState } from 'react';
 import { agenda, agendamentosVisiveis, planos as apiPlanos } from '../services/api.js';
 import { rotuloMes as rotuloMesPlano } from '../domain/planos.js';
 import { acharClientePorTelefone, CAMPOS_DE_VEICULO, camposObrigatorios, nomeMaisCompleto } from '../domain/engine.js';
 import { FORMAS_PAGAMENTO, STATUS, boxesAtivos, duracaoMin, formaEfetiva, formatarTelefone, nomeBox, ocupadoMin, servicoNoPorte, servicosPorIds, telefoneNacional, totalPreco, usaIntegracaoPix } from '../domain/rules.js';
-import { EXEMPLO_PORTE, PORTES, PORTE_PADRAO, ROTULO_PORTE, placaValida, rotuloVeiculo } from '../domain/veiculos.js';
+import { EXEMPLO_PORTE, PORTE_PADRAO, ROTULO_PORTE, placaValida, portesParaEscolher, rotuloVeiculo } from '../domain/veiculos.js';
 import { MIN, fmtDate, fmtDuration, fmtHM, fmtMoney, fromYmd, startOfDay, tsAt, ymd } from '../domain/time.js';
 import { Aviso, rolarAoErro, Btn, Campo, Icon, Modal } from './common.jsx';
 import { SeletorHora } from './Agendamento.jsx';
@@ -56,7 +57,7 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
   // Últimos usados primeiro (no histórico que este usuário enxerga); quem nunca foi usado vem depois, na ordem do cadastro.
   const visiveis = agendamentosVisiveis(st, user);
   const produtos = porUltimoUso(st.materiais.filter((m) => m.tipo === 'produto' && m.ativo !== false), visiveis, 'produto');
-  const servicos = porUltimoUso(st.servicos.filter((s) => s.ativo !== false), visiveis, 'servico');
+  const servicos = servicosNaOrdemDaLoja(st, st.servicos.filter((s) => s.ativo !== false)); // mais usados primeiro ou a ordem do dono (Estabelecimento > Regras)
   const itensProduto = produtos.filter((m) => Number(qtds[m.id]) > 0).map((m) => ({ materialId: m.id, qtd: Number(qtds[m.id]) }));
   const temServico = servicoIds.length > 0;
   const vendeProduto = itensProduto.length > 0;
@@ -213,8 +214,8 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
                 <Campo rotulo="Cor (opcional)"><input value={vNovo.cor} onChange={(e) => setVNovo({ ...vNovo, cor: e.target.value })} maxLength={20} autoComplete="off" data-testid="atender-cor" /></Campo>
                 <Campo rotulo={`Porte${obrig.includes('porte') ? ' *' : ''}`} className="campo-largo" dica={vNovo.porte ? EXEMPLO_PORTE[vNovo.porte] : 'O porte define o preço e a duração dos serviços. Sem porte vale o médio.'}>
                   <select value={vNovo.porte} onChange={(e) => setVNovo({ ...vNovo, porte: e.target.value })} data-testid="atender-porte">
-                    <option value="">{obrig.includes('porte') ? 'Escolha…' : 'Médio (padrão)'}</option>
-                    {PORTES.map((k) => <option key={k} value={k}>{ROTULO_PORTE[k]}</option>)}
+                    <option value="">{obrig.includes('porte') ? 'Escolha…' : `${ROTULO_PORTE[PORTE_PADRAO]} (padrão)`}</option>
+                    {portesParaEscolher(vNovo.porte).map(({ id: k }) => <option key={k} value={k}>{ROTULO_PORTE[k]}</option>)}
                   </select>
                 </Campo>
               </div>

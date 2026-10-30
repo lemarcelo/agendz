@@ -6,7 +6,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { clientes as api } from '../../services/api-real.js';
 import { capAtiva, rot } from '../../domain/tipos.js';
 import { formatarCpf, formatarTelefone, somenteDigitos } from '../../domain/rules.js';
-import { LIMITE_VEICULOS, PORTES, ROTULO_PORTE, placaValida, rotuloVeiculo } from '../../domain/veiculos.js';
+import { LIMITE_VEICULOS, ROTULO_PORTE, placaValida, portesParaEscolher, rotuloVeiculo } from '../../domain/veiculos.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
 import { BlocoPlanoReal, FormEscolherPlanoReal } from './PlanoDoCliente.jsx';
 import { FormEncerrar, FormMensalidade } from './Planos.jsx';
@@ -64,7 +64,7 @@ function FormCliente({ ficha, aoSalvar, aoCancelar, plano }) {
                   <Campo rotulo="Marca"><input value={v.marca || ''} onChange={veic(i, 'marca')} maxLength={30} autoComplete="off" data-testid={`cli-v-marca-${i}`} /></Campo>
                   <Campo rotulo="Modelo"><input value={v.modelo || ''} onChange={veic(i, 'modelo')} maxLength={40} autoComplete="off" data-testid={`cli-v-modelo-${i}`} /></Campo>
                   <Campo rotulo="Cor"><input value={v.cor || ''} onChange={veic(i, 'cor')} maxLength={20} autoComplete="off" data-testid={`cli-v-cor-${i}`} /></Campo>
-                  <Campo rotulo="Porte"><select value={v.porte || ''} onChange={veic(i, 'porte')} data-testid={`cli-v-porte-${i}`}><option value="">Escolha…</option>{PORTES.map((k) => <option key={k} value={k}>{ROTULO_PORTE[k]}</option>)}</select></Campo>
+                  <Campo rotulo="Porte"><select value={v.porte || ''} onChange={veic(i, 'porte')} data-testid={`cli-v-porte-${i}`}><option value="">Escolha…</option>{portesParaEscolher(v.porte).map(({ id: k }) => <option key={k} value={k}>{ROTULO_PORTE[k]}</option>)}</select></Campo>
                   <button type="button" className="icone-btn" onClick={() => setF({ ...f, veiculos: f.veiculos.filter((_, j) => j !== i) })} aria-label={`Remover veículo ${i + 1}`} data-testid={`cli-v-remover-${i}`}><Icone n="trash" size={16} /></button>
                 </div>
               ))}

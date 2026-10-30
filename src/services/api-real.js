@@ -419,10 +419,15 @@ function lerServico(d) {
   };
 }
 export const servicos = {
-  // GET /api/servicos  (dono vê todos; profissional só os ativos)
-  async listar() {
-    const r = await chamar('GET', '/api/servicos');
+  // GET /api/servicos  (dono vê todos; profissional só os ativos). `para: 'atender'` = ordem do Atender (modo da loja: mais usados ou a ordem do dono); sem ela, a ordem da lista de Serviços
+  async listar({ para } = {}) {
+    const r = await chamar('GET', para === 'atender' ? '/api/servicos?para=atender' : '/api/servicos');
     return r.ok ? { ok: true, servicos: listaDe(r.dados, 500).map(lerServico) } : r;
+  },
+  // PUT /api/servicos/ordem  { ids }  (quem tem a seção Serviços; nova ordem manual, a que vale no modo "minha ordem")
+  async reordenar(ids) {
+    if (!Array.isArray(ids) || ids.length > 300 || !ids.every((x) => ID.test(String(x)))) return { ok: false, status: 0, erro: 'Ordem dos serviços inválida.' };
+    return chamar('PUT', '/api/servicos/ordem', { ids });
   },
   // GET /api/servicos/{id}
   async obter(id) {
@@ -730,6 +735,28 @@ export const boxes = {
     const corpo = { boxes: itens.map((b) => ({ ...(ID.test(String(b && b.id)) ? { id: b.id } : {}), nome: texto(b && b.nome, 30), ativo: !(b && b.ativo === false) })) };
     const r = await chamar('PUT', '/api/estabelecimento/boxes', corpo);
     return r.ok ? { ok: true, boxes: listaDe(r.dados, 20).map(lerBox).filter((b) => ID.test(b.id)) } : r;
+  },
+};
+
+// ---------- portes de veículo (v122; regras no servidor: PorteService; só o proprietário grava) ----------
+function lerPorte(d) {
+  d = d || {};
+  return { id: texto(d.id, 24), nome: texto(d.nome, 20), exemplo: texto(d.exemplo || '', 60), ativo: d.ativo !== false };
+}
+const lerPortes = (d) => listaDe(d, 12).map(lerPorte).filter((x) => /^[a-z0-9-]{2,24}$/.test(x.id) && x.nome);
+export const portes = {
+  // GET /api/estabelecimento/portes  (quem está logado; estética. Sem cadastro o servidor devolve os cinco de fábrica)
+  async listar() {
+    const r = await chamar('GET', '/api/estabelecimento/portes');
+    return r.ok ? { ok: true, portes: lerPortes(r.dados) } : r;
+  },
+  // PUT /api/estabelecimento/portes  { portes: [{ id?, nome, exemplo?, ativo }] }  (só o proprietário; a lista inteira substitui a anterior, por id; 1 a 12; o Médio fica e ativo; porte usado só desativa)
+  async gravar(lista) {
+    const itens = Array.isArray(lista) ? lista.slice(0, 12) : [];
+    if (itens.length === 0) return { ok: false, status: 0, erro: 'Cadastre ao menos um porte.' };
+    const corpo = { portes: itens.map((x) => ({ ...(/^[a-z0-9-]{2,24}$/.test(String(x && x.id)) ? { id: x.id } : {}), nome: texto(x && x.nome, 20), exemplo: texto((x && x.exemplo) || '', 60), ativo: !(x && x.ativo === false) })) };
+    const r = await chamar('PUT', '/api/estabelecimento/portes', corpo);
+    return r.ok ? { ok: true, portes: lerPortes(r.dados) } : r;
   },
 };
 
@@ -1055,7 +1082,7 @@ const CAMPOS_ATENDER = ['nome', 'telefone', 'profissional', 'vendedor', 'formaPa
 const lerRegras = (d) => {
   d = d && typeof d === 'object' ? d : {};
   const campos = (l, futuro) => listaDe(l, 9).map((x) => texto(x, 20)).filter((x) => CAMPOS_ATENDER.includes(x) && !(futuro && x === 'formaPagamento'));
-  return { formaPagamentoPadrao: ['', 'pix', 'dinheiro', 'cartao'].includes(d.formaPagamentoPadrao) ? d.formaPagamentoPadrao : 'pix', futuro: campos(d.futuro, true), local: campos(d.local, false) };
+  return { formaPagamentoPadrao: ['', 'pix', 'dinheiro', 'cartao'].includes(d.formaPagamentoPadrao) ? d.formaPagamentoPadrao : 'pix', futuro: campos(d.futuro, true), local: campos(d.local, false), ordemServicos: d.ordemServicos === 'manual' ? 'manual' : 'uso' };
 };
 export const regras = {
   // GET /api/estabelecimento/regras-atendimento  (quem usa a agenda; o formulário Atender precisa da forma padrão e dos campos obrigatórios)
@@ -1064,8 +1091,12 @@ export const regras = {
     return r.ok ? { ok: true, regras: lerRegras(r.dados) } : r;
   },
   // PUT /api/estabelecimento/regras-atendimento  { formaPagamentoPadrao?, camposObrigatorios?: { futuro, local } }  (só o proprietário)
-  async gravar({ formaPagamentoPadrao, camposObrigatorios } = {}) {
+  async gravar({ formaPagamentoPadrao, camposObrigatorios, ordemServicos } = {}) {
     const corpo = {};
+    if (ordemServicos !== undefined) {
+      if (!['uso', 'manual'].includes(ordemServicos)) return { ok: false, status: 0, erro: 'Ordem dos serviços inválida.' };
+      corpo.ordemServicos = ordemServicos;
+    }
     if (formaPagamentoPadrao !== undefined) {
       if (!['', 'pix', 'dinheiro', 'cartao'].includes(formaPagamentoPadrao)) return { ok: false, status: 0, erro: 'Forma de pagamento padrão inválida.' };
       corpo.formaPagamentoPadrao = formaPagamentoPadrao;
@@ -1207,10 +1238,11 @@ export const marca = {
 const PUB = { publico: true };
 const IDV = (v) => (ID.test(String(v)) ? String(v) : '');
 const inteiroOuZero = (v) => (Number.isInteger(v) && v >= 0 ? v : 0);
-const PORTES_PUB = ['pequeno', 'medio', 'grande', 'suv', 'pickup'];
+const ID_PORTE = /^[a-z0-9-]{2,24}$/; // portes cadastrados pelo dono (v122): ids dos de fábrica (medio, suv…) e gerados pelo servidor
+const porteDoPublico = (p) => typeof p === 'string' && ID_PORTE.test(p);
 const tabelaPorPorte = (t, conv) => {
   const o = {};
-  if (t && typeof t === 'object') for (const p of PORTES_PUB) if (conv(t[p]) !== null) o[p] = conv(t[p]);
+  if (t && typeof t === 'object') for (const p of Object.keys(t)) if (porteDoPublico(p) && conv(t[p]) !== null) o[p] = conv(t[p]);
   return o;
 };
 const dinheiroOuNulo = (v) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v < 1e7 ? v : null);
@@ -1222,7 +1254,7 @@ function lerPaginaPublica(d) {
     ativo: d.ativo === true, aviso: texto(d.aviso, 200), diasMax: Number.isInteger(d.diasMax) ? Math.min(60, Math.max(1, d.diasMax)) : 30,
     tipo: texto(d.tipo, 40), exigeTelefone: d.exigeTelefone !== false, exigeNome: d.exigeNome !== false, // tudo obrigatório de fábrica; o dono tira em Estabelecimento
     exigeVeiculo: Array.isArray(d.exigeVeiculo) ? d.exigeVeiculo.filter((x) => ['placa', 'modelo', 'porte'].includes(x)) : ['placa', 'modelo', 'porte'],
-    portes: listaDe(d.portes, 10).filter((x) => x && PORTES_PUB.includes(x.id)).map((x) => ({ id: x.id, nome: texto(x.nome, 20) })),
+    portes: listaDe(d.portes, 12).filter((x) => x && porteDoPublico(x.id)).map((x) => ({ id: x.id, nome: texto(x.nome, 20), exemplo: texto(x.exemplo || '', 60) })),
     servicos: listaDe(d.servicos, 200).filter((x) => x && IDV(x.id)).map((x) => ({
       id: x.id, nome: texto(x.nome, 120), duracao: inteiroOuZero(x.duracao), preco: dinheiroOuZero(x.preco), antecedenciaH: inteiroOuZero(x.antecedenciaH),
       precos: tabelaPorPorte(x.precos, dinheiroOuNulo), duracoes: tabelaPorPorte(x.duracoes, minutosOuNulo),
@@ -1236,7 +1268,7 @@ function lerResumoPublico(d) {
     id: IDV(d.id), inicio: instante(d.inicio), fim: instante(d.fim), status: STATUS_AGENDA.includes(d.status) ? d.status : 'a_confirmar', rotulo: texto(d.rotulo, 40),
     servicos: listaDe(d.servicos, 20).map((x) => texto(x, 120)), duracao: inteiroOuZero(d.duracao), total: dinheiroOuZero(d.total), desconto: dinheiroOuZero(d.desconto),
     cupom: d.cupom ? texto(d.cupom, 60) : '', profissional: texto(d.profissional, 80), ativo: d.ativo === true, podeCancelar: d.podeCancelar === true,
-    veiculo: d.veiculo && typeof d.veiculo === 'object' ? { placa: texto(d.veiculo.placa, 10), modelo: texto(d.veiculo.modelo, 60), porte: PORTES_PUB.includes(d.veiculo.porte) ? d.veiculo.porte : '' } : null,
+    veiculo: d.veiculo && typeof d.veiculo === 'object' ? { placa: texto(d.veiculo.placa, 10), modelo: texto(d.veiculo.modelo, 60), porte: porteDoPublico(d.veiculo.porte) ? d.veiculo.porte : '' } : null,
   };
 }
 const consultaServicos = (ids) => (Array.isArray(ids) ? ids.filter((x) => ID.test(String(x))).slice(0, 5).join(',') : '');
@@ -1249,14 +1281,14 @@ export const publico = {
   // GET /api/publico/dias?de=AAAA-MM-DD&dias=14&servicos=id,id&profissionalId=&porte=   → ['AAAA-MM-DD', ...]  (porte só na estética)
   async dias({ de, dias, servicoIds, profissionalId, porte }) {
     if (!DIA_ISO.test(String(de)) || !consultaServicos(servicoIds)) return { ok: true, dias: [] };
-    const q = `de=${de}&dias=${Math.min(31, Math.max(1, Number(dias) || 1))}&servicos=${consultaServicos(servicoIds)}${ID.test(String(profissionalId)) ? `&profissionalId=${profissionalId}` : ''}${PORTES_PUB.includes(porte) ? `&porte=${porte}` : ''}`;
+    const q = `de=${de}&dias=${Math.min(31, Math.max(1, Number(dias) || 1))}&servicos=${consultaServicos(servicoIds)}${ID.test(String(profissionalId)) ? `&profissionalId=${profissionalId}` : ''}${porteDoPublico(porte) ? `&porte=${porte}` : ''}`;
     const r = await chamar('GET', `/api/publico/dias?${q}`, undefined, undefined, PUB);
     return r.ok ? { ok: true, dias: listaDe(r.dados, 62).filter((x) => DIA_ISO.test(String(x))) } : r;
   },
   // GET /api/publico/horarios?data=AAAA-MM-DD&servicos=id,id&profissionalId=&porte=   → [{ inicio, profissionalId }]  (porte só na estética)
   async horarios({ data, servicoIds, profissionalId, porte }) {
     if (!DIA_ISO.test(String(data)) || !consultaServicos(servicoIds)) return { ok: true, horarios: [] };
-    const q = `data=${data}&servicos=${consultaServicos(servicoIds)}${ID.test(String(profissionalId)) ? `&profissionalId=${profissionalId}` : ''}${PORTES_PUB.includes(porte) ? `&porte=${porte}` : ''}`;
+    const q = `data=${data}&servicos=${consultaServicos(servicoIds)}${ID.test(String(profissionalId)) ? `&profissionalId=${profissionalId}` : ''}${porteDoPublico(porte) ? `&porte=${porte}` : ''}`;
     const r = await chamar('GET', `/api/publico/horarios?${q}`, undefined, undefined, PUB);
     return r.ok ? { ok: true, horarios: listaDe(r.dados, 100).filter((x) => x && instante(x.inicio) !== null && IDV(x.profissionalId)).map((x) => ({ inicio: instante(x.inicio), profissionalId: x.profissionalId })) } : r;
   },
@@ -1268,7 +1300,7 @@ export const publico = {
     if (typeof cupomChave === 'string' && cupomChave.trim()) corpo.cupomChave = texto(cupomChave.trim(), 40);
     if (typeof site === 'string' && site) corpo.site = texto(site, 100);
     if (veiculo && typeof veiculo === 'object') {
-      corpo.veiculo = { placa: texto(veiculo.placa, 20), modelo: texto(veiculo.modelo, 60), porte: PORTES_PUB.includes(veiculo.porte) ? veiculo.porte : '' }; // campo vazio vai vazio: o servidor trata como "não informado"
+      corpo.veiculo = { placa: texto(veiculo.placa, 20), modelo: texto(veiculo.modelo, 60), porte: porteDoPublico(veiculo.porte) ? veiculo.porte : '' }; // campo vazio vai vazio: o servidor trata como "não informado"
       if (typeof veiculo.marca === 'string' && veiculo.marca.trim()) corpo.veiculo.marca = texto(veiculo.marca, 60);
       if (typeof veiculo.cor === 'string' && veiculo.cor.trim()) corpo.veiculo.cor = texto(veiculo.cor, 40);
     }

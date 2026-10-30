@@ -1,6 +1,7 @@
 package br.com.agendz.clientes;
 
 import br.com.agendz.cifra.Cifra;
+import br.com.agendz.configuracao.PorteController;
 import br.com.agendz.erro.ErroDeNegocio;
 import br.com.agendz.tenant.Loja;
 import br.com.agendz.tenant.LojaContext;
@@ -31,7 +32,6 @@ import org.springframework.stereotype.Service;
 public class ClienteService {
 
     public static final int LIMITE_VEICULOS = 10;
-    private static final Set<String> PORTES = Set.of("pequeno", "medio", "grande", "suv", "pickup");
     private static final String MSG_NOME = "Informe o nome ou apelido do cliente.";
     private static final String MSG_TELEFONE = "Informe o telefone com DDD.";
 
@@ -131,7 +131,7 @@ public class ClienteService {
         String cpf = cpfOpcional(e.cpf());
         String nasc = nascimentoOpcional(e.nascimento());
         exigirCamposDaLoja(loja, cpf, nasc);
-        List<Veiculo> veiculos = usaVeiculo(loja) && e.veiculos() != null ? veiculosValidos(e.veiculos()) : List.of();
+        List<Veiculo> veiculos = usaVeiculo(loja) && e.veiculos() != null ? veiculosValidos(e.veiculos(), banco.naLoja(PorteController::ids)) : List.of();
         try {
             return banco.naLoja(jdbc -> {
                 UUID id = jdbc.queryForObject(
@@ -154,7 +154,7 @@ public class ClienteService {
         String tel = e.telefone() == null ? null : telefoneObrigatorio(e.telefone());
         String cpf = e.cpf() == null ? null : cpfOpcional(e.cpf());          // "" = apagar
         String nasc = e.nascimento() == null ? null : nascimentoOpcional(e.nascimento());
-        List<Veiculo> veiculos = usaVeiculo(loja) && e.veiculos() != null ? veiculosValidos(e.veiculos()) : null;
+        List<Veiculo> veiculos = usaVeiculo(loja) && e.veiculos() != null ? veiculosValidos(e.veiculos(), banco.naLoja(PorteController::ids)) : null;
         try {
             return banco.naLoja(jdbc -> {
                 Linha atual = lerPorId(jdbc, id, true);
@@ -279,7 +279,7 @@ public class ClienteService {
     }
 
     /** Mesma regra de `limparVeiculo` (src/domain/veiculos.js): placa antiga ou Mercosul só por formato; modelo e porte obrigatórios. */
-    static List<Veiculo> veiculosValidos(List<EntradaVeiculo> entrada) {
+    static List<Veiculo> veiculosValidos(List<EntradaVeiculo> entrada, Set<String> portesConhecidos) {
         if (entrada.size() > LIMITE_VEICULOS) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Veículos inválidos: no máximo " + LIMITE_VEICULOS + " por cliente.");
         List<Veiculo> saida = new ArrayList<>();
         Set<String> vistas = new HashSet<>();
@@ -292,7 +292,7 @@ public class ClienteService {
             }
             String modelo = limitar(Texto.limpar(v.modelo() == null ? "" : v.modelo()), 40);
             if (modelo.length() < 2) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe o modelo do veículo.");
-            if (v.porte() == null || !PORTES.contains(v.porte())) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha o porte do veículo.");
+            if (v.porte() == null || !portesConhecidos.contains(v.porte())) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha o porte do veículo.");
             String placa = chave.matches("^[A-Z]{3}[0-9]{4}$") ? chave.substring(0, 3) + "-" + chave.substring(3) : chave;
             if (!vistas.add(chave)) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "A placa " + placa + " aparece duas vezes nesse cliente.");
             UUID id = null;
@@ -397,7 +397,8 @@ public class ClienteService {
         String modeloLimpo = vazio(novo.modelo()) ? "" : br.com.agendz.validacao.Texto.limpar(novo.modelo());
         if (exigir.contains("modelo") ? modeloLimpo.length() < 2 : modeloLimpo.length() == 1) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe o modelo do veículo.");
         if (modeloLimpo.length() > 40) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe o modelo do veículo.");
-        if (vazio(novo.porte()) ? exigir.contains("porte") : !PORTES.contains(novo.porte())) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha o porte do veículo.");
+        Set<String> portesConhecidos = PorteController.ids(jdbc);
+        if (vazio(novo.porte()) ? exigir.contains("porte") : !portesConhecidos.contains(novo.porte())) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha o porte do veículo.");
         String porte = vazio(novo.porte()) ? PORTE_PADRAO : novo.porte();
         if (placaBruta.isEmpty() || modeloLimpo.length() < 2) {
             // incompleto: só a foto do atendimento
@@ -406,7 +407,7 @@ public class ClienteService {
             if (marca.length() > 30 || cor.length() > 20) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Dados do veículo inválidos.");
             return new VeiculoDoAgendamento(null, placaBruta.isEmpty() ? "" : formatarPlaca(placaBruta), marca, modeloLimpo, cor, porte);
         }
-        Veiculo limpo = veiculosValidos(List.of(new EntradaVeiculo(null, novo.placa(), novo.marca(), novo.modelo(), novo.cor(), porte))).get(0);
+        Veiculo limpo = veiculosValidos(List.of(new EntradaVeiculo(null, novo.placa(), novo.marca(), novo.modelo(), novo.cor(), porte)), portesConhecidos).get(0);
         String chave = chavePlaca(limpo.placa());
         for (Veiculo x : doCliente) if (chavePlaca(x.placa()).equals(chave)) return foto(x);
         if (clienteId == null) return new VeiculoDoAgendamento(null, limpo.placa(), limpo.marca(), limpo.modelo(), limpo.cor(), limpo.porte());

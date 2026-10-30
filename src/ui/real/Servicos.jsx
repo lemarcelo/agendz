@@ -6,7 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import { servicos as api } from '../../services/api-real.js';
 import { capAtiva } from '../../domain/tipos.js';
-import { PORTES, ROTULO_PORTE } from '../../domain/veiculos.js';
+import { PORTES, ROTULO_PORTE, portesAtivos } from '../../domain/veiculos.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
 
 const dinheiro = (v) => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -81,7 +81,7 @@ function FormServico({ ficha, todos, ehDono, aoSalvar, aoCancelar }) {
           {porPorte ? (
             <div className="srv-portes" data-testid="srv-portes">
               <p className="muted">Preço e duração (em minutos) para cada porte de veículo.</p>
-              {PORTES.map((p) => (
+              {portesAtivos().map(({ id: p }) => (
                 <div key={p} className="srv-porte-linha">
                   <b>{ROTULO_PORTE[p]}</b>
                   <Campo rotulo="Preço (R$)"><input value={f.precos[p]} inputMode="decimal" onChange={mudarPorte('precos', p)} data-testid={`srv-preco-${p}`} /></Campo>
@@ -152,6 +152,15 @@ export default function Servicos({ ehDono }) {
   if (ficha) {
     return <FormServico ficha={ficha} todos={lista || []} ehDono={ehDono} aoCancelar={() => setFicha(null)} aoSalvar={() => { setFicha(null); setAviso('Serviço salvo.'); setVersao((v) => v + 1); }} />;
   }
+  // PUT /api/servicos/ordem — troca de lugar na ordem manual (só sem busca ativa, para a posição ser a da lista inteira)
+  const mover = async (i, d) => {
+    const ids = (lista || []).map((x) => x.id);
+    [ids[i], ids[i + d]] = [ids[i + d], ids[i]];
+    setErro(''); setAviso('');
+    const r = await api.reordenar(ids);
+    if (!r.ok) { setErro(r.erro); return; }
+    setVersao((v) => v + 1);
+  };
   const q = busca.trim().toLowerCase();
   const visiveis = (lista || []).filter((s) => !q || s.nome.toLowerCase().includes(q) || s.codigo.toLowerCase().includes(q) || s.categoria.toLowerCase().includes(q));
   return (
@@ -166,7 +175,7 @@ export default function Servicos({ ehDono }) {
       {lista === null ? <p className="muted" role="status" data-testid="srv-carregando">Carregando…</p>
         : visiveis.length === 0 ? <p className="muted" data-testid="srv-vazio">{q ? 'Nenhum serviço encontrado.' : 'Nenhum serviço cadastrado ainda.'}</p> : (
           <ul className="clientes-lista" data-testid="srv-lista">
-            {visiveis.map((s) => (
+            {visiveis.map((s, i) => (
               <li key={s.id} className="cliente-cartao" data-testid={`srv-${s.id}`}>
                 <div className="cliente-dados">
                   <b data-testid="srv-item-nome">{s.nome}</b>{' '}
@@ -184,6 +193,8 @@ export default function Servicos({ ehDono }) {
                   )}
                 </div>
                 <div className="acoes">
+                  {ehDono && !q && <Btn tamanho="sm" disabled={i === 0} onClick={() => mover(i, -1)} aria-label={`Subir ${s.nome}`} data-testid={`srv-sobe-${s.id}`}><Icone n="up" size={15} /></Btn>}
+                  {ehDono && !q && <Btn tamanho="sm" disabled={i === visiveis.length - 1} onClick={() => mover(i, 1)} aria-label={`Descer ${s.nome}`} data-testid={`srv-desce-${s.id}`}><Icone n="down" size={15} /></Btn>}
                   <Btn tamanho="sm" onClick={() => { setAviso(''); setFicha(s); }} aria-label={`${ehDono ? 'Editar' : 'Ver'} ${s.nome}`} data-testid={`editar-${s.id}`}><Icone n={ehDono ? 'edit' : 'info'} size={15} /> {ehDono ? 'Editar' : 'Ver'}</Btn>
                   {ehDono && <Btn tamanho="sm" onClick={() => setRemovendo(s.id)} aria-label={`Remover ${s.nome}`} data-testid={`remover-${s.id}`}><Icone n="trash" size={15} /></Btn>}
                 </div>

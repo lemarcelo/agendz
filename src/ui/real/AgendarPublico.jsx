@@ -12,7 +12,7 @@ import { publico } from '../../services/api-real.js';
 import { fmtMoney, maiuscula1 } from '../../domain/time.js';
 import { formatarTelefone } from '../../domain/rules.js';
 import { Rot, capAtiva, rot } from '../../domain/tipos.js';
-import { EXEMPLO_PORTE, PORTE_PADRAO, formatarPlaca, limparVeiculoComRegras, placaValida, tipoPlaca } from '../../domain/veiculos.js';
+import { PORTE_PADRAO, formatarPlaca, limparVeiculoComRegras, placaValida, tipoPlaca } from '../../domain/veiculos.js';
 import { logoValida } from '../../domain/tema.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
 
@@ -208,7 +208,7 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
               <div className="pub-portes" role="group" aria-labelledby="pub-porte-r">
                 {(pagina.portes || []).map((x) => (
                   <button type="button" key={x.id} className={`pub-porte ${porte === x.id ? 'on' : ''}`} aria-pressed={porte === x.id} onClick={() => { setPorte(x.id); setEscolha(null); }} data-testid={`pub-porte-${x.id}`}>
-                    <b>{x.nome}</b><small>{(EXEMPLO_PORTE[x.id] || '').replace('Ex.: ', '')}</small>
+                    <b>{x.nome}</b><small>{(x.exemplo || '').replace('Ex.: ', '')}</small>
                   </button>
                 ))}
               </div>

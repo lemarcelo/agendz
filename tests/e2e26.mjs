@@ -68,13 +68,14 @@ await T('atender-lista-servicos-busca').fill('zzzz');
 await T('atender-lista-servicos-vazio').waitFor();
 await T('atender-lista-servicos-lupa').click(); // fechar limpa a busca
 assert.equal((await ids()).length, antes.length);
-// atende "Barba" e confere que ela passa para o topo da lista seguinte
+// v123: serviços seguem a regra da loja (mais usados primeiro): atender um serviço nunca o faz descer na lista seguinte
+const posAntes = (await ids()).indexOf('atender-srv-s-lav-motor');
 await T('atender-srv-s-lav-motor').check();
 await salvarAtender(p); await T('salvar-atender').waitFor({ state: 'detached' });
 await T('atender').click();
-assert.equal((await ids())[0], 'atender-srv-s-lav-motor', 'o último serviço usado vem primeiro');
+assert.ok((await ids()).indexOf('atender-srv-s-lav-motor') <= posAntes, 'serviço mais usado não desce na lista');
 if (await T('atender-lista-produtos-lupa').count()) { await T('atender-lista-produtos-lupa').click(); await T('atender-lista-produtos-busca').fill('1'); assert.ok(await p.locator('[data-testid^="atender-prod-"]').count() >= 1); }
-ok('lupa por nome/código e últimos usados primeiro');
+ok('lupa por nome/código e serviços por uso');
 console.log('erros', erros);
 assert.deepEqual(erros, []);
 await b.close();

@@ -188,11 +188,14 @@ test('avisos do painel: lista com limite e leitura defensiva; marcar como lido p
 });
 
 test('estética (v104): portes e tabelas por porte lidos com defesa; porte na consulta; veículo no corpo do pedido', async () => {
-  servidor({ ativo: true, tipo: 'estetica_automotiva', portes: [{ id: 'pequeno', nome: 'Pequeno' }, { id: 'lixo', nome: 'x' }, { id: 'suv', nome: 'SUV' }],
-    servicos: [{ id: SRV, nome: 'Lavagem', duracao: 60, preco: 80, precos: { pequeno: 80, suv: 120, gigante: 1, medio: -5 }, duracoes: { pequeno: 60, suv: 90, grande: 'x' } }], profissionais: [] });
+  servidor({ ativo: true, tipo: 'estetica_automotiva', portes: [{ id: 'pequeno', nome: 'Pequeno' }, { id: 'Lixo!', nome: 'x' }, { id: 'suv', nome: 'SUV' }],
+    servicos: [{ id: SRV, nome: 'Lavagem', duracao: 60, preco: 80, precos: { pequeno: 80, suv: 120, 'GIGANTE!': 1, medio: -5 }, duracoes: { pequeno: 60, suv: 90, grande: 'x' } }], profissionais: [] });
   const p = (await publico.pagina()).pagina;
   assert.equal(p.tipo, 'estetica_automotiva'); assert.deepEqual(p.portes.map((x) => x.id), ['pequeno', 'suv']);
   assert.deepEqual(p.servicos[0].precos, { pequeno: 80, suv: 120 }); assert.deepEqual(p.servicos[0].duracoes, { pequeno: 60, suv: 90 });
+  servidor({ ativo: true, tipo: 'estetica_automotiva', portes: [{ id: 'medio', nome: 'Médio', exemplo: 'Ex.: Onix' }, { id: 'pt12', nome: 'Van', exemplo: 'Ex.: Sprinter' }], servicos: [], profissionais: [] });
+  const p2 = (await publico.pagina()).pagina;
+  assert.deepEqual(p2.portes, [{ id: 'medio', nome: 'Médio', exemplo: 'Ex.: Onix' }, { id: 'pt12', nome: 'Van', exemplo: 'Ex.: Sprinter' }], 'porte cadastrado pelo dono chega com id e exemplo');
   servidor(['2026-11-02']);
   await publico.dias({ de: '2026-11-01', dias: 5, servicoIds: [SRV], porte: 'suv' });
   assert.ok(chamadas[0].url.endsWith('&porte=suv'));

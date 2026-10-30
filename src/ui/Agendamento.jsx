@@ -1,6 +1,7 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:2bd105c6cd */
 import ListaItens from './ListaItens.jsx';
 import { casaBusca, porUltimoUso } from '../domain/codigo.js';
+import { servicosNaOrdemDaLoja } from '../domain/ordem-servicos.js';
 import React, { useEffect, useMemo, useState } from 'react';
 import { agenda, clientes as apiClientes, comissoes, destinosCalendario } from '../services/api.js';
 import { ROTULO_STATUS, STATUS, boxesAtivos, duracaoMin, exigeConfirmacaoServico, nomeBox, ocupadoMin, ocupacaoDe, servicosPorIds, totalPreco, notificacoesEfetivas } from '../domain/rules.js';
@@ -263,7 +264,7 @@ function AdicionarItens({ a, st, user }) {
   const [busca, setBusca] = useState('');
   const visiveis = agendamentosVisiveis(st, user);
   // Últimos usados primeiro; a lupa filtra as duas listas por nome ou código.
-  const livres = porUltimoUso(st.servicos.filter((s) => s.ativo !== false && !a.servicoIds.includes(s.id)), visiveis, 'servico').filter((s) => casaBusca(s, busca));
+  const livres = servicosNaOrdemDaLoja(st, st.servicos.filter((s) => s.ativo !== false && !a.servicoIds.includes(s.id))).filter((s) => casaBusca(s, busca));
   const produtos = porUltimoUso(st.materiais.filter((m) => m.tipo === 'produto' && m.ativo !== false), visiveis, 'produto').filter((m) => casaBusca(m, busca));
   const ver = (r, ok) => { if (r.ok) { toast(ok); return true; } toast(r.erros[0], 'erro'); return false; };
   return (

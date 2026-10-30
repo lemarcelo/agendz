@@ -3,12 +3,67 @@
 // Sem consulta de placa em base externa: a validação é só de formato.
 import { limparTexto } from './texto.js';
 
-export const PORTES = ['pequeno', 'medio', 'grande', 'suv', 'pickup'];
-export const ROTULO_PORTE = { pequeno: 'Pequeno', medio: 'Médio', grande: 'Grande', suv: 'SUV', pickup: 'Pickup' };
-export const EXEMPLO_PORTE = { pequeno: 'Ex.: Mobi, Kwid, Up', medio: 'Ex.: Onix, HB20, Corolla', grande: 'Ex.: Spin, Compass sedã grande, Van', suv: 'Ex.: Creta, T-Cross, Tracker', pickup: 'Ex.: Strada, Hilux, S10' };
-export const PORTE_PADRAO = 'medio';
+// Portes da loja (v122): o dono cadastra em Estabelecimento > Portes. Sem cadastro valem os cinco de fábrica. `PORTES` (todos os ids, ativos ou não, na ordem do dono),
+// `ROTULO_PORTE` e `EXEMPLO_PORTE` são atualizados NO LUGAR por `definirPortes` (quem importou continua vendo a lista atual); `portesAtivos()` é o que se oferece para escolher.
+export const PORTE_PADRAO = 'medio'; // nunca sai nem desativa: é o porte de quem não escolheu e o preço de quem não tem preço no porte
+export const PORTES_DE_FABRICA = [
+  { id: 'pequeno', nome: 'Pequeno', exemplo: 'Ex.: Mobi, Kwid, Up', ativo: true },
+  { id: 'medio', nome: 'Médio', exemplo: 'Ex.: Onix, HB20, Corolla', ativo: true },
+  { id: 'grande', nome: 'Grande', exemplo: 'Ex.: Spin, Compass sedã grande, Van', ativo: true },
+  { id: 'suv', nome: 'SUV', exemplo: 'Ex.: Creta, T-Cross, Tracker', ativo: true },
+  { id: 'pickup', nome: 'Pickup', exemplo: 'Ex.: Strada, Hilux, S10', ativo: true },
+];
+export const LIMITE_PORTES = 12;
+export const PORTES = [];
+export const ROTULO_PORTE = {};
+export const EXEMPLO_PORTE = {};
+let listaPortes = [];
+export function definirPortes(lista) {
+  const l = Array.isArray(lista) && lista.length ? lista : PORTES_DE_FABRICA;
+  listaPortes = l.map((x) => ({ id: x.id, nome: x.nome, exemplo: x.exemplo || '', ativo: x.ativo !== false }));
+  PORTES.length = 0; PORTES.push(...listaPortes.map((x) => x.id));
+  for (const k of Object.keys(ROTULO_PORTE)) delete ROTULO_PORTE[k];
+  for (const k of Object.keys(EXEMPLO_PORTE)) delete EXEMPLO_PORTE[k];
+  for (const x of listaPortes) { ROTULO_PORTE[x.id] = x.nome; EXEMPLO_PORTE[x.id] = x.exemplo; }
+}
+definirPortes(null);
+export const listaDePortes = () => listaPortes.map((x) => ({ ...x }));
+export const portesAtivos = () => listaPortes.filter((x) => x.ativo);
+export const porteValido = (p) => typeof p === 'string' && PORTES.includes(p); // conhecido (para ler o que já existe)
+// Portes para o campo de escolha: os ativos e, se o valor atual for de um porte já desativado, ele também (para não sumir da tela).
+export const portesParaEscolher = (atual) => listaPortes.filter((x) => x.ativo || x.id === atual);
+export const porteAtivo = (p) => typeof p === 'string' && listaPortes.some((x) => x.id === p && x.ativo); // para escolher um porte agora
+// Valor do porte numa tabela de preços/durações: o do porte, senão o do médio, senão `padrao`.
+export const valorDoPorte = (tabela, porte, padrao) => {
+  const v = tabela && typeof tabela === 'object' ? tabela : {};
+  const n = (k) => (Number.isFinite(Number(v[k])) && v[k] !== null && v[k] !== '' ? Number(v[k]) : null);
+  return n(porte) ?? n(PORTE_PADRAO) ?? padrao;
+};
+
+// Lista de portes vinda do dono (Estabelecimento > Portes). Devolve { ok, portes } ou { ok: false, erro }. Id novo (vazio) é gerado por `novoId`.
+// Regras: 1 a 12 portes, nome 2–20 sem repetir (sem diferenciar maiúsculas), exemplo até 60, o médio fica e fica ativo, ao menos um ativo.
+export function sanearPortes(entrada, novoId) {
+  if (!Array.isArray(entrada) || entrada.length < 1 || entrada.length > LIMITE_PORTES) return { ok: false, erro: `Cadastre de 1 a ${LIMITE_PORTES} portes.` };
+  const vistos = new Set(); const ids = new Set(); const saida = [];
+  for (const x of entrada) {
+    if (!x || typeof x !== 'object' || Array.isArray(x)) return { ok: false, erro: 'Porte inválido.' };
+    if (x.id !== undefined && x.id !== null && x.id !== '' && !(typeof x.id === 'string' && /^[a-z0-9-]{2,24}$/.test(x.id))) return { ok: false, erro: 'Porte inválido.' };
+    if (typeof x.nome !== 'string' || (x.exemplo !== undefined && x.exemplo !== null && typeof x.exemplo !== 'string') || (x.ativo !== undefined && typeof x.ativo !== 'boolean')) return { ok: false, erro: 'Porte inválido.' };
+    const nome = limparTexto(x.nome, 20).trim();
+    if (nome.length < 2) return { ok: false, erro: 'O nome do porte tem de 2 a 20 letras.' };
+    if (vistos.has(nome.toLowerCase())) return { ok: false, erro: `O porte “${nome}” aparece duas vezes.` };
+    vistos.add(nome.toLowerCase());
+    const id = x.id || novoId();
+    if (ids.has(id)) return { ok: false, erro: 'Porte repetido.' };
+    ids.add(id);
+    saida.push({ id, nome, exemplo: limparTexto(String(x.exemplo ?? ''), 60).trim(), ativo: x.ativo !== false });
+  }
+  const medio = saida.find((x) => x.id === PORTE_PADRAO);
+  if (!medio) return { ok: false, erro: 'O porte padrão (Médio) não pode ser retirado; você pode mudar o nome dele.' };
+  if (!medio.ativo) return { ok: false, erro: 'O porte padrão (Médio) não pode ser desativado.' };
+  return { ok: true, portes: saida };
+}
 export const LIMITE_VEICULOS = 10;
-export const porteValido = (p) => typeof p === 'string' && PORTES.includes(p);
 
 const ANTIGA = /^[A-Z]{3}[0-9]{4}$/;
 const MERCOSUL = /^[A-Z]{3}[0-9][A-Z][0-9]{2}$/;

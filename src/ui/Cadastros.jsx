@@ -1,12 +1,13 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:48b7831473 */
 import { proximoCodigo } from '../domain/codigo.js';
+import { porOrdemManual } from '../domain/ordem-servicos.js';
 import React, { useState } from 'react';
 import { clientes as apiCli, servicos as apiSrv, equipe as apiEq, demo, MODO_DEMO, modelos as apiMod, agenda, avisosDoUsuario, pedidosVinculoVisiveis, avaliacoes as apiAv } from '../services/api.js';
 import { SECOES, SECOES_LIBERAVEIS, ehGestor, formatarCpf, formatarTelefone, papelRotulo, pode, podeAutorizarVinculo, ultimoAtendimento, ehDono } from '../domain/rules.js';
 import { creditoDoCliente } from '../domain/financeiro.js';
 import { CATEGORIAS, renderizar, validarModelo, variaveisDoCorpo } from '../domain/templates.js';
 import { fmtDate, fmtDateTime, fmtDuration, fmtHM, fmtMoney } from '../domain/time.js';
-import { LIMITE_VEICULOS, PORTES, ROTULO_PORTE, placaValida, rotuloVeiculo } from '../domain/veiculos.js';
+import { LIMITE_VEICULOS, PORTES, ROTULO_PORTE, placaValida, portesAtivos, portesParaEscolher, rotuloVeiculo } from '../domain/veiculos.js';
 import { Abas, Aviso, rolarAoErro, Avatar, Btn, Campo, Icon, Interruptor, Modal, Vazio } from './common.jsx';
 import { FotoCampo } from './Foto.jsx';
 import { fotoDeExemplo } from './imagem.js';
@@ -146,7 +147,7 @@ function FormCliente({ c, onClose, plano }) {
                 <Campo rotulo="Marca"><input value={v.marca || ''} onChange={mud('marca')} maxLength={30} autoComplete="off" data-testid={`cli-v-marca-${i}`} /></Campo>
                 <Campo rotulo="Modelo"><input value={v.modelo || ''} onChange={mud('modelo')} maxLength={40} autoComplete="off" data-testid={`cli-v-modelo-${i}`} /></Campo>
                 <Campo rotulo="Cor"><input value={v.cor || ''} onChange={mud('cor')} maxLength={20} autoComplete="off" data-testid={`cli-v-cor-${i}`} /></Campo>
-                <Campo rotulo="Porte"><select value={v.porte || ''} onChange={mud('porte')} data-testid={`cli-v-porte-${i}`}><option value="">Escolha…</option>{PORTES.map((k) => <option key={k} value={k}>{ROTULO_PORTE[k]}</option>)}</select></Campo>
+                <Campo rotulo="Porte"><select value={v.porte || ''} onChange={mud('porte')} data-testid={`cli-v-porte-${i}`}><option value="">Escolha…</option>{portesParaEscolher(v.porte).map(({ id: k }) => <option key={k} value={k}>{ROTULO_PORTE[k]}</option>)}</select></Campo>
                 <button type="button" className="icone-btn" onClick={() => setF({ ...f, veiculos: f.veiculos.filter((_, j) => j !== i) })} aria-label={`Remover veículo ${i + 1}`} data-testid={`cli-v-remover-${i}`}><Icon n="trash" size={16} /></button>
               </div>
             );
@@ -166,6 +167,13 @@ export function Servicos({ user }) {
   const { state: st } = useStore();
   const [edit, setEdit] = useState(null);
   const podeEditar = pode(user, 'servicos');
+  // PUT /servicos/ordem — troca o serviço de lugar na ordem manual (vale no Atender e no link quando a regra é "minha ordem")
+  const mover = (lista, i, d) => {
+    const ids = lista.map((x) => x.id);
+    [ids[i], ids[i + d]] = [ids[i + d], ids[i]];
+    const r = apiSrv.reordenar(ids);
+    if (!r.ok) toast(r.erros?.[0] || 'Não foi possível mudar a ordem.');
+  };
   const novo = !capAtiva('precoPorPorte') ? { nome: '', preco: 40, duracao: 40, intervalo: 10, antecedenciaH: 2, notificacoes: null, confirmacaoServico: null, combo: false, componentes: [] } : { nome: '', categoria: '', precos: { pequeno: 60, medio: 70, grande: 80, suv: 90, pickup: 95 }, duracoes: { pequeno: 40, medio: 45, grande: 50, suv: 55, pickup: 60 }, multiDia: false, combo: false, componentes: [], intervalo: 10, antecedenciaH: 2, notificacoes: null, confirmacaoServico: null };
   return (
     <section className="tela">
@@ -175,7 +183,7 @@ export function Servicos({ user }) {
       </header>
       {!podeEditar && <Aviso>Somente o proprietário (ou um admin com permissão de serviços) altera os serviços.</Aviso>}
       <div className="grade-cards">
-        {st.servicos.map((s) => (
+        {porOrdemManual(st.servicos).map((s, i, lista) => (
           <article key={s.id} className={`card-serv ${s.ativo === false ? 'inativo' : ''}`}>
             <div className="card-serv-topo"><h3>{s.nome}</h3><b>{faixaPreco(s)}</b></div>
             <small className="muted cod" data-testid={`srv-cod-${s.id}`}>Código {s.codigo}{s.categoria ? ` · ${s.categoria}` : ''}</small>
@@ -191,7 +199,13 @@ export function Servicos({ user }) {
             </ul>
             {s.ativo === false && <span className="chip chip-p">Desativado</span>}
             {pode(user, 'avaliacoes') && <ResumoDoServico id={s.id} />}
-            {podeEditar && <Btn tamanho="sm" icone="edit" onClick={() => setEdit(s)} aria-label={`Editar ${s.nome}`}>Editar</Btn>}
+            {podeEditar && (
+              <div className="acoes">
+                <Btn tamanho="sm" icone="edit" onClick={() => setEdit(s)} aria-label={`Editar ${s.nome}`}>Editar</Btn>
+                <Btn tamanho="sm" icone="up" disabled={i === 0} onClick={() => mover(lista, i, -1)} aria-label={`Subir ${s.nome}`} data-testid={`srv-sobe-${s.id}`} />
+                <Btn tamanho="sm" icone="down" disabled={i === lista.length - 1} onClick={() => mover(lista, i, 1)} aria-label={`Descer ${s.nome}`} data-testid={`srv-desce-${s.id}`} />
+              </div>
+            )}
           </article>
         ))}
       </div>
@@ -229,13 +243,14 @@ function FormServico({ s, user, onClose }) {
           <div className="tabela-portes" role="group" aria-labelledby="srv-portes-r" data-testid="srv-portes">
             <span className="campo-rotulo" id="srv-portes-r">Preço e duração por porte do veículo</span>
             <div className="porte-cab"><span>Porte</span><span>Preço (R$)</span><span>{f.multiDia ? 'Trabalho (min)' : 'Duração (min)'}</span></div>
-            {PORTES.map((p) => (
+            {portesAtivos().map(({ id: p }) => (
               <div className="porte-linha" key={p}>
                 <b>{ROTULO_PORTE[p]}</b>
                 <input type="number" min="0" step="0.5" value={f.precos?.[p] ?? ''} onChange={(e) => setF({ ...f, precos: { ...f.precos, [p]: e.target.value === '' ? '' : Number(e.target.value) } })} aria-label={`Preço, porte ${ROTULO_PORTE[p]}`} data-testid={`srv-preco-${p}`} />
                 <input type="number" min="5" step="5" value={f.duracoes?.[p] ?? ''} onChange={(e) => setF({ ...f, duracoes: { ...f.duracoes, [p]: e.target.value === '' ? '' : Number(e.target.value) } })} aria-label={`Duração, porte ${ROTULO_PORTE[p]}`} data-testid={`srv-dur-${p}`} />
               </div>
             ))}
+            <small className="muted">Porte que você cadastrou e deixou sem valor usa o preço e o tempo do Médio.</small>
           </div>
         </div>}
         {capAtiva('multiDia') && <div className="campo-largo"><Interruptor checked={!!f.multiDia} onChange={(v) => setF({ ...f, multiDia: v })} rotulo="Serviço de vários dias" descricao="O carro entra, fica no box e é retirado depois. A duração conta só o tempo de trabalho (ex.: 480 = um dia de 8 h); a retirada cai no último dia útil necessário." testid="srv-multidia" /></div>}

@@ -10,7 +10,9 @@ import React, { useEffect, useState } from 'react';
 import { comissaoGeral as apiComissao, local as api } from '../../services/api-real.js';
 import { caminhoHttps, coordenadasDeTexto, latitudeValida, longitudeValida } from '../../domain/localizacao.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
+import { capAtiva } from '../../domain/tipos.js';
 import RegrasAtendimento from './RegrasAtendimento.jsx';
+import Portes from './Portes.jsx';
 import LinkAgendamento from './LinkAgendamento.jsx';
 import Expediente from './Expediente.jsx';
 import MarcaLoja from './MarcaLoja.jsx';
@@ -157,6 +159,12 @@ export default function Estabelecimento({ ehDono, aoReconfigurar, aoMudarMarca }
         <>
           <h2 className="est-subtitulo-real">Horário de funcionamento</h2>
           <Expediente />
+          {capAtiva('precoPorPorte') && (
+            <>
+              <h2 className="est-subtitulo-real">Portes de veículo</h2>
+              <Portes />
+            </>
+          )}
           <h2 className="est-subtitulo-real">Logo e cor do tema</h2>
           <MarcaLoja aoMudar={aoMudarMarca} />
         </>

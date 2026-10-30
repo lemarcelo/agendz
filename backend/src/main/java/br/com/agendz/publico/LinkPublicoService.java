@@ -3,6 +3,8 @@ package br.com.agendz.publico;
 import br.com.agendz.clientes.ClienteService;
 import br.com.agendz.comissao.ComissaoService;
 import br.com.agendz.configuracao.LinkAgendamento;
+import br.com.agendz.configuracao.PorteController;
+import br.com.agendz.servicos.OrdemDosServicos;
 import br.com.agendz.configuracao.LocalDaLoja;
 import br.com.agendz.cupom.CupomService;
 import br.com.agendz.agenda.Ocupacao;
@@ -79,7 +81,7 @@ public class LinkPublicoService {
     public record ServicoPublico(UUID id, String nome, int duracao, BigDecimal preco, int antecedenciaH, Map<String, BigDecimal> precos, Map<String, Integer> duracoes) {
     }
 
-    public record PortePublico(String id, String nome) {
+    public record PortePublico(String id, String nome, String exemplo) {
     }
 
     public record ProfissionalPublico(UUID id, String nome, String foto) {
@@ -143,8 +145,6 @@ public class LinkPublicoService {
     private final LimitePublico limite;
     private final Ocupacao ocupacao;
     private static final ObjectMapper JSON = new ObjectMapper();
-    private static final List<String> PORTES = List.of("pequeno", "medio", "grande", "suv", "pickup");
-    private static final Map<String, String> ROTULO_PORTE = Map.of("pequeno", "Pequeno", "medio", "Médio", "grande", "Grande", "suv", "SUV", "pickup", "Pickup");
 
     public LinkPublicoService(LojaJdbc banco, Clock relogio, EscalaService escalas, ClienteService clientes, CupomService cupons, ComissaoService comissoes, LimitePublico limite, Ocupacao ocupacao) {
         this.banco = banco;
@@ -170,16 +170,17 @@ public class LinkPublicoService {
                 return new Pagina(false, ERRO_SEM_BOX, cfg.diasMax(), cfg.telefoneObrigatorio(), cfg.nomeObrigatorio(), cfg.veiculoObrigatorio(), List.of(), List.of(), null, null, loja.tipo(), List.of()); // estética sem box: a agenda do cliente não abre (v120)
             }
             boolean porPorte = Capacidades.precoPorPorte(loja);
+            List<PorteController.Porte> listaPortes = porPorte ? PorteController.ler(jdbc) : List.of();
             List<ServicoPublico> servicos = jdbc.query(
-                    "select id, nome, preco, duracao_min, antecedencia_h, precos::text as precos, duracoes::text as duracoes from servico where ativo and not multi_dia order by lower(nome), id",
+                    "select id, nome, preco, duracao_min, antecedencia_h, precos::text as precos, duracoes::text as duracoes from servico where ativo and not multi_dia order by " + OrdemDosServicos.sql(jdbc),
                     (rs, i) -> new ServicoPublico(rs.getObject("id", UUID.class), rs.getString("nome"), rs.getInt("duracao_min"), rs.getBigDecimal("preco"), rs.getInt("antecedencia_h"),
-                            porPorte ? tabelaPrecos(rs.getString("precos")) : null, porPorte ? tabelaDuracoes(rs.getString("duracoes")) : null));
+                            porPorte ? tabelaPrecos(listaPortes, rs.getString("precos")) : null, porPorte ? tabelaDuracoes(listaPortes, rs.getString("duracoes")) : null));
             List<ProfissionalPublico> profissionais = jdbc.query(
                     "select id, coalesce(nullif(apelido, ''), nome) as n, foto from usuario where ativo and atende order by lower(coalesce(nullif(apelido, ''), nome)), id",
                     (rs, i) -> new ProfissionalPublico(rs.getObject("id", UUID.class), rs.getString("n"), rs.getString("foto")));
             LocalDaLoja.Local local = LocalDaLoja.ler(jdbc);
             boolean mostra = local.enderecoNoLink() && local.temEndereco();
-            List<PortePublico> portes = porPorte ? PORTES.stream().map(x -> new PortePublico(x, ROTULO_PORTE.get(x))).toList() : List.of();
+            List<PortePublico> portes = listaPortes.stream().filter(PorteController.Porte::ativo).map(x -> new PortePublico(x.id(), x.nome(), x.exemplo())).toList();
             return new Pagina(true, null, cfg.diasMax(), cfg.telefoneObrigatorio(), cfg.nomeObrigatorio(), cfg.veiculoObrigatorio(), servicos, profissionais, mostra ? local.enderecoTexto() : null, mostra ? local.mapaUrl() : null, loja.tipo(), portes);
         });
     }
@@ -194,7 +195,7 @@ public class LinkPublicoService {
         return banco.naLoja(jdbc -> {
             LinkAgendamento.Config cfg = config(jdbc, loja);
             if (!cfg.ativo()) return List.<Horario>of();
-            List<Svc> servicos = servicosDoLink(jdbc, ids(servicoIds), porteDoPedido(loja, porte));
+            List<Svc> servicos = servicosDoLink(jdbc, ids(servicoIds), porteDoPedido(jdbc, loja, porte));
             Base base = base(jdbc, loja, profissionalId);
             return horariosDoDia(jdbc, cfg, base, dia, servicos, relogio.instant(), false, null);
         });
@@ -209,7 +210,7 @@ public class LinkPublicoService {
         return banco.naLoja(jdbc -> {
             LinkAgendamento.Config cfg = config(jdbc, loja);
             if (!cfg.ativo() || n == 0) return List.<LocalDate>of();
-            List<Svc> servicos = servicosDoLink(jdbc, ids(servicoIds), porteDoPedido(loja, porte));
+            List<Svc> servicos = servicosDoLink(jdbc, ids(servicoIds), porteDoPedido(jdbc, loja, porte));
             Base base = base(jdbc, loja, profissionalId);
             Instant agora = relogio.instant();
             List<LocalDate> livres = new ArrayList<>();
@@ -322,6 +323,7 @@ public class LinkPublicoService {
                     : clientes.resolverVeiculo(jdbc, loja, null, null, p.veiculo() == null ? null
                             : new ClienteService.EntradaVeiculo(null, p.veiculo().placa(), p.veiculo().marca(), p.veiculo().modelo(), p.veiculo().cor(), p.veiculo().porte()),
                             new java.util.HashSet<>(cfg.veiculoObrigatorio()));
+            if (vei != null && vei.porte() != null && !PorteController.ativos(jdbc).contains(vei.porte())) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha o porte do veículo."); // porte desativado não se oferece mais
             List<Svc> servicos = servicosDoLink(jdbc, servicoIds, vei == null ? null : vei.porte());
             Instant inicio = p.inicio();
             if (inicio.getNano() != 0 || inicio.getEpochSecond() % 60 != 0 || !inicio.isAfter(agora) || inicio.isAfter(agora.plus(cfg.diasMax(), ChronoUnit.DAYS))) {
@@ -644,10 +646,11 @@ public class LinkPublicoService {
     }
 
     /** Porte pedido nas consultas de horário: no tipo que cobra por porte é obrigatório e válido; nos outros é ignorado. */
-    private static String porteDoPedido(Loja loja, String porte) {
+    private static String porteDoPedido(JdbcTemplate jdbc, Loja loja, String porte) {
         if (!Capacidades.precoPorPorte(loja)) return null;
         String p = porte == null ? "" : porte.trim().toLowerCase(java.util.Locale.ROOT);
-        if (!PORTES.contains(p)) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha o porte do veículo.");
+        if (p.isEmpty()) return PorteController.PADRAO; // o dono pode tirar a obrigatoriedade do porte: quem não escolhe fica no Médio
+        if (!PorteController.ativos(jdbc).contains(p)) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha o porte do veículo.");
         return p;
     }
 
@@ -672,20 +675,22 @@ public class LinkPublicoService {
         }
     }
 
-    private static Map<String, BigDecimal> tabelaPrecos(String json) {
+    private static Map<String, BigDecimal> tabelaPrecos(List<PorteController.Porte> portes, String json) {
         Map<String, BigDecimal> m = new LinkedHashMap<>();
-        for (String x : PORTES) {
-            BigDecimal v = valorDoPorte(json, x);
-            if (v != null) m.put(x, v);
+        for (PorteController.Porte x : portes) {
+            if (!x.ativo()) continue;
+            BigDecimal v = valorDoPorte(json, x.id());
+            if (v != null) m.put(x.id(), v);
         }
         return m;
     }
 
-    private static Map<String, Integer> tabelaDuracoes(String json) {
+    private static Map<String, Integer> tabelaDuracoes(List<PorteController.Porte> portes, String json) {
         Map<String, Integer> m = new LinkedHashMap<>();
-        for (String x : PORTES) {
-            BigDecimal v = valorDoPorte(json, x);
-            if (v != null) m.put(x, v.intValue());
+        for (PorteController.Porte x : portes) {
+            if (!x.ativo()) continue;
+            BigDecimal v = valorDoPorte(json, x.id());
+            if (v != null) m.put(x.id(), v.intValue());
         }
         return m;
     }

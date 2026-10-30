@@ -34,7 +34,7 @@ export default function RegrasAtendimento() {
     e.preventDefault();
     if (salvando) return;
     setSalvando(true); setErro(''); setOk('');
-    const r = await api.gravar({ formaPagamentoPadrao: regras.formaPagamentoPadrao, camposObrigatorios: { futuro: regras.futuro, local: regras.local } });
+    const r = await api.gravar({ formaPagamentoPadrao: regras.formaPagamentoPadrao, camposObrigatorios: { futuro: regras.futuro, local: regras.local }, ordemServicos: regras.ordemServicos });
     setSalvando(false);
     if (!r.ok) { setErro(r.erro); return; }
     setRegras(r.regras); setOk('Regras salvas.');
@@ -55,6 +55,11 @@ export default function RegrasAtendimento() {
         <select value={regras.formaPagamentoPadrao} onChange={(e) => { setOk(''); setErro(''); setRegras({ ...regras, formaPagamentoPadrao: e.target.value }); }} data-testid="regras-forma">
           {FORMAS_PAGAMENTO.map(([k, r]) => <option key={k} value={k}>{r}</option>)}
           <option value="">Sem padrão (perguntar sempre)</option>
+        </select>
+      </Campo>
+      <Campo rotulo="Ordem dos serviços no Atender e no link" dica="Mais usados: os que mais saem ficam em cima. Minha ordem: a que você montou na lista de Serviços (setas).">
+        <select value={regras.ordemServicos} onChange={(e) => { setOk(''); setErro(''); setRegras({ ...regras, ordemServicos: e.target.value }); }} data-testid="regras-ordem-servicos">
+          <option value="uso">Mais usados primeiro</option><option value="manual">Minha ordem</option>
         </select>
       </Campo>
       {grupo('futuro', 'Campos obrigatórios no agendamento (data futura)', CAMPOS_FUTURO())}
