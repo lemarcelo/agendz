@@ -41,6 +41,7 @@ const servidor = http.createServer((req, res) => {
       { id: SRV_BARBA, codigo: '2', nome: 'Barba', categoria: '', preco: 30, duracaoMin: 30, intervaloMin: 0, ativo: true },
       { id: id(52), codigo: '3', nome: 'Pigmentação antiga', categoria: '', preco: 99, duracaoMin: 60, intervaloMin: 0, ativo: false },
     ]);
+    if (u.pathname === '/api/estabelecimento/regras-atendimento') return json(200, { formaPagamentoPadrao: 'pix', futuro: ['nome', 'telefone'], local: [] }); // o dono marcou nome e telefone no futuro
     if (u.pathname === '/api/atendimentos' && req.method === 'POST') {
       if (c.inicio === '2026-11-03T13:00:00.000Z' && papel === 'dono' && !c.nome) return json(400, { mensagem: 'Preencha os campos obrigatórios: nome, telefone.' });
       const quando = c.inicio ? Date.parse(c.inicio) : AGORA.getTime();

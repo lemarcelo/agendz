@@ -177,7 +177,7 @@ function Painel({ loja, sessao, aoSair }) {
   const itens = [];
   if (dono || (sessao.secoes || []).includes('agenda')) itens.push(['agenda', 'Agenda', 'calendar']);
   if (dono || (sessao.secoes || []).includes('clientes')) itens.push(['clientes', 'Clientes', 'users']);
-  itens.push(['servicos', 'Serviços', tipo.visual.iconeServicos || 'scissors']);
+  itens.push(['servicos', 'Serviços', TIPOS[loja.tipo].visual.iconeServicos || 'scissors']);
   if (dono) itens.push(['equipe', 'Equipe', 'team']);
   if (dono && capAtiva('usaRecursoFisico')) itens.push(['boxes', 'Boxes', 'car']);
   if (dono || (sessao.secoes || []).includes('estabelecimento')) itens.push(['cupons', 'Cupons', 'tag']);

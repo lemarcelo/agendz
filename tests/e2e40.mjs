@@ -83,7 +83,7 @@ async function abrir(viewport = { width: 1280, height: 800 }) {
   p.on('dialog', async (d) => { erros.push('DIALOG: ' + d.message()); await d.dismiss(); });
   await p.goto(url);
   await p.getByTestId('login-id').fill('davi'); await p.getByTestId('login-senha').fill('qualquer'); await p.getByTestId('login-entrar').click();
-  await p.getByTestId('nav-estabelecimento').click(); await p.getByTestId('tela-estabelecimento').waitFor();
+  await p.locator('.nav button').first().waitFor();
   return { ctx, p };
 }
 const semRolagem = async (p, nome) => assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `${nome}: rolagem horizontal em 390 px`);

@@ -58,6 +58,12 @@ assert.match(await T('salvar-atender').innerText(), /Registrar/);
 await salvar();
 ok('data passada registra atendimento');
 
+// de fábrica o agendamento futuro não exige dados do cliente: o dono marca nome e telefone em Regras
+await T('nav-estab').click();
+await p.getByRole('tab', { name: 'Regras' }).click();
+assert.equal(await T('obrig-futuro-nome').isChecked(), false, 'de fábrica nada é obrigatório no futuro');
+await T('obrig-futuro-nome').check(); await T('obrig-futuro-telefone').check();
+await T('nav-agenda').click();
 await T('atender').click();
 await primeiroServico();
 await T('atender-quando').click();
@@ -65,7 +71,7 @@ await T('atender-data').fill('2026-10-14');
 await T('hora-h').fill('10'); await T('hora-m').fill('00');
 assert.match(await T('salvar-atender').innerText(), /Agendar/);
 await salvarAtender(p);
-assert.match(await p.locator('[role=dialog], .modal').first().innerText(), /nome|telefone/i, 'agendamento futuro pede nome e telefone');
+assert.match(await p.locator('[role=dialog], .modal').first().innerText(), /nome|telefone/i, 'agendamento futuro pede nome e telefone quando marcado');
 await T('atender-nome').fill('Beto Futuro');
 await T('atender-telefone').fill('51 98888-2222');
 await salvar();
@@ -89,6 +95,19 @@ await T('nav-estab').click();
 await p.getByRole('tab', { name: 'Regras' }).click();
 await T('obrig-local-nome').uncheck();
 ok('campos obrigatórios configuráveis');
+
+// 4b) tudo desmarcado: o Atender (futuro e na hora) não pede cliente nem dados; o futuro fica sem cadastro, confirmado
+await T('nav-estab').click();
+await p.getByRole('tab', { name: 'Regras' }).click();
+await T('obrig-futuro-nome').uncheck(); await T('obrig-futuro-telefone').uncheck();
+await T('nav-agenda').click();
+await T('atender').click();
+await primeiroServico();
+await T('atender-quando').click();
+await T('atender-data').fill('2026-10-16');
+await T('hora-h').fill('11'); await T('hora-m').fill('00');
+await salvar();
+ok('futuro sem nenhuma regra marcada agenda sem pedir cliente');
 
 // 5) o botão Atender da Agenda abre o Atender com a data do dia aberto (a grade de horas saiu na v73)
 await T('nav-agenda').click();
