@@ -16,6 +16,7 @@ import { PainelEscala } from './Estabelecimento.jsx';
 import { textoUltimo } from './format.js';
 import { toast, useStore } from './hooks.js';
 import Tabela from './Tabela.jsx';
+import { BlocoPlano, ModaisPlano } from './PlanoDoCliente.jsx';
 import { capAtiva, rot, Rot, rots, voc, Voc } from '../domain/tipos.js';
 
 const faixa = (obj, fmt) => { const v = PORTES.map((p) => obj?.[p]).filter((x) => Number.isFinite(x)); if (!v.length) return ''; const a = Math.min(...v), b = Math.max(...v); return a === b ? fmt(a) : `${fmt(a)} a ${fmt(b)}`; };
@@ -24,10 +25,16 @@ const faixaDuracao = (s) => (s.multiDia ? 'vários dias' : faixa(s.duracoes, fmt
 const fmtNasc = (s) => (s ? fmtDate(new Date(`${s}T00:00`).getTime()) : '');
 
 // ---------- Clientes ----------
-export function Clientes({ user }) {
+export function Clientes({ user, aoIr }) {
   const { state: st, agora } = useStore();
   const [busca, setBusca] = useState('');
   const [edit, setEdit] = useState(null);
+  // Plano na ficha: o aviso, a recarga e o formulário aberto moram AQUI (a ficha e o bloco recarregam), não no bloco.
+  const [planoModo, setPlanoModo] = useState(null);
+  const [planoAviso, setPlanoAviso] = useState('');
+  const [planoVersao, setPlanoVersao] = useState(0);
+  const podePlanos = pode(user, 'planos');
+  const fechaFicha = () => { setEdit(null); setPlanoModo(null); setPlanoAviso(''); };
   const q = busca.toLowerCase();
   const lista = st.clientes.filter((c) => !q || [c.nome, c.apelido, c.telefone, c.cpf, ...(c.veiculos || []).flatMap((v) => [v.placa, v.modelo])].some((v) => String(v || '').toLowerCase().includes(q) || String(v || '').replace(/\D/g, '').includes(q.replace(/\D/g, '') || '§')));
   return (
@@ -50,7 +57,8 @@ export function Clientes({ user }) {
           { id: 'acoes', titulo: '', fixa: true, cel: (c) => <Btn tamanho="sm" icone="edit" onClick={() => setEdit(c)} aria-label={`Editar ${c.nome}`}>Editar</Btn> },
         ]} />
       )}
-      {edit && <FormCliente c={edit} onClose={() => setEdit(null)} />}
+      {edit && <FormCliente c={edit} onClose={planoModo ? () => {} : fechaFicha} plano={podePlanos && edit.id ? { aviso: planoAviso, versao: planoVersao, aoAbrir: (m) => { setPlanoAviso(''); setPlanoModo(m); }, aoFeito: (m) => { setPlanoAviso(m); setPlanoVersao((v) => v + 1); }, aoIr: aoIr ? (a) => { fechaFicha(); aoIr(a); } : null } : null} />}
+      {edit && podePlanos && planoModo && <ModaisPlano modo={planoModo} cliente={edit} aoFechar={() => { setPlanoModo(null); setPlanoVersao((v) => v + 1); }} aoFeito={(m) => setPlanoAviso(m)} />}
     </section>
   );
 }
@@ -111,7 +119,7 @@ function PedidosVinculo({ user }) {
   );
 }
 
-function FormCliente({ c, onClose }) {
+function FormCliente({ c, onClose, plano }) {
   const [f, setF] = useState(c);
   const [erro, setErro] = useState('');
   const salvar = () => { const r = apiCli.salvar(f); if (!r.ok) { setErro(r.erros[0]); return; } toast('Cliente salvo.'); onClose(); };
@@ -144,6 +152,7 @@ function FormCliente({ c, onClose }) {
         <Btn tamanho="sm" icone="plus" disabled={(f.veiculos || []).length >= LIMITE_VEICULOS} onClick={() => setF({ ...f, veiculos: [...(f.veiculos || []), { placa: '', marca: '', modelo: '', cor: '', porte: '' }] })} data-testid="cli-veiculo-add">Adicionar veículo</Btn>
         <p className="muted">O porte (pequeno, médio, grande, SUV, pickup) define o preço e o tempo dos serviços. Veículo com agendamento ativo não pode ser removido.</p>
       </fieldset>}
+      {plano && <BlocoPlano cliente={c} {...plano} />}
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
     </Modal>
   );

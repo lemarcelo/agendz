@@ -171,7 +171,7 @@ function Shell({ user, st, tema, setTema }) {
       <div className="corpo">
         <main className="principal">
           {abaAtual === 'agenda' && <Agenda user={user} onAbrir={abrir} onNovo={novo} />}
-          {abaAtual === 'clientes' && <Clientes user={user} />}
+          {abaAtual === 'clientes' && <Clientes user={user} aoIr={setAba} />}
           {abaAtual === 'servicos' && <Servicos user={user} />}
           {abaAtual === 'relatorios' && <Relatorios user={user} />}
           {abaAtual === 'ganhos' && <RelatorioProfissional />}

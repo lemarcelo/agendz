@@ -20,7 +20,7 @@ function situacaoDe(a) {
 }
 
 // ---------------------------------------------------------------- formulários (cada um ocupa a tela, como o de cupons)
-function Rodape({ erro, enviando, aoCancelar, rotuloSalvar, rotuloCancelar = 'Cancelar', perigo, testid }) {
+export function Rodape({ erro, enviando, aoCancelar, rotuloSalvar, rotuloCancelar = 'Cancelar', perigo, testid }) {
   return (
     <>
       {erro && <Aviso tipo="erro" data-testid="planos-erro-form">{erro}</Aviso>}
@@ -32,7 +32,7 @@ function Rodape({ erro, enviando, aoCancelar, rotuloSalvar, rotuloCancelar = 'Ca
   );
 }
 
-function usarEnvio(fazer, aoOk) {
+export function usarEnvio(fazer, aoOk) {
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
   const enviar = async (e) => {
@@ -100,7 +100,7 @@ function FormAssinatura({ planos, mes, aoCancelar, aoFeito }) {
   );
 }
 
-function FormMensalidade({ a, mesInicial, aoCancelar, aoFeito }) {
+export function FormMensalidade({ a, mesInicial, aoCancelar, aoFeito }) {
   const [mes, setMes] = useState(mesInicial);
   const [forma, setForma] = useState('pix');
   const { erro, enviando, enviar } = usarEnvio(() => api.pagar(a.id, { mes, forma }), () => aoFeito(`Mensalidade de ${rotuloMes(mes)} registrada.`));
@@ -125,7 +125,7 @@ function FormMensalidade({ a, mesInicial, aoCancelar, aoFeito }) {
   );
 }
 
-function FormEncerrar({ a, aoCancelar, aoFeito }) {
+export function FormEncerrar({ a, aoCancelar, aoFeito }) {
   const [motivo, setMotivo] = useState('');
   const { erro, enviando, enviar } = usarEnvio(() => api.encerrar(a.id, motivo),
     (r) => aoFeito(r.divida > 0 ? `Plano encerrado. ${r.divida} ${plural(r.divida, 'corte adiantado ficou', 'cortes adiantados ficaram')} como dívida.` : 'Plano encerrado.'));
