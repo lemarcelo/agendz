@@ -175,9 +175,9 @@ export function agendarPorLink(s, d, agora) {
   const a = r.agendamento;
   if (typeof d.lembretes === 'boolean') c.lembretes = d.lembretes;
   const sv = servicosDoAg(s, a).map((x) => x.nome).join(', ');
-  E.avisarPainel(s, a, `Cliente agendou: ${c.apelido || c.nome} pediu ${sv}${a.veiculo ? ` para o ${resumoVeiculo(a.veiculo)}` : ''} com ${profissional.apelido || profissional.nome} para ${fmtDate(a.inicio)} às ${fmtHM(a.inicio)}. Confirme ou recuse.`, agora);
+  E.avisarPainel(s, a, `Cliente agendou: ${c.apelido || c.nome} pediu ${sv}${a.veiculo ? ` para o ${resumoVeiculo(a.veiculo)}` : ''} com ${profissional.apelido || profissional.nome} para ${fmtDate(a.inicio)} às ${fmtHM(a.inicio)}.${r.plano ? ` Usa 1 atendimento do plano ${r.plano.nome}.` : ''} Confirme ou recuse.`, agora);
   E.enviarAoCliente(s, a, 'cliente_agendou', agora);
-  return { ok: true, agendamentoId: a.id, token: emitirToken(s, c.id, agora), clienteNovo: !!r0.criado };
+  return { ok: true, agendamentoId: a.id, token: emitirToken(s, c.id, agora), clienteNovo: !!r0.criado, usouPlano: !!r.plano };
 }
 
 // ---------- gerenciar os próprios agendamentos ----------

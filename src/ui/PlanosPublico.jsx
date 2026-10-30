@@ -1,6 +1,6 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
-// Página pública de planos (`#planos`): o cliente vê os planos e o valor mensal, pede um (entra para o dono aceitar) e consulta quantos cortes restam.
-// Fala só com `publico.*`: nunca vê dado de outro cliente. A consulta de saldo responde só o número de cortes e é limitada por tentativas.
+// Página pública de planos (`#planos`): o cliente vê os planos e o valor mensal, pede um (entra para o dono aceitar) e consulta quantos atendimentos restam.
+// Fala só com `publico.*`: nunca vê dado de outro cliente. A consulta de saldo responde só o número de atendimentos e é limitada por tentativas.
 import React, { useState } from 'react';
 import { publico } from '../services/api.js';
 import { fmtMoney } from '../domain/time.js';

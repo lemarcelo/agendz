@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { store, auth, agenda, financeiro, whatsapp, bancoSimulado, equipe } from '../src/services/api.js';
 import { reiniciar } from './helpers.mjs';
 import * as R from '../src/domain/rules.js';
-import { addDays, startOfDay, tsAt, MIN, HORA } from '../src/domain/time.js';
+import { addDays, startOfDay, tsAt, MIN, HORA, ymd } from '../src/domain/time.js';
 import { faixasDoDia } from '../src/domain/schedule.js';
 
 const st = () => store.getState();
@@ -314,4 +314,30 @@ test('o cliente (link ou WhatsApp) nunca ocupa um horário que outro cliente já
   const painel = R.validarHorario(st(), { profissionalId: 'u-pablo', inicio, servicoIds: ['s-lav-simples'], agora: store.agora(), origem: 'painel' });
   assert.deepEqual(painel.erros, [], 'a equipe vê o aviso, mas pode sobrepor um pedido a confirmar');
   assert.equal(painel.pendentes.length, 1);
+});
+
+test('horário fixo de assinante (plano): ninguém mais toma, nem antes de virar agendamento; só o assinante ou o encaixe da equipe; dia cancelado fica livre', () => {
+  const d = dia(20); // dia útil distante: o fixo ainda não virou agendamento
+  const inicio = tsAt(d, '10:00');
+  st().assinaturas = [{ id: 'asx', clienteId: 'c-jon', status: 'ativa', plano: { servicoIds: ['s-lav-simples'] }, fixos: [{ id: 'fxx', dia: new Date(d).getDay(), hm: '10:00', profissionalId: 'u-pablo', servicoIds: ['s-lav-simples'] }] }];
+  const r = cria({ inicio });
+  assert.equal(r.ok, false); assert.match(r.erros[0], /fixo de um cliente com plano/);
+  assert.equal(R.validarHorario(st(), { profissionalId: 'u-pablo', inicio: inicio + 30 * MIN, servicoIds: ['s-lav-simples'], agora: store.agora(), origem: 'painel' }).erros.length, 1, 'sobrepõe a janela do fixo (40 min + intervalo)');
+  assert.deepEqual(R.validarHorario(st(), { profissionalId: 'u-pablo', inicio: inicio + 3 * HORA, servicoIds: ['s-lav-simples'], agora: store.agora(), origem: 'painel' }).erros, [], 'horas depois está livre');
+  assert.deepEqual(R.validarHorario(st(), { profissionalId: 'u-tailuan', inicio, servicoIds: ['s-lav-simples'], agora: store.agora(), origem: 'painel' }).erros.filter((e) => /fixo/.test(e)), [], 'outro profissional não é afetado');
+  // o cliente (link/WhatsApp) também não passa; a equipe só com encaixe
+  assert.equal(R.validarHorario(st(), { profissionalId: 'u-pablo', inicio, servicoIds: ['s-lav-simples'], agora: store.agora(), origem: 'link', encaixe: true }).erros.some((e) => /fixo/.test(e)), true);
+  assert.equal(cria({ inicio, encaixe: true, status: 'confirmado' }).ok, true, 'encaixe da equipe');
+  // o próprio assinante agenda normalmente
+  assert.equal(cria({ clienteId: 'c-jon', inicio: tsAt(addDays(d, 7), '10:00') }).ok, true, 'o assinante pode');
+  // o dia em que o fixo foi cancelado fica livre: outro cliente pode pegar
+  const dia2 = addDays(d, 14); const i2 = tsAt(dia2, '10:00');
+  const meu = cria({ clienteId: 'c-jon', inicio: i2 });
+  assert.ok(meu.ok, JSON.stringify(meu));
+  assert.ok(agenda.alterarStatus(meu.agendamento.id, 'cancelado').ok);
+  const a = st().agendamentos.find((x) => x.id === meu.agendamento.id); a.fixoId = 'fxx'; a.fixoData = ymd(i2);
+  assert.equal(cria({ inicio: i2 }).ok, true, 'fixo cancelado nesse dia: livre');
+  // assinatura encerrada não reserva mais
+  st().assinaturas[0].status = 'cancelada';
+  assert.equal(cria({ clienteId: 'c-marcelo', profissionalId: 'u-pablo', inicio: tsAt(addDays(d, 21), '10:00') }).ok, true);
 });
