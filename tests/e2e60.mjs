@@ -136,7 +136,8 @@ const A1 = id(101), A4 = id(104);
   banco.find((a) => a.id === A1).status = 'cancelado';
   await p.waitForFunction((i) => document.querySelector(`[data-testid="cartao"][data-id="${i}"]`)?.getAttribute('data-status') === 'confirmado', A1);
   await p.clock.runFor(21000);
-  await p.waitForFunction((i) => document.querySelector(`[data-testid="cartao"][data-id="${i}"]`)?.getAttribute('data-status') === 'cancelado', A1);
+  // cancelado sai da lista do dia e vai para a linha "Cancelados (N)"
+  await p.waitForFunction((i) => !document.querySelector(`[data-testid="cartao"][data-id="${i}"]`) && /^Cancelados? \(\d+\)$/.test(document.querySelector('[data-testid="cancelados-resumo"]')?.textContent.trim() || ''), A1);
   ok('a cada 20 s a agenda se atualiza sozinha');
   await ctx.close();
 }

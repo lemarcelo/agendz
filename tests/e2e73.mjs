@@ -66,4 +66,4 @@ for (const vp of [{ width: 1440, height: 900 }, { width: 390, height: 780 }]) {
 }
 assert.deepEqual(erros, []);
 await b.close();
-ok('e2e72 completo');
+ok('e2e73 completo');
