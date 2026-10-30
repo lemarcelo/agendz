@@ -23,6 +23,7 @@ ag(7, '2026-11-10T09:00:00', 45, ALAN, CAIO, 'confirmado', 'Corte'); // fora dos
 const chamadas = [];
 const pedidosWa = [];
 let papel = 'dono';
+let comMapa = false; // só o teste do aviso em 390 px liga o link do mapa
 let ocupadoEm = null; // remarcar para este horário responde 409
 const servidor = http.createServer((req, res) => {
   let corpo = '';
@@ -35,6 +36,7 @@ const servidor = http.createServer((req, res) => {
     if (u.pathname === '/api/publico/loja') return json(200, { slug: 'dalforno', nome: 'Dalforno', tipo: 'barbearia', logo: null, temaCor: null, temaCor2: null });
     if (u.pathname === '/api/auth/login') return json(200, { token: 'tok', id: ALAN, nome: 'Alan', papel, deveTrocarSenha: false, onboardingPendente: false, secoes: ['agenda', 'clientes'] });
     if (u.pathname === '/api/clientes') return json(200, [{ id: BRUNO, nome: 'Bruno Lima', apelido: 'Bruno', telefone: '11999990001' }, { id: CAIO, nome: 'Caio Souza', apelido: '', telefone: '11999990002' }, { id: DEBORA, nome: 'Débora Reis', apelido: '', telefone: '' }]);
+    if (u.pathname === '/api/estabelecimento/local' && comMapa) return json(200, { enderecoNoLink: false, localizacaoNoWhatsapp: true, enderecoTexto: 'Rua das Flores, 100', localizacaoUrl: '', localizacaoWhatsappUrl: 'https://maps.example.com/' + 'a'.repeat(150) });
     if (u.pathname === '/api/profissionais') return json(200, [{ id: ALAN, nome: 'Alan', papel: 'dono', atende: true }, { id: KIKO, nome: 'Kiko', papel: 'profissional', atende: true }]);
     if (u.pathname === '/api/agendamentos' && req.method === 'GET') {
       const de = Date.parse(u.searchParams.get('de')), ate = Date.parse(u.searchParams.get('ate'));
@@ -266,6 +268,28 @@ const textoDe = (p, t) => p.getByTestId(t).innerText();
   await p.locator('[data-testid="cartao"][data-status="confirmado"]').first().locator('[data-testid="cartao-abrir"]').click(); await p.getByTestId('acao-remarcar').click(); await semRolagem('remarcar');
   await p.getByTestId('aba-calendario').click(); await p.getByTestId('calendario').waitFor(); await semRolagem('calendário');
   ok('390 px com fonte larga: sem rolagem lateral');
+  await ctx.close();
+}
+
+// 10b. celular: o aviso de remarcar tem o link do mapa (sem espaços, 170 caracteres): o botão "Avisar" tem que ficar dentro da tela (bug: o modal chegava a 1000 px)
+{
+  comMapa = true;
+  const fotoDoBanco = JSON.stringify(banco); // o teste remarca um horário: devolve o banco ao que era para não mexer nos testes seguintes
+  const { ctx, p } = await abrir({ width: 390, height: 780 });
+  await p.addStyleTag({ content: '*{font-family:"DejaVu Sans" !important}' });
+  await p.waitForFunction(() => document.querySelectorAll('[data-testid="cartao"]').length >= 1);
+  await p.locator('[data-testid="cartao"][data-status="confirmado"]').first().locator('[data-testid="cartao-abrir"]').click();
+  await p.getByTestId('acao-remarcar').click();
+  await p.getByTestId('remarcar-quando').fill('2026-10-28T18:30');
+  await p.getByTestId('remarcar-salvar').click();
+  await p.getByTestId('avisar-whats-sim').waitFor();
+  assert.match(await textoDe(p, 'avisar-whats-texto'), /Como chegar: https:\/\/maps\.example\.com\//, 'a mensagem leva o link do mapa');
+  const bs = await p.getByTestId('avisar-whats-sim').boundingBox();
+  assert.ok(bs && bs.x >= 0 && bs.x + bs.width <= 390 && bs.y + bs.height <= 780, 'o botão Avisar está dentro da tela: ' + JSON.stringify(bs));
+  assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'sem rolagem horizontal com o aviso aberto');
+  ok('390 px: aviso de remarcar com link longo cabe na tela');
+  comMapa = false;
+  banco.splice(0, banco.length, ...JSON.parse(fotoDoBanco));
   await ctx.close();
 }
 
