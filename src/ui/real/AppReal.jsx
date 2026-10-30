@@ -3,7 +3,7 @@
 // temporária e mostra o painel com o menu. Os módulos entram um a um (Clientes na parte 2, Serviços na 3, Equipe na 4; a agenda na seguinte), cada um só
 // quando o servidor tem a regra inteira. Não importa `api.js` (a simulada) nem `hooks.js`: o estado aqui é só o da sessão real, em memória.
 import React, { useEffect, useMemo, useState } from 'react';
-import { cancelarEspera, carregarLoja, entrar, esperandoRede, loginValido, onboarding, passkey, perfil as apiPerfil, quandoEsperar, sair, sessaoAtual, suporte as apiSuporte, trocarSenha } from '../../services/api-real.js';
+import { cancelarEspera, carregarLoja, entrar, esperandoRede, onboarding, passkey, perfil as apiPerfil, quandoEsperar, sair, sessaoAtual, suporte as apiSuporte, trocarSenha } from '../../services/api-real.js';
 import PrimeiroAcesso from '../leve/PrimeiroAcesso.jsx';
 import Agenda from './Agenda.jsx';
 import Clientes from './Clientes.jsx';
@@ -86,7 +86,7 @@ function Login({ loja, aoEntrar }) {
   };
   return (
     <Cartao loja={loja}>
-      <form onSubmit={enviar} className="form-grade um">
+      <form onSubmit={enviar} className="form-grade um form-acesso-real">
         <Campo rotulo="Usuário"><input value={id} onChange={(e) => { setId(e.target.value); setErro(''); }} autoComplete="username" autoFocus maxLength={60} data-testid="login-id" /></Campo>
         <Campo rotulo="Senha"><input type="password" value={senha} onChange={(e) => { setSenha(e.target.value); setErro(''); }} autoComplete="current-password" maxLength={100} data-testid="login-senha" /></Campo>
         {erro && <Aviso tipo="erro" data-testid="login-erro">{erro}</Aviso>}
@@ -99,10 +99,10 @@ function Login({ loja, aoEntrar }) {
   );
 }
 
-// Primeiro acesso: a pessoa já entrou com o usuário e a senha que recebeu; aqui só redefine (usuário que ela escolhe + senha nova). A senha enviada vem da
+// Primeiro acesso: a pessoa já entrou com o usuário e a senha que recebeu; aqui só redefine a senha (o usuário continua o mesmo que ela digitou ao entrar; v119). A senha enviada vem da
 // tela de entrada e fica só em memória até a troca (nunca vai ao storage); depois de salvar a sessão já é a nova e a tela segue sozinha (assistente ou agenda).
 function TrocarSenha({ loja, sessao, senhaEnviada, aoTrocar, aoSair }) {
-  const [f, setF] = useState({ atual: '', usuario: '', nova: '', repetir: '' });
+  const [f, setF] = useState({ atual: '', nova: '', repetir: '' });
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
   const mudar = (k) => (e) => { setF({ ...f, [k]: e.target.value }); setErro(''); };
@@ -110,22 +110,19 @@ function TrocarSenha({ loja, sessao, senhaEnviada, aoTrocar, aoSair }) {
   const enviar = async (e) => {
     e.preventDefault();
     if (enviando) return;
-    const usuario = f.usuario.trim().toLowerCase();
-    if (!loginValido(usuario)) { setErro('Escolha o seu usuário: de 2 a 60 caracteres, só letras, números, ponto, hífen e sublinhado'); return; }
     if (f.nova !== f.repetir) { setErro('A confirmação da nova senha não confere'); return; }
     setEnviando(true); setErro('');
-    const r = await trocarSenha({ senhaAtual: senhaEnviada || f.atual, nova: f.nova, usuario });
+    const r = await trocarSenha({ senhaAtual: senhaEnviada || f.atual, nova: f.nova });
     setEnviando(false);
     if (!r.ok) { setErro(r.erro); return; }
     aoTrocar(r.sessao);
   };
   return (
     <Cartao loja={loja}>
-      <form onSubmit={enviar} className="form-grade um">
-        <p><b>Olá, {sessao.nome}.</b> Sua senha é temporária. Escolha o seu usuário e a sua senha definitiva: depois disso você já entra e segue para a configuração.</p>
+      <form onSubmit={enviar} className="form-grade um form-acesso-real">
+        <p><b>Olá, {sessao.nome}.</b> Sua senha é temporária. Escolha a sua senha definitiva: depois disso você já entra e segue para a configuração.</p>
         {precisaAtual && <Campo rotulo="Senha temporária (a que você recebeu)"><input type="password" value={f.atual} onChange={mudar('atual')} autoComplete="current-password" autoFocus maxLength={100} data-testid="troca-atual" /></Campo>}
-        <Campo rotulo="Seu usuário (você escolhe; letras, números, ponto, hífen)"><input value={f.usuario} onChange={mudar('usuario')} autoComplete="username" autoCapitalize="none" spellCheck={false} maxLength={60} autoFocus={!precisaAtual} data-testid="troca-usuario" /></Campo>
-        <Campo rotulo="Sua senha definitiva (8 caracteres ou mais)"><input type="password" value={f.nova} onChange={mudar('nova')} autoComplete="new-password" maxLength={100} data-testid="troca-nova" /></Campo>
+        <Campo rotulo="Sua senha definitiva (8 caracteres ou mais)"><input type="password" value={f.nova} onChange={mudar('nova')} autoComplete="new-password" autoFocus={!precisaAtual} maxLength={100} data-testid="troca-nova" /></Campo>
         <Campo rotulo="Repita a senha definitiva"><input type="password" value={f.repetir} onChange={mudar('repetir')} autoComplete="new-password" maxLength={100} data-testid="troca-repetir" /></Campo>
         {erro && <Aviso tipo="erro" data-testid="troca-erro">{erro}</Aviso>}
         <p className="muted" data-testid="troca-esqueci">Esqueceu a senha depois? Quando o e-mail ou o WhatsApp da loja estiver configurado, dá para redefinir por lá. Até lá, peça ao suporte do Agendz, que redefine para você.</p>
