@@ -145,7 +145,7 @@ public class ServicoService {
     public Remocao remover(UUID id) {
         return banco.naLoja(jdbc -> {
             if (buscar(jdbc, id) == null) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, "Serviço não encontrado.");
-            Integer usos = jdbc.queryForObject("select (select count(*) from agendamento_servico where servico_id = ?) + (select count(*) from servico_componente where componente_id = ?)", Integer.class, id, id);
+            Integer usos = jdbc.queryForObject("select (select count(*) from agendamento_servico where servico_id = ?) + (select count(*) from servico_componente where componente_id = ?) + (select count(*) from plano_servico where servico_id = ?)", Integer.class, id, id, id);
             if (usos != null && usos > 0) {
                 jdbc.update("update servico set ativo = false where id = ?", id);
                 return new Remocao(true);

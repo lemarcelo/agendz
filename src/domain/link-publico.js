@@ -29,3 +29,14 @@ export function baseDoLink(loc = {}) {
   if (proto === 'file:') return String(loc.pathname ?? ''); // abrir o arquivo direto (teste local)
   return LINK_ARTEFATO;
 }
+
+// Página pública de planos (`#planos`, e na demonstração `#planos@<loja>`): o cliente vê os planos, pede um e consulta o saldo.
+export const HASH_PLANOS = /^#planos(@[a-z0-9-]{1,40})?$/;
+export function lerHashPlanos(hash) {
+  const m = HASH_PLANOS.exec(String(hash ?? ''));
+  return m ? { loja: m[1] ? m[1].slice(1) : '' } : null;
+}
+export function montarLinkPlanos({ base, busca = '', lojaNoLink = '' }) {
+  const loja = /^[a-z0-9-]{1,40}$/.test(String(lojaNoLink)) ? `@${lojaNoLink}` : '';
+  return `${base}${busca}#planos${loja}`;
+}

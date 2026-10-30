@@ -1055,3 +1055,7 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
 .sup-img.grande { cursor: zoom-out; width: 100%; }
 .sup-img.grande img { width: 100%; height: auto; max-height: 70vh; object-fit: contain; }
 .sup-img-falha, .sup-img-carregando { font-size: 12.5px; }
+
+/* Planos de serviço (site real) */
+.planos-rodape-real { grid-column: 1 / -1; display: grid; gap: 10px; }
+.planos-escolha-real { width: 100%; justify-content: space-between; text-align: left; gap: 8px; }

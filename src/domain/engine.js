@@ -5,6 +5,7 @@ import {
   ATIVOS, STATUS, comissaoJaPaga, ERRO_COMISSAO_PAGA, formaEfetiva, formatarTelefone, acharConflitos, cadastroPorCpf, somenteDigitos, telefoneNacional, telefoneDoCanal, errosServicoIds, limparTexto, duracaoMin, exigeConfirmacaoServico, identificarCliente, janelaOcupada,
   montarPlano, montarLembretes, notificacoesEfetivas, ocupadoMin, servicosPorIds, servicosDoAg, validarHorario, congelarComissoes, ocupacaoDe, retiradaDe, nomeBox,
 } from './rules.js';
+import { podeUsar, usoParaAgendamento } from './planos.js';
 import { LIMITE_VEICULOS, fotoDoVeiculo, limparVeiculo, resumoVeiculo, veiculoPorPlaca } from './veiculos.js';
 import { fmtDate, fmtHM, fmtMoney, HORA, MIN, startOfDay } from './time.js';
 import { consumoDoAgendamento, r2, r3, totalAgendamento } from './reports.js';
@@ -84,6 +85,14 @@ export function avisarPainel(s, a, texto, agora) {
   return aviso;
 }
 
+// Agendamento que usa um plano: remarcar ou reativar também precisa caber na cota (outro mês pode não ter corte). Devolve o texto do erro ou null.
+function erroDoPlano(s, a, inicio, agora) {
+  if (!a.planoUso) return null;
+  const as = (s.assinaturas || []).find((x) => x.id === a.planoUso.assinaturaId);
+  const pu = podeUsar(s, as, { inicio, agora, ignoreId: a.id });
+  return pu.ok ? null : pu.erro;
+}
+
 // ---------- criação ----------
 // Acréscimo: recurso aposentado (v54). Não se cria nem edita mais; o que já existe em atendimentos antigos continua valendo nos relatórios e na comissão.
 export function limparAcrescimos(map, ids) {
@@ -136,6 +145,12 @@ export function criarAgendamento(s, dados, autor, agora) {
   if (!rv.ok) return { ok: false, erros: rv.erros };
   const v = validarHorario(s, { profissionalId, inicio, servicoIds, porte: rv.veiculo?.porte, boxId, encaixe, origem, agora });
   if (v.erros.length) return { ok: false, erros: v.erros };
+  let usoPlano = null;
+  if (dados.assinaturaId) {
+    const up = usoParaAgendamento(s, { assinaturaId: dados.assinaturaId, clienteId, servicoIds, inicio, agora });
+    if (!up.ok) return { ok: false, erros: [up.erro] };
+    usoPlano = up;
+  }
   const plano = montarPlano({ inicio, servicos: v.servicos, estab: s.estabelecimento, agora });
   const semNotificacoes = notificacoesEfetivas(v.servicos, s.estabelecimento).lista.length === 0;
   const porLink = origem === 'link'; // pedido do cliente pelo link: nasce "Cliente agendou" (a confirmar pelo estabelecimento) e só recebe os lembretes de 24 h e 2 h
@@ -149,14 +164,16 @@ export function criarAgendamento(s, dados, autor, agora) {
     ...(porLink ? { clienteAgendou: true, lembretes: montarLembretes({ inicio, agora }) } : {}),
     faltaConfirmacao: null, servicosFeitos: null, motivoCancelamento: null, log: [],
     precos: Object.fromEntries(v.servicos.map((x) => [x.id, x.preco])), acrescimos: {}, estoqueBaixado: null,
+    ...(usoPlano ? { planoUso: usoPlano.uso } : {}),
   };
   congelarComissoes(s, a, v.servicos);
   registrar(s, a, autor, 'criação', null, `${nomesServicos(s, a)} ${a.veiculo ? `(${resumoVeiculo(a.veiculo)}) ` : ''}em ${fmtDate(inicio)} às ${fmtHM(inicio)}`, agora);
   s.agendamentos.push(a);
   if (status === STATUS.CONFIRMADO || status === STATUS.CONCLUIDO) cancelarPendentesConflitantes(s, a, agora);
+  if (usoPlano) registrar(s, a, autor, 'plano', null, `Usa 1 corte do plano ${usoPlano.uso.planoNome}${usoPlano.aviso ? ` (${usoPlano.aviso})` : ''}`, agora);
   for (const g of aposCriar) g(s, a, autor, agora);
   tick(s, agora);
-  return { ok: true, agendamento: a, avisos: { pendentes: v.pendentes, confirmados: v.confirmados } };
+  return { ok: true, agendamento: a, avisos: { pendentes: v.pendentes, confirmados: v.confirmados }, ...(usoPlano ? { plano: { nome: usoPlano.uso.planoNome, aviso: usoPlano.aviso, adiantado: usoPlano.adiantado } } : {}) };
 }
 
 // Quem confirma primeiro fica com o horário: os pendentes sobrepostos são cancelados.
@@ -247,6 +264,7 @@ export function clienteRemarca(s, id, novoInicio, agora) {
   if (a.status === STATUS.CANCELADO && jaCreditado(s, a)) return { ok: false, erros: ERRO_DEVOLVIDO };
   const v = validarHorario(s, { profissionalId: a.profissionalId, inicio: novoInicio, servicoIds: a.servicoIds, porte: a.porte, boxPreferido: a.boxId, ignoreId: a.id, origem: 'whatsapp', agora });
   if (v.erros.length) return { ok: false, erros: v.erros };
+  { const e = erroDoPlano(s, a, novoInicio, agora); if (e) return { ok: false, erros: [e] }; }
   const c = clienteDe(s, a);
   const semNotificacoes = notificacoesEfetivas(v.servicos, s.estabelecimento).lista.length === 0;
   if ([STATUS.A_CONFIRMAR, STATUS.CONFIRMADO].includes(a.status) && a.inicio - agora < PRAZO_CANCELAR_MS) a.cancelamentoTravado = true;
@@ -290,6 +308,7 @@ export function profissionalRemarca(s, id, { inicio, status, profissionalId, box
   const novoProfissional = profissionalId || a.profissionalId;
   const v = validarHorario(s, { profissionalId: novoProfissional, inicio, servicoIds: a.servicoIds, porte: a.porte, boxId, boxPreferido: a.boxId, ignoreId: a.id, encaixe: a.encaixe, origem: 'painel', agora });
   if (v.erros.length) return { ok: false, erros: v.erros };
+  { const e = erroDoPlano(s, a, inicio, agora); if (e) return { ok: false, erros: [e] }; }
   if (v.boxId !== a.boxId) {
     registrar(s, a, autor, 'box', nomeBox(s, a.boxId) || null, nomeBox(s, v.boxId), agora);
     a.boxId = v.boxId;
@@ -327,6 +346,7 @@ export function profissionalAlteraStatus(s, id, status, autor, agora) {
     if (jaCreditado(s, a)) return { ok: false, erros: ERRO_DEVOLVIDO };
     const v = validarHorario(s, { profissionalId: a.profissionalId, inicio: a.inicio, servicoIds: a.servicoIds, porte: a.porte, boxPreferido: a.boxId, ignoreId: a.id, encaixe: a.encaixe, origem: 'painel', agora });
     if (v.erros.length) return { ok: false, erros: v.erros };
+    { const e = erroDoPlano(s, a, a.inicio, agora); if (e) return { ok: false, erros: [e] }; }
     a.boxId = v.boxId;
   }
   registrar(s, a, autor, 'status', ROTULOS[a.status], ROTULOS[status], agora);
@@ -384,7 +404,7 @@ export function resolverClienteDoAtendimento(s, { nome, telefone, clienteId }, a
 // Atendimento local (cliente que chegou no balcão, ou registro de algo que já aconteceu): nasce concluído, para entrar no relatório, no estoque,
 // na comissão e no financeiro. Não manda mensagem, não passa por conflito de horário (já aconteceu). `inicio` opcional (passado); sem ele, é agora.
 // Cliente: ver `resolverClienteDoAtendimento` (telefone cria cadastro; só nome não).
-export function registrarAtendimentoLocal(s, { profissionalId, servicoIds, nome, telefone, clienteId: clienteEscolhido, produtos, vendedorId, formaPagamento, inicio, veiculoId, veiculo, motivoRetroativo }, autor, agora) {
+export function registrarAtendimentoLocal(s, { profissionalId, servicoIds, nome, telefone, clienteId: clienteEscolhido, produtos, vendedorId, formaPagamento, inicio, veiculoId, veiculo, motivoRetroativo, assinaturaId }, autor, agora) {
   const ids = Array.isArray(servicoIds) ? servicoIds : [];
   const temProdutos = Array.isArray(produtos) && produtos.length > 0;
   // Venda de produto sem serviço: vale quando há ao menos um produto; senão continua exigindo ao menos um serviço.
@@ -423,7 +443,15 @@ export function registrarAtendimentoLocal(s, { profissionalId, servicoIds, nome,
   const rv = ids.length ? resolverVeiculo(s, cli, { veiculoId, veiculo }) : null;
   if (rv && !rv.ok) return { ok: false, erros: rv.erros };
   const sv = servicosPorIds(s, ids, rv?.veiculo?.porte);
+  let usoPlano = null;
+  if (assinaturaId) {
+    if (!cli) return { ok: false, erros: ['O plano é de um cliente cadastrado: informe o telefone dele.'] };
+    const up = usoParaAgendamento(s, { assinaturaId, clienteId: cli.id, servicoIds: ids, inicio: Math.min(quando, Math.floor(agora / 60000) * 60000), agora });
+    if (!up.ok) return { ok: false, erros: [up.erro] };
+    usoPlano = up;
+  }
   const a = {
+    ...(usoPlano ? { planoUso: usoPlano.uso } : {}),
     id: nextId(s, 'a'), clienteId: cli ? cli.id : null, nomeAvulso: cli ? '' : rc.nomeAvulso || '', telefoneAvulso: '', local: true, profissionalId, servicoIds: [...ids],
     ...(rv ? { veiculoId: gravarVeiculo(s, cli, rv), veiculo: rv.veiculo, porte: rv.veiculo?.porte } : {}), boxId: null,
     inicio: Math.min(quando, Math.floor(agora / 60000) * 60000), status: STATUS.CONCLUIDO, encaixe: false, reagendado: false, origem: 'local', criadoEm: agora,
@@ -446,9 +474,10 @@ export function registrarAtendimentoLocal(s, { profissionalId, servicoIds, nome,
     if (fechado) a.comissaoEm = agora;
     registrar(s, a, autor, 'lançamento retroativo', null, `${motivoRetro}${fechado ? ' · comissão entra no próximo pagamento (o período já foi pago)' : ''}`, agora);
   }
+  if (usoPlano) registrar(s, a, autor, 'plano', null, `Usa 1 corte do plano ${usoPlano.uso.planoNome}${usoPlano.aviso ? ` (${usoPlano.aviso})` : ''}`, agora);
   s.agendamentos.push(a);
   tick(s, agora);
-  return { ok: true, agendamento: a };
+  return { ok: true, agendamento: a, ...(usoPlano ? { plano: { nome: usoPlano.uso.planoNome, aviso: usoPlano.aviso, adiantado: usoPlano.adiantado } } : {}) };
 }
 
 // ---------- Atender: uma ação só para atendimento no balcão, registro do que já aconteceu e agendamento futuro ----------
@@ -491,7 +520,7 @@ export function atender(s, d, autor, agora) {
   const rc = resolverClienteDoAtendimento(s, d, agora);
   if (!rc.ok) return rc;
   // Sem telefone (e sem cliente escolhido) não há cadastro: o horário fica com o nome avulso, confirmado e sem aviso por WhatsApp. Só vira obrigatório se a loja marcar.
-  const r = criarAgendamento(s, { clienteId: rc.cliente ? rc.cliente.id : null, ...(rc.cliente ? {} : { semCliente: true, nomeAvulso: rc.nomeAvulso }), profissionalId: d.profissionalId, servicoIds: ids, inicio: Number(d.inicio), status, encaixe: !!d.encaixe, origem: 'painel', boxId: d.boxId, veiculoId: d.veiculoId, veiculo: d.veiculo }, autor, agora);
+  const r = criarAgendamento(s, { clienteId: rc.cliente ? rc.cliente.id : null, ...(rc.cliente ? {} : { semCliente: true, nomeAvulso: rc.nomeAvulso }), profissionalId: d.profissionalId, servicoIds: ids, inicio: Number(d.inicio), status, encaixe: !!d.encaixe, origem: 'painel', boxId: d.boxId, veiculoId: d.veiculoId, veiculo: d.veiculo, assinaturaId: d.assinaturaId }, autor, agora);
   if (!r.ok) return r;
   for (const p of produtos) {
     const x = adicionarProdutoAoAgendamento(s, r.agendamento.id, { materialId: p && p.materialId, qtd: p && p.qtd, vendedorId: d.vendedorId }, autor, agora);

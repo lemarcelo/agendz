@@ -3,7 +3,7 @@ import ListaItens from './ListaItens.jsx';
 import PickerCliente from './PickerCliente.jsx';
 import { porUltimoUso } from '../domain/codigo.js';
 import React, { useMemo, useState } from 'react';
-import { agenda, agendamentosVisiveis } from '../services/api.js';
+import { agenda, agendamentosVisiveis, planos as apiPlanos } from '../services/api.js';
 import { acharClientePorTelefone, camposObrigatorios, nomeMaisCompleto } from '../domain/engine.js';
 import { FORMAS_PAGAMENTO, STATUS, boxesAtivos, duracaoMin, formaEfetiva, formatarTelefone, nomeBox, ocupadoMin, servicoNoPorte, servicosPorIds, telefoneNacional, totalPreco, usaIntegracaoPix } from '../domain/rules.js';
 import { EXEMPLO_PORTE, PORTES, PORTE_PADRAO, ROTULO_PORTE, placaValida, rotuloVeiculo } from '../domain/veiculos.js';
@@ -41,6 +41,7 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
   const [boxId, setBoxId] = useState('');
   const [erros, setErros] = useState([]);
   const [motivoRetro, setMotivoRetro] = useState('');
+  const [semPlano, setSemPlano] = useState(false); // o cliente tem plano, mas esta vez a pessoa quer cobrar normal
 
   const inicio = personalizar && data ? tsAt(fromYmd(data), minutos) : null;
   const futuro = inicio != null && inicio > agora + 60000;
@@ -88,6 +89,11 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
   // Nome digitado mais completo que o do cadastro: avisa que o cadastro será atualizado.
   const atualizaraNome = cadastrado && !cadastrado.semNome && nome.trim() && nomeMaisCompleto(cadastrado.nome, nome.trim());
 
+  // Plano do cliente (menu Planos): serviço que o plano inclui sai de graça e gasta 1 corte do mês; sem corte ou sem marcar, cobra pelo preço normal.
+  const planoCli = useMemo(() => { const r = cadastrado ? apiPlanos.doCliente(cadastrado.id) : null; return r && r.ok ? r.plano : null; }, [cadastrado?.id, st]); // eslint-disable-line react-hooks/exhaustive-deps
+  const cobertos = planoCli ? servicoIds.filter((id) => planoCli.servicoIds.includes(id)) : [];
+  const podePlano = !!planoCli && cobertos.length > 0 && (planoCli.restantes > 0 || planoCli.maisPermitidos > 0);
+  const usaPlano = podePlano && !semPlano;
   // Vendedor: por padrão quem está lançando (se tem "Pode vender produtos"); senão o profissional. O profissional vende como ele mesmo.
   const vendedores = st.usuarios.filter((u) => u.papel !== 'master' && u.ativo !== false && u.podeVender !== false);
   const euVendo = vendedores.some((u) => u.id === user.id);
@@ -104,11 +110,13 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
       servicoIds, produtos: itensProduto, nome: nome.trim() || undefined, telefone: telefone.trim() || undefined, clienteId: clienteId || undefined,
       profissionalId: profissionalId || undefined, vendedorId: vendeProduto && !ehProfissional && vendedorEscolhido ? vendedorEscolhido : undefined,
       formaPagamento: futuro ? undefined : formaEscolhida || undefined, inicio: inicio != null ? inicio : undefined, motivoRetroativo: retro ? motivoRetro.trim() || undefined : undefined,
+      ...(usaPlano ? { assinaturaId: planoCli.assinaturaId } : {}),
       ...(temServico && usaVeiculo ? (veicSel === 'novo' ? { veiculo: vNovo } : veicSel ? { veiculoId: veicSel } : {}) : {}),
       ...(futuro ? { status, encaixe, boxId: boxId || undefined, cupomChave: chaveCupom.trim() || undefined } : {}),
     });
     if (!r.ok) { setErros(r.erros); return; }
     toast(r.tipo === 'futuro' ? 'Agendamento criado.' : 'Atendimento registrado.');
+    if (r.plano?.aviso) toast(`Plano ${r.plano.nome}: ${r.plano.aviso}`); // o aviso vem DEPOIS de salvar: nunca atrasa nem bloqueia o agendamento
     onSalvo && onSalvo(r.agendamento, r.tipo);
     onClose();
   };
@@ -159,6 +167,15 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
             {v && !v.erros.length && !v.pendentes.length && <p className="msg-ok"><Icon n="check" size={15} /> Horário livre · {v.retirada && v.dias > 1 ? `entrada ${fmtDate(inicio)} ${fmtHM(inicio)}, retirada prevista ${fmtDate(v.retirada)} ${fmtHM(v.retirada)} (${v.dias} dias)` : `${fmtHM(inicio)} às ${fmtHM(v.retirada || inicio + (v.duracao || 0) * MIN)}`}{v.boxId ? ` · ${nomeBox(st, v.boxId)}` : ''}</p>}
           </div>
         </div>
+        {planoCli && (
+          <div className="campo-largo subcartao" data-testid="atender-plano">
+            <b><Icon n="ticket" size={15} /> Plano {planoCli.plano}</b>
+            <span className="muted" data-testid="atender-plano-saldo">Restam {planoCli.restantes} corte{planoCli.restantes === 1 ? '' : 's'} em {planoCli.mes}{planoCli.restantes <= 0 && planoCli.maisPermitidos > 0 ? ` · pode adiantar ${planoCli.maisPermitidos}` : ''}{planoCli.atrasado ? ' · mensalidade do mês ainda não registrada' : ''}.</span>
+            {cobertos.length === 0 && <span className="muted">Escolha um serviço que o plano inclui para usar o plano.</span>}
+            {cobertos.length > 0 && !podePlano && <span className="msg-conflito" data-testid="atender-plano-esgotado"><Icon n="alert" size={15} /> Os cortes do plano acabaram: este atendimento será cobrado pelo preço normal.</span>}
+            {podePlano && <label className="interruptor"><input type="checkbox" checked={!semPlano} onChange={(e) => setSemPlano(!e.target.checked)} data-testid="atender-usar-plano" /><span className="trilho"><i className="bolinha" /></span><span className="interruptor-txt"><b>Usar o plano neste atendimento</b><small className="muted">Os serviços do plano saem de graça; o resto é cobrado normalmente.</small></span></label>}
+          </div>
+        )}
         {produtos.length > 0 && (
           <ListaItens titulo="Produtos" testid="atender-lista-produtos" itens={produtos} selecionado={(m) => Number(qtds[m.id]) > 0} renderItem={(m) => (
             <div key={m.id} className={`servico-linha ${Number(qtds[m.id]) > 0 ? 'on' : ''}`}>

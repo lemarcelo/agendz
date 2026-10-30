@@ -7,6 +7,8 @@ import * as CD from '../domain/codigo.js';
 import * as F from '../domain/financeiro.js';
 import '../domain/pagamento.js'; // registra no tick o lançamento das receitas e estornos do atendimento local
 import * as CU from '../domain/resgate.js';
+import * as AS from '../domain/assinaturas.js';
+import { aReceber, extrato, rotuloMes, saldoAtual, planosPublicos } from '../domain/planos.js';
 import { TIPOS_CUPOM } from '../domain/cupons.js';
 import { cancelarComissao, intervaloComissao, pagarComissao, relatorioComissoes, relatorioDoProfissional, restaurarComissao } from '../domain/comissao.js';
 import * as T from '../domain/tema.js';
@@ -289,13 +291,13 @@ export const agenda = {
   atender(entrada) {
     const u = usuario();
     if (!u || !R.pode(u, 'agenda')) return semPermissao();
-    const d = pegar(entrada, permitidos(['servicoIds', 'produtos', 'nome', 'telefone', 'clienteId', 'profissionalId', 'vendedorId', 'formaPagamento', 'inicio', 'status', 'encaixe', 'cupomChave', 'veiculoId', 'veiculo', 'boxId', 'motivoRetroativo']));
+    const d = pegar(entrada, permitidos(['servicoIds', 'produtos', 'nome', 'telefone', 'clienteId', 'profissionalId', 'vendedorId', 'formaPagamento', 'inicio', 'status', 'encaixe', 'cupomChave', 'veiculoId', 'veiculo', 'boxId', 'motivoRetroativo', 'assinaturaId']));
     if (d.servicoIds === undefined || d.servicoIds === null) d.servicoIds = [];
     if (!(Array.isArray(d.servicoIds) && d.servicoIds.length <= 10 && d.servicoIds.every((x) => texto(x, 60)))) return erro('Escolha até 10 serviços.');
     if (d.produtos === undefined || d.produtos === null) d.produtos = [];
     if (!(Array.isArray(d.produtos) && d.produtos.length <= 10 && d.produtos.every((p) => p && typeof p === 'object'))) return erro('Produtos inválidos.');
     d.produtos = d.produtos.map((p) => pegar(p, ['materialId', 'qtd']));
-    for (const k of ['nome', 'telefone', 'clienteId', 'profissionalId', 'vendedorId', 'formaPagamento', 'status', 'cupomChave', 'veiculoId', 'boxId']) {
+    for (const k of ['nome', 'telefone', 'clienteId', 'profissionalId', 'vendedorId', 'formaPagamento', 'status', 'cupomChave', 'veiculoId', 'boxId', 'assinaturaId']) {
       if (d[k] === undefined || d[k] === null || d[k] === '') { delete d[k]; continue; }
       if (!texto(d[k], k === 'nome' ? 60 : 60)) return erro('Dados inválidos em ' + k + '.');
     }
@@ -747,6 +749,78 @@ export const cupons = {
   // DELETE /cupons/{id}  (já usado: não apaga, só encerra e vai para o histórico)
   remover(id) { return exigir('estabelecimento') || mutate((s) => CU.removerCupom(s, id), { metodo: 'DELETE', rota: `/cupons/${id}` }); },
 };
+
+// ---------- planos de serviço (menu Planos; seção própria que o dono libera) ----------
+const idOk = (v) => texto(v, 60);
+export const planos = {
+  // GET /planos  (catálogo + assinaturas com saldo derivado + pedidos do link + mensalidades em aberto do mês)
+  listar() {
+    const n = exigir('planos'); if (n) return n;
+    const agora = now();
+    const assinaturas = (state.assinaturas || []).map((a) => {
+      const c = state.clientes.find((x) => x.id === a.clienteId);
+      return { ...structuredClone(a), cliente: c ? { id: c.id, nome: c.nome, apelido: c.apelido || '' } : null, saldo: saldoAtual(state, a, agora), extrato: extrato(state, a, agora).linhas };
+    });
+    return { ok: true, planos: structuredClone(state.planos || []), assinaturas, pedidos: structuredClone((state.pedidosPlano || []).filter((p) => p.status === 'novo')), aReceber: aReceber(state, agora).map((a) => a.id), mes: AS_MES(agora) };
+  },
+  // POST /planos  |  PUT /planos/{id}
+  salvar(entrada) {
+    const n = exigir('planos'); if (n) return n;
+    const d = pegar(entrada, ['id', 'nome', 'descricao', 'preco', 'cortes', 'servicoIds', 'adianta', 'acumuloMeses', 'intervaloDias', 'ativo']);
+    if (d.id === undefined || d.id === null || d.id === '') delete d.id; else if (!idOk(d.id)) return erro('Plano inválido.');
+    if (!texto(d.nome, 60)) return erro('Dê um nome ao plano (até 60 letras).');
+    if (d.descricao !== undefined && !texto(String(d.descricao), 200, true)) return erro('A descrição pode ter até 200 letras.');
+    for (const k of ['preco', 'cortes', 'adianta', 'acumuloMeses', 'intervaloDias']) if (d[k] !== undefined && d[k] !== null && d[k] !== '' && !finito(d[k])) return erro('Número inválido em ' + k + '.');
+    if (!(Array.isArray(d.servicoIds) && d.servicoIds.length <= 10 && d.servicoIds.every(idOk))) return erro('Escolha de 1 a 10 serviços.');
+    if (d.ativo !== undefined && typeof d.ativo !== 'boolean') return erro('Situação inválida.');
+    return mutate((s, agora) => AS.salvarPlano(s, { ...d, agora }, autor()), { metodo: d.id ? 'PUT' : 'POST', rota: d.id ? `/planos/${d.id}` : '/planos' });
+  },
+  // DELETE /planos/{id}  (já contratado: só desativa)
+  remover(id) { return exigir('planos') || (!idOk(id) ? erro('Plano inválido.') : mutate((s) => AS.removerPlano(s, id), { metodo: 'DELETE', rota: `/planos/${id}` })); },
+  // POST /assinaturas  ({ clienteId, planoId, inicioMes, diaCobranca })
+  contratar(entrada) {
+    const n = exigir('planos'); if (n) return n;
+    const d = pegar(entrada, ['clienteId', 'planoId', 'inicioMes', 'diaCobranca']);
+    if (!idOk(d.clienteId) || !idOk(d.planoId)) return erro('Escolha o cliente e o plano.');
+    if (d.inicioMes !== undefined && d.inicioMes !== null && d.inicioMes !== '' && !texto(d.inicioMes, 7)) return erro('Mês de início inválido.');
+    if (d.diaCobranca !== undefined && d.diaCobranca !== null && d.diaCobranca !== '' && !finito(d.diaCobranca)) return erro('Dia de cobrança inválido.');
+    return mutate((s, agora) => AS.contratar(s, d, autor(), agora), { metodo: 'POST', rota: '/assinaturas' });
+  },
+  // POST /assinaturas/{id}/pagamentos  ({ mes, forma })
+  pagar(id, entrada) {
+    const n = exigir('planos'); if (n) return n;
+    const d = pegar(entrada, ['mes', 'forma']);
+    if (!idOk(id)) return erro('Assinatura inválida.');
+    if (d.mes !== undefined && d.mes !== null && d.mes !== '' && !texto(d.mes, 7)) return erro('Mês inválido.');
+    if (!texto(d.forma, 20)) return erro('Escolha como foi pago.');
+    return mutate((s, agora) => AS.registrarPagamento(s, id, d, autor(), agora), { metodo: 'POST', rota: `/assinaturas/${id}/pagamentos` });
+  },
+  // POST /assinaturas/{id}/pagamentos/{pagId}/estorno  ({ motivo })
+  estornar(id, pagId, motivo) {
+    const n = exigir('planos'); if (n) return n;
+    if (!idOk(id) || !idOk(pagId) || !texto(motivo, 200)) return erro('Informe a mensalidade e o motivo (até 200 letras).');
+    return mutate((s, agora) => AS.estornarPagamento(s, id, pagId, motivo, autor(), agora), { metodo: 'POST', rota: `/assinaturas/${id}/pagamentos/${pagId}/estorno` });
+  },
+  // POST /assinaturas/{id}/encerrar  ({ motivo })
+  encerrar(id, motivo) {
+    const n = exigir('planos'); if (n) return n;
+    if (!idOk(id) || !texto(motivo, 200)) return erro('Informe o motivo (até 200 letras).');
+    return mutate((s, agora) => AS.encerrar(s, id, motivo, autor(), agora), { metodo: 'POST', rota: `/assinaturas/${id}/encerrar` });
+  },
+  // POST /assinaturas/{id}/quitar
+  quitar(id) { return exigir('planos') || (!idOk(id) ? erro('Assinatura inválida.') : mutate((s, agora) => AS.quitarDivida(s, id, autor(), agora), { metodo: 'POST', rota: `/assinaturas/${id}/quitar` })); },
+  // POST /planos/pedidos/{id}/aceitar  |  /recusar
+  aceitarPedido(id) { return exigir('planos') || (!idOk(id) ? erro('Pedido inválido.') : mutate((s, agora) => AS.aceitarPedido(s, id, autor(), agora), { metodo: 'POST', rota: `/planos/pedidos/${id}/aceitar` })); },
+  recusarPedido(id) { return exigir('planos') || (!idOk(id) ? erro('Pedido inválido.') : mutate((s, agora) => AS.recusarPedido(s, id, autor(), agora), { metodo: 'POST', rota: `/planos/pedidos/${id}/recusar` })); },
+  // GET /planos/cliente/{clienteId}  (Atender: plano ativo do cliente, quanto resta e se pode adiantar; quem lança na agenda precisa disso, sem ter a seção Planos)
+  doCliente(clienteId) {
+    const u = usuario();
+    if (!u || !(R.pode(u, 'agenda') || R.pode(u, 'planos'))) return semPermissao();
+    if (!idOk(clienteId)) return { ok: true, plano: null };
+    return { ok: true, plano: AS.planoDoCliente(state, clienteId, now()) };
+  },
+};
+const AS_MES = (agora) => { const d = new Date(agora); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
 
 // Só para demonstração: acrescenta profissionais de exemplo (com ou sem foto) e um dia cheio, para ver a agenda com muita gente.
 export const demo = {
@@ -1281,6 +1355,25 @@ const P = (rota, metodo = 'POST') => ({ metodo, rota, origem: 'link' });
 const MUITAS = 'Muitas tentativas. Aguarde um pouco e tente de novo.';
 const tokenOk = (t) => typeof t === 'string' && t.length === 48;
 export const publico = {
+
+  // GET /publico/planos  (catálogo à venda: nome, descrição, valor, cortes e serviços; nada de cliente)
+  planos() { return { ok: true, planos: planosPublicos(state) }; },
+  // POST /publico/planos/pedidos  (nome + telefone + plano; entra "a confirmar" para o dono; resposta igual se já pediu)
+  pedirPlano(entrada) {
+    const d = pegar(entrada, ['nome', 'telefone', 'planoId', 'site']);
+    if (!texto(d.nome, 60) || !texto(d.telefone, 30) || !texto(d.planoId, 60)) return erro('Informe o nome, o telefone e o plano.');
+    if (d.site !== undefined && !texto(String(d.site), 100, true)) return erro('Dados inválidos.');
+    const tel = R.telefoneNacional(d.telefone);
+    if (estourou(`pp:${tel}`, 3, 15 * 60000) || estourou('pp:*', 60, 60000)) return erro(MUITAS);
+    return mutate((s, agora) => AS.pedirPlanoPorLink(s, d, agora), P('/publico/planos/pedidos'));
+  },
+  // GET /publico/planos/saldo?telefone=  (só quantos cortes restam por plano; resposta genérica se não houver; 5 consultas por telefone a cada 15 min)
+  saldoDoPlano(telefone) {
+    if (!texto(telefone, 30)) return erro('Informe o telefone com DDD.');
+    const tel = R.telefoneNacional(telefone);
+    if (estourou(`ps:${tel}`, 5, 15 * 60000) || estourou('ps:*', 120, 60000)) return erro(MUITAS);
+    return AS.saldoPorTelefone(state, telefone, now());
+  },
   // GET /publico/config  (só nome, serviços ativos e profissionais que atendem)
   config() { return PU.configPublica(state); },
   // GET /publico/dias-livres?profissionalId=&servicoIds=&porte=&de=&dias=

@@ -351,3 +351,23 @@ Qualquer usuário logado (menos o que ainda está com senha temporária). O serv
 Situação: aberto → em atendimento → aguardando cliente → resolvido (vale 7 dias para o cliente reabrir respondendo; depois fecha sozinho com aviso do sistema) → fechado (só o administrador fecha à mão, com motivo).
 
 > v109: `POST /api/atendimentos` com data futura aceita **sem cliente** (sem `clienteId`, nome ou telefone, se as regras do atendimento não exigirem): grava `cliente_id` nulo e `nome_avulso`, status `confirmado`, sem aviso ao cliente. `POST /api/agendamentos` continua exigindo `clienteId`. De fábrica `campos_futuro` é vazio.
+
+## 10n. Planos de serviço (v111; seção de permissão `planos`; `PlanosTest`, `equivalencia/planos.json` no servidor — em andamento)
+Mensalidade por mês; o pagamento é direto com o profissional (só se registra). **Saldo derivado dos atendimentos**: nunca há contador gravado (`domain/planos.js` `extrato`). Seção `planos`: dono libera por pessoa, padrão ninguém (Relatórios continua só dono/master). Tabelas novas: `plano`, `assinatura`, `assinatura_pagamento`, `pedido_plano` e `agendamento.plano_uso` (todas com `loja_id` + RLS + FK composta + teste de isolamento).
+
+| Método do `api.js` | Rota | Permissão | Regra e teste |
+|---|---|---|---|
+| `planos.listar` | `GET /api/planos` | `planos` | catálogo, assinaturas com saldo e extrato, pedidos novos, a receber do mês |
+| `planos.salvar` | `POST /api/planos` · `PUT /api/planos/{id}` | `planos` | nome 2–60 único, preço > 0, 1–31 cortes, 1–10 serviços (sem combo), adianta 0–3, acúmulo 1–6 meses, intervalo 0–30 dias; assinatura guarda a foto do plano |
+| `planos.remover` | `DELETE /api/planos/{id}` | `planos` | contratado: só desativa |
+| `planos.contratar` | `POST /api/assinaturas` | `planos` | um plano aberto por cliente; dívida de plano encerrado trava; início de −2 a +3 meses; dia 1–28 |
+| `planos.pagar` | `POST /api/assinaturas/{id}/pagamentos` (`Idempotency-Key`) | `planos` | uma mensalidade por mês; valor = o do plano contratado; forma Pix/dinheiro/cartão; lança receita no financeiro se a forma tem conta |
+| `planos.estornar` | `POST /api/assinaturas/{id}/pagamentos/{pagId}/estorno` | `planos` | motivo 5–200; recusa se deixar corte usado sem cobertura |
+| `planos.encerrar` | `POST /api/assinaturas/{id}/encerrar` | `planos` | motivo 5–200; cortes adiantados sem pagar viram dívida |
+| `planos.quitar` | `POST /api/assinaturas/{id}/quitar` | `planos` | só encerrada com dívida |
+| `planos.aceitarPedido` · `planos.recusarPedido` | `POST /api/planos/pedidos/{id}/aceitar` · `/recusar` | `planos` | aceitar acha/cria o cliente por nome+telefone e abre assinatura "aguardando pagamento" |
+| `planos.doCliente` | `GET /api/planos/cliente/{clienteId}` | `agenda` ou `planos` | plano ativo, cortes que restam e quantos pode adiantar (Atender); nunca valor de mensalidade |
+| `agenda.atender` (campo `assinaturaId`) | `POST /api/atendimentos` · `POST /api/agendamentos` | `agenda` | serviço do plano sai de graça (desconto na linha); produto e serviço fora do plano cobrados; remarcar/reativar também confere a cota; adiantado grava aviso **depois** de salvar |
+| `publico.planos` | `GET /api/publico/planos` | sem login | só nome, descrição, valor, cortes e nomes dos serviços |
+| `publico.pedirPlano` | `POST /api/publico/planos/pedidos` | sem login | isca `site`; 3 por telefone/15 min; máx. 30 pedidos abertos; repetido = mesma resposta |
+| `publico.saldoDoPlano` | `GET /api/publico/planos/saldo` | sem login | só `{plano, mes, restantes, cortesPorMes, pagoMes}`; sem plano = resposta genérica; 5 consultas/telefone/15 min (429) |

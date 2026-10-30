@@ -1,7 +1,7 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:a6fe1e7410 */
 import React, { useEffect, useLayoutEffect, useState } from 'react';
 import { LOJA_NAO_ENCONTRADA, MODO_DEMO, auth, avisosDoUsuario, equipe, naoLidasDoSuporte, store, suporte } from '../services/api.js';
-import { lerHashAgendar } from '../domain/link-publico.js';
+import { lerHashAgendar, lerHashPlanos } from '../domain/link-publico.js';
 import { criarAdaptadorDemo } from '../services/onboarding-demo.js';
 import PrimeiroAcesso from './leve/PrimeiroAcesso.jsx';
 import Suporte from './leve/Suporte.jsx';
@@ -20,6 +20,8 @@ import Login from './Login.jsx';
 import { LogoMarca, RodapePlataforma, TemaMarca } from './Marca.jsx';
 import { PainelWhats } from './Whats.jsx';
 import AgendarPublico from './AgendarPublico.jsx';
+import Planos from './Planos.jsx';
+import PlanosPublico from './PlanosPublico.jsx';
 import { toast, useLocal, useMedia, useStore, useToasts, useUser } from './hooks.js';
 import { restaurarOrdens, useOrdem, useTemOrdemPersonalizada } from './ordem.jsx';
 
@@ -95,10 +97,12 @@ function AppDaLoja() {
   const hash = useHash();
   const [tema, setTema] = useTema();
   const publica = lerHashAgendar(hash);
+  const planosPub = lerHashPlanos(hash);
   // Demonstração: o link traz a loja de quem enviou (#agendar@dalforno); `entrarNaLoja` só age sem loja fixa por build ou endereço.
-  useLayoutEffect(() => { if (MODO_DEMO && publica?.loja) store.entrarNaLoja(publica.loja); }, [publica?.loja]);
+  useLayoutEffect(() => { const l = publica?.loja || planosPub?.loja; if (MODO_DEMO && l) store.entrarNaLoja(l); }, [publica?.loja, planosPub?.loja]);
   if (MODO_DEMO && hash === '#primeiro-acesso') return <><TemaMarca /><PreviaPrimeiroAcesso st={st} /></>;
   if (publica) return <><TemaMarca /><AgendarPublico key={st.estabelecimento.nome} profissionalInicial={publica.profissionalId} logado={!!user} aoVoltar={() => { window.location.hash = ''; }} /></>;
+  if (planosPub) return <><TemaMarca /><PlanosPublico key={st.estabelecimento.nome} aoVoltar={user ? () => { window.location.hash = ''; } : null} /></>;
   if (!user) return <><TemaMarca /><Login /><Toasts /></>;
   return <><TemaMarca /><Shell user={user} st={st} tema={tema} setTema={setTema} /></>;
 }
@@ -121,6 +125,7 @@ function Shell({ user, st, tema, setTema }) {
     ehGestor(user) && ['ganhos', 'Meus ganhos', 'gauge'],
     pode(user, 'estoque') && ['estoque', 'Estoque', 'box'],
     pode(user, 'financeiro') && ['financeiro', 'Financeiro', 'wallet'],
+    pode(user, 'planos') && ['planos', 'Planos', 'ticket'],
     pode(user, 'estabelecimento') && ['estab', 'Estabelecimento', 'store'],
     ehDono(user) && ['equipe', 'Equipe', 'team'],
     user.papel === 'profissional' && ['escala', 'Minha escala', 'clock'],
@@ -172,6 +177,7 @@ function Shell({ user, st, tema, setTema }) {
           {abaAtual === 'ganhos' && <RelatorioProfissional />}
           {abaAtual === 'estoque' && <Estoque user={user} />}
           {abaAtual === 'financeiro' && <Financeiro user={user} />}
+          {abaAtual === 'planos' && <Planos user={user} />}
           {abaAtual === 'estab' && <Estabelecimento user={user} />}
           {abaAtual === 'equipe' && <Equipe user={user} />}
           {abaAtual === 'escala' && <MinhaEscala user={user} />}
