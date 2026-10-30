@@ -240,7 +240,8 @@ test('link: cliente com plano ativo e serviço coberto gasta 1 corte; avisa ante
   assert.deepEqual(previa, { ok: true, usaPlano: true });
   const r = linkPara();
   assert.ok(r.ok, JSON.stringify(r)); assert.equal(r.usouPlano, true);
-  assert.equal(JSON.stringify(r).includes('75'), false, 'sem valor da mensalidade');
+  // o token do acesso é aleatório e pode conter "75": só vale o número solto (valor), nunca pedaço de palavra
+  assert.equal(/(?<![0-9a-zA-Z])75(?![0-9a-zA-Z])/.test(JSON.stringify(r)), false, 'sem valor da mensalidade');
   alan();
   const a = st().agendamentos.find((x) => x.id === r.agendamentoId);
   assert.equal(a.planoUso.assinaturaId, assin); assert.equal(a.origem, 'link'); assert.equal(a.status, 'a_confirmar');
