@@ -169,6 +169,8 @@ test('agendamento recusado não deixa veículo novo para trás no cadastro', () 
 });
 
 test('atendimento de balcão: serviço pede veículo (fica só na foto do atendimento); venda só de produto não pede', () => {
+  // de fábrica nada é obrigatório (v121): sem veículo registra no porte médio; o dono pode exigir o veículo em Estabelecimento > Regras
+  assert.ok(estabelecimento.salvar({ camposObrigatorios: { futuro: [], local: ['veiculo'] } }).ok);
   const v = agenda.atender({ servicoIds: ['s-lav-simples'], profissionalId: 'u-pablo', formaPagamento: 'pix' });
   assert.equal(v.ok, false); assert.match(v.erros[0], /veículo/i);
   const r = agenda.atender({ servicoIds: ['s-lav-simples'], profissionalId: 'u-pablo', formaPagamento: 'pix', veiculo: { placa: 'AAA1B23', modelo: 'Hilux', porte: 'pickup' } });

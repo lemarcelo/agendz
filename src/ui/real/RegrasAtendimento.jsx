@@ -5,10 +5,12 @@
 import React, { useEffect, useState } from 'react';
 import { regras as api } from '../../services/api-real.js';
 import { CAMPOS_DO_ATENDER, FORMAS_PAGAMENTO } from '../../domain/atender-form.js';
+import { capAtiva } from '../../domain/tipos.js';
 import { Aviso, Btn, Campo } from '../leve/mini.jsx';
 
-const CAMPOS_FUTURO = ['nome', 'telefone', 'profissional', 'vendedor'];
-const CAMPOS_LOCAL = ['nome', 'telefone', 'profissional', 'vendedor', 'formaPagamento'];
+const VEICULO = ['veiculo', 'placa', 'modelo', 'porte']; // só na estética (v121)
+const CAMPOS_FUTURO = () => ['nome', 'telefone', 'profissional', 'vendedor', ...(capAtiva('usaVeiculo') ? VEICULO : [])];
+const CAMPOS_LOCAL = () => ['nome', 'telefone', 'profissional', 'vendedor', 'formaPagamento', ...(capAtiva('usaVeiculo') ? VEICULO : [])];
 
 export default function RegrasAtendimento() {
   const [regras, setRegras] = useState(null);
@@ -55,8 +57,8 @@ export default function RegrasAtendimento() {
           <option value="">Sem padrão (perguntar sempre)</option>
         </select>
       </Campo>
-      {grupo('futuro', 'Campos obrigatórios no agendamento (data futura)', CAMPOS_FUTURO)}
-      {grupo('local', 'Campos obrigatórios no atendimento feito (agora ou passado)', CAMPOS_LOCAL)}
+      {grupo('futuro', 'Campos obrigatórios no agendamento (data futura)', CAMPOS_FUTURO())}
+      {grupo('local', 'Campos obrigatórios no atendimento feito (agora ou passado)', CAMPOS_LOCAL())}
       {erro && <Aviso tipo="erro" data-testid="regras-erro">{erro}</Aviso>}
       {ok && <p className="msg-ok" role="status" data-testid="regras-ok">{ok}</p>}
       <div className="acoes"><Btn variante="primario" type="submit" disabled={salvando} data-testid="regras-salvar">{salvando ? 'Salvando…' : 'Salvar regras'}</Btn></div>

@@ -122,7 +122,7 @@ test('linkAgendamento: pendências (o que falta para o cliente ver horários) s�
 test('linkAgendamento: GET e PUT do proprietário; dias fora de 1 a 60 nem saem', async () => {
   servidor({ ativo: false, diasMax: 14, disponivel: false });
   const r = await linkAgendamento.obter();
-  assert.deepEqual(r.link, { ativo: false, diasMax: 14, disponivel: false, telefoneObrigatorio: true, pendencias: [] }, 'telefone obrigatório de fábrica');
+  assert.deepEqual(r.link, { ativo: false, diasMax: 14, disponivel: false, telefoneObrigatorio: true, nomeObrigatorio: true, veiculoObrigatorio: ['placa', 'modelo', 'porte'], pendencias: [] }, 'telefone, nome e dados do veículo obrigatórios de fábrica');
   assert.deepEqual([chamadas[0].metodo, chamadas[0].url], ['GET', 'https://loja.teste/api/estabelecimento/link-agendamento']);
   servidor({ ativo: true, diasMax: 20, disponivel: true });
   const g = await linkAgendamento.gravar({ ativo: true, diasMax: 20 });
@@ -133,6 +133,17 @@ test('linkAgendamento: GET e PUT do proprietário; dias fora de 1 a 60 nem saem'
   assert.equal(t.link.telefoneObrigatorio, false); assert.deepEqual(chamadas[0].corpo, { telefoneObrigatorio: false });
   servidor({});
   for (const ruim of [0, 61, 1.5, '30', null]) assert.equal((await linkAgendamento.gravar({ diasMax: ruim })).ok, false);
+  assert.equal(chamadas.length, 0);
+});
+
+test('linkAgendamento: nome e dados do veículo opcionais saem no PUT; lista fora do conjunto nem sai', async () => {
+  servidor({ ativo: true, diasMax: 20, disponivel: true, nomeObrigatorio: false, veiculoObrigatorio: [] });
+  const g = await linkAgendamento.gravar({ nomeObrigatorio: false, veiculoObrigatorio: [] });
+  assert.equal(g.ok, true);
+  assert.deepEqual(chamadas[0].corpo, { nomeObrigatorio: false, veiculoObrigatorio: [] });
+  assert.equal(g.link.nomeObrigatorio, false); assert.deepEqual(g.link.veiculoObrigatorio, []);
+  servidor({});
+  for (const ruim of [{ nomeObrigatorio: 'nao' }, { veiculoObrigatorio: ['cor'] }, { veiculoObrigatorio: 'placa' }, { veiculoObrigatorio: ['placa', 'placa'] }]) assert.equal((await linkAgendamento.gravar(ruim)).ok, false);
   assert.equal(chamadas.length, 0);
 });
 

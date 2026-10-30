@@ -38,6 +38,32 @@ export function limparVeiculo(v) {
   return { ok: true, veiculo: { placa: formatarPlaca(v.placa), marca: limparTexto(String(v.marca ?? ''), 30).trim(), modelo, cor: limparTexto(String(v.cor ?? ''), 20).trim(), porte: v.porte } };
 }
 
+// ---------- veículo com campos opcionais (v121) ----------
+// O dono decide em Estabelecimento > Regras (atendimento) e no link do cliente o que é obrigatório: `veiculo` (algum veículo escolhido/informado), `placa`, `modelo`, `porte`.
+// O que for informado sempre é conferido (placa no formato, porte conhecido); o que não for exigido pode faltar. Sem porte, vale o médio (preço e duração do cadastro).
+export const CAMPOS_VEICULO_EXIGIVEIS = ['veiculo', 'placa', 'modelo', 'porte'];
+export const EXIGE_TUDO_DO_VEICULO = ['veiculo', 'placa', 'modelo', 'porte']; // regra antiga: quem não passa a lista continua exigindo tudo (chat, remarcação)
+const vazioV = (x) => x === undefined || x === null || String(x).trim() === '';
+export const veiculoInformado = (v) => !!v && typeof v === 'object' && !Array.isArray(v) && ['placa', 'marca', 'modelo', 'cor', 'porte'].some((k) => !vazioV(v[k]));
+
+// Devolve { ok, veiculo, completo }. `veiculo` é null quando nada foi informado e nada é exigido. `completo` = placa válida + modelo (pode ir ao cadastro do cliente);
+// veículo incompleto vale só como "foto" do atendimento.
+export function limparVeiculoComRegras(v, exigir = EXIGE_TUDO_DO_VEICULO) {
+  const pede = (k) => exigir.includes(k);
+  if (!veiculoInformado(v)) {
+    if (pede('veiculo')) return { ok: false, erro: 'Escolha o veículo do atendimento.' };
+    const falta = [['placa', 'Informe a placa do veículo.'], ['modelo', 'Informe o modelo do veículo.'], ['porte', 'Escolha o porte do veículo.']].find(([k]) => pede(k));
+    return falta ? { ok: false, erro: falta[1] } : { ok: true, veiculo: null, completo: false };
+  }
+  for (const k of ['placa', 'marca', 'modelo', 'cor', 'porte']) if (v[k] !== undefined && v[k] !== null && typeof v[k] !== 'string') return { ok: false, erro: 'Dados do veículo inválidos.' };
+  if (vazioV(v.placa) ? pede('placa') : !placaValida(v.placa)) return { ok: false, erro: vazioV(v.placa) ? 'Informe a placa do veículo.' : 'Placa inválida. Use o formato antigo (ABC-1234) ou Mercosul (ABC1D23).' };
+  const modelo = limparTexto(String(v.modelo ?? ''), 40).trim();
+  if (pede('modelo') ? modelo.length < 2 : modelo.length === 1) return { ok: false, erro: 'Informe o modelo do veículo.' };
+  if (vazioV(v.porte) ? pede('porte') : !porteValido(v.porte)) return { ok: false, erro: 'Escolha o porte do veículo.' };
+  const placa = vazioV(v.placa) ? '' : formatarPlaca(v.placa);
+  return { ok: true, completo: !!placa && modelo.length >= 2, veiculo: { placa, marca: limparTexto(String(v.marca ?? ''), 30).trim(), modelo, cor: limparTexto(String(v.cor ?? ''), 20).trim(), porte: vazioV(v.porte) ? PORTE_PADRAO : v.porte } };
+}
+
 // "Honda Civic · prata · ABC1D23"
 export const rotuloVeiculo = (v) => (v ? [[v.marca, v.modelo].filter(Boolean).join(' '), v.cor, v.placa].filter(Boolean).join(' · ') : '');
 // Só o essencial para mensagens e cartões: "Civic ABC1D23"

@@ -15,7 +15,7 @@ import * as T from '../domain/tema.js';
 import { capAtiva, definirTipoAtivo, exemploAtivo, rot, Rot, TIPO_PADRAO, tipoDe, tipoValido, Voc } from '../domain/tipos.js';
 import { fotoValida, proximoSlot } from '../domain/foto.js';
 import { diasDaExcecao } from '../domain/schedule.js';
-import { LIMITE_VEICULOS, PORTES, ROTULO_PORTE, chavePlaca, limparVeiculo, porteValido } from '../domain/veiculos.js';
+import { CAMPOS_VEICULO_EXIGIVEIS, LIMITE_VEICULOS, PORTES, ROTULO_PORTE, chavePlaca, limparVeiculo, porteValido } from '../domain/veiculos.js';
 import { validarModelo } from '../domain/templates.js';
 import { addDays, fromYmd, startOfDay, ymd } from '../domain/time.js';
 import { itensDoAgendamento } from '../domain/reports.js';
@@ -1083,7 +1083,9 @@ export const estabelecimento = {
       const l = patch.linkAgendamento;
       if (!(l && typeof l === 'object' && typeof l.ativo === 'boolean' && Number.isInteger(l.diasMax) && l.diasMax >= 1 && l.diasMax <= 60)) return erro('Link de agendamento inválido: ligado ou desligado e de 1 a 60 dias à frente.');
       if ('telefoneObrigatorio' in l && typeof l.telefoneObrigatorio !== 'boolean') return erro('Link de agendamento inválido: telefone obrigatório é sim ou não.');
-      patch.linkAgendamento = { ativo: l.ativo, diasMax: l.diasMax, telefoneObrigatorio: l.telefoneObrigatorio !== false };
+      if ('nomeObrigatorio' in l && typeof l.nomeObrigatorio !== 'boolean') return erro('Link de agendamento inválido: nome obrigatório é sim ou não.');
+      if ('veiculoObrigatorio' in l && !(Array.isArray(l.veiculoObrigatorio) && l.veiculoObrigatorio.length <= 4 && new Set(l.veiculoObrigatorio).size === l.veiculoObrigatorio.length && l.veiculoObrigatorio.every((x) => CAMPOS_VEICULO_EXIGIVEIS.includes(x)))) return erro('Link de agendamento inválido: dados do veículo obrigatórios.');
+      patch.linkAgendamento = { ativo: l.ativo, diasMax: l.diasMax, telefoneObrigatorio: l.telefoneObrigatorio !== false, nomeObrigatorio: l.nomeObrigatorio !== false, veiculoObrigatorio: Array.isArray(l.veiculoObrigatorio) ? [...l.veiculoObrigatorio] : [...PU.VEICULO_DE_FABRICA_NO_LINK] };
     }
     if ('usaIntegracaoPix' in patch && typeof patch.usaIntegracaoPix !== 'boolean') return erro('Opção de integração Pix inválida.');
     if ('formaPagamentoPadrao' in patch && patch.formaPagamentoPadrao !== '' && !R.formaValida(patch.formaPagamentoPadrao)) return erro('Forma de pagamento padrão inválida.');
@@ -1094,7 +1096,7 @@ export const estabelecimento = {
     }
     if ('camposObrigatorios' in patch) {
       const c = patch.camposObrigatorios;
-      const ok = c && typeof c === 'object' && ['futuro', 'local'].every((k) => Array.isArray(c[k]) && c[k].length <= 5 && new Set(c[k]).size === c[k].length && c[k].every((x) => Object.hasOwn(E.CAMPOS_ATENDER, x) && !(k === 'futuro' && x === 'formaPagamento')));
+      const ok = c && typeof c === 'object' && ['futuro', 'local'].every((k) => Array.isArray(c[k]) && c[k].length <= 9 && new Set(c[k]).size === c[k].length && c[k].every((x) => Object.hasOwn(E.CAMPOS_ATENDER, x) && !(k === 'futuro' && x === 'formaPagamento')));
       if (!ok) return erro('Campos obrigatórios inválidos.');
       patch.camposObrigatorios = { futuro: [...c.futuro], local: [...c.local] };
     }
@@ -1605,7 +1607,8 @@ export const publico = {
   // POST /publico/agendamentos  (nome + telefone + placa, modelo e porte do veículo; nasce "Cliente agendou"; devolve o token pessoal)
   agendar(entrada) {
     const d = pegar(entrada, permitidos(['nome', 'telefone', 'placa', 'marca', 'modelo', 'cor', 'porte', 'servicoIds', 'profissionalId', 'inicio', 'lembretes', 'site']));
-    if (!texto(d.nome, 60) || !texto(d.telefone, 30)) return erro('Informe o nome e o telefone.');
+    // nome e telefone podem faltar se o dono tirou a obrigatoriedade (agendarPorLink confere); aqui só o tipo e o tamanho
+    for (const [k, n] of [['nome', 60], ['telefone', 30]]) if (d[k] !== undefined && d[k] !== null && (typeof d[k] !== 'string' || d[k].length > n)) return erro('Dados inválidos.');
     for (const k of ['placa', 'marca', 'modelo', 'cor', 'porte']) if (d[k] !== undefined && d[k] !== null && !texto(d[k], 40)) return erro('Dados do veículo inválidos.');
     if (!(Array.isArray(d.servicoIds) && d.servicoIds.length >= 1 && d.servicoIds.length <= 10 && d.servicoIds.every((x) => texto(x, 60)))) return erro('Escolha de 1 a 10 serviços.');
     if (d.profissionalId !== undefined && d.profissionalId !== null && d.profissionalId !== '' && !texto(d.profissionalId, 60)) return erro(`${Rot('profissional')} inválido.`);

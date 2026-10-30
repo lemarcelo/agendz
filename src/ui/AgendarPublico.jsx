@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { MODO_DEMO, publico, store } from '../services/api.js';
 import { DIAS_CURTOS, fmtDayLong, fmtHM, fmtMoney, maiuscula1, startOfDay, ymd } from '../domain/time.js';
 import { formatarTelefone, telefoneBrasileiro } from '../domain/rules.js';
-import { EXEMPLO_PORTE, formatarPlaca, placaValida, resumoVeiculo, tipoPlaca } from '../domain/veiculos.js';
+import { EXEMPLO_PORTE, PORTE_PADRAO, formatarPlaca, limparVeiculoComRegras, placaValida, resumoVeiculo, tipoPlaca } from '../domain/veiculos.js';
 import { Aviso, Btn, Campo, Icon } from './common.jsx';
 import { LogoMarca, RodapePlataforma } from './Marca.jsx';
 import { useLocal, useStore } from './hooks.js';
@@ -73,8 +73,8 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
   // Tipo sem veículo (barbearia): a etapa do veículo some e o preço e a duração são os do serviço. Os números das etapas seguem os da estética (0 = veículo).
   const usaVeiculo = cap({ tipo: cfg.tipo }, 'usaVeiculo');
   const desl = usaVeiculo ? 0 : 1;
-  const preco = (x) => (usaVeiculo ? x.precos[porte] ?? 0 : x.preco ?? 0);
-  const minutos = (x) => (usaVeiculo ? x.duracoes[porte] ?? 0 : x.duracao ?? 0);
+  const preco = (x) => (usaVeiculo ? x.precos[porte || PORTE_PADRAO] ?? 0 : x.preco ?? 0); // sem porte (dono tirou a obrigatoriedade) vale o médio
+  const minutos = (x) => (usaVeiculo ? x.duracoes[porte || PORTE_PADRAO] ?? 0 : x.duracao ?? 0);
   const dur = (m) => (usaVeiculo ? fmtDur(m) : `${m} min`);
   const [etapa, setEtapa] = useState(desl);
   const [placa, setPlaca] = useState('');
@@ -106,8 +106,11 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
     return [...m.entries()];
   }, [cfg.servicos]);
   const placaOk = placaValida(placa);
-  const veiculoOk = placaOk && modelo.trim().length >= 2 && !!porte;
+  const exV = cfg.exigeVeiculo || ['placa', 'modelo', 'porte']; // o que o dono marcou como obrigatório (Estabelecimento > Regras > Link)
+  const veiculoOk = limparVeiculoComRegras({ placa, modelo, porte }, exV).ok;
   const rotuloPorte = (cfg.portes || []).find((x) => x.id === porte)?.nome || '';
+  const textoV = [modelo.trim(), placa && formatarPlaca(placa), rotuloPorte && `porte ${rotuloPorte.toLowerCase()}`].filter(Boolean).join(' · ');
+  const estrela = (k) => (exV.includes(k) ? ' *' : '');
 
   // Avisa antes de pedir: "este horário usa um atendimento do seu plano". Só consulta com o telefone completo; o servidor responde apenas sim ou não.
   useEffect(() => {
@@ -119,10 +122,10 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
 
   const enviar = () => {
     setErro(''); setEnviando(true);
-    const r = publico.agendar({ nome, telefone: tel, ...(usaVeiculo ? { placa, marca, modelo, cor, porte } : {}), servicoIds: srv, profissionalId: escolha?.profissionalId || barb, inicio: escolha?.inicio, site: isca });
+    const r = publico.agendar({ nome, telefone: tel, ...(usaVeiculo ? { placa, marca, modelo, cor, ...(porte ? { porte } : {}) } : {}), servicoIds: srv, profissionalId: escolha?.profissionalId || barb, inicio: escolha?.inicio, site: isca });
     setEnviando(false);
     if (!r.ok) { setErro(r.erros[0]); if (/ocupado/.test(r.erros[0])) { setEscolha(null); setEtapa(2); } return; }
-    if (r.token) setToken(r.token); setFeito({ usouPlano: !!r.usouPlano, semTelefone: !r.token, inicio: escolha.inicio, profissionalId: escolha.profissionalId, servicos: servicos.map((x) => x.nome), veiculo: usaVeiculo ? `${modelo.trim()} · ${formatarPlaca(placa)}` : '' });
+    if (r.token) setToken(r.token); setFeito({ usouPlano: !!r.usouPlano, semTelefone: !r.token, inicio: escolha.inicio, profissionalId: escolha.profissionalId, servicos: servicos.map((x) => x.nome), veiculo: usaVeiculo ? [modelo.trim(), placa && formatarPlaca(placa)].filter(Boolean).join(' · ') : '' });
     setEtapa(4);
   };
   const lembrar = (quer) => { const r = publico.lembretes(token, quer); if (r.ok) setLemb(quer); else setErro(r.erros[0]); };
@@ -166,15 +169,15 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
           <h2>Qual é o seu veículo?</h2>
           <p className="muted">O porte define o preço e o tempo de cada serviço.</p>
           <div className="pub-form">
-            <Campo rotulo="Placa" dica="Formato antigo (ABC-1234) ou Mercosul (ABC1D23)." erro={placa && !placaOk ? 'Placa inválida.' : undefined}>
+            <Campo rotulo={`Placa${estrela('placa')}`} dica="Formato antigo (ABC-1234) ou Mercosul (ABC1D23)." erro={placa && !placaOk ? 'Placa inválida.' : undefined}>
               <input value={placa} onChange={(e) => setPlaca(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 8))} maxLength={8} autoCapitalize="characters" autoComplete="off" placeholder="ABC1D23" data-testid="pub-placa" />
             </Campo>
-            <Campo rotulo="Modelo"><input value={modelo} onChange={(e) => setModelo(e.target.value)} maxLength={40} placeholder="Ex.: Onix, Corolla, Hilux" autoComplete="off" data-testid="pub-modelo" /></Campo>
+            <Campo rotulo={`Modelo${estrela('modelo')}`}><input value={modelo} onChange={(e) => setModelo(e.target.value)} maxLength={40} placeholder="Ex.: Onix, Corolla, Hilux" autoComplete="off" data-testid="pub-modelo" /></Campo>
             <div className="pub-duas">
               <Campo rotulo="Marca (opcional)"><input value={marca} onChange={(e) => setMarca(e.target.value)} maxLength={30} autoComplete="off" data-testid="pub-marca" /></Campo>
               <Campo rotulo="Cor (opcional)"><input value={cor} onChange={(e) => setCor(e.target.value)} maxLength={20} autoComplete="off" data-testid="pub-cor" /></Campo>
             </div>
-            <div className="campo"><span className="campo-rotulo" id="pub-porte-r">Porte</span>
+            <div className="campo"><span className="campo-rotulo" id="pub-porte-r">{`Porte${estrela('porte')}`}</span>
               <div className="pub-portes" role="group" aria-labelledby="pub-porte-r">
                 {cfg.portes.map((x) => (
                   <button type="button" key={x.id} className={`pub-porte ${porte === x.id ? 'on' : ''}`} aria-pressed={porte === x.id} onClick={() => { setPorte(x.id); setEscolha(null); }} data-testid={`pub-porte-${x.id}`}>
@@ -194,7 +197,7 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
       {etapa === 1 && (
         <div className="pub-bloco">
           <h2>O que vamos fazer?</h2>
-          {usaVeiculo && <p className="muted" data-testid="pub-veiculo-atual">{modelo.trim()} · {formatarPlaca(placa)} · porte {rotuloPorte.toLowerCase()} <button type="button" className="link" onClick={() => setEtapa(0)} data-testid="pub-trocar-veiculo">Trocar</button></p>}
+          {usaVeiculo && <p className="muted" data-testid="pub-veiculo-atual">{textoV || 'Sem dados do veículo'} <button type="button" className="link" onClick={() => setEtapa(0)} data-testid="pub-trocar-veiculo">Trocar</button></p>}
           {categorias.map(([cat, lista]) => (
             <div key={cat} className="pub-cat" role="group" aria-label={cat}>
               {categorias.length > 1 && <h3>{cat}</h3>}
@@ -243,13 +246,13 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
           <h2>Seus dados</h2>
           <div className="pub-resumo" data-testid="pub-resumo">
             <b>{servicos.map((x) => x.nome).join(', ')}</b>
-            {usaVeiculo && <span>{modelo.trim()} · {formatarPlaca(placa)} ({rotuloPorte})</span>}
+            {usaVeiculo && textoV && <span>{textoV}</span>}
             <span>{fmtDayLong(escolha.inicio)}, {fmtHM(escolha.inicio)} · {nomeBarb(escolha.profissionalId)}</span>
             <span className="muted">{multiDia ? 'Vários dias' : dur(duracao)} · {fmtMoney(total)}</span>
           </div>
           {usaPlano && <p className="pub-aviso-plano" role="status" data-testid="pub-usa-plano"><Icon n="ticket" size={14} /> Este horário usa um atendimento do seu plano.</p>}
           <form className="pub-form" onSubmit={(e) => { e.preventDefault(); enviar(); }} noValidate>
-            <Campo rotulo="Nome"><input value={nome} onChange={(e) => setNome(e.target.value)} maxLength={60} autoComplete="name" data-testid="pub-nome" /></Campo>
+            <Campo rotulo={cfg.exigeNome === false ? 'Nome, se quiser' : 'Nome'}><input value={nome} onChange={(e) => setNome(e.target.value)} maxLength={60} autoComplete="name" data-testid="pub-nome" /></Campo>
             <Campo rotulo={cfg.exigeTelefone === false ? 'Telefone (WhatsApp), se quiser' : 'Telefone (WhatsApp)'} dica={cfg.exigeTelefone === false ? 'Opcional. Com telefone avisamos do seu horário e você acompanha por aqui; sem ele, só a loja vê o seu pedido.' : 'Com DDD. Só usamos para falar do seu horário.'}><input type="tel" inputMode="tel" value={tel} onChange={(e) => setTel(formatarTelefone(e.target.value))} maxLength={16} autoComplete="tel" placeholder="(51) 99999-9999" data-testid="pub-telefone" /></Campo>
             <input className="pub-isca" tabIndex={-1} aria-hidden="true" autoComplete="off" name="site" value={isca} onChange={(e) => setIsca(e.target.value)} data-testid="pub-isca" />
             {erro && <Aviso tipo="erro"><span data-testid="pub-erro">{erro}</span></Aviso>}

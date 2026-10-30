@@ -1051,10 +1051,10 @@ export const profissionais = {
 };
 
 // ---------- regras do Atender (5d-4c) ----------
-const CAMPOS_ATENDER = ['nome', 'telefone', 'profissional', 'vendedor', 'formaPagamento'];
+const CAMPOS_ATENDER = ['nome', 'telefone', 'profissional', 'vendedor', 'formaPagamento', 'veiculo', 'placa', 'modelo', 'porte']; // v121: os quatro últimos só valem na estética
 const lerRegras = (d) => {
   d = d && typeof d === 'object' ? d : {};
-  const campos = (l, futuro) => listaDe(l, 5).map((x) => texto(x, 20)).filter((x) => CAMPOS_ATENDER.includes(x) && !(futuro && x === 'formaPagamento'));
+  const campos = (l, futuro) => listaDe(l, 9).map((x) => texto(x, 20)).filter((x) => CAMPOS_ATENDER.includes(x) && !(futuro && x === 'formaPagamento'));
   return { formaPagamentoPadrao: ['', 'pix', 'dinheiro', 'cartao'].includes(d.formaPagamentoPadrao) ? d.formaPagamentoPadrao : 'pix', futuro: campos(d.futuro, true), local: campos(d.local, false) };
 };
 export const regras = {
@@ -1072,7 +1072,7 @@ export const regras = {
     }
     if (camposObrigatorios !== undefined) {
       const c = camposObrigatorios;
-      const ok = c && typeof c === 'object' && ['futuro', 'local'].every((k) => Array.isArray(c[k]) && c[k].length <= 5 && new Set(c[k]).size === c[k].length && c[k].every((x) => CAMPOS_ATENDER.includes(x) && !(k === 'futuro' && x === 'formaPagamento')));
+      const ok = c && typeof c === 'object' && ['futuro', 'local'].every((k) => Array.isArray(c[k]) && c[k].length <= 9 && new Set(c[k]).size === c[k].length && c[k].every((x) => CAMPOS_ATENDER.includes(x) && !(k === 'futuro' && x === 'formaPagamento')));
       if (!ok) return { ok: false, status: 0, erro: 'Campos obrigatórios inválidos.' };
       corpo.camposObrigatorios = { futuro: [...c.futuro], local: [...c.local] };
     }
@@ -1087,6 +1087,7 @@ const lerLink = (d) => {
   d = d && typeof d === 'object' ? d : {};
   const dm = Number.isInteger(d.diasMax) ? Math.min(60, Math.max(1, d.diasMax)) : 30;
   return { ativo: d.ativo !== false, diasMax: dm, disponivel: d.disponivel !== false, telefoneObrigatorio: d.telefoneObrigatorio !== false,
+    nomeObrigatorio: d.nomeObrigatorio !== false, veiculoObrigatorio: Array.isArray(d.veiculoObrigatorio) ? d.veiculoObrigatorio.filter((x) => ['placa', 'modelo', 'porte'].includes(x)) : ['placa', 'modelo', 'porte'],
     pendencias: Array.isArray(d.pendencias) ? d.pendencias.filter((x) => typeof x === 'string' && x).slice(0, 5).map((x) => x.slice(0, 300)) : [] }; // v119: o que falta cadastrar para o cliente ver horários
 };
 export const linkAgendamento = {
@@ -1095,9 +1096,17 @@ export const linkAgendamento = {
     const r = await chamar('GET', '/api/estabelecimento/link-agendamento');
     return r.ok ? { ok: true, link: lerLink(r.dados) } : r;
   },
-  // PUT /api/estabelecimento/link-agendamento  { ativo?, diasMax?, telefoneObrigatorio? }
-  async gravar({ ativo, diasMax, telefoneObrigatorio } = {}) {
+  // PUT /api/estabelecimento/link-agendamento  { ativo?, diasMax?, telefoneObrigatorio?, nomeObrigatorio?, veiculoObrigatorio?: ['placa','modelo','porte'] }
+  async gravar({ ativo, diasMax, telefoneObrigatorio, nomeObrigatorio, veiculoObrigatorio } = {}) {
     const corpo = {};
+    if (nomeObrigatorio !== undefined) {
+      if (typeof nomeObrigatorio !== 'boolean') return { ok: false, status: 0, erro: 'Valor inválido.' };
+      corpo.nomeObrigatorio = nomeObrigatorio;
+    }
+    if (veiculoObrigatorio !== undefined) {
+      if (!Array.isArray(veiculoObrigatorio) || veiculoObrigatorio.length > 3 || new Set(veiculoObrigatorio).size !== veiculoObrigatorio.length || !veiculoObrigatorio.every((x) => ['placa', 'modelo', 'porte'].includes(x))) return { ok: false, status: 0, erro: 'Dados do veículo obrigatórios inválidos.' };
+      corpo.veiculoObrigatorio = [...veiculoObrigatorio];
+    }
     if (telefoneObrigatorio !== undefined) corpo.telefoneObrigatorio = telefoneObrigatorio === true;
     if (ativo !== undefined) corpo.ativo = ativo === true;
     if (diasMax !== undefined) {
@@ -1211,7 +1220,8 @@ function lerPaginaPublica(d) {
   return {
     endereco: opcional(d.endereco, 300), mapaUrl: httpsOuVazio(d.mapaUrl),
     ativo: d.ativo === true, aviso: texto(d.aviso, 200), diasMax: Number.isInteger(d.diasMax) ? Math.min(60, Math.max(1, d.diasMax)) : 30,
-    tipo: texto(d.tipo, 40), exigeTelefone: d.exigeTelefone !== false, // telefone obrigatório de fábrica
+    tipo: texto(d.tipo, 40), exigeTelefone: d.exigeTelefone !== false, exigeNome: d.exigeNome !== false, // tudo obrigatório de fábrica; o dono tira em Estabelecimento
+    exigeVeiculo: Array.isArray(d.exigeVeiculo) ? d.exigeVeiculo.filter((x) => ['placa', 'modelo', 'porte'].includes(x)) : ['placa', 'modelo', 'porte'],
     portes: listaDe(d.portes, 10).filter((x) => x && PORTES_PUB.includes(x.id)).map((x) => ({ id: x.id, nome: texto(x.nome, 20) })),
     servicos: listaDe(d.servicos, 200).filter((x) => x && IDV(x.id)).map((x) => ({
       id: x.id, nome: texto(x.nome, 120), duracao: inteiroOuZero(x.duracao), preco: dinheiroOuZero(x.preco), antecedenciaH: inteiroOuZero(x.antecedenciaH),
@@ -1258,7 +1268,7 @@ export const publico = {
     if (typeof cupomChave === 'string' && cupomChave.trim()) corpo.cupomChave = texto(cupomChave.trim(), 40);
     if (typeof site === 'string' && site) corpo.site = texto(site, 100);
     if (veiculo && typeof veiculo === 'object') {
-      corpo.veiculo = { placa: texto(veiculo.placa, 20), modelo: texto(veiculo.modelo, 60), porte: PORTES_PUB.includes(veiculo.porte) ? veiculo.porte : '' };
+      corpo.veiculo = { placa: texto(veiculo.placa, 20), modelo: texto(veiculo.modelo, 60), porte: PORTES_PUB.includes(veiculo.porte) ? veiculo.porte : '' }; // campo vazio vai vazio: o servidor trata como "não informado"
       if (typeof veiculo.marca === 'string' && veiculo.marca.trim()) corpo.veiculo.marca = texto(veiculo.marca, 60);
       if (typeof veiculo.cor === 'string' && veiculo.cor.trim()) corpo.veiculo.cor = texto(veiculo.cor, 40);
     }

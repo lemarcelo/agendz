@@ -263,6 +263,21 @@ public class ClienteService {
         return placa.toUpperCase(Locale.ROOT).replaceAll("[\\s-]", "");
     }
 
+    private static final String PORTE_PADRAO = "medio";
+
+    /** Placa antiga (ABC-1234) ou Mercosul (ABC1D23), só por formato. */
+    private static boolean placaConfere(String bruta) {
+        if (bruta == null || bruta.length() > 16) return false;
+        String c = chavePlaca(bruta);
+        return c.matches("^[A-Z]{3}[0-9]{4}$") || c.matches("^[A-Z]{3}[0-9][A-Z][0-9]{2}$");
+    }
+
+    /** Antiga com hífen, Mercosul junta (mesma saída de `formatarPlaca` do front). */
+    private static String formatarPlaca(String bruta) {
+        String c = chavePlaca(bruta);
+        return c.matches("^[A-Z]{3}[0-9]{4}$") ? c.substring(0, 3) + "-" + c.substring(3) : c;
+    }
+
     /** Mesma regra de `limparVeiculo` (src/domain/veiculos.js): placa antiga ou Mercosul só por formato; modelo e porte obrigatórios. */
     static List<Veiculo> veiculosValidos(List<EntradaVeiculo> entrada) {
         if (entrada.size() > LIMITE_VEICULOS) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Veículos inválidos: no máximo " + LIMITE_VEICULOS + " por cliente.");
@@ -346,17 +361,52 @@ public class ClienteService {
      * informado, ou um novo (`novo`: placa, modelo, porte…), que entra no cadastro se o cliente existe (placa que ele já tem vale o existente). Sem cliente (balcão) fica só a foto.
      * Tipo sem veículo (barbearia) devolve null. Roda na transação do atendimento: se o horário for recusado depois, o veículo novo volta atrás junto.
      */
+    /** Regra antiga: tudo do veículo é obrigatório (painel `POST /api/agendamentos`, chat). */
+    public static final Set<String> EXIGE_TUDO_DO_VEICULO = Set.of("veiculo", "placa", "modelo", "porte");
+    public static final Set<String> CAMPOS_DO_VEICULO = EXIGE_TUDO_DO_VEICULO;
+
     public VeiculoDoAgendamento resolverVeiculo(JdbcTemplate jdbc, Loja loja, UUID clienteId, UUID veiculoId, EntradaVeiculo novo) {
+        return resolverVeiculo(jdbc, loja, clienteId, veiculoId, novo, EXIGE_TUDO_DO_VEICULO);
+    }
+
+    private static boolean vazio(String s) {
+        return s == null || s.isBlank();
+    }
+
+    /**
+     * v121: `exigir` diz o que é obrigatório (`veiculo`, `placa`, `modelo`, `porte`). O que for informado sempre é conferido; o que não for exigido pode faltar.
+     * Nada informado e nada exigido = null (atendimento sem veículo, preço e duração do porte médio). Sem placa válida ou sem modelo, o veículo vale só como foto
+     * do atendimento (não entra no cadastro do cliente). Sem porte, vale o médio.
+     */
+    public VeiculoDoAgendamento resolverVeiculo(JdbcTemplate jdbc, Loja loja, UUID clienteId, UUID veiculoId, EntradaVeiculo novo, Set<String> exigir) {
         if (!br.com.agendz.tenant.Capacidades.usaVeiculo(loja)) return null;
         List<Veiculo> doCliente = clienteId == null ? List.of() : veiculosDe(jdbc, clienteId);
         if (veiculoId != null) {
             return foto(doCliente.stream().filter(x -> x.id().equals(veiculoId)).findFirst().orElseThrow(() -> new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Veículo não encontrado.")));
         }
-        if (novo == null) {
+        boolean informado = novo != null && (!vazio(novo.placa()) || !vazio(novo.marca()) || !vazio(novo.modelo()) || !vazio(novo.cor()) || !vazio(novo.porte()));
+        if (!informado) {
             if (doCliente.size() == 1) return foto(doCliente.get(0));
-            throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha o veículo do atendimento.");
+            if (exigir.stream().anyMatch(CAMPOS_DO_VEICULO::contains)) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha o veículo do atendimento.");
+            return null;
         }
-        Veiculo limpo = veiculosValidos(List.of(new EntradaVeiculo(null, novo.placa(), novo.marca(), novo.modelo(), novo.cor(), novo.porte()))).get(0);
+        String placaBruta = vazio(novo.placa()) ? "" : novo.placa().trim();
+        if (placaBruta.isEmpty() ? exigir.contains("placa") : !placaConfere(placaBruta)) {
+            throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, placaBruta.isEmpty() ? "Informe a placa do veículo." : "Placa inválida. Use o formato antigo (ABC-1234) ou Mercosul (ABC1D23).");
+        }
+        String modeloLimpo = vazio(novo.modelo()) ? "" : br.com.agendz.validacao.Texto.limpar(novo.modelo());
+        if (exigir.contains("modelo") ? modeloLimpo.length() < 2 : modeloLimpo.length() == 1) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe o modelo do veículo.");
+        if (modeloLimpo.length() > 40) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe o modelo do veículo.");
+        if (vazio(novo.porte()) ? exigir.contains("porte") : !PORTES.contains(novo.porte())) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha o porte do veículo.");
+        String porte = vazio(novo.porte()) ? PORTE_PADRAO : novo.porte();
+        if (placaBruta.isEmpty() || modeloLimpo.length() < 2) {
+            // incompleto: só a foto do atendimento
+            String marca = vazio(novo.marca()) ? "" : br.com.agendz.validacao.Texto.limpar(novo.marca());
+            String cor = vazio(novo.cor()) ? "" : br.com.agendz.validacao.Texto.limpar(novo.cor());
+            if (marca.length() > 30 || cor.length() > 20) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Dados do veículo inválidos.");
+            return new VeiculoDoAgendamento(null, placaBruta.isEmpty() ? "" : formatarPlaca(placaBruta), marca, modeloLimpo, cor, porte);
+        }
+        Veiculo limpo = veiculosValidos(List.of(new EntradaVeiculo(null, novo.placa(), novo.marca(), novo.modelo(), novo.cor(), porte))).get(0);
         String chave = chavePlaca(limpo.placa());
         for (Veiculo x : doCliente) if (chavePlaca(x.placa()).equals(chave)) return foto(x);
         if (clienteId == null) return new VeiculoDoAgendamento(null, limpo.placa(), limpo.marca(), limpo.modelo(), limpo.cor(), limpo.porte());
@@ -445,7 +495,7 @@ public class ClienteService {
         String tel = Documentos.telefone(telefoneBruto);
         if (tel == null) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe o telefone com DDD.");
         String nome = nomeBruto == null ? "" : Texto.limpar(nomeBruto).trim();
-        if (nome.length() < 2) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe o seu nome.");
+        if (nome.length() == 1) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe o seu nome."); // em branco só chega aqui se o dono tirou a obrigatoriedade (v121)
         if (nome.length() > 60) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "O nome pode ter até 60 letras.");
         String hash = cifra.hash(loja.id(), "tel", tel);
         List<Candidato> doNumero = jdbc.query("select id, nome, apelido, sem_nome, telefone_hash from cliente where telefone_hash = ? order by criado_em, id",
@@ -465,8 +515,8 @@ public class ClienteService {
         }
         try {
             UUID novo = jdbc.queryForObject(
-                    "insert into cliente (loja_id, nome, telefone_cif, telefone_hash, sem_nome, origem_cadastro) values (?::uuid, ?, ?, ?, false, 'link') returning id",
-                    UUID.class, loja.id().toString(), nome, cifra.cifrar(tel), hash);
+                    "insert into cliente (loja_id, nome, telefone_cif, telefone_hash, sem_nome, origem_cadastro) values (?::uuid, ?, ?, ?, ?, 'link') returning id",
+                    UUID.class, loja.id().toString(), nome.isEmpty() ? telefoneFormatado(tel) : nome, cifra.cifrar(tel), hash, nome.isEmpty());
             return new DoLink(novo, true);
         } catch (DuplicateKeyException ex) {
             throw duplicado(ex);

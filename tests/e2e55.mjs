@@ -221,7 +221,7 @@ let contexto;
   assert.equal(deHoje('PUT', '/api/estabelecimento/link-agendamento').length, 0, 'dias fora de 1 a 60 nem saem');
   await p.getByTestId('link-dias').fill('14'); await p.getByTestId('link-ativo').uncheck();
   await p.getByTestId('link-salvar').click(); await p.getByTestId('link-ok').waitFor();
-  assert.deepEqual(deHoje('PUT', '/api/estabelecimento/link-agendamento').at(-1).corpo, { ativo: false, diasMax: 14, telefoneObrigatorio: true });
+  assert.deepEqual(deHoje('PUT', '/api/estabelecimento/link-agendamento').at(-1).corpo, { ativo: false, diasMax: 14, telefoneObrigatorio: true, nomeObrigatorio: true });
   assert.equal(link.ativo, false);
   ok('Início: endereço do link, abrir em aba nova, dias de 1 a 60, ligar/desligar');
   // telefone obrigatório de fábrica; o dono tira e a tela avisa o que isso significa

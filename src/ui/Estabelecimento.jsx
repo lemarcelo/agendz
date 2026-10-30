@@ -3,7 +3,8 @@ import { consumirAbaEstabelecimento } from './destino.js';
 import React, { useState } from 'react';
 import { estabelecimento as apiEst, excecoes as apiEx, afetadosPorExcecoes } from '../services/api.js';
 import { FORMAS_PAGAMENTO, ehDono } from '../domain/rules.js';
-import { CAMPOS_ATENDER, CAMPOS_OBRIGATORIOS_PADRAO } from '../domain/engine.js';
+import { configLink } from '../domain/publico.js';
+import { CAMPOS_ATENDER, CAMPOS_DE_VEICULO, CAMPOS_OBRIGATORIOS_PADRAO } from '../domain/engine.js';
 import { DIAS_SEMANA, fmtDate, fmtHM, fromYmd, ymd, startOfDay } from '../domain/time.js';
 import { TIPOS_EXCECAO, diasDaExcecao } from '../domain/schedule.js';
 import { FERIADOS_NACIONAIS } from '../domain/feriados.js';
@@ -336,13 +337,24 @@ function PagamentoRegras({ st, e }) {
 
 // Link de agendamento do cliente: liga/desliga e até quantos dias à frente o cliente pode marcar.
 function LinkAgendamentoRegras({ e }) {
-  const cfg = e.linkAgendamento || { ativo: true, diasMax: 30, telefoneObrigatorio: true };
+  const cfg = configLink({ estabelecimento: e }); // com os padrões de fábrica (tudo obrigatório) onde o dono ainda não mexeu
+  const alternaVei = (k) => salvar({ veiculoObrigatorio: cfg.veiculoObrigatorio.includes(k) ? cfg.veiculoObrigatorio.filter((x) => x !== k) : [...cfg.veiculoObrigatorio, k] }, 'Regra do veículo no link salva.');
   const salvar = (patch, msg) => { const r = apiEst.salvar({ linkAgendamento: { ...cfg, ...patch } }); if (r.ok) toast(msg); else toast(r.erros[0], 'erro'); };
   return (
     <div className="bloco" data-testid="regras-link">
       <h3>Link de agendamento do cliente</h3>
       <Interruptor checked={cfg.ativo !== false} onChange={(v) => salvar({ ativo: v }, v ? 'Link ligado.' : 'Link desligado.')} rotulo="Cliente agenda pelo link" descricao="O botão “Link de agendamento” fica na Agenda. Desligado, a página do cliente avisa que está indisponível." />
       <Interruptor checked={cfg.telefoneObrigatorio !== false} onChange={(v) => salvar({ telefoneObrigatorio: v }, v ? 'Telefone obrigatório no link.' : 'Telefone opcional no link.')} rotulo="Telefone obrigatório no link" descricao="Ligado (padrão), o cliente só pede o horário com telefone e recebe os avisos. Desligado, ele pode pedir só com o nome; o pedido fica sem cadastro e sem aviso por WhatsApp." testid="link-telefone-obrigatorio" />
+      <Interruptor checked={cfg.nomeObrigatorio} onChange={(v) => salvar({ nomeObrigatorio: v }, v ? 'Nome obrigatório no link.' : 'Nome opcional no link.')} rotulo="Nome obrigatório no link" descricao="Desligado, o cliente pode pedir o horário sem dizer o nome. Sem nome e sem telefone o horário fica anônimo." testid="link-nome-obrigatorio" />
+      {capAtiva('usaVeiculo') && (
+        <fieldset className="conj" data-testid="link-veiculo-obrigatorio">
+          <legend>Dados do veículo obrigatórios no link</legend>
+          {[['placa', 'Placa'], ['modelo', 'Modelo'], ['porte', 'Porte']].map(([k, r]) => (
+            <label key={k} className="check-linha"><input type="checkbox" checked={cfg.veiculoObrigatorio.includes(k)} onChange={() => alternaVei(k)} data-testid={`link-veic-${k}`} /> {r}</label>
+          ))}
+          <small className="muted">Sem porte, vale o preço e a duração do porte médio.</small>
+        </fieldset>
+      )}
       <Campo rotulo="Até quantos dias à frente o cliente pode marcar" dica="De 1 a 60. A antecedência mínima de cada serviço continua valendo.">
         <select value={cfg.diasMax} onChange={(x) => salvar({ diasMax: Number(x.target.value) }, 'Prazo salvo.')} data-testid="link-dias-max">
           {[7, 14, 30, 45, 60].map((d) => <option key={d} value={d}>{d} dias</option>)}
@@ -364,13 +376,13 @@ function CamposObrigatorios({ e }) {
   return (
     <div className="bloco" data-testid="campos-obrigatorios">
       <h3>Campos obrigatórios do botão Atender</h3>
-      <p className="muted">Serviço ou produto sempre é obrigatório. Marque o que mais deve ser preenchido em cada tipo. Para agendar, o telefone é sempre necessário (o aviso do horário vai por WhatsApp).</p>
+      <p className="muted">Serviço ou produto sempre é obrigatório. Marque o que mais deve ser preenchido em cada tipo. Todos podem ficar desmarcados. Sem telefone o horário fica sem cadastro e sem aviso por WhatsApp.</p>
       <div className="form-grade">
         {grupos.map(([tipo, titulo, dica]) => (
           <fieldset key={tipo} className="conj" data-testid={`obrig-${tipo}`}>
             <legend>{titulo}</legend>
             <small className="muted">{dica}</small>
-            {Object.entries(CAMPOS_ATENDER).filter(([k]) => !(tipo === 'futuro' && k === 'formaPagamento')).map(([k, r]) => (
+            {Object.entries(CAMPOS_ATENDER).filter(([k]) => !(tipo === 'futuro' && k === 'formaPagamento') && (capAtiva('usaVeiculo') || !CAMPOS_DE_VEICULO.includes(k))).map(([k, r]) => (
               <label key={k} className="check-linha"><input type="checkbox" checked={atual[tipo].includes(k)} onChange={() => alterna(tipo, k)} data-testid={`obrig-${tipo}-${k}`} /> {r[0].toUpperCase() + r.slice(1)}</label>
             ))}
           </fieldset>

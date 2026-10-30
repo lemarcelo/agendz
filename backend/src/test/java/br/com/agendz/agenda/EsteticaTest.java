@@ -68,6 +68,7 @@ class EsteticaTest extends BaseApi {
         jdbc.update("delete from servico");
         jdbc.update("delete from cliente");
         jdbc.update("delete from escala_faixa");
+        jdbc.update("delete from configuracao_loja"); // regras de atendimento gravadas por teste não vazam para o seguinte
     }
 
     private static String id(String json) {
@@ -239,6 +240,9 @@ class EsteticaTest extends BaseApi {
 
     @Test
     void atendimentoLocalDaEsteticaUsaOPorteEFicaSemBox() throws Exception {
+        // v121: de fábrica o veículo não é obrigatório; o dono pode exigi-lo (ou só placa, modelo, porte) em Estabelecimento > Regras
+        mvc.perform(put("/api/estabelecimento/regras-atendimento").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"camposObrigatorios\":{\"futuro\":[],\"local\":[\"veiculo\"]}}")).andExpect(status().isOk());
         mvc.perform(post("/api/atendimentos").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"profissionalId\":\"" + pabloId + "\",\"servicoIds\":[\"" + lavagem + "\"],\"nome\":\"Caio\",\"telefone\":\"(53) 99900-1003\"}"))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.mensagem").value("Escolha o veículo do atendimento."));
@@ -248,6 +252,30 @@ class EsteticaTest extends BaseApi {
                 .andExpect(jsonPath("$.estetica.porte").value("suv")).andExpect(jsonPath("$.estetica.box").doesNotExist());
         assertEquals(1, jdbc.queryForObject("select count(*) from cliente_veiculo", Integer.class));
         assertEquals(1, jdbc.queryForObject("select count(*) from agendamento_bloco", Integer.class));
+    }
+
+    @Test
+    void veiculoOpcionalNoAtenderQuandoOsCamposNaoSaoObrigatorios() throws Exception {
+        String base = "{\"profissionalId\":\"" + pabloId + "\",\"servicoIds\":[\"" + lavagem + "\"],\"nome\":\"Caio\",\"telefone\":\"(53) 99900-1004\"";
+        // sem veículo e sem regra: registra no porte médio, sem veículo no atendimento
+        mvc.perform(post("/api/atendimentos").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON).content(base + "}"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.total").value(80));
+        assertEquals(0, jdbc.queryForObject("select count(*) from cliente_veiculo", Integer.class));
+        // cada campo só é exigido se marcado
+        mvc.perform(put("/api/estabelecimento/regras-atendimento").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"camposObrigatorios\":{\"futuro\":[],\"local\":[\"placa\",\"porte\"]}}")).andExpect(status().isOk());
+        mvc.perform(post("/api/atendimentos").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON)
+                .content(base + ",\"veiculo\":{\"modelo\":\"Onix\",\"porte\":\"suv\"}}")).andExpect(status().isBadRequest()).andExpect(jsonPath("$.mensagem").value("Informe a placa do veículo."));
+        mvc.perform(post("/api/atendimentos").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON)
+                .content(base + ",\"veiculo\":{\"placa\":\"ABC1D23\"}}")).andExpect(status().isBadRequest()).andExpect(jsonPath("$.mensagem").value("Escolha o porte do veículo."));
+        // placa e porte, sem modelo: vale como foto do atendimento (não entra no cadastro do cliente)
+        mvc.perform(post("/api/atendimentos").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON)
+                .content(base + ",\"veiculo\":{\"placa\":\"ABC1D23\",\"porte\":\"suv\"}}")).andExpect(status().isCreated()).andExpect(jsonPath("$.total").value(120))
+                .andExpect(jsonPath("$.estetica.porte").value("suv"));
+        assertEquals(0, jdbc.queryForObject("select count(*) from cliente_veiculo", Integer.class));
+        // as regras aceitam só os campos conhecidos
+        mvc.perform(put("/api/estabelecimento/regras-atendimento").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"camposObrigatorios\":{\"futuro\":[\"cor\"],\"local\":[]}}")).andExpect(status().isBadRequest());
     }
 
     private static Instant local(LocalDate dia, int hora, int minuto) {

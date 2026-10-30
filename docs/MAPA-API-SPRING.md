@@ -260,7 +260,7 @@ O catálogo (`backend/src/main/resources/catalogo/<tipo>.json`) é gerado dos se
 | Rota | Quem | O que faz | Regras |
 |---|---|---|---|
 | `GET /api/estabelecimento/regras-atendimento` | dono, admin, atendente, profissional (seção agenda) | `{formaPagamentoPadrao, futuro[], local[]}` | sem linha gravada: Pix, futuro = nome e telefone, local = nada |
-| `PUT /api/estabelecimento/regras-atendimento` `{formaPagamentoPadrao?, camposObrigatorios?: {futuro, local}}` | dono | grava; o que não vem fica como estava | forma: pix, dinheiro, cartao ou vazio (sem padrão); campos: nome, telefone, profissional, vendedor, formaPagamento (esta só no local), sem repetir, até 5 |
+| `PUT /api/estabelecimento/regras-atendimento` `{formaPagamentoPadrao?, camposObrigatorios?: {futuro, local}}` | dono | grava; o que não vem fica como estava | forma: pix, dinheiro, cartao ou vazio (sem padrão); campos: nome, telefone, profissional, vendedor, formaPagamento (esta só no local) e, na estética, veiculo, placa, modelo, porte (v121), sem repetir, até 9; vazio = nada obrigatório |
 | `POST /api/atendimentos` `formaPagamento?` | quem já tinha | atendimento feito guarda a forma (escolhida ou padrão); campos obrigatórios das regras valem nos dois tipos | sem padrão e nada escolhido = 400 "Escolha a forma de pagamento."; futuro ignora a forma |
 
 ## 10i. Cupons e vales (v96, 5d-4c-2; `CupomTest`, `CupomEquivalenciaTest`, `equivalencia/cupons.json`)
@@ -286,7 +286,7 @@ Rotas **sem login** (a loja vem do Host; `SegurancaConfig` libera só estas). Li
 | `POST /api/publico/agendamentos` | pede um horário | nome 2 a 60, telefone BR, 1 a 5 serviços, isca `site` vazia, até `diasMax`; entra a confirmar (`origem` link); máx. 3 abertos por cliente; `cupomChave` opcional (errada = pedido inteiro recusado e tentativa gravada); devolve `{agendamento, token}` (token uma vez) |
 | `POST /api/publico/meus {tokens}` | os horários dos tokens | até 10 tokens; inválido some; nunca telefone nem id de cliente |
 | `POST /api/publico/agendamentos/{id}/cancelar` (`X-Acesso`) | cancela o próprio horário | token precisa ser DESTE horário; ativo e 24 h ou mais; motivo `cliente` |
-| `GET/PUT /api/estabelecimento/link-agendamento` | liga/desliga e `diasMax` (1 a 60) | só o proprietário |
+| `GET/PUT /api/estabelecimento/link-agendamento` | liga/desliga, `diasMax` (1 a 60), `telefoneObrigatorio`, `nomeObrigatorio` (v121) e `veiculoObrigatorio` (lista de `placa`/`modelo`/`porte`, só estética; V35) | só o proprietário |
 | `GET /api/publico/agendamentos/{id}/horarios?data=` e `/dias?de&dias=` (`X-Acesso`) | horários/dias livres para REMARCAR | mesmo profissional e serviços do horário; o próprio horário conta como livre; link desligado = lista vazia |
 | `POST /api/publico/agendamentos/{id}/remarcar {inicio}` (`X-Acesso`) | remarca o próprio horário | token deste horário; ativo; 24 h ou mais até o horário atual; regras do pedido no horário novo; volta a "a confirmar", `reagendado`; link desligado = 403; 30 por 10 min por IP |
 | `GET /api/avisos`, `PUT /api/avisos/{id}/lido` | avisos do painel (pedido, remarcou, cancelou) | seção agenda; profissional vê só os seus; outra loja/profissional = 404 |

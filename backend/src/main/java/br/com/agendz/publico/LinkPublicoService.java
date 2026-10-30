@@ -86,7 +86,7 @@ public class LinkPublicoService {
     }
 
     /** `endereco` e `mapaUrl` só vêm quando o proprietário ligou "mostrar o endereço no link" e há endereço gravado. */
-    public record Pagina(boolean ativo, String aviso, int diasMax, boolean exigeTelefone, List<ServicoPublico> servicos, List<ProfissionalPublico> profissionais, String endereco, String mapaUrl,
+    public record Pagina(boolean ativo, String aviso, int diasMax, boolean exigeTelefone, boolean exigeNome, List<String> exigeVeiculo, List<ServicoPublico> servicos, List<ProfissionalPublico> profissionais, String endereco, String mapaUrl,
                          String tipo, List<PortePublico> portes) {
     }
 
@@ -165,9 +165,9 @@ public class LinkPublicoService {
         return banco.naLoja(jdbc -> {
             LinkAgendamento.Config cfg = LinkAgendamento.ler(jdbc);
             boolean ativo = cfg.ativo() && LinkAgendamento.tipoSuportado(loja);
-            if (!ativo) return new Pagina(false, ERRO_DESLIGADO, cfg.diasMax(), cfg.telefoneObrigatorio(), List.of(), List.of(), null, null, loja.tipo(), List.of());
+            if (!ativo) return new Pagina(false, ERRO_DESLIGADO, cfg.diasMax(), cfg.telefoneObrigatorio(), cfg.nomeObrigatorio(), cfg.veiculoObrigatorio(), List.of(), List.of(), null, null, loja.tipo(), List.of());
             if (Capacidades.usaRecursoFisico(loja) && Integer.valueOf(0).equals(jdbc.queryForObject("select count(*) from box where ativo", Integer.class))) {
-                return new Pagina(false, ERRO_SEM_BOX, cfg.diasMax(), cfg.telefoneObrigatorio(), List.of(), List.of(), null, null, loja.tipo(), List.of()); // estética sem box: a agenda do cliente não abre (v120)
+                return new Pagina(false, ERRO_SEM_BOX, cfg.diasMax(), cfg.telefoneObrigatorio(), cfg.nomeObrigatorio(), cfg.veiculoObrigatorio(), List.of(), List.of(), null, null, loja.tipo(), List.of()); // estética sem box: a agenda do cliente não abre (v120)
             }
             boolean porPorte = Capacidades.precoPorPorte(loja);
             List<ServicoPublico> servicos = jdbc.query(
@@ -180,7 +180,7 @@ public class LinkPublicoService {
             LocalDaLoja.Local local = LocalDaLoja.ler(jdbc);
             boolean mostra = local.enderecoNoLink() && local.temEndereco();
             List<PortePublico> portes = porPorte ? PORTES.stream().map(x -> new PortePublico(x, ROTULO_PORTE.get(x))).toList() : List.of();
-            return new Pagina(true, null, cfg.diasMax(), cfg.telefoneObrigatorio(), servicos, profissionais, mostra ? local.enderecoTexto() : null, mostra ? local.mapaUrl() : null, loja.tipo(), portes);
+            return new Pagina(true, null, cfg.diasMax(), cfg.telefoneObrigatorio(), cfg.nomeObrigatorio(), cfg.veiculoObrigatorio(), servicos, profissionais, mostra ? local.enderecoTexto() : null, mostra ? local.mapaUrl() : null, loja.tipo(), portes);
         });
     }
 
@@ -227,7 +227,7 @@ public class LinkPublicoService {
 
     private LinkAgendamento.Config config(JdbcTemplate jdbc, Loja loja) {
         LinkAgendamento.Config c = LinkAgendamento.ler(jdbc);
-        return new LinkAgendamento.Config(c.ativo() && LinkAgendamento.tipoSuportado(loja), c.diasMax(), c.telefoneObrigatorio());
+        return new LinkAgendamento.Config(c.ativo() && LinkAgendamento.tipoSuportado(loja), c.diasMax(), c.telefoneObrigatorio(), c.nomeObrigatorio(), c.veiculoObrigatorio());
     }
 
     private Base base(JdbcTemplate jdbc, Loja loja, UUID profissionalId) {
@@ -297,14 +297,14 @@ public class LinkPublicoService {
         Loja loja = LojaContext.exigir();
         if (p.site() != null && !p.site().isBlank()) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Não foi possível agendar. Tente de novo."); // campo isca: robô
         String nome = p.nome() == null ? "" : Texto.limpar(p.nome()).trim();
-        if (nome.length() < 2) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe o seu nome.");
+        // nome em branco só vale se o dono tirou a obrigatoriedade (conferido de novo dentro da transação); uma letra só nunca vale
+        if (nome.length() == 1) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe o seu nome.");
         if (nome.length() > 60) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "O nome pode ter até 60 letras.");
         // telefone digitado precisa ser válido; em branco só vale se o proprietário tirou a obrigatoriedade (conferido de novo dentro da transação)
         boolean telefoneEmBranco = p.telefone() == null || p.telefone().replaceAll("\\D", "").isEmpty();
         String tel = telefoneEmBranco ? null : Documentos.telefone(p.telefone());
         if (tel == null && !telefoneEmBranco) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe o telefone com DDD.");
         List<UUID> servicoIds = ids(p.servicoIds());
-        if (Capacidades.usaVeiculo(loja) && p.veiculo() == null) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe o veículo (placa, modelo e porte).");
         boolean comCupom = p.cupomChave() != null && !p.cupomChave().isBlank();
         boolean liberado = (tel == null || limite.liberar("agendar-tel:" + loja.id() + ":" + tel, 5, Duration.ofMinutes(1)))
                 && limite.liberar("agendar-ip:" + loja.id() + ":" + ip, 20, Duration.ofMinutes(10))
@@ -316,9 +316,12 @@ public class LinkPublicoService {
             LinkAgendamento.Config cfg = config(jdbc, loja);
             if (!cfg.ativo()) throw new ErroDeNegocio(HttpStatus.FORBIDDEN, ERRO_DESLIGADO);
             if (tel == null && cfg.telefoneObrigatorio()) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe o telefone com DDD.");
+            if (nome.isEmpty() && cfg.nomeObrigatorio()) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe o seu nome.");
             // estética: o veículo vem do pedido (não entra no cadastro de quem já é cliente) e o porte dele define preço e duração
             ClienteService.VeiculoDoAgendamento vei = !Capacidades.usaVeiculo(loja) ? null
-                    : clientes.resolverVeiculo(jdbc, loja, null, null, new ClienteService.EntradaVeiculo(null, p.veiculo().placa(), p.veiculo().marca(), p.veiculo().modelo(), p.veiculo().cor(), p.veiculo().porte()));
+                    : clientes.resolverVeiculo(jdbc, loja, null, null, p.veiculo() == null ? null
+                            : new ClienteService.EntradaVeiculo(null, p.veiculo().placa(), p.veiculo().marca(), p.veiculo().modelo(), p.veiculo().cor(), p.veiculo().porte()),
+                            new java.util.HashSet<>(cfg.veiculoObrigatorio()));
             List<Svc> servicos = servicosDoLink(jdbc, servicoIds, vei == null ? null : vei.porte());
             Instant inicio = p.inicio();
             if (inicio.getNano() != 0 || inicio.getEpochSecond() % 60 != 0 || !inicio.isAfter(agora) || inicio.isAfter(agora.plus(cfg.diasMax(), ChronoUnit.DAYS))) {
@@ -354,6 +357,7 @@ public class LinkPublicoService {
             UUID boxId = escolherBoxDoLink(jdbc, loja, inicio, fimServico, fimOcupado, null, NINGUEM);
 
             // sem telefone não há cadastro: o pedido guarda só o nome (`nome_avulso`) e o limite de abertos fica por conta do limite por IP e da loja
+            String nomeNaAgenda = nome.isEmpty() ? "Sem nome" : nome; // dono tirou a obrigatoriedade do nome
             ClienteService.DoLink cli = tel == null ? null : clientes.resolverDoLink(jdbc, nome, tel);
             UUID clienteId = cli == null ? null : cli.clienteId();
             if (cli != null) {
@@ -365,7 +369,7 @@ public class LinkPublicoService {
             UUID id = jdbc.queryForObject(
                     "insert into agendamento (loja_id, cliente_id, nome_avulso, profissional_id, inicio, fim_servico, fim_ocupado, status, encaixe, total, origem, box_id, porte, veiculo_placa, veiculo_marca, veiculo_modelo, veiculo_cor) "
                             + "values (?::uuid, ?, ?, ?, ?, ?, ?, 'a_confirmar', false, ?, 'link', ?, ?, ?, ?, ?, ?) returning id",
-                    UUID.class, loja.id().toString(), clienteId, clienteId == null ? nome : null, profissional, utc(inicio), utc(fimServico), utc(fimOcupado), total, boxId,
+                    UUID.class, loja.id().toString(), clienteId, clienteId == null ? nomeNaAgenda : null, profissional, utc(inicio), utc(fimServico), utc(fimOcupado), total, boxId,
                     vei == null ? null : vei.porte(), vei == null ? null : vei.placa(), vei == null ? null : vei.marca(), vei == null ? null : vei.modelo(), vei == null ? null : vei.cor());
             short ordem = 0;
             for (Svc s : servicos) {
@@ -379,7 +383,7 @@ public class LinkPublicoService {
                 CupomService.Aplicado ap = cupons.aplicar(jdbc, loja.id(), id, null, "link:" + ip, p.cupomChave(), agora);
                 evento(jdbc, loja.id(), id, "cupom", null, ap.nome() + ": desconto de " + CupomService.reais(ap.desconto()));
             }
-            avisar(jdbc, loja.id(), id, "pedido", nome + (clienteId == null ? " (sem telefone)" : "") + " pediu horário pelo link" + (vei == null ? "" : " para o " + vei.modelo() + " " + vei.placa()) + ": " + dataHora(inicio) + " (aguardando a sua confirmação).");
+            avisar(jdbc, loja.id(), id, "pedido", nomeNaAgenda + (clienteId == null ? " (sem telefone)" : "") + " pediu horário pelo link" + (vei == null ? "" : " para o " + vei.modelo() + " " + vei.placa()) + ": " + dataHora(inicio) + " (aguardando a sua confirmação).");
             String token = novoToken();
             jdbc.update("delete from acesso_publico where expira_em < ?", utc(agora));
             jdbc.update("insert into acesso_publico (loja_id, agendamento_id, token_hash, expira_em) values (?::uuid, ?, ?, ?)",

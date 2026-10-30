@@ -226,6 +226,14 @@ test('regras do Atender: rota, corpo certo, leitura defensiva e validação ante
   assert.equal(chamadas.length, antes, 'nada inválido sai do cliente');
 });
 
+test('regras do Atender: placa, modelo, porte e veículo são campos válidos e saem no corpo', async () => {
+  servidor({ formaPagamentoPadrao: 'pix', futuro: ['veiculo', 'placa'], local: ['modelo', 'porte'] });
+  const g = await regras.gravar({ camposObrigatorios: { futuro: ['veiculo', 'placa'], local: ['modelo', 'porte'] } });
+  assert.equal(g.ok, true);
+  assert.deepEqual(chamadas[0].corpo, { camposObrigatorios: { futuro: ['veiculo', 'placa'], local: ['modelo', 'porte'] } });
+  assert.deepEqual([g.regras.futuro, g.regras.local], [['veiculo', 'placa'], ['modelo', 'porte']]);
+});
+
 test('regras do Atender: o erro do servidor chega com a mensagem dele (profissional não grava)', async () => {
   servidor({ mensagem: 'Acesso negado.' }, 403);
   const r = await regras.gravar({ formaPagamentoPadrao: 'pix' });

@@ -27,7 +27,7 @@ public class RegrasAtendimento {
     public static final Set<String> FORMAS = Set.of("pix", "dinheiro", "cartao");
     public static final String FORMA_DE_FABRICA = "pix";
     /** Campos que o Atender pode exigir. A forma de pagamento só existe no atendimento local (o futuro ainda não foi pago). */
-    public static final List<String> CAMPOS = List.of("nome", "telefone", "profissional", "vendedor", "formaPagamento");
+    public static final List<String> CAMPOS = List.of("nome", "telefone", "profissional", "vendedor", "formaPagamento", "veiculo", "placa", "modelo", "porte");
     public static final List<String> FUTURO_DE_FABRICA = List.of();
     public static final List<String> LOCAL_DE_FABRICA = List.of();
 
@@ -98,7 +98,7 @@ public class RegrasAtendimento {
     }
 
     private static List<String> conferir(List<String> campos, boolean futuro) {
-        boolean ok = campos != null && campos.size() <= 5 && new LinkedHashSet<>(campos).size() == campos.size()
+        boolean ok = campos != null && campos.size() <= 9 && new LinkedHashSet<>(campos).size() == campos.size()
                 && campos.stream().allMatch(x -> x != null && CAMPOS.contains(x) && !(futuro && x.equals("formaPagamento")));
         if (!ok) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Campos obrigatórios inválidos.");
         return List.copyOf(campos);

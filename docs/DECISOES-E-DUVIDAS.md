@@ -132,3 +132,9 @@ Lista simples. Cada item está no histórico do `prompt-agendz-regras.md` (v84 a
 - **Decidi:** a digital condicional (campo de usuário) é só um atalho do navegador; a digital continua sem substituir a senha.
 - **Decidi:** o assistente de estética ganhou a etapa Boxes (nome livre, padrão "Box 1"); o `concluir` ainda cria 1 box por profissional se o dono pular, para nunca deixar a loja sem box. Sem box ativo: Atender, Link Agenda e página do cliente ficam bloqueados; o aviso só leva ao cadastro se a pessoa for o proprietário.
 
+## v121 (30/10): campos opcionais, inclusive veículo
+- **Decidi:** no painel (Atender) nada é obrigatório de fábrica, inclusive veículo/placa/modelo/porte na estética; no link do cliente de fábrica nome, telefone, placa, modelo e porte continuam obrigatórios (cliente anônimo), e o dono desmarca o que quiser.
+- **Decidi:** veículo incompleto vale só como "foto" do atendimento; só placa + modelo cadastram o veículo no cliente; sem porte vale o médio. Placa informada é sempre conferida.
+- **Decidi:** nome opcional no link sem nome digitado = "Sem nome"; nome de uma letra continua recusado.
+- **Dúvida:** o atendimento sem veículo na estética usa o preço do porte médio; talvez o dono prefira exigir o porte (ele marca em Regras).
+

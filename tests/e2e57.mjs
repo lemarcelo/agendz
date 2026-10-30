@@ -16,6 +16,8 @@ const banco = [];
 let boxes = [{ id: BX1, nome: 'Box 1', ativo: true }, { id: BX2, nome: 'Box 2', ativo: true }];
 let recusarBoxes = '';
 let seq = 0;
+let regrasAtend = { formaPagamentoPadrao: 'pix', futuro: [], local: ['placa', 'modelo', 'porte'] };
+let linkAg = { ativo: true, diasMax: 30, disponivel: true, telefoneObrigatorio: true, nomeObrigatorio: true, veiculoObrigatorio: ['placa', 'modelo', 'porte'], pendencias: [] };
 const ultimo = (m, u) => chamadas.filter((c) => c.m === m && c.u === u).at(-1);
 const CLIENTE = { id: CLI, nome: 'Carlos Lima', apelido: 'Carlos', telefone: '5511977776666', cpfMascarado: '', veiculos: [{ id: V_ONIX, placa: 'ABC1D23', marca: 'Chevrolet', modelo: 'Onix', cor: 'Prata', porte: 'medio' }, { id: V_HILUX, placa: 'DEF4567', marca: 'Toyota', modelo: 'Hilux', cor: 'Preta', porte: 'pickup' }], dadosCompletos: false };
 const SERVICO = { id: SRV, codigo: '1', nome: 'Lavagem completa', categoria: '', preco: 80, duracaoMin: 60, intervaloMin: 0, antecedenciaH: 0, ativo: true, precos: { pequeno: 60, medio: 80, grande: 100, suv: 120, pickup: 150 }, duracoes: { pequeno: 45, medio: 60, grande: 75, suv: 90, pickup: 120 } };
@@ -35,7 +37,14 @@ const servidor = http.createServer((req, res) => {
     if (u.pathname === '/api/profissionais') return json(200, [{ id: DAVI, nome: 'Davi', papel: 'dono', atende: true, podeVender: true }]);
     if (u.pathname === '/api/servicos') return json(200, [SERVICO]);
     if (u.pathname === '/api/produtos') return json(200, []);
-    if (u.pathname === '/api/estabelecimento/regras-atendimento') return json(200, { formaPagamentoPadrao: 'pix', futuro: [], local: [] });
+    if (u.pathname === '/api/estabelecimento/regras-atendimento') {
+      if (req.method === 'PUT') { regrasAtend = { ...regrasAtend, futuro: c.camposObrigatorios.futuro, local: c.camposObrigatorios.local }; }
+      return json(200, regrasAtend);
+    }
+    if (u.pathname === '/api/estabelecimento/link-agendamento') {
+      if (req.method === 'PUT') linkAg = { ...linkAg, ...c };
+      return json(200, linkAg);
+    }
     if (u.pathname === '/api/boxes') return json(200, boxes);
     if (u.pathname === '/api/estabelecimento/boxes' && req.method === 'PUT') {
       if (recusarBoxes) return json(409, { mensagem: recusarBoxes });
@@ -219,6 +228,32 @@ const texto = (p, t) => p.getByTestId(t).innerText();
   l = await largura();
   assert.ok(l.doc <= l.janela, `Boxes: rolagem lateral ${l.doc} > ${l.janela}`);
   ok('390 px com fonte larga: Atender (estética) e Boxes sem rolagem lateral');
+  await ctx.close();
+}
+
+// 6. v121: Estabelecimento (estética): placa, modelo, porte e veículo aparecem nas regras do Atender e do link; o dono tira a obrigatoriedade e o corpo leva a lista nova
+{
+  const { ctx, p } = await abrir();
+  await p.getByTestId('nav-estabelecimento').click();
+  await p.getByTestId('regras-real').waitFor();
+  for (const k of ['veiculo', 'placa', 'modelo', 'porte']) assert.equal(await p.getByTestId(`regras-local-${k}`).count(), 1, `${k} é regra do atendimento feito`);
+  assert.equal(await p.getByTestId('regras-local-placa').isChecked(), true);
+  await p.getByTestId('regras-local-placa').uncheck(); await p.getByTestId('regras-local-modelo').uncheck(); await p.getByTestId('regras-local-porte').uncheck();
+  await p.getByTestId('regras-salvar').click(); await p.getByTestId('regras-ok').waitFor();
+  assert.deepEqual(ultimo('PUT', '/api/estabelecimento/regras-atendimento').corpo.camposObrigatorios, { futuro: [], local: [] });
+  await p.getByTestId('link-nome-obrigatorio').uncheck();
+  await p.getByTestId('link-veic-placa').uncheck(); await p.getByTestId('link-veic-modelo').uncheck(); await p.getByTestId('link-veic-porte').uncheck();
+  await p.getByTestId('link-salvar').click(); await p.getByTestId('link-ok').waitFor();
+  const corpo = ultimo('PUT', '/api/estabelecimento/link-agendamento').corpo;
+  assert.equal(corpo.nomeObrigatorio, false); assert.deepEqual(corpo.veiculoObrigatorio, []);
+  // sem a exigência, o Atender salva sem os dados do veículo
+  await p.getByTestId('nav-agenda').click(); await p.getByTestId('atender-abrir').click();
+  await p.getByTestId(`atender-srv-${SRV}`).check();
+  const antes = chamadas.filter((c) => c.u === '/api/atendimentos').length;
+  await p.getByTestId('salvar-atender').click();
+  await p.getByTestId('cartao').first().waitFor();
+  assert.equal(chamadas.filter((c) => c.u === '/api/atendimentos').length, antes + 1, 'o atendimento sem veículo foi enviado');
+  ok('regras do veículo: aparecem no Estabelecimento, saem do corpo e o Atender salva sem veículo');
   await ctx.close();
 }
 

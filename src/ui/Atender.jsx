@@ -5,7 +5,7 @@ import { porUltimoUso } from '../domain/codigo.js';
 import React, { useMemo, useState } from 'react';
 import { agenda, agendamentosVisiveis, planos as apiPlanos } from '../services/api.js';
 import { rotuloMes as rotuloMesPlano } from '../domain/planos.js';
-import { acharClientePorTelefone, camposObrigatorios, nomeMaisCompleto } from '../domain/engine.js';
+import { acharClientePorTelefone, CAMPOS_DE_VEICULO, camposObrigatorios, nomeMaisCompleto } from '../domain/engine.js';
 import { FORMAS_PAGAMENTO, STATUS, boxesAtivos, duracaoMin, formaEfetiva, formatarTelefone, nomeBox, ocupadoMin, servicoNoPorte, servicosPorIds, telefoneNacional, totalPreco, usaIntegracaoPix } from '../domain/rules.js';
 import { EXEMPLO_PORTE, PORTES, PORTE_PADRAO, ROTULO_PORTE, placaValida, rotuloVeiculo } from '../domain/veiculos.js';
 import { MIN, fmtDate, fmtDuration, fmtHM, fmtMoney, fromYmd, startOfDay, tsAt, ymd } from '../domain/time.js';
@@ -195,7 +195,7 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
         </Campo>
         {temServico && usaVeiculo && (
           <fieldset className="campo-largo conj" data-testid="atender-veiculo">
-            <legend>Veículo *</legend>
+            <legend>Veículo{obrig.some((k) => CAMPOS_DE_VEICULO.includes(k)) ? ' *' : ''}</legend>
             {veiculosCli.length > 0 && (
               <Campo rotulo="Veículo do cliente">
                 <select value={veicSel} onChange={(e) => setVeiculoId(e.target.value)} data-testid="atender-veiculo-sel">
@@ -207,13 +207,13 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
             )}
             {veicSel === 'novo' && (
               <div className="form-grade">
-                <Campo rotulo="Placa" erro={vNovo.placa && !placaValida(vNovo.placa) ? 'Placa inválida (ABC-1234 ou ABC1D23).' : undefined}><input value={vNovo.placa} onChange={(e) => setVNovo({ ...vNovo, placa: e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 8) })} maxLength={8} autoComplete="off" placeholder="ABC1D23" data-testid="atender-placa" /></Campo>
-                <Campo rotulo="Modelo"><input value={vNovo.modelo} onChange={(e) => setVNovo({ ...vNovo, modelo: e.target.value })} maxLength={40} autoComplete="off" placeholder="Ex.: Onix" data-testid="atender-modelo" /></Campo>
+                <Campo rotulo={`Placa${obrig.includes('placa') ? ' *' : ''}`} erro={vNovo.placa && !placaValida(vNovo.placa) ? 'Placa inválida (ABC-1234 ou ABC1D23).' : undefined}><input value={vNovo.placa} onChange={(e) => setVNovo({ ...vNovo, placa: e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 8) })} maxLength={8} autoComplete="off" placeholder="ABC1D23" data-testid="atender-placa" /></Campo>
+                <Campo rotulo={`Modelo${obrig.includes('modelo') ? ' *' : ''}`}><input value={vNovo.modelo} onChange={(e) => setVNovo({ ...vNovo, modelo: e.target.value })} maxLength={40} autoComplete="off" placeholder="Ex.: Onix" data-testid="atender-modelo" /></Campo>
                 <Campo rotulo="Marca (opcional)"><input value={vNovo.marca} onChange={(e) => setVNovo({ ...vNovo, marca: e.target.value })} maxLength={30} autoComplete="off" data-testid="atender-marca" /></Campo>
                 <Campo rotulo="Cor (opcional)"><input value={vNovo.cor} onChange={(e) => setVNovo({ ...vNovo, cor: e.target.value })} maxLength={20} autoComplete="off" data-testid="atender-cor" /></Campo>
-                <Campo rotulo="Porte" className="campo-largo" dica={vNovo.porte ? EXEMPLO_PORTE[vNovo.porte] : 'O porte define o preço e a duração dos serviços.'}>
+                <Campo rotulo={`Porte${obrig.includes('porte') ? ' *' : ''}`} className="campo-largo" dica={vNovo.porte ? EXEMPLO_PORTE[vNovo.porte] : 'O porte define o preço e a duração dos serviços. Sem porte vale o médio.'}>
                   <select value={vNovo.porte} onChange={(e) => setVNovo({ ...vNovo, porte: e.target.value })} data-testid="atender-porte">
-                    <option value="">Escolha…</option>
+                    <option value="">{obrig.includes('porte') ? 'Escolha…' : 'Médio (padrão)'}</option>
                     {PORTES.map((k) => <option key={k} value={k}>{ROTULO_PORTE[k]}</option>)}
                   </select>
                 </Campo>
