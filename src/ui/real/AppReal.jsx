@@ -17,6 +17,7 @@ import Estabelecimento from './Estabelecimento.jsx';
 import Ganhos from './Ganhos.jsx';
 import RegrasAtendimento from './RegrasAtendimento.jsx';
 import Cupons from './Cupons.jsx';
+import Planos from './Planos.jsx';
 import AgendarPublico from './AgendarPublico.jsx';
 import LinkAgendamento from './LinkAgendamento.jsx';
 import Avisos from './Avisos.jsx';
@@ -191,6 +192,7 @@ function Painel({ loja, sessao, aoSair }) {
   if (dono) itens.push(['equipe', 'Equipe', 'team']);
   if (dono && capAtiva('usaRecursoFisico')) itens.push(['boxes', 'Boxes', 'car']);
   if (dono || (sessao.secoes || []).includes('estabelecimento')) itens.push(['cupons', 'Cupons', 'tag']);
+  if (dono || (sessao.secoes || []).includes('planos')) itens.push(['planos', 'Planos', 'ticket']);
   if (dono || (sessao.secoes || []).includes('estoque')) itens.push(['estoque', 'Estoque', 'box']);
   if (dono || (sessao.secoes || []).includes('estabelecimento')) itens.push(['estabelecimento', 'Estabelecimento', 'store']);
   if (dono) itens.push(['relatorios', 'Relatórios', 'list']);
@@ -233,6 +235,7 @@ function Painel({ loja, sessao, aoSair }) {
           {aba === 'equipe' && dono && <Equipe meuId={sessao.id} />}
           {aba === 'boxes' && dono && <Boxes />}
           {aba === 'cupons' && (dono || (sessao.secoes || []).includes('estabelecimento')) && <Cupons />}
+          {aba === 'planos' && (dono || (sessao.secoes || []).includes('planos')) && <Planos />}
           {aba === 'estoque' && (dono || (sessao.secoes || []).includes('estoque')) && <Estoque ehDono={dono} />}
           {aba === 'estabelecimento' && (dono || (sessao.secoes || []).includes('estabelecimento')) && <Estabelecimento ehDono={dono} aoReconfigurar={() => setReconfigurando(true)} />}
           {aba === 'relatorios' && dono && <Relatorios />}

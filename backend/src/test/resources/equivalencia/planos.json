@@ -1,0 +1,1853 @@
+{
+ "descricao": "Planos de serviço (v111): cota mensal derivada, acúmulo, adiantamento, intervalo, atraso, dívida e desconto. Roda em tests/planos-equivalencia.test.mjs (src/domain/planos.js) e em PlanosEquivalenciaTest (planos/PlanoRegras). Horários em hora local da loja, sem fuso.",
+ "casos": [
+  {
+   "nome": "mês pago sem uso: restam os 2 cortes",
+   "plano": {
+    "nome": "Degradê em Dia",
+    "preco": 75,
+    "cortes": 2,
+    "adianta": 1,
+    "acumuloMeses": 2,
+    "intervaloDias": 3
+   },
+   "status": "ativa",
+   "inicioMes": "2026-10",
+   "pagos": [
+    "2026-10"
+   ],
+   "usos": [],
+   "agora": "2026-10-15T10:00",
+   "extra": "2026-10-20T10:00",
+   "esperado": {
+    "saldo": {
+     "restantes": 2,
+     "usadosNoMes": 0,
+     "maisPermitidos": 1,
+     "pagoMes": true,
+     "pagoAte": "2026-10",
+     "atrasado": false
+    },
+    "extrato": [
+     {
+      "mes": "2026-10",
+      "pago": true,
+      "concedidos": 2,
+      "usados": 0,
+      "saldoFim": 2,
+      "limite": 1,
+      "estourou": false,
+      "zerou": false
+     }
+    ],
+    "divida": 0,
+    "pode": {
+     "ok": true,
+     "adiantado": false,
+     "aviso": ""
+    }
+   }
+  },
+  {
+   "nome": "sem mensalidade registrada não há corte",
+   "plano": {
+    "nome": "Degradê em Dia",
+    "preco": 75,
+    "cortes": 2,
+    "adianta": 1,
+    "acumuloMeses": 2,
+    "intervaloDias": 3
+   },
+   "status": "ativa",
+   "inicioMes": "2026-10",
+   "pagos": [],
+   "usos": [],
+   "agora": "2026-10-15T10:00",
+   "extra": "2026-10-20T10:00",
+   "esperado": {
+    "saldo": {
+     "restantes": 0,
+     "usadosNoMes": 0,
+     "maisPermitidos": 0,
+     "pagoMes": false,
+     "pagoAte": null,
+     "atrasado": false
+    },
+    "extrato": [],
+    "divida": 0,
+    "pode": {
+     "ok": false,
+     "erro": "A mensalidade do plano ainda não foi registrada."
+    }
+   }
+  },
+  {
+   "nome": "plano aguardando pagamento não está ativo",
+   "plano": {
+    "nome": "Degradê em Dia",
+    "preco": 75,
+    "cortes": 2,
+    "adianta": 1,
+    "acumuloMeses": 2,
+    "intervaloDias": 3
+   },
+   "status": "pendente",
+   "inicioMes": "2026-10",
+   "pagos": [],
+   "usos": [],
+   "agora": "2026-10-15T10:00",
+   "extra": "2026-10-20T10:00",
+   "esperado": {
+    "saldo": {
+     "restantes": 0,
+     "usadosNoMes": 0,
+     "maisPermitidos": 0,
+     "pagoMes": false,
+     "pagoAte": null,
+     "atrasado": false
+    },
+    "extrato": [],
+    "divida": 0,
+    "pode": {
+     "ok": false,
+     "erro": "Esse plano não está ativo."
+    }
+   }
+  },
+  {
+   "nome": "cortes que sobram acumulam até o teto (2 cortes × 2 meses = 4)",
+   "plano": {
+    "nome": "Degradê em Dia",
+    "preco": 75,
+    "cortes": 2,
+    "adianta": 1,
+    "acumuloMeses": 2,
+    "intervaloDias": 3
+   },
+   "status": "ativa",
+   "inicioMes": "2026-07",
+   "pagos": [
+    "2026-07",
+    "2026-08",
+    "2026-09",
+    "2026-10"
+   ],
+   "usos": [],
+   "agora": "2026-10-15T10:00",
+   "extra": "2026-10-20T10:00",
+   "esperado": {
+    "saldo": {
+     "restantes": 4,
+     "usadosNoMes": 0,
+     "maisPermitidos": 1,
+     "pagoMes": true,
+     "pagoAte": "2026-10",
+     "atrasado": false
+    },
+    "extrato": [
+     {
+      "mes": "2026-07",
+      "pago": true,
+      "concedidos": 2,
+      "usados": 0,
+      "saldoFim": 2,
+      "limite": 1,
+      "estourou": false,
+      "zerou": false
+     },
+     {
+      "mes": "2026-08",
+      "pago": true,
+      "concedidos": 2,
+      "usados": 0,
+      "saldoFim": 4,
+      "limite": 1,
+      "estourou": false,
+      "zerou": false
+     },
+     {
+      "mes": "2026-09",
+      "pago": true,
+      "concedidos": 2,
+      "usados": 0,
+      "saldoFim": 4,
+      "limite": 1,
+      "estourou": false,
+      "zerou": false
+     },
+     {
+      "mes": "2026-10",
+      "pago": true,
+      "concedidos": 2,
+      "usados": 0,
+      "saldoFim": 4,
+      "limite": 1,
+      "estourou": false,
+      "zerou": false
+     }
+    ],
+    "divida": 0,
+    "pode": {
+     "ok": true,
+     "adiantado": false,
+     "aviso": ""
+    }
+   }
+  },
+  {
+   "nome": "acúmulo de 1 mês não passa dos cortes do mês",
+   "plano": {
+    "nome": "Degradê em Dia",
+    "preco": 75,
+    "cortes": 2,
+    "adianta": 1,
+    "acumuloMeses": 1,
+    "intervaloDias": 3
+   },
+   "status": "ativa",
+   "inicioMes": "2026-08",
+   "pagos": [
+    "2026-08",
+    "2026-09",
+    "2026-10"
+   ],
+   "usos": [],
+   "agora": "2026-10-15T10:00",
+   "esperado": {
+    "saldo": {
+     "restantes": 2,
+     "usadosNoMes": 0,
+     "maisPermitidos": 1,
+     "pagoMes": true,
+     "pagoAte": "2026-10",
+     "atrasado": false
+    },
+    "extrato": [
+     {
+      "mes": "2026-08",
+      "pago": true,
+      "concedidos": 2,
+      "usados": 0,
+      "saldoFim": 2,
+      "limite": 1,
+      "estourou": false,
+      "zerou": false
+     },
+     {
+      "mes": "2026-09",
+      "pago": true,
+      "concedidos": 2,
+      "usados": 0,
+      "saldoFim": 2,
+      "limite": 1,
+      "estourou": false,
+      "zerou": false
+     },
+     {
+      "mes": "2026-10",
+      "pago": true,
+      "concedidos": 2,
+      "usados": 0,
+      "saldoFim": 2,
+      "limite": 1,
+      "estourou": false,
+      "zerou": false
+     }
+    ],
+    "divida": 0
+   }
+  },
+  {
+   "nome": "usou os 2: o terceiro é adiantado do mês seguinte",
+   "plano": {
+    "nome": "Degradê em Dia",
+    "preco": 75,
+    "cortes": 2,
+    "adianta": 1,
+    "acumuloMeses": 2,
+    "intervaloDias": 3
+   },
+   "status": "ativa",
+   "inicioMes": "2026-10",
+   "pagos": [
+    "2026-10"
+   ],
+   "usos": [
+    {
+     "inicio": "2026-10-02T10:00",
+     "status": "concluido"
+    },
+    {
+     "inicio": "2026-10-07T10:00",
+     "status": "concluido"
+    }
+   ],
+   "agora": "2026-10-15T10:00",
+   "extra": "2026-10-20T10:00",
+   "esperado": {
+    "saldo": {
+     "restantes": 0,
+     "usadosNoMes": 2,
+     "maisPermitidos": 1,
+     "pagoMes": true,
+     "pagoAte": "2026-10",
+     "atrasado": false
+    },
+    "extrato": [
+     {
+      "mes": "2026-10",
+      "pago": true,
+      "concedidos": 2,
+      "usados": 2,
+      "saldoFim": 0,
+      "limite": 1,
+      "estourou": false,
+      "zerou": false
+     }
+    ],
+    "divida": 0,
+    "pode": {
+     "ok": true,
+     "adiantado": true,
+     "aviso": "Esse corte foi adiantado do mês seguinte."
+    }
+   }
+  },
+  {
+   "nome": "adiantado com o mês seguinte pago mostra quanto resta nele",
+   "plano": {
+    "nome": "Degradê em Dia",
+    "preco": 75,
+    "cortes": 2,
+    "adianta": 1,
+    "acumuloMeses": 2,
+    "intervaloDias": 3
+   },
+   "status": "ativa",
+   "inicioMes": "2026-10",
+   "pagos": [
+    "2026-10",
+    "2026-11"
+   ],
+   "usos": [
+    {
+     "inicio": "2026-10-02T10:00",
+     "status": "concluido"
+    },
+    {
+     "inicio": "2026-10-07T10:00",
+     "status": "concluido"
+    }
+   ],
+   "agora": "2026-10-15T10:00",
+   "extra": "2026-10-20T10:00",
+   "esperado": {
+    "saldo": {
+     "restantes": 0,
+     "usadosNoMes": 2,
+     "maisPermitidos": 1,
+     "pagoMes": true,
+     "pagoAte": "2026-11",
+     "atrasado": false
+    },
+    "extrato": [
+     {
+      "mes": "2026-10",
+      "pago": true,
+      "concedidos": 2,
+      "usados": 2,
+      "saldoFim": 0,
+      "limite": 1,
+      "estourou": false,
+      "zerou": false
+     },
+     {
+      "mes": "2026-11",
+      "pago": true,
+      "concedidos": 2,
+      "usados": 0,
+      "saldoFim": 2,
+      "limite": 1,
+      "estourou": false,
+      "zerou": false
+     }
+    ],
+    "divida": 0,
+    "pode": {
+     "ok": true,
+     "adiantado": true,
+     "aviso": "Esse corte foi adiantado do mês seguinte (em novembro/2026 restam 1)."
+    }
+   }
+  },
+  {
+   "nome": "passou do adiantamento: recusa",
+   "plano": {
+    "nome": "Degradê em Dia",
+    "preco": 75,
+    "cortes": 2,
+    "adianta": 1,
+    "acumuloMeses": 2,
+    "intervaloDias": 3
+   },
+   "status": "ativa",
+   "inicioMes": "2026-10",
+   "pagos": [
+    "2026-10"
+   ],
+   "usos": [
+    {
+     "inicio": "2026-10-02T10:00",
+     "status": "concluido"
+    },
+    {
+     "inicio": "2026-10-07T10:00",
+     "status": "concluido"
+    },
+    {
+     "inicio": "2026-10-12T10:00",
+     "status": "concluido"
+    }
+   ],
+   "agora": "2026-10-15T10:00",
+   "extra": "2026-10-25T10:00",
+   "esperado": {
+    "saldo": {
+     "restantes": 0,
+     "usadosNoMes": 3,
+     "maisPermitidos": 0,
+     "pagoMes": true,
+     "pagoAte": "2026-10",
+     "atrasado": false
+    },
+    "extrato": [
+     {
+      "mes": "2026-10",
+      "pago": true,
+      "concedidos": 2,
+      "usados": 3,
+      "saldoFim": -1,
+      "limite": 1,
+      "estourou": false,
+      "zerou": false
+     }
+    ],
+    "divida": 1,
+    "pode": {
+     "ok": false,
+     "erro": "Os cortes do plano em outubro/2026 acabaram."
+    }
+   }
+  },
+  {
+   "nome": "plano sem adiantamento recusa o terceiro",
+   "plano": {
+    "nome": "Degradê em Dia",
+    "preco": 75,
+    "cortes": 2,
+    "adianta": 0,
+    "acumuloMeses": 2,
+    "intervaloDias": 3
+   },
+   "status": "ativa",
+   "inicioMes": "2026-10",
+   "pagos": [
+    "2026-10"
+   ],
+   "usos": [
+    {
+     "inicio": "2026-10-02T10:00",
+     "status": "concluido"
+    },
+    {
+     "inicio": "2026-10-07T10:00",
+     "status": "concluido"
+    }
+   ],
+   "agora": "2026-10-15T10:00",
+   "extra": "2026-10-20T10:00",
+   "esperado": {
+    "saldo": {
+     "restantes": 0,
+     "usadosNoMes": 2,
+     "maisPermitidos": 0,
+     "pagoMes": true,
+     "pagoAte": "2026-10",
+     "atrasado": false
+    },
+    "extrato": [
+     {
+      "mes": "2026-10",
+      "pago": true,
+      "concedidos": 2,
+      "usados": 2,
+      "saldoFim": 0,
+      "limite": 0,
+      "estourou": false,
+      "zerou": false
+     }
+    ],
+    "divida": 0,
+    "pode": {
+     "ok": false,
+     "erro": "Os cortes do plano em outubro/2026 acabaram."
+    }
+   }
+  },
+  {
+   "nome": "adiantamento de 3 aceita até 5 cortes no mês",
+   "plano": {
+    "nome": "Degradê em Dia",
+    "preco": 75,
+    "cortes": 2,
+    "adianta": 3,
+    "acumuloMeses": 2,
+    "intervaloDias": 3
+   },
+   "status": "ativa",
+   "inicioMes": "2026-10",
+   "pagos": [
+    "2026-10"
+   ],
+   "usos": [
+    {
+     "inicio": "2026-10-02T10:00",
+     "status": "concluido"
+    },
+    {
+     "inicio": "2026-10-07T10:00",
+     "status": "concluido"
+    },
+    {
+     "inicio": "2026-10-12T10:00",
+     "status": "concluido"
+    },
+    {
+     "inicio": "2026-10-17T10:00",
+     "status": "concluido"
+    }
+   ],
+   "agora": "2026-10-15T10:00",
+   "extra": "2026-10-25T10:00",
+   "esperado": {
+    "saldo": {
+     "restantes": 0,
+     "usadosNoMes": 4,
+     "maisPermitidos": 1,
+     "pagoMes": true,
+     "pagoAte": "2026-10",
+     "atrasado": false
+    },
+    "extrato": [
+     {
+      "mes": "2026-10",
+      "pago": true,
+      "concedidos": 2,
+      "usados": 4,
+      "saldoFim": -2,
+      "limite": 3,
+      "estourou": false,
+      "zerou": false
+     }
+    ],
+    "divida": 2,
+    "pode": {
+     "ok": true,
+     "adiantado": true,
+     "aviso": "Esse corte foi adiantado do mês seguinte."
+    }
+   }
+  },
+  {
+   "nome": "intervalo mínimo: dois dias depois do último corte é cedo",
+   "plano": {
+    "nome": "Degradê em Dia",
+    "preco": 75,
+    "cortes": 2,
+    "adianta": 1,
+    "acumuloMeses": 2,
+    "intervaloDias": 3
+   },
+   "status": "ativa",
+   "inicioMes": "2026-10",
+   "pagos": [
+    "2026-10"
+   ],
+   "usos": [
+    {
+     "inicio": "2026-10-10T10:00",
+     "status": "concluido"
+    }
+   ],
+   "agora": "2026-10-15T10:00",
+   "extra": "2026-10-12T10:00",
+   "esperado": {
+    "saldo": {
+     "restantes": 1,
+     "usadosNoMes": 1,
+     "maisPermitidos": 1,
+     "pagoMes": true,
+     "pagoAte": "2026-10",
+     "atrasado": false
+    },
+    "extrato": [
+     {
+      "mes": "2026-10",
+      "pago": true,
+      "concedidos": 2,
+      "usados": 1,
+      "saldoFim": 1,
+      "limite": 1,
+      "estourou": false,
+      "zerou": false
+     }
+    ],
+    "divida": 0,
+    "pode": {
+     "ok": false,
+     "erro": "Esse plano pede 3 dias entre um corte e outro."
+    }
+   }
+  },
+  {
+   "nome": "intervalo mínimo: três dias depois pode",
+   "plano": {
+    "nome": "Degradê em Dia",
+    "preco": 75,
+    "cortes": 2,
+    "adianta": 1,
+    "acumuloMeses": 2,
+    "intervaloDias": 3
+   },
+   "status": "ativa",
+   "inicioMes": "2026-10",
+   "pagos": [
+    "2026-10"
+   ],
+   "usos": [
+    {
+     "inicio": "2026-10-10T10:00",
+     "status": "concluido"
+    }
+   ],
+   "agora": "2026-10-15T10:00",
+   "extra": "2026-10-13T10:00",
+   "esperado": {
+    "saldo": {
+     "restantes": 1,
+     "usadosNoMes": 1,
+     "maisPermitidos": 1,
+     "pagoMes": true,
+     "pagoAte": "2026-10",
+     "atrasado": false
+    },
+    "extrato": [
+     {
+      "mes": "2026-10",
+      "pago": true,
+      "concedidos": 2,
+      "usados": 1,
+      "saldoFim": 1,
+      "limite": 1,
+      "estourou": false,
+      "zerou": false
+     }
+    ],
+    "divida": 0,
+    "pode": {
+     "ok": true,
+     "adiantado": false,
+     "aviso": ""
+    }
+   }
+  },
+  {
+   "nome": "intervalo mínimo vale também antes do corte já marcado",
+   "plano": {
+    "nome": "Degradê em Dia",
+    "preco": 75,
+    "cortes": 2,
+    "adianta": 1,
+    "acumuloMeses": 2,
+    "intervaloDias": 3
+   },
+   "status": "ativa",
+   "inicioMes": "2026-10",
+   "pagos": [
+    "2026-10"
+   ],
+   "usos": [
+    {
+     "inicio": "2026-10-20T10:00",
+     "status": "confirmado"
+    }
+   ],
+   "agora": "2026-10-15T10:00",
+   "extra": "2026-10-18T10:00",
+   "esperado": {
+    "saldo": {
+     "restantes": 1,
+     "usadosNoMes": 1,
+     "maisPermitidos": 1,
+     "pagoMes": true,
+     "pagoAte": "2026-10",
+     "atrasado": false
+    },
+    "extrato": [
+     {
+      "mes": "2026-10",
+      "pago": true,
+      "concedidos": 2,
+      "usados": 1,
+      "saldoFim": 1,
+      "limite": 1,
+      "estourou": false,
+      "zerou": false
+     }
+    ],
+    "divida": 0,
+    "pode": {
+     "ok": false,
+     "erro": "Esse plano pede 3 dias entre um corte e outro."
+    }
+   }
+  },
+  {
+   "nome": "intervalo de 1 dia: no mesmo dia não, no dia seguinte sim",
+   "plano": {
+    "nome": "Degradê em Dia",
+    "preco": 75,
+    "cortes": 2,
+    "adianta": 1,
+    "acumuloMeses": 2,
+    "intervaloDias": 1
+   },
+   "status": "ativa",
+   "inicioMes": "2026-10",
+   "pagos": [
+    "2026-10"
+   ],
+   "usos": [
+    {
+     "inicio": "2026-10-10T10:00",
+     "status": "concluido"
+    }
+   ],
+   "agora": "2026-10-15T10:00",
+   "extra": "2026-10-10T15:00",
+   "esperado": {
+    "saldo": {
+     "restantes": 1,
+     "usadosNoMes": 1,
+     "maisPermitidos": 1,
+     "pagoMes": true,
+     "pagoAte": "2026-10",
+     "atrasado": false
+    },
+    "extrato": [
+     {
+      "mes": "2026-10",
+      "pago": true,
+      "concedidos": 2,
+      "usados": 1,
+      "saldoFim": 1,
+      "limite": 1,
+      "estourou": false,
+      "zerou": false
+     }
+    ],
+    "divida": 0,
+    "pode": {
+     "ok": false,
+     "erro": "Esse plano pede 1 dia entre um corte e outro."
+    }
+   }
+  },
+  {
+   "nome": "intervalo de 0 deixa dois cortes no mesmo dia",
+   "plano": {
+    "nome": "Degradê em Dia",
+    "preco": 75,
+    "cortes": 2,
+    "adianta": 1,
+    "acumuloMeses": 2,
+    "intervaloDias": 0
+   },
+   "status": "ativa",
+   "inicioMes": "2026-10",
+   "pagos": [
+    "2026-10"
+   ],
+   "usos": [
+    {
+     "inicio": "2026-10-10T10:00",
+     "status": "concluido"
+    }
+   ],
+   "agora": "2026-10-15T10:00",
+   "extra": "2026-10-10T15:00",
+   "esperado": {
+    "saldo": {
+     "restantes": 1,
+     "usadosNoMes": 1,
+     "maisPermitidos": 1,
+     "pagoMes": true,
+     "pagoAte": "2026-10",
+     "atrasado": false
+    },
+    "extrato": [
+     {
+      "mes": "2026-10",
+      "pago": true,
+      "concedidos": 2,
+      "usados": 1,
+      "saldoFim": 1,
+      "limite": 1,
+      "estourou": false,
+      "zerou": false
+     }
+    ],
+    "divida": 0,
+    "pode": {
+     "ok": true,
+     "adiantado": false,
+     "aviso": ""
+    }
+   }
+  },
+  {
+   "nome": "dois meses sem pagar zeram o saldo acumulado",
+   "plano": {
+    "nome": "Degradê em Dia",
+    "preco": 75,
+    "cortes": 2,
+    "adianta": 1,
+    "acumuloMeses": 2,
+    "intervaloDias": 3
+   },
+   "status": "ativa",
+   "inicioMes": "2026-07",
+   "pagos": [
+    "2026-07"
+   ],
+   "usos": [],
+   "agora": "2026-10-15T10:00",
+   "extra": "2026-10-20T10:00",
+   "esperado": {
+    "saldo": {
+     "restantes": 0,
+     "usadosNoMes": 0,
+     "maisPermitidos": 0,
+     "pagoMes": false,
+     "pagoAte": "2026-07",
+     "atrasado": true
+    },
+    "extrato": [
+     {
+      "mes": "2026-07",
+      "pago": true,
+      "concedidos": 2,
+      "usados": 0,
+      "saldoFim": 2,
+      "limite": 1,
+      "estourou": false,
+      "zerou": false
+     },
+     {
+      "mes": "2026-08",
+      "pago": false,
+      "concedidos": 0,
+      "usados": 0,
+      "saldoFim": 2,
+      "limite": 0,
+      "estourou": false,
+      "zerou": false
+     },
+     {
+      "mes": "2026-09",
+      "pago": false,
+      "concedidos": 0,
+      "usados": 0,
+      "saldoFim": 0,
+      "limite": 0,
+      "estourou": false,
+      "zerou": true
+     },
+     {
+      "mes": "2026-10",
+      "pago": false,
+      "concedidos": 0,
+      "usados": 0,
+      "saldoFim": 0,
+      "limite": 0,
+      "estourou": false,
+      "zerou": false
+     }
+    ],
+    "divida": 0,
+    "pode": {
+     "ok": false,
+     "erro": "Os cortes do plano acabaram. A mensalidade de outubro/2026 ainda não foi registrada."
+    }
+   }
+  },
+  {
+   "nome": "um mês sem pagar ainda mantém o saldo",
+   "plano": {
+    "nome": "Degradê em Dia",
+    "preco": 75,
+    "cortes": 2,
+    "adianta": 1,
+    "acumuloMeses": 2,
+    "intervaloDias": 3
+   },
+   "status": "ativa",
+   "inicioMes": "2026-08",
+   "pagos": [
+    "2026-08",
+    "2026-09"
+   ],
+   "usos": [],
+   "agora": "2026-10-15T10:00",
+   "extra": "2026-10-20T10:00",
+   "esperado": {
+    "saldo": {
+     "restantes": 4,
+     "usadosNoMes": 0,
+     "maisPermitidos": 0,
+     "pagoMes": false,
+     "pagoAte": "2026-09",
+     "atrasado": true
+    },
+    "extrato": [
+     {
+      "mes": "2026-08",
+      "pago": true,
+      "concedidos": 2,
+      "usados": 0,
+      "saldoFim": 2,
+      "limite": 1,
+      "estourou": false,
+      "zerou": false
+     },
+     {
+      "mes": "2026-09",
+      "pago": true,
+      "concedidos": 2,
+      "usados": 0,
+      "saldoFim": 4,
+      "limite": 1,
+      "estourou": false,
+      "zerou": false
+     },
+     {
+      "mes": "2026-10",
+      "pago": false,
+      "concedidos": 0,
+      "usados": 0,
+      "saldoFim": 4,
+      "limite": 0,
+      "estourou": false,
+      "zerou": false
+     }
+    ],
+    "divida": 0,
+    "pode": {
+     "ok": true,
+     "adiantado": false,
+     "aviso": ""
+    }
+   }
+  },
+  {
+   "nome": "pagar de novo depois do atraso volta a conceder",
+   "plano": {
+    "nome": "Degradê em Dia",
+    "preco": 75,
+    "cortes": 2,
+    "adianta": 1,
+    "acumuloMeses": 2,
+    "intervaloDias": 3
+   },
+   "status": "ativa",
+   "inicioMes": "2026-07",
+   "pagos": [
+    "2026-07",
+    "2026-10"
+   ],
+   "usos": [],
+   "agora": "2026-10-15T10:00",
+   "extra": "2026-10-20T10:00",
+   "esperado": {
+    "saldo": {
+     "restantes": 2,
+     "usadosNoMes": 0,
+     "maisPermitidos": 1,
+     "pagoMes": true,
+     "pagoAte": "2026-10",
+     "atrasado": false
+    },
+    "extrato": [
+     {
+      "mes": "2026-07",
+      "pago": true,
+      "concedidos": 2,
+      "usados": 0,
+      "saldoFim": 2,
+      "limite": 1,
+      "estourou": false,
+      "zerou": false
+     },
+     {
+      "mes": "2026-08",
+      "pago": false,
+      "concedidos": 0,
+      "usados": 0,
+      "saldoFim": 2,
+      "limite": 0,
+      "estourou": false,
+      "zerou": false
+     },
+     {
+      "mes": "2026-09",
+      "pago": false,
+      "concedidos": 0,
+      "usados": 0,
+      "saldoFim": 0,
+      "limite": 0,
+      "estourou": false,
+      "zerou": true
+     },
+     {
+      "mes": "2026-10",
+      "pago": true,
+      "concedidos": 2,
+      "usados": 0,
+      "saldoFim": 2,
+      "limite": 1,
+      "estourou": false,
+      "zerou": false
+     }
+    ],
+    "divida": 0,
+    "pode": {
+     "ok": true,
+     "adiantado": false,
+     "aviso": ""
+    }
+   }
+  },
+  {
+   "nome": "mês seguinte pago antes: o corte de novembro pode ser usado já",
+   "plano": {
+    "nome": "Degradê em Dia",
+    "preco": 75,
+    "cortes": 2,
+    "adianta": 1,
+    "acumuloMeses": 2,
+    "intervaloDias": 3
+   },
+   "status": "ativa",
+   "inicioMes": "2026-10",
+   "pagos": [
+    "2026-10",
+    "2026-11"
+   ],
+   "usos": [],
+   "agora": "2026-10-15T10:00",
+   "extra": "2026-11-05T10:00",
+   "esperado": {
+    "saldo": {
+     "restantes": 2,
+     "usadosNoMes": 0,
+     "maisPermitidos": 1,
+     "pagoMes": true,
+     "pagoAte": "2026-11",
+     "atrasado": false
+    },
+    "extrato": [
+     {
+      "mes": "2026-10",
+      "pago": true,
+      "concedidos": 2,
+      "usados": 0,
+      "saldoFim": 2,
+      "limite": 1,
+      "estourou": false,
+      "zerou": false
+     },
+     {
+      "mes": "2026-11",
+      "pago": true,
+      "concedidos": 2,
+      "usados": 0,
+      "saldoFim": 4,
+      "limite": 1,
+      "estourou": false,
+      "zerou": false
+     }
+    ],
+    "divida": 0,
+    "pode": {
+     "ok": true,
+     "adiantado": false,
+     "aviso": ""
+    }
+   }
+  },
+  {
+   "nome": "mês seguinte sem pagar: não há corte em novembro além do acumulado",
+   "plano": {
+    "nome": "Degradê em Dia",
+    "preco": 75,
+    "cortes": 2,
+    "adianta": 1,
+    "acumuloMeses": 2,
+    "intervaloDias": 3
+   },
+   "status": "ativa",
+   "inicioMes": "2026-10",
+   "pagos": [
+    "2026-10"
+   ],
+   "usos": [
+    {
+     "inicio": "2026-10-02T10:00",
+     "status": "concluido"
+    }
+   ],
+   "agora": "2026-10-15T10:00",
+   "extra": "2026-11-05T10:00",
+   "esperado": {
+    "saldo": {
+     "restantes": 1,
+     "usadosNoMes": 1,
+     "maisPermitidos": 1,
+     "pagoMes": true,
+     "pagoAte": "2026-10",
+     "atrasado": false
+    },
+    "extrato": [
+     {
+      "mes": "2026-10",
+      "pago": true,
+      "concedidos": 2,
+      "usados": 1,
+      "saldoFim": 1,
+      "limite": 1,
+      "estourou": false,
+      "zerou": false
+     }
+    ],
+    "divida": 0,
+    "pode": {
+     "ok": true,
+     "adiantado": false,
+     "aviso": ""
+    }
+   }
+  },
+  {
+   "nome": "horário antes do início do plano",
+   "plano": {
+    "nome": "Degradê em Dia",
+    "preco": 75,
+    "cortes": 2,
+    "adianta": 1,
+    "acumuloMeses": 2,
+    "intervaloDias": 3
+   },
+   "status": "ativa",
+   "inicioMes": "2026-10",
+   "pagos": [
+    "2026-10"
+   ],
+   "usos": [],
+   "agora": "2026-10-15T10:00",
+   "extra": "2026-09-20T10:00",
+   "esperado": {
+    "saldo": {
+     "restantes": 2,
+     "usadosNoMes": 0,
+     "maisPermitidos": 1,
+     "pagoMes": true,
+     "pagoAte": "2026-10",
+     "atrasado": false
+    },
+    "extrato": [
+     {
+      "mes": "2026-10",
+      "pago": true,
+      "concedidos": 2,
+      "usados": 0,
+      "saldoFim": 2,
+      "limite": 1,
+      "estourou": false,
+      "zerou": false
+     }
+    ],
+    "divida": 0,
+    "pode": {
+     "ok": false,
+     "erro": "O plano começa em outubro/2026."
+    }
+   }
+  },
+  {
+   "nome": "corte cancelado pelo profissional volta",
+   "plano": {
+    "nome": "Degradê em Dia",
+    "preco": 75,
+    "cortes": 2,
+    "adianta": 1,
+    "acumuloMeses": 2,
+    "intervaloDias": 3
+   },
+   "status": "ativa",
+   "inicioMes": "2026-10",
+   "pagos": [
+    "2026-10"
+   ],
+   "usos": [
+    {
+     "inicio": "2026-10-02T10:00",
+     "status": "concluido"
+    },
+    {
+     "inicio": "2026-10-07T10:00",
+     "status": "cancelado",
+     "motivoCancelamento": "profissional"
+    }
+   ],
+   "agora": "2026-10-15T10:00",
+   "extra": "2026-10-20T10:00",
+   "esperado": {
+    "saldo": {
+     "restantes": 1,
+     "usadosNoMes": 1,
+     "maisPermitidos": 1,
+     "pagoMes": true,
+     "pagoAte": "2026-10",
+     "atrasado": false
+    },
+    "extrato": [
+     {
+      "mes": "2026-10",
+      "pago": true,
+      "concedidos": 2,
+      "usados": 1,
+      "saldoFim": 1,
+      "limite": 1,
+      "estourou": false,
+      "zerou": false
+     }
+    ],
+    "divida": 0,
+    "pode": {
+     "ok": true,
+     "adiantado": false,
+     "aviso": ""
+    }
+   }
+  },
+  {
+   "nome": "falta de confirmação de horário do painel consome o corte",
+   "plano": {
+    "nome": "Degradê em Dia",
+    "preco": 75,
+    "cortes": 2,
+    "adianta": 1,
+    "acumuloMeses": 2,
+    "intervaloDias": 3
+   },
+   "status": "ativa",
+   "inicioMes": "2026-10",
+   "pagos": [
+    "2026-10"
+   ],
+   "usos": [
+    {
+     "inicio": "2026-10-02T10:00",
+     "status": "concluido"
+    },
+    {
+     "inicio": "2026-10-07T10:00",
+     "status": "cancelado",
+     "motivoCancelamento": "falta_confirmacao"
+    }
+   ],
+   "agora": "2026-10-15T10:00",
+   "extra": "2026-10-20T10:00",
+   "esperado": {
+    "saldo": {
+     "restantes": 0,
+     "usadosNoMes": 2,
+     "maisPermitidos": 1,
+     "pagoMes": true,
+     "pagoAte": "2026-10",
+     "atrasado": false
+    },
+    "extrato": [
+     {
+      "mes": "2026-10",
+      "pago": true,
+      "concedidos": 2,
+      "usados": 2,
+      "saldoFim": 0,
+      "limite": 1,
+      "estourou": false,
+      "zerou": false
+     }
+    ],
+    "divida": 0,
+    "pode": {
+     "ok": true,
+     "adiantado": true,
+     "aviso": "Esse corte foi adiantado do mês seguinte."
+    }
+   }
+  },
+  {
+   "nome": "falta de confirmação de horário do link devolve o corte",
+   "plano": {
+    "nome": "Degradê em Dia",
+    "preco": 75,
+    "cortes": 2,
+    "adianta": 1,
+    "acumuloMeses": 2,
+    "intervaloDias": 3
+   },
+   "status": "ativa",
+   "inicioMes": "2026-10",
+   "pagos": [
+    "2026-10"
+   ],
+   "usos": [
+    {
+     "inicio": "2026-10-02T10:00",
+     "status": "concluido"
+    },
+    {
+     "inicio": "2026-10-07T10:00",
+     "status": "cancelado",
+     "motivoCancelamento": "falta_confirmacao",
+     "origem": "link"
+    }
+   ],
+   "agora": "2026-10-15T10:00",
+   "extra": "2026-10-20T10:00",
+   "esperado": {
+    "saldo": {
+     "restantes": 1,
+     "usadosNoMes": 1,
+     "maisPermitidos": 1,
+     "pagoMes": true,
+     "pagoAte": "2026-10",
+     "atrasado": false
+    },
+    "extrato": [
+     {
+      "mes": "2026-10",
+      "pago": true,
+      "concedidos": 2,
+      "usados": 1,
+      "saldoFim": 1,
+      "limite": 1,
+      "estourou": false,
+      "zerou": false
+     }
+    ],
+    "divida": 0,
+    "pode": {
+     "ok": true,
+     "adiantado": false,
+     "aviso": ""
+    }
+   }
+  },
+  {
+   "nome": "dívida ao encerrar: corte adiantado sem pagar",
+   "plano": {
+    "nome": "Degradê em Dia",
+    "preco": 75,
+    "cortes": 2,
+    "adianta": 1,
+    "acumuloMeses": 2,
+    "intervaloDias": 3
+   },
+   "status": "ativa",
+   "inicioMes": "2026-10",
+   "pagos": [
+    "2026-10"
+   ],
+   "usos": [
+    {
+     "inicio": "2026-10-02T10:00",
+     "status": "concluido"
+    },
+    {
+     "inicio": "2026-10-07T10:00",
+     "status": "concluido"
+    },
+    {
+     "inicio": "2026-10-12T10:00",
+     "status": "concluido"
+    }
+   ],
+   "agora": "2026-10-15T10:00",
+   "esperado": {
+    "saldo": {
+     "restantes": 0,
+     "usadosNoMes": 3,
+     "maisPermitidos": 0,
+     "pagoMes": true,
+     "pagoAte": "2026-10",
+     "atrasado": false
+    },
+    "extrato": [
+     {
+      "mes": "2026-10",
+      "pago": true,
+      "concedidos": 2,
+      "usados": 3,
+      "saldoFim": -1,
+      "limite": 1,
+      "estourou": false,
+      "zerou": false
+     }
+    ],
+    "divida": 1
+   }
+  },
+  {
+   "nome": "sem dívida quando o saldo é positivo",
+   "plano": {
+    "nome": "Degradê em Dia",
+    "preco": 75,
+    "cortes": 2,
+    "adianta": 1,
+    "acumuloMeses": 2,
+    "intervaloDias": 3
+   },
+   "status": "ativa",
+   "inicioMes": "2026-10",
+   "pagos": [
+    "2026-10"
+   ],
+   "usos": [
+    {
+     "inicio": "2026-10-02T10:00",
+     "status": "concluido"
+    }
+   ],
+   "agora": "2026-10-15T10:00",
+   "esperado": {
+    "saldo": {
+     "restantes": 1,
+     "usadosNoMes": 1,
+     "maisPermitidos": 1,
+     "pagoMes": true,
+     "pagoAte": "2026-10",
+     "atrasado": false
+    },
+    "extrato": [
+     {
+      "mes": "2026-10",
+      "pago": true,
+      "concedidos": 2,
+      "usados": 1,
+      "saldoFim": 1,
+      "limite": 1,
+      "estourou": false,
+      "zerou": false
+     }
+    ],
+    "divida": 0
+   }
+  },
+  {
+   "nome": "virada de ano: dezembro e janeiro pagos",
+   "plano": {
+    "nome": "Degradê em Dia",
+    "preco": 75,
+    "cortes": 2,
+    "adianta": 1,
+    "acumuloMeses": 2,
+    "intervaloDias": 3
+   },
+   "status": "ativa",
+   "inicioMes": "2026-12",
+   "pagos": [
+    "2026-12",
+    "2027-01"
+   ],
+   "usos": [
+    {
+     "inicio": "2026-12-20T10:00",
+     "status": "concluido"
+    }
+   ],
+   "agora": "2027-01-12T10:00",
+   "extra": "2027-01-20T10:00",
+   "esperado": {
+    "saldo": {
+     "restantes": 3,
+     "usadosNoMes": 0,
+     "maisPermitidos": 1,
+     "pagoMes": true,
+     "pagoAte": "2027-01",
+     "atrasado": false
+    },
+    "extrato": [
+     {
+      "mes": "2026-12",
+      "pago": true,
+      "concedidos": 2,
+      "usados": 1,
+      "saldoFim": 1,
+      "limite": 1,
+      "estourou": false,
+      "zerou": false
+     },
+     {
+      "mes": "2027-01",
+      "pago": true,
+      "concedidos": 2,
+      "usados": 0,
+      "saldoFim": 3,
+      "limite": 1,
+      "estourou": false,
+      "zerou": false
+     }
+    ],
+    "divida": 0,
+    "pode": {
+     "ok": true,
+     "adiantado": false,
+     "aviso": ""
+    }
+   }
+  },
+  {
+   "nome": "plano de 31 cortes por mês",
+   "plano": {
+    "nome": "Degradê em Dia",
+    "preco": 75,
+    "cortes": 31,
+    "adianta": 0,
+    "acumuloMeses": 1,
+    "intervaloDias": 0
+   },
+   "status": "ativa",
+   "inicioMes": "2026-10",
+   "pagos": [
+    "2026-10"
+   ],
+   "usos": [],
+   "agora": "2026-10-15T10:00",
+   "extra": "2026-10-20T10:00",
+   "esperado": {
+    "saldo": {
+     "restantes": 31,
+     "usadosNoMes": 0,
+     "maisPermitidos": 0,
+     "pagoMes": true,
+     "pagoAte": "2026-10",
+     "atrasado": false
+    },
+    "extrato": [
+     {
+      "mes": "2026-10",
+      "pago": true,
+      "concedidos": 31,
+      "usados": 0,
+      "saldoFim": 31,
+      "limite": 0,
+      "estourou": false,
+      "zerou": false
+     }
+    ],
+    "divida": 0,
+    "pode": {
+     "ok": true,
+     "adiantado": false,
+     "aviso": ""
+    }
+   }
+  },
+  {
+   "nome": "uso em mês sem mensalidade gasta o acumulado",
+   "plano": {
+    "nome": "Degradê em Dia",
+    "preco": 75,
+    "cortes": 2,
+    "adianta": 1,
+    "acumuloMeses": 2,
+    "intervaloDias": 3
+   },
+   "status": "ativa",
+   "inicioMes": "2026-09",
+   "pagos": [
+    "2026-09"
+   ],
+   "usos": [
+    {
+     "inicio": "2026-10-05T10:00",
+     "status": "concluido"
+    }
+   ],
+   "agora": "2026-10-15T10:00",
+   "extra": "2026-10-20T10:00",
+   "esperado": {
+    "saldo": {
+     "restantes": 1,
+     "usadosNoMes": 1,
+     "maisPermitidos": 0,
+     "pagoMes": false,
+     "pagoAte": "2026-09",
+     "atrasado": true
+    },
+    "extrato": [
+     {
+      "mes": "2026-09",
+      "pago": true,
+      "concedidos": 2,
+      "usados": 0,
+      "saldoFim": 2,
+      "limite": 1,
+      "estourou": false,
+      "zerou": false
+     },
+     {
+      "mes": "2026-10",
+      "pago": false,
+      "concedidos": 0,
+      "usados": 1,
+      "saldoFim": 1,
+      "limite": 0,
+      "estourou": false,
+      "zerou": false
+     }
+    ],
+    "divida": 0,
+    "pode": {
+     "ok": true,
+     "adiantado": false,
+     "aviso": ""
+    }
+   }
+  },
+  {
+   "nome": "uso em mês sem pagar depois do acumulado acabar estoura",
+   "plano": {
+    "nome": "Degradê em Dia",
+    "preco": 75,
+    "cortes": 1,
+    "adianta": 1,
+    "acumuloMeses": 1,
+    "intervaloDias": 3
+   },
+   "status": "ativa",
+   "inicioMes": "2026-09",
+   "pagos": [
+    "2026-09"
+   ],
+   "usos": [
+    {
+     "inicio": "2026-10-05T10:00",
+     "status": "concluido"
+    }
+   ],
+   "agora": "2026-10-15T10:00",
+   "extra": "2026-10-20T10:00",
+   "esperado": {
+    "saldo": {
+     "restantes": 0,
+     "usadosNoMes": 1,
+     "maisPermitidos": 0,
+     "pagoMes": false,
+     "pagoAte": "2026-09",
+     "atrasado": true
+    },
+    "extrato": [
+     {
+      "mes": "2026-09",
+      "pago": true,
+      "concedidos": 1,
+      "usados": 0,
+      "saldoFim": 1,
+      "limite": 1,
+      "estourou": false,
+      "zerou": false
+     },
+     {
+      "mes": "2026-10",
+      "pago": false,
+      "concedidos": 0,
+      "usados": 1,
+      "saldoFim": 0,
+      "limite": 0,
+      "estourou": false,
+      "zerou": false
+     }
+    ],
+    "divida": 0,
+    "pode": {
+     "ok": false,
+     "erro": "Os cortes do plano acabaram. A mensalidade de outubro/2026 ainda não foi registrada."
+    }
+   }
+  }
+ ],
+ "consomem": [
+  {
+   "status": "confirmado",
+   "esperado": true
+  },
+  {
+   "status": "concluido",
+   "esperado": true
+  },
+  {
+   "status": "a_confirmar",
+   "esperado": true
+  },
+  {
+   "status": "cancelado",
+   "motivoCancelamento": "profissional",
+   "esperado": false
+  },
+  {
+   "status": "cancelado",
+   "motivoCancelamento": "cliente",
+   "esperado": false
+  },
+  {
+   "status": "cancelado",
+   "motivoCancelamento": "falta_confirmacao",
+   "esperado": true
+  },
+  {
+   "status": "cancelado",
+   "motivoCancelamento": "falta_confirmacao",
+   "origem": "link",
+   "esperado": false
+  },
+  {
+   "status": "cancelado",
+   "motivoCancelamento": null,
+   "esperado": false
+  }
+ ],
+ "meses": [
+  {
+   "mes": "2026-10",
+   "n": 1,
+   "esperado": {
+    "soma": "2026-11",
+    "rotulo": "outubro/2026"
+   }
+  },
+  {
+   "mes": "2026-12",
+   "n": 1,
+   "esperado": {
+    "soma": "2027-01",
+    "rotulo": "dezembro/2026"
+   }
+  },
+  {
+   "mes": "2026-01",
+   "n": -1,
+   "esperado": {
+    "soma": "2025-12",
+    "rotulo": "janeiro/2026"
+   }
+  },
+  {
+   "mes": "2026-03",
+   "n": 14,
+   "esperado": {
+    "soma": "2027-05",
+    "rotulo": "março/2026"
+   }
+  },
+  {
+   "mes": "2027-02",
+   "n": -3,
+   "esperado": {
+    "soma": "2026-11",
+    "rotulo": "fevereiro/2027"
+   }
+  }
+ ],
+ "descontos": [
+  {
+   "nome": "só o que o plano inclui sai de graça",
+   "incluidos": [
+    "a"
+   ],
+   "itens": [
+    {
+     "id": "a",
+     "valor": 45
+    },
+    {
+     "id": "b",
+     "valor": 30
+    }
+   ],
+   "esperado": {
+    "a": 45
+   }
+  },
+  {
+   "nome": "serviço de valor zero fica de fora",
+   "incluidos": [
+    "a",
+    "b"
+   ],
+   "itens": [
+    {
+     "id": "a",
+     "valor": 0
+    },
+    {
+     "id": "b",
+     "valor": 30
+    }
+   ],
+   "esperado": {
+    "b": 30
+   }
+  },
+  {
+   "nome": "arredonda em centavos",
+   "incluidos": [
+    "a"
+   ],
+   "itens": [
+    {
+     "id": "a",
+     "valor": 30.456
+    }
+   ],
+   "esperado": {
+    "a": 30.46
+   }
+  },
+  {
+   "nome": "plano sem serviço no atendimento",
+   "incluidos": [
+    "x"
+   ],
+   "itens": [
+    {
+     "id": "a",
+     "valor": 45
+    }
+   ],
+   "esperado": {}
+  }
+ ]
+}

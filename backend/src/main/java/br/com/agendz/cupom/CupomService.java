@@ -258,7 +258,7 @@ public class CupomService {
         });
         Integer doCliente = clienteId == null ? 0 : jdbc.queryForObject("select count(*) from agendamento where cupom_id = ? and cliente_id = ? and status <> 'cancelado'", Integer.class, achado, clienteId);
         if (doCliente != null && doCliente >= c.usosPorCliente()) throw recusa("Esse cliente já usou esse cupom o máximo de vezes.");
-        List<Object[]> linhas = jdbc.query("select servico_id, preco from agendamento_servico where agendamento_id = ? order by ordem",
+        List<Object[]> linhas = jdbc.query("select servico_id, preco from agendamento_servico where agendamento_id = ? and not plano order by ordem",
                 (rs, i) -> new Object[]{rs.getObject(1, UUID.class), rs.getBigDecimal(2)}, agendamentoId);
         List<Item> itens = new ArrayList<>();
         for (Object[] l : linhas) itens.add(new Item(l[0].toString(), (BigDecimal) l[1]));
@@ -289,7 +289,7 @@ public class CupomService {
         if (!"a_confirmar".equals(status) && !"confirmado".equals(status)) throw recusa("Só dá para retirar o cupom de horário a confirmar ou confirmado.");
         if (ag.get(0)[1] == null) throw recusa("Esse horário não tem cupom.");
         jdbc.update("update agendamento set cupom_id = null, cupom_foto = null, cupom_aplicado_em = null, cupom_por = null, atualizado_em = now() where id = ?", agendamentoId);
-        jdbc.update("update agendamento_servico set desconto = 0 where agendamento_id = ?", agendamentoId);
+        jdbc.update("update agendamento_servico set desconto = 0 where agendamento_id = ? and not plano", agendamentoId); // o desconto do plano fica
         return (String) ag.get(0)[1];
     }
 

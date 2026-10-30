@@ -444,6 +444,9 @@ public class LinkPublicoService {
         if (l.isEmpty()) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, ERRO_NAO_ACHEI);
         Object[] a = l.get(0);
         if (!ativo((String) a[1], (Instant) a[2], agora)) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, ERRO_NAO_ACHEI);
+        // horário que gasta corte de plano: o cliente não remarca sozinho (outro mês pode não ter corte); a loja remarca e confere a cota
+        Integer comPlano = jdbc.queryForObject("select count(*) from agendamento where id = ? and plano_assinatura_id is not null", Integer.class, id);
+        if (comPlano != null && comPlano > 0) throw new ErroDeNegocio(HttpStatus.CONFLICT, "Esse horário usa um plano. Fale com a loja para remarcar.");
         // os valores congelados do agendamento (a duração não muda se o serviço foi editado depois); a antecedência vale a de hoje
         List<Svc> servicos = jdbc.query("select x.servico_id, x.nome, x.preco, x.duracao_min, x.intervalo_min, coalesce(sv.antecedencia_h, 0) "
                         + "from agendamento_servico x left join servico sv on sv.id = x.servico_id where x.agendamento_id = ? order by x.ordem",

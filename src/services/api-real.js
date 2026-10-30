@@ -725,6 +725,168 @@ export const cupons = {
   },
 };
 
+// ---------- planos de serviço (V32; regras no servidor: PlanoService/PlanoRegras; seção `planos`, que o dono libera) ----------
+// O saldo de cortes é DERIVADO dos agendamentos no servidor: a tela só mostra o que ele devolve. O pagamento é direto com o profissional; aqui só se registra.
+const MES_PLANO = /^\d{4}-(0[1-9]|1[0-2])$/;
+const FORMAS_PLANO = ['pix', 'dinheiro', 'cartao'];
+const STATUS_ASSINATURA = ['pendente', 'ativa', 'cancelada'];
+const idsDe = (v, max) => listaDe(v, max).map((x) => texto(x, 40)).filter((x) => ID.test(x));
+const mesPlano = (v) => (typeof v === 'string' && MES_PLANO.test(v) ? v : '');
+const inteiroPlano = (v) => (Number.isInteger(v) ? v : 0); // o saldo do extrato pode ser negativo (corte adiantado)
+function lerPlano(d) {
+  d = d && typeof d === 'object' ? d : {};
+  return { id: texto(d.id, 40), nome: texto(d.nome, 60), descricao: texto(d.descricao, 200), preco: dinheiroOuZero(d.preco), cortes: inteiroPlano(d.cortes), servicoIds: idsDe(d.servicoIds, 10),
+    adianta: inteiroPlano(d.adianta), acumuloMeses: inteiroPlano(d.acumuloMeses), intervaloDias: inteiroPlano(d.intervaloDias), ativo: d.ativo !== false };
+}
+function lerAssinatura(d) {
+  d = d && typeof d === 'object' ? d : {};
+  const f = d.plano && typeof d.plano === 'object' ? d.plano : {};
+  const sd = d.saldo && typeof d.saldo === 'object' ? d.saldo : {};
+  const c = d.cliente && typeof d.cliente === 'object' ? d.cliente : {};
+  return {
+    id: texto(d.id, 40), clienteId: texto(d.clienteId, 40), cliente: { id: texto(c.id, 40), nome: texto(c.nome, 150), apelido: texto(c.apelido, 100) }, planoId: texto(d.planoId, 40),
+    plano: { nome: texto(f.nome, 60), preco: dinheiroOuZero(f.preco), cortes: inteiroPlano(f.cortes), servicoIds: idsDe(f.servicoIds, 10), adianta: inteiroPlano(f.adianta), acumuloMeses: inteiroPlano(f.acumuloMeses), intervaloDias: inteiroPlano(f.intervaloDias) },
+    status: STATUS_ASSINATURA.includes(d.status) ? d.status : 'pendente', inicioMes: mesPlano(d.inicioMes), diaCobranca: inteiroPlano(d.diaCobranca),
+    pagamentos: listaDe(d.pagamentos, 120).map((p) => ({ id: texto(p && p.id, 40), mes: mesPlano(p && p.mes), valor: dinheiroOuZero(p && p.valor), forma: FORMAS_PLANO.includes(p && p.forma) ? p.forma : 'pix', em: instante(p && p.em),
+      autor: { nome: texto(p && p.autor && p.autor.nome, 150) }, estornado: !!(p && p.estornado === true), estornoMotivo: p && p.estornoMotivo ? texto(p.estornoMotivo, 200) : '' })).filter((p) => ID.test(p.id)),
+    divida: inteiroPlano(d.divida), dividaQuitada: d.dividaQuitada === true, criadoEm: instante(d.criadoEm), encerradoEm: instante(d.encerradoEm),
+    log: listaDe(d.log, 30).map((x) => ({ em: instante(x && x.em), autor: { nome: texto(x && x.autor && x.autor.nome, 150) }, acao: texto(x && x.acao, 30), detalhe: texto(x && x.detalhe, 300) })),
+    saldo: { planoNome: texto(sd.planoNome, 60), situacao: texto(sd.situacao, 20), cortesPorMes: inteiroPlano(sd.cortesPorMes), mes: mesPlano(sd.mes), pagoMes: sd.pagoMes === true, restantes: inteiroPlano(sd.restantes),
+      usadosNoMes: inteiroPlano(sd.usadosNoMes), maisPermitidos: inteiroPlano(sd.maisPermitidos), pagoAte: mesPlano(sd.pagoAte) || null, atrasado: sd.atrasado === true },
+    extrato: listaDe(d.extrato, 60).map((l) => ({ mes: mesPlano(l && l.mes), pago: !!(l && l.pago === true), concedidos: inteiroPlano(l && l.concedidos), usados: inteiroPlano(l && l.usados), saldoFim: inteiroPlano(l && l.saldoFim),
+      limite: inteiroPlano(l && l.limite), estourou: !!(l && l.estourou === true), zerou: !!(l && l.zerou === true) })).filter((l) => l.mes),
+  };
+}
+const lerPedidoPlano = (d) => ({ id: texto(d && d.id, 40), nome: texto(d && d.nome, 60), telefone: texto(d && d.telefone, 20), planoId: texto(d && d.planoId, 40), planoNome: texto(d && d.planoNome, 60), status: texto(d && d.status, 12), criadoEm: instante(d && d.criadoEm) });
+let ultimaMensalidade = { assinatura: '', chave: '' };
+const semAssinatura = { ok: false, status: 0, erro: 'Assinatura não encontrada.' };
+export const planos = {
+  // GET /api/planos  (catálogo + assinaturas com saldo derivado e extrato + pedidos novos do link + mensalidades do mês em aberto)
+  async listar() {
+    const r = await chamar('GET', '/api/planos');
+    if (!r.ok) return r;
+    const d = r.dados || {};
+    return { ok: true, planos: listaDe(d.planos, 20).map(lerPlano), assinaturas: listaDe(d.assinaturas, 1000).map(lerAssinatura), pedidos: listaDe(d.pedidos, 30).map(lerPedidoPlano),
+      aReceber: idsDe(d.aReceber, 1000), mes: mesPlano(d.mes) };
+  },
+  // POST /api/planos  |  PUT /api/planos/{id}   (quem já assina mantém a foto do plano de quando contratou)
+  async salvar(d) {
+    d = d && typeof d === 'object' ? d : {};
+    const ids = listaDe(d.servicoIds, 10).map((x) => String(x ?? ''));
+    if (!ids.every((x) => ID.test(x))) return { ok: false, status: 0, erro: 'Serviço do plano não encontrado.' };
+    const corpo = { nome: texto(d.nome, 60), descricao: texto(d.descricao, 200), servicoIds: ids, ativo: d.ativo !== false };
+    for (const k of ['preco', 'cortes', 'adianta', 'acumuloMeses', 'intervaloDias']) {
+      const n = numeroDoCampo(d[k]);
+      if (n !== null && !Number.isFinite(n)) return { ok: false, status: 0, erro: 'Informe só números nos valores e nos limites.' };
+      if (n !== null) corpo[k] = n;
+    }
+    const edicao = d.id !== undefined && d.id !== null && d.id !== '';
+    if (edicao && !ID.test(String(d.id))) return { ok: false, status: 0, erro: 'Plano não encontrado.' };
+    const r = await chamar(edicao ? 'PUT' : 'POST', edicao ? `/api/planos/${d.id}` : '/api/planos', corpo);
+    return r.ok ? { ok: true, plano: lerPlano(r.dados) } : r;
+  },
+  // DELETE /api/planos/{id}  (nunca contratado: apaga; contratado: só sai de venda → { desativado: true })
+  async remover(id) {
+    if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Plano não encontrado.' };
+    const r = await chamar('DELETE', `/api/planos/${id}`);
+    return r.ok ? { ok: true, desativado: !!(r.dados && r.dados.desativado === true) } : r;
+  },
+  // POST /api/assinaturas  { clienteId, planoId, inicioMes?, diaCobranca? }  (um plano em andamento por cliente; dívida de plano encerrado trava um novo)
+  async contratar(d) {
+    d = d && typeof d === 'object' ? d : {};
+    if (!ID.test(String(d.clienteId ?? '')) || !ID.test(String(d.planoId ?? ''))) return { ok: false, status: 0, erro: 'Escolha o cliente e o plano.' };
+    const corpo = { clienteId: d.clienteId, planoId: d.planoId };
+    if (d.inicioMes !== undefined && d.inicioMes !== null && d.inicioMes !== '') { if (!mesPlano(d.inicioMes)) return { ok: false, status: 0, erro: 'Mês de início inválido.' }; corpo.inicioMes = d.inicioMes; }
+    if (d.diaCobranca !== undefined && d.diaCobranca !== null && d.diaCobranca !== '') { const n = Number(d.diaCobranca); if (!Number.isFinite(n)) return { ok: false, status: 0, erro: 'Dia de cobrança inválido.' }; corpo.diaCobranca = n; }
+    const r = await chamar('POST', '/api/assinaturas', corpo);
+    return r.ok ? { ok: true, assinatura: lerAssinatura(r.dados) } : r;
+  },
+  // POST /api/assinaturas/{id}/pagamentos  { mes, forma }  (leva Idempotency-Key: clicar de novo depois de um erro de rede nunca registra a mensalidade duas vezes)
+  async pagar(id, { mes, forma } = {}) {
+    if (!ID.test(String(id ?? ''))) return semAssinatura;
+    if (mes !== undefined && mes !== null && mes !== '' && !mesPlano(mes)) return { ok: false, status: 0, erro: 'Mês inválido.' };
+    if (!FORMAS_PLANO.includes(forma)) return { ok: false, status: 0, erro: 'Escolha como foi pago: Pix, dinheiro ou cartão.' };
+    const corpo = { ...(mes ? { mes } : {}), forma };
+    const assinatura = `${id}:${JSON.stringify(corpo)}`;
+    if (ultimaMensalidade.assinatura !== assinatura) ultimaMensalidade = { assinatura, chave: novaChave() };
+    const r = await chamar('POST', `/api/assinaturas/${id}/pagamentos`, corpo, ultimaMensalidade.chave);
+    if (r.ok) ultimaMensalidade = { assinatura: '', chave: '' };
+    return r.ok ? { ok: true, assinatura: lerAssinatura(r.dados) } : r;
+  },
+  // POST /api/assinaturas/{id}/pagamentos/{pagamentoId}/estorno  { motivo }  (recusado se deixar um horário de plano sem cobertura)
+  async estornar(id, pagamentoId, motivo) {
+    if (!ID.test(String(id ?? '')) || !ID.test(String(pagamentoId ?? ''))) return { ok: false, status: 0, erro: 'Mensalidade não encontrada.' };
+    const m = typeof motivo === 'string' ? motivo.trim() : '';
+    if (m.length > 200) return { ok: false, status: 0, erro: 'O motivo pode ter até 200 letras.' };
+    const r = await chamar('POST', `/api/assinaturas/${id}/pagamentos/${pagamentoId}/estorno`, { motivo: m });
+    return r.ok ? { ok: true, assinatura: lerAssinatura(r.dados) } : r;
+  },
+  // POST /api/assinaturas/{id}/encerrar  { motivo }  (corte adiantado sem pagar vira dívida: trava plano novo até quitar)
+  async encerrar(id, motivo) {
+    if (!ID.test(String(id ?? ''))) return semAssinatura;
+    const m = typeof motivo === 'string' ? motivo.trim() : '';
+    if (m.length > 200) return { ok: false, status: 0, erro: 'O motivo pode ter até 200 letras.' };
+    const r = await chamar('POST', `/api/assinaturas/${id}/encerrar`, { motivo: m });
+    if (!r.ok) return r;
+    const a = lerAssinatura(r.dados);
+    return { ok: true, assinatura: a, divida: a.divida };
+  },
+  // POST /api/assinaturas/{id}/quitar  (o dono recebeu por fora o que ficou devendo)
+  async quitar(id) {
+    if (!ID.test(String(id ?? ''))) return semAssinatura;
+    const r = await chamar('POST', `/api/assinaturas/${id}/quitar`);
+    return r.ok ? { ok: true, assinatura: lerAssinatura(r.dados) } : r;
+  },
+  // POST /api/planos/pedidos/{id}/aceitar  (acha ou cadastra o cliente por nome+telefone e abre a assinatura "aguardando pagamento")  |  …/recusar
+  async aceitarPedido(id) {
+    if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Pedido não encontrado.' };
+    const r = await chamar('POST', `/api/planos/pedidos/${id}/aceitar`);
+    return r.ok ? { ok: true, assinatura: lerAssinatura(r.dados) } : r;
+  },
+  async recusarPedido(id) {
+    if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Pedido não encontrado.' };
+    const r = await chamar('POST', `/api/planos/pedidos/${id}/recusar`);
+    return r.ok ? { ok: true } : r;
+  },
+  // GET /api/planos/cliente/{clienteId}  (Atender: plano ativo do cliente, quanto resta e se pode adiantar; quem lança na agenda lê sem ter a seção; nunca o valor da mensalidade)
+  async doCliente(clienteId) {
+    if (!ID.test(String(clienteId ?? ''))) return { ok: true, plano: null };
+    const r = await chamar('GET', `/api/planos/cliente/${clienteId}`);
+    if (!r.ok) return r;
+    const p = r.dados && r.dados.plano;
+    if (!p || typeof p !== 'object') return { ok: true, plano: null };
+    return { ok: true, plano: { assinaturaId: texto(p.assinaturaId, 40), plano: texto(p.plano, 60), servicoIds: idsDe(p.servicoIds, 10), restantes: inteiroPlano(p.restantes), maisPermitidos: inteiroPlano(p.maisPermitidos),
+      pagoMes: p.pagoMes === true, atrasado: p.atrasado === true, mes: mesPlano(p.mes) } };
+  },
+};
+
+// Link de planos do cliente (sem login; nunca leva o token do painel). Telefone do saldo vai na consulta (contrato do simulador); o servidor limita por telefone, IP e loja.
+export const planosPublico = {
+  // GET /api/publico/planos  → { planos: [{ id, nome, descricao, preco, cortes, servicos: [nome] }] }  (link de agendamento desligado = lista vazia)
+  async pagina() {
+    const r = await chamar('GET', '/api/publico/planos', undefined, undefined, PUB);
+    if (!r.ok) return r;
+    return { ok: true, planos: listaDe(r.dados && r.dados.planos, 20).map((p) => ({ id: texto(p && p.id, 40), nome: texto(p && p.nome, 60), descricao: texto(p && p.descricao, 200), preco: dinheiroOuZero(p && p.preco),
+      cortes: inteiroPlano(p && p.cortes), servicos: listaDe(p && p.servicos, 10).map((x) => texto(x, 120)) })).filter((p) => ID.test(p.id)) };
+  },
+  // POST /api/publico/planos/pedidos  { nome, telefone, planoId, site }  → { ok }  (o dono aceita ou recusa; o mesmo pedido de novo não duplica)
+  async pedir({ nome, telefone, planoId, site }) {
+    if (!ID.test(String(planoId ?? ''))) return { ok: false, status: 0, erro: 'Escolha um plano.' };
+    const corpo = { nome: texto(nome, 100), telefone: texto(telefone, 30), planoId };
+    if (typeof site === 'string' && site) corpo.site = texto(site, 100);
+    const r = await chamar('POST', '/api/publico/planos/pedidos', corpo, undefined, PUB);
+    return r.ok ? { ok: true } : r;
+  },
+  // GET /api/publico/planos/saldo?telefone=  → { planos: [{ plano, mes, restantes, cortesPorMes, pagoMes }], aviso }  (só cortes; sem plano = resposta genérica)
+  async saldo(telefone) {
+    const r = await chamar('GET', `/api/publico/planos/saldo?telefone=${encodeURIComponent(texto(telefone, 30))}`, undefined, undefined, PUB);
+    if (!r.ok) return r;
+    const d = r.dados || {};
+    return { ok: true, aviso: d.aviso ? texto(d.aviso, 200) : '', planos: listaDe(d.planos, 10).map((p) => ({ plano: texto(p && p.plano, 60), mes: mesPlano(p && p.mes), restantes: inteiroPlano(p && p.restantes),
+      cortesPorMes: inteiroPlano(p && p.cortesPorMes), pagoMes: !!(p && p.pagoMes === true) })) };
+  },
+};
+
 // ---------- comissões (5d-4b; regras no servidor: ComissaoController/ComissaoService) ----------
 const DIA_ISO = /^\d{4}-\d{2}-\d{2}$/;
 const MES_ISO = /^\d{4}-(0[1-9]|1[0-2])$/;
