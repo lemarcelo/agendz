@@ -243,6 +243,8 @@ const concluir = (extra = {}) => {
   if (d.clienteId) { const v = store.getState().clientes.find((c) => c.id === d.clienteId)?.veiculos?.[0]; if (v) d.veiculoId = v.id; else d.veiculo = VEI; }
   const r = agenda.atender(d); assert.ok(r.ok, JSON.stringify(r)); return r.agendamento.id;
 };
+// O seed traz concluídos "de hoje" que variam com a hora do dia: o teste de fila parte de uma agenda sem concluídos.
+const semConcluidosDoSeed = () => { const ag = store.getState().agendamentos; for (let i = ag.length - 1; i >= 0; i--) if (ag[i].status === 'concluido') ag.splice(i, 1); };
 const avaliarDe = (token, extra = {}) => publico.avaliar({ token, nota: 5, texto: 'Muito bom', ...extra });
 test.beforeEach(() => reiniciar());
 
@@ -364,7 +366,7 @@ test('API: filtro por serviço e por profissional, lista e resumo usam o mesmo f
   assert.equal(avaliacoes.listar({ servicoId: { $ne: 1 } }).ok, false);
 });
 test('API fila: prévia, iniciar, abrir (token e telefone só aqui), marcar enviado/pulou, pausa e encerrar', () => {
-  como('davi');
+  como('davi'); semConcluidosDoSeed();
   const ids = [concluir(), concluir({ clienteId: 'c-jon', profissionalId: 'u-marcelo' })];
   const hoje = new Date().toISOString().slice(0, 10);
   const f = { de: hoje, ate: hoje };
@@ -388,7 +390,7 @@ test('API fila: prévia, iniciar, abrir (token e telefone só aqui), marcar envi
   assert.ok(ids.length === 2);
 });
 test('API fila: contato que ficou impossível depois de entrar na fila é pulado e a recusa fica registrada', () => {
-  como('davi'); concluir();
+  como('davi'); semConcluidosDoSeed(); concluir();
   const hoje = new Date().toISOString().slice(0, 10);
   const fila = mensagens.iniciarFila({ de: hoje, ate: hoje, modelo: 'Oi {nome}: {link}' }).fila;
   store.getState().clientes.find((c) => c.id === 'c-igor').semMensagens = true;
@@ -397,7 +399,7 @@ test('API fila: contato que ficou impossível depois de entrar na fila é pulado
   assert.equal(mensagens.filaAtual().fila.itens[0].status, 'pulou', 'persistir: a recusa deixa o registro');
 });
 test('API: opt-out do cliente (semMensagens) é só booleano e tira da fila e da estrela', () => {
-  como('davi');
+  como('davi'); semConcluidosDoSeed();
   const id = concluir();
   assert.equal(clientes.salvar({ id: 'c-igor', nome: 'Igor', telefone: '(51) 99999-0001', semMensagens: 'sim' }).ok, false);
   const c = store.getState().clientes.find((x) => x.id === 'c-igor');
@@ -408,7 +410,7 @@ test('API: opt-out do cliente (semMensagens) é só booleano e tira da fila e da
   assert.equal(mensagens.iniciarFila({ de: hoje, ate: hoje, modelo: 'Oi {nome}: {link}' }).ok, false, 'fila vazia não é criada');
 });
 test('API fila aviso: sem {link}, sem token e sem marcar avaliação pedida', () => {
-  como('davi'); const id = concluir();
+  como('davi'); semConcluidosDoSeed(); const id = concluir();
   const hoje = new Date().toISOString().slice(0, 10);
   const fila = mensagens.iniciarFila({ tipo: 'aviso', de: hoje, ate: hoje, modelo: 'Oi {nome}, promoção de sexta!' }).fila;
   const ab = mensagens.abrirItem(fila.id, fila.itens[0].id); assert.ok(ab.ok); assert.equal(ab.token, null);
