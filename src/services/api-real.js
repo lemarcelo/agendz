@@ -628,6 +628,13 @@ export const agenda = {
     const r = await chamar('PUT', `/api/agendamentos/${id}/status`, { status });
     return r.ok ? { ok: true, agendamento: lerAgendamento(r.dados) } : r;
   },
+  // PUT /api/agendamentos/{id}/forma-pagamento  { formaPagamento }  (v119: futuro ou concluído, nunca cancelado; profissional só nos seus; só registra a escolha)
+  async mudarFormaPagamento(id, forma) {
+    if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Agendamento não encontrado.' };
+    if (!['pix', 'dinheiro', 'cartao'].includes(forma)) return { ok: false, status: 0, erro: 'Forma de pagamento inválida.' };
+    const r = await chamar('PUT', `/api/agendamentos/${id}/forma-pagamento`, { formaPagamento: forma });
+    return r.ok ? { ok: true, agendamento: lerAgendamento(r.dados) } : r;
+  },
   // POST /api/agendamentos/{id}/cupom  { chave }  (só a confirmar ou confirmado; um cupom por horário; chave errada responde sempre a mesma mensagem e 5 seguidas bloqueiam por 15 min)
   async aplicarCupom(id, chave) {
     if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Agendamento não encontrado.' };

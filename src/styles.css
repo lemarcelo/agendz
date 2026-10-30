@@ -1111,3 +1111,8 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
 .fila-vez { display: grid; gap: 6px; background: var(--surface-2); border-radius: var(--raio); padding: 12px; }
 .fila-st-enviado { background: var(--verde-bg); color: var(--verde); } .fila-st-pulou { background: var(--cinza-bg); color: var(--cinza); } .fila-st-aberto { background: var(--azul-bg); color: var(--azul); }
 @media (max-width: 520px) { .av-resumo { grid-template-columns: 1fr; } .av-estrela { width: 48px; height: 48px; } }
+
+/* v119: troca da forma de pagamento (segurar o cartão) */
+.forma-opcoes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.forma-opcoes .btn { min-height: 48px; font-size: 15px; }
+.cartao, .cartao-real > .cartao { -webkit-touch-callout: none; }

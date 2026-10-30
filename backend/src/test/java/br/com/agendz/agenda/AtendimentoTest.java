@@ -459,4 +459,39 @@ class AtendimentoTest extends BaseApi {
         // gravar só a forma não apaga os campos já escolhidos
         regras(APEX, davi, "{\"formaPagamentoPadrao\":\"dinheiro\"}").andExpect(status().isOk()).andExpect(jsonPath("$.local[0]").value("telefone")).andExpect(jsonPath("$.futuro[0]").value("nome"));
     }
+
+    // ---------------------------------------------------------------- v119: trocar a forma de pagamento (segurar o cartão)
+
+    private ResultActions trocarForma(String token, String agId, String corpo) throws Exception {
+        return mvc.perform(put("/api/agendamentos/" + agId + "/forma-pagamento").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(token)).contentType(MediaType.APPLICATION_JSON).content(corpo));
+    }
+
+    @Test
+    void trocaAFormaDoConcluidoEDoFuturoERegistraNoHistoricoMasNaoDoCancelado() throws Exception {
+        String feito = id(atender(APEX, davi, corpo(pabloId, ",\"formaPagamento\":\"dinheiro\"")).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
+        trocarForma(davi, feito, "{\"formaPagamento\":\"cartao\"}").andExpect(status().isOk()).andExpect(jsonPath("$.formaPagamento").value("cartao"));
+        assertEquals("cartao", jdbc.queryForObject("select forma_pagamento from agendamento where id = ?::uuid", String.class, feito));
+        assertEquals(1, jdbc.queryForObject("select count(*) from agendamento_evento where agendamento_id = ?::uuid and campo = 'forma de pagamento' and para = 'Cartão' and de = 'Dinheiro'", Integer.class, feito));
+        trocarForma(davi, feito, "{\"formaPagamento\":\"cartao\"}").andExpect(status().isOk()); // igual: não duplica o histórico
+        assertEquals(1, jdbc.queryForObject("select count(*) from agendamento_evento where agendamento_id = ?::uuid and campo = 'forma de pagamento'", Integer.class, feito));
+        trocarForma(davi, feito, "{\"formaPagamento\":\"boleto\"}").andExpect(status().isBadRequest());
+        trocarForma(davi, feito, "{}").andExpect(status().isBadRequest());
+
+        String agendado = id(atender(APEX, davi, corpo(pabloId, ",\"inicio\":\"" + futuro + "\"")).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
+        trocarForma(davi, agendado, "{\"formaPagamento\":\"pix\"}").andExpect(status().isOk()).andExpect(jsonPath("$.formaPagamento").value("pix"));
+
+        mvc.perform(put("/api/agendamentos/" + agendado + "/status").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"cancelado\"}")).andExpect(status().isOk());
+        trocarForma(davi, agendado, "{\"formaPagamento\":\"dinheiro\"}").andExpect(status().isConflict());
+        assertEquals("pix", jdbc.queryForObject("select forma_pagamento from agendamento where id = ?::uuid", String.class, agendado));
+    }
+
+    @Test
+    void profissionalTrocaSoNoQueEDeleEQuemNaoTemTokenNaoTroca() throws Exception {
+        String doMarcelo = id(atender(APEX, davi, corpo(marceloId, "")).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
+        String doPablo = id(atender(APEX, davi, corpo(pabloId, "")).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
+        trocarForma(pablo, doMarcelo, "{\"formaPagamento\":\"cartao\"}").andExpect(status().isNotFound());
+        assertEquals("pix", jdbc.queryForObject("select forma_pagamento from agendamento where id = ?::uuid", String.class, doMarcelo));
+        trocarForma(pablo, doPablo, "{\"formaPagamento\":\"cartao\"}").andExpect(status().isOk());
+        mvc.perform(put("/api/agendamentos/" + doPablo + "/forma-pagamento").with(host(APEX)).contentType(MediaType.APPLICATION_JSON).content("{\"formaPagamento\":\"pix\"}")).andExpect(status().isUnauthorized());
+    }
 }

@@ -1,7 +1,7 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:b3ec830fb7 */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { abreviarNome } from '../domain/abreviar.js';
-import { LOJA_TROCAVEL, MODO_DEMO, agendamentosVisiveis, profissionaisVisiveis } from '../services/api.js';
+import { LOJA_TROCAVEL, MODO_DEMO, agenda as apiAgenda, agendamentosVisiveis, profissionaisVisiveis } from '../services/api.js';
 import { baseDoLink, montarLinkAgendamento } from '../domain/link-publico.js';
 import { ATIVOS, STATUS, boxesAtivos, ocupacaoDe, retiradaDe } from '../domain/rules.js';
 import { faixasDoProfissional, excecaoDoDia, TIPOS_EXCECAO } from '../domain/schedule.js';
@@ -19,6 +19,8 @@ import { sanearModoAgenda, sanearRolagem } from '../domain/agenda-modo.js';
 import { alternarMulti, escolherUnico, removerUm, sanearSelecao } from '../domain/selecao.js';
 import { BotaoRemover, useGestosSelecao } from './selecao.jsx';
 import { copiarTexto } from './clipboard.js';
+import FormaPagamento from './leve/FormaPagamento.jsx';
+import { useToqueLongo } from './leve/segurar.js';
 import { abrirWhatsapp } from './whatsapp.js';
 import { EstrelaAvaliar } from './PedirAvaliacao.jsx';
 import { textoConvite } from '../domain/whatsapp.js';
@@ -47,9 +49,13 @@ function CartaoAgendamento({ a, st, agora, onClick, mostraBarb, testid = 'cartao
   const v = visualDoCartao(a, agora);
   const podePedir = a.status === STATUS.CONCLUIDO && (a.servicoIds || []).length > 0;
   const avaliada = (st.avaliacoes || []).some((x) => x.agendamentoId === a.id);
+  const [trocando, setTrocando] = useState(false); // v119: segurar o cartão abre a forma de pagamento (futuro ou concluído; cancelado não)
+  const toque = useToqueLongo(() => setTrocando(true));
   return (
     <div className="cartao-bloco">
-    <button type="button" className={`cartao st-${v.chave}`} onClick={onClick} data-testid={testid} data-status={v.chave}
+    {trocando && <FormaPagamento quem={`${nomeCliente(st, a)} · ${fmtHM(a.inicio)}`} atual={(a.pagamento && a.pagamento.forma) || ''} aoFechar={() => setTrocando(false)}
+      aoEscolher={async (k) => { const r = apiAgenda.mudarFormaPagamento(a.id, k); if (r.ok) toast('Forma de pagamento alterada.'); return r; }} />}
+    <button type="button" className={`cartao st-${v.chave}`} onClick={onClick} data-testid={testid} data-status={v.chave} {...(a.status !== STATUS.CANCELADO ? toque : {})}
       title={`${fmtHM(a.inicio)} ${nomeCliente(st, a)} · ${nomeServicos(st, a)}${a.veiculo ? ` · ${textoVeiculo(a)}` : ''} · ${v.rotulo}`}>
       <div className="cartao-topo">
         <div className="cartao-quem">

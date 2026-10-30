@@ -161,6 +161,11 @@ public class AgendaController {
     public record NovoStatus(@NotNull @Size(max = 30) String status) {
     }
 
+    public record NovaForma(@NotNull @Size(max = 20) String formaPagamento) {
+    }
+
+    private static final Map<String, String> ROTULO_FORMA = Map.of("pix", "Pix", "dinheiro", "Dinheiro", "cartao", "Cartão");
+
     private record ServicoLinha(UUID id, String nome, BigDecimal preco, int duracaoMin, int intervaloMin, boolean multiDia, boolean ativo) {
     }
 
@@ -528,6 +533,25 @@ public class AgendaController {
             estoque.sincronizar(jdbc, loja.id(), id, UUID.fromString(jwt.getSubject()), relogio.instant()); // concluir baixa os produtos; sair de concluído devolve
             Agendamento r = buscar(jdbc, id, so);
             return CONFIRMADO.equals(novo) ? r : r.comAvisos(pendentes.isEmpty() ? null : pendentes);
+        });
+    }
+
+    // ---------------------------------------------------------------- forma de pagamento
+
+    /** Troca a forma de pagamento (segurar o cartão): futuro ou concluído, nunca cancelado. O profissional só age no dele. Só registra a escolha (o servidor ainda não tem financeiro). */
+    @PutMapping("/api/agendamentos/{id}/forma-pagamento")
+    public Agendamento mudarFormaPagamento(@PathVariable UUID id, @Valid @RequestBody NovaForma d, @AuthenticationPrincipal Jwt jwt) {
+        if (!RegrasAtendimento.FORMAS.contains(d.formaPagamento())) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Forma de pagamento inválida.");
+        UUID so = somenteDe(jwt);
+        Loja loja = LojaContext.exigir();
+        return banco.naLoja(jdbc -> {
+            Atual a = ler(jdbc, id, so, true);
+            if (CANCELADO.equals(a.status())) throw new ErroDeNegocio(HttpStatus.CONFLICT, "Agendamento cancelado não tem forma de pagamento.");
+            String antes = jdbc.queryForObject("select forma_pagamento from agendamento where id = ?", String.class, id);
+            if (d.formaPagamento().equals(antes)) return buscar(jdbc, id, so);
+            jdbc.update("update agendamento set forma_pagamento = ?, atualizado_em = now() where id = ?", d.formaPagamento(), id);
+            registrar(jdbc, loja.id(), id, jwt, "forma de pagamento", antes == null || antes.isEmpty() ? "(padrão da loja)" : ROTULO_FORMA.getOrDefault(antes, antes), ROTULO_FORMA.get(d.formaPagamento()));
+            return buscar(jdbc, id, so);
         });
     }
 

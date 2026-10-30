@@ -14,6 +14,8 @@ import { Rot, capAtiva } from '../../domain/tipos.js';
 import { ROTULO_PORTE, rotuloVeiculo } from '../../domain/veiculos.js';
 import { boxesAtivos } from '../../domain/atender-form.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
+import FormaPagamento from '../leve/FormaPagamento.jsx';
+import { useToqueLongo } from '../leve/segurar.js';
 import { montarLinkAgendamento } from '../../domain/link-publico.js';
 import { numeroWhatsapp, textoConvite, textoReagendamento } from '../../domain/whatsapp.js';
 import { abrirWhatsapp } from '../whatsapp.js';
@@ -27,13 +29,14 @@ const aoLocal = (ts) => { const d = new Date(ts); const p = (n) => String(n).pad
 const doLocal = (v) => { const t = new Date(v).getTime(); return Number.isFinite(t) ? t : null; };
 
 
-function Cartao({ a, nomeCliente, nomeProf, mostraProf, aberto, aoAbrir, testid, destaque = false, children }) {
+function Cartao({ a, nomeCliente, nomeProf, mostraProf, aberto, aoAbrir, aoSegurar, testid, destaque = false, children }) {
   const v = visual(a);
+  const toque = useToqueLongo(() => { if (aoSegurar) aoSegurar(a); }); // v119: segurar abre a forma de pagamento (concluído ou futuro; cancelado não)
   const venda = a.produtos.length ? a.produtos.map((p) => `${p.qtd}× ${p.nome}`).join(', ') : '';
   const servicos = a.servicos.map((s) => s.nome).join(' + ') || (venda ? 'Venda de produtos' : 'Sem serviço');
   return (
     <div className={`cartao-real st-${v.cor}${destaque ? ' cartao-novo-real' : ''}`} data-testid={testid} data-status={a.status} data-id={a.id} data-destaque={destaque ? 'sim' : undefined}>
-      <button type="button" className="cartao" onClick={aoAbrir} aria-expanded={aberto} data-testid={`${testid}-abrir`}>
+      <button type="button" className="cartao" onClick={aoAbrir} aria-expanded={aberto} data-testid={`${testid}-abrir`} {...(aoSegurar && a.status !== 'cancelado' ? toque : {})}>
         <div className="cartao-topo">
           <div className="cartao-quem">
             <span className="cartao-nome" title={nomeCliente} data-testid={`${testid}-cliente`}>{abreviarNome(nomeCliente, 24)}</span>
@@ -261,6 +264,7 @@ export default function Agenda({ ehProprio = false, ehDono = false, meuId = '', 
   const [clientes, setClientes] = useState(new Map());
   const [profs, setProfs] = useState([]);
   const [boxes, setBoxes] = useState([]);
+  const [trocaForma, setTrocaForma] = useState(null); // agendamento cuja forma de pagamento está sendo trocada (segurar o cartão)
   const [avisoRemarcar, setAvisoRemarcar] = useState(null); // { tel, texto } | { semTelefone }: fica na Agenda porque o cartão pode sair da lista ao mudar de dia
   const [fichas, setFichas] = useState(new Map()); // id → { nome, telefone }: só para avisar o cliente pelo WhatsApp (quem não lê Clientes fica sem o aviso)
   const [lojaInfo, setLojaInfo] = useState({ endereco: '', mapaUrl: '' });
@@ -350,7 +354,7 @@ export default function Agenda({ ehProprio = false, ehDono = false, meuId = '', 
 
   const cartao = (a, testid) => (
     <Cartao key={a.id} a={a} testid={testid} nomeCliente={nomeCliente(a)} nomeProf={nomeProf(a.profissionalId)} mostraProf={!ehProprio && selecionado === 'todos' && atendem.length > 1}
-      aberto={aberto === a.id} aoAbrir={() => setAberto(aberto === a.id ? null : a.id)} destaque={destaqueIds.includes(a.id)}>
+      aberto={aberto === a.id} aoAbrir={() => setAberto(aberto === a.id ? null : a.id)} aoSegurar={setTrocaForma} destaque={destaqueIds.includes(a.id)}>
       <Detalhe a={a} nomeProf={nomeProf(a.profissionalId)} nomeDe={nomeProf} profissionais={atendem} boxes={boxes} ehDono={ehDono} aoAlterar={alterou} aoAvisar={setAvisoRemarcar} cliente={a.clienteId ? fichas.get(a.clienteId) || null : null} loja={{ nome: nomeLoja, ...lojaInfo }} />
     </Cartao>
   );
@@ -378,6 +382,10 @@ export default function Agenda({ ehProprio = false, ehDono = false, meuId = '', 
       )}
       {erro && <Aviso tipo="erro" data-testid="agenda-erro">{erro}</Aviso>}
       {aviso && <Aviso data-testid="agenda-aviso">{aviso}</Aviso>}
+      {trocaForma && (
+        <FormaPagamento quem={`${nomeCliente(trocaForma)} · ${fmtDateTime(trocaForma.inicio)}`} atual={trocaForma.formaPagamento || ''} aoFechar={() => setTrocaForma(null)}
+          aoEscolher={async (k) => { const r = await api.mudarFormaPagamento(trocaForma.id, k); if (r.ok) alterou('Forma de pagamento alterada.', r.agendamento); return r; }} />
+      )}
       {avisoRemarcar && <AvisoRemarcado avisar={avisoRemarcar} aoFechar={() => setAvisoRemarcar(null)} aoErro={setErro} />}
       {lista === null && <p className="muted" role="status" data-testid="agenda-carregando">Carregando…</p>}
       {lista !== null && modo === 'calendario' && <Calendario cursor={cursor} lista={visiveis} aoEscolherDia={(d) => { setModo('horarios'); irPara(d); }} />}

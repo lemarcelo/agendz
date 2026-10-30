@@ -5,7 +5,7 @@ import * as E from '../domain/engine.js';
 import * as R from '../domain/rules.js';
 import * as CD from '../domain/codigo.js';
 import * as F from '../domain/financeiro.js';
-import '../domain/pagamento.js'; // registra no tick o lançamento das receitas e estornos do atendimento local
+import { trocarFormaDoAgendamento } from '../domain/pagamento.js'; // registra no tick o lançamento das receitas e estornos do atendimento local
 import * as CU from '../domain/resgate.js';
 import * as AS from '../domain/assinaturas.js';
 import { aReceber, extrato, rotuloMes, saldoAtual, planosPublicos } from '../domain/planos.js';
@@ -397,6 +397,12 @@ export const agenda = {
     if (dados?.boxId !== undefined && dados.boxId !== null && dados.boxId !== '' && !texto(dados.boxId, 60)) return erro('Box inválido.');
     const n = meuAgendamento(id) || (state.agendamentos.find((x) => x.id === id)?.local ? erro('Atendimento local não é remarcado.') : null) || (usuario().papel === 'profissional' && dados?.profissionalId && dados.profissionalId !== usuario().id ? semPermissao() : null); if (n) return n;
     return mutate((s, agora) => E.profissionalRemarca(s, id, dados, autor(), agora), { metodo: 'PUT', rota: `/agendamentos/${id}/remarcar` });
+  },
+  // PUT /agendamentos/{id}/forma-pagamento  ({ formaPagamento: 'pix' | 'dinheiro' | 'cartao' })  futuro ou concluído, nunca cancelado; profissional só nos seus; receita já lançada acompanha a troca
+  mudarFormaPagamento(id, forma) {
+    if (typeof id !== 'string' || !id || id.length > 60) return erro('Agendamento não encontrado.');
+    if (!R.formaValida(forma)) return erro('Forma de pagamento inválida.');
+    return meuAgendamento(id) || mutate((s, agora) => trocarFormaDoAgendamento(s, s.agendamentos.find((x) => x.id === id), forma, autor(), agora), { metodo: 'PUT', rota: `/agendamentos/${id}/forma-pagamento` });
   },
   // POST /agendamentos/{id}/cancelar
   cancelar(id) { return meuAgendamento(id) || mutate((s, agora) => E.profissionalCancela(s, id, autor(), agora), { metodo: 'POST', rota: `/agendamentos/${id}/cancelar` }); },
