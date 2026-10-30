@@ -89,7 +89,7 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
   // Nome digitado mais completo que o do cadastro: avisa que o cadastro será atualizado.
   const atualizaraNome = cadastrado && !cadastrado.semNome && nome.trim() && nomeMaisCompleto(cadastrado.nome, nome.trim());
 
-  // Plano do cliente (menu Planos): serviço que o plano inclui sai de graça e gasta 1 corte do mês; sem corte ou sem marcar, cobra pelo preço normal.
+  // Plano do cliente (menu Planos): serviço que o plano inclui sai de graça e gasta 1 atendimento do mês; sem atendimento ou sem marcar, cobra pelo preço normal.
   const planoCli = useMemo(() => { const r = cadastrado ? apiPlanos.doCliente(cadastrado.id) : null; return r && r.ok ? r.plano : null; }, [cadastrado?.id, st]); // eslint-disable-line react-hooks/exhaustive-deps
   const cobertos = planoCli ? servicoIds.filter((id) => planoCli.servicoIds.includes(id)) : [];
   const podePlano = !!planoCli && cobertos.length > 0 && (planoCli.restantes > 0 || planoCli.maisPermitidos > 0);
@@ -170,9 +170,9 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
         {planoCli && (
           <div className="campo-largo subcartao" data-testid="atender-plano">
             <b><Icon n="ticket" size={15} /> Plano {planoCli.plano}</b>
-            <span className="muted" data-testid="atender-plano-saldo">Restam {planoCli.restantes} corte{planoCli.restantes === 1 ? '' : 's'} em {planoCli.mes}{planoCli.restantes <= 0 && planoCli.maisPermitidos > 0 ? ` · pode adiantar ${planoCli.maisPermitidos}` : ''}{planoCli.atrasado ? ' · mensalidade do mês ainda não registrada' : ''}.</span>
+            <span className="muted" data-testid="atender-plano-saldo">Restam {planoCli.restantes} atendimento{planoCli.restantes === 1 ? '' : 's'} em {planoCli.mes}{planoCli.restantes <= 0 && planoCli.maisPermitidos > 0 ? ` · pode adiantar ${planoCli.maisPermitidos}` : ''}{planoCli.atrasado ? ' · mensalidade do mês ainda não registrada' : ''}.</span>
             {cobertos.length === 0 && <span className="muted">Escolha um serviço que o plano inclui para usar o plano.</span>}
-            {cobertos.length > 0 && !podePlano && <span className="msg-conflito" data-testid="atender-plano-esgotado"><Icon n="alert" size={15} /> Os cortes do plano acabaram: este atendimento será cobrado pelo preço normal.</span>}
+            {cobertos.length > 0 && !podePlano && <span className="msg-conflito" data-testid="atender-plano-esgotado"><Icon n="alert" size={15} /> Os atendimentos do plano acabaram: este atendimento será cobrado pelo preço normal.</span>}
             {podePlano && <label className="interruptor"><input type="checkbox" checked={!semPlano} onChange={(e) => setSemPlano(!e.target.checked)} data-testid="atender-usar-plano" /><span className="trilho"><i className="bolinha" /></span><span className="interruptor-txt"><b>Usar o plano neste atendimento</b><small className="muted">Os serviços do plano saem de graça; o resto é cobrado normalmente.</small></span></label>}
           </div>
         )}

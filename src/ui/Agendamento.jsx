@@ -433,7 +433,7 @@ export function GavetaAgendamento({ id, user, onClose, onRemarcar }) {
                 <div><dt>Histórico do cliente</dt><dd>{textoUltimo(st, a)}</dd></div>
               </>
             )}
-            <div><dt>Origem</dt><dd>{local ? 'Local (balcão)' : a.origem === 'whatsapp' ? 'WhatsApp' : 'Painel'}{a.encaixe ? ' · encaixe' : ''}</dd></div>
+            <div><dt>Origem</dt><dd>{local ? 'Local (balcão)' : a.origem === 'whatsapp' ? 'WhatsApp' : 'Painel'}{a.encaixe ? ' · encaixe' : ''}{a.fixoId ? ' · horário fixo do plano' : ''}</dd></div>
             {destinosCalendario(st, a).length > 0 && <div><dt>Google Agenda</dt><dd>Evento enviado para {destinosCalendario(st, a).join(' e ')}</dd></div>}
           </dl>
 

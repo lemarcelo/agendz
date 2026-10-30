@@ -1,13 +1,13 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
-// Planos de serviço (puro): catálogo, assinatura do cliente e cota mensal de cortes. Não conhece a tela, o relógio nem o motor da agenda.
+// Planos de serviço (puro): catálogo, assinatura do cliente e cota mensal de atendimentos. Não conhece a tela, o relógio nem o motor da agenda.
 //
 // Regras (spec: prompt-agendz-regras.md, v109):
-// - O pagamento é DIRETO com o profissional; o sistema só registra. Os cortes do mês só existem depois que o dono registra a mensalidade daquele mês.
-// - A cota é derivada dos agendamentos (como o uso do cupom): não há contador. Cada agendamento com `planoUso` gasta 1 corte do mês dele.
-// - Cortes que sobram acumulam para o mês seguinte, até o teto (cortes × meses de acúmulo). Passou do que tem: gasta o mês seguinte (adiantamento),
-//   até o limite do plano (padrão 1 corte a mais) e só num mês já pago. Esgotou tudo: não agenda mais até a próxima mensalidade.
-// - Antifraude: crédito só com pagamento registrado; adiantamento limitado; 2 meses sem pagar zeram o saldo acumulado; intervalo mínimo entre cortes;
-//   corte cancelado pelo cliente volta, mas a falta de confirmação consome; cancelar o plano com corte adiantado deixa dívida que trava um plano novo.
+// - O pagamento é DIRETO com o profissional; o sistema só registra. Os atendimentos do mês só existem depois que o dono registra a mensalidade daquele mês.
+// - A cota é derivada dos agendamentos (como o uso do cupom): não há contador. Cada agendamento com `planoUso` gasta 1 atendimento do mês dele.
+// - Atendimentos que sobram acumulam para o mês seguinte, até o teto (atendimentos × meses de acúmulo). Passou do que tem: gasta o mês seguinte (adiantamento),
+//   até o limite do plano (padrão 1 atendimento a mais) e só num mês já pago. Esgotou tudo: não agenda mais até a próxima mensalidade.
+// - Antifraude: crédito só com pagamento registrado; adiantamento limitado; 2 meses sem pagar zeram o saldo acumulado; intervalo mínimo entre atendimentos;
+//   atendimento cancelado pelo cliente volta, mas a falta de confirmação consome; cancelar o plano com atendimento adiantado deixa dívida que trava um plano novo.
 import { STATUS } from './rules.js';
 import { DIA, MESES, startOfDay, ymd } from './time.js';
 import { limparTexto } from './texto.js';
@@ -18,13 +18,14 @@ export const MAX_PEDIDOS_ABERTOS = 30; // pedidos pelo link aguardando o dono
 export const CORTES_MAX = 31;
 export const ADIANTA_PADRAO = 1;
 export const ADIANTA_MAX = 3;
-export const ACUMULO_PADRAO = 2; // meses de cortes que podem acumular
+export const ACUMULO_PADRAO = 2; // meses de atendimentos que podem acumular
 export const ACUMULO_MAX = 6;
-export const INTERVALO_PADRAO = 3; // dias mínimos entre dois cortes do mesmo plano
+export const INTERVALO_PADRAO = 3; // dias mínimos entre dois atendimentos do mesmo plano
 export const INTERVALO_MAX = 30;
 export const MESES_A_FRENTE = 3; // até quantos meses adiante a mensalidade pode ser registrada
 export const MAX_FIXOS = 3;
 export const DIAS_FIXOS_A_FRENTE = 14; // o horário fixo vira agendamento com esta antecedência
+export const VALIDADE_MAX = 24; // meses de validade do plano (0 = sem prazo)
 export const ATRASO_ZERA_MESES = 2; // meses seguidos sem pagar zeram o saldo acumulado
 export const SITUACAO = { pendente: 'Aguardando pagamento', ativa: 'Ativa', cancelada: 'Encerrada' };
 
@@ -49,7 +50,10 @@ export function montarPlano(s, d, atual) {
   const preco = Number(d.preco);
   if (!Number.isFinite(preco) || preco <= 0 || preco > 99999) erros.push('Informe o valor mensal do plano.');
   const cortes = Number(d.cortes);
-  if (!Number.isInteger(cortes) || cortes < 1 || cortes > CORTES_MAX) erros.push(`Cortes por mês: de 1 a ${CORTES_MAX}.`);
+  if (!Number.isInteger(cortes) || cortes < 1 || cortes > CORTES_MAX) erros.push(`Atendimentos por mês: de 1 a ${CORTES_MAX}.`);
+  const pids = d.produtoIds === undefined || d.produtoIds === null ? [] : d.produtoIds;
+  if (!Array.isArray(pids) || pids.length > 10 || new Set(pids).size !== pids.length) erros.push('Escolha até 10 produtos incluídos, sem repetir.');
+  else if (pids.some((id) => typeof id !== 'string' || !(s.materiais || []).some((x) => x.id === id && x.tipo === 'produto' && x.ativo !== false))) erros.push('Produto do plano não encontrado.');
   const ids = Array.isArray(d.servicoIds) ? d.servicoIds : [];
   if (!ids.length || ids.length > 10 || new Set(ids).size !== ids.length) erros.push('Escolha de 1 a 10 serviços que o plano inclui, sem repetir.');
   else if (ids.some((id) => typeof id !== 'string' || !s.servicos.some((x) => x.id === id && !x.combo))) erros.push('Serviço do plano não encontrado.');
@@ -59,18 +63,22 @@ export function montarPlano(s, d, atual) {
     if (!Number.isInteger(n) || n < min || n > max) { erros.push(`${rot}: de ${min} a ${max}.`); return padrao; }
     return n;
   };
-  const adianta = inteiro(d.adianta, ADIANTA_PADRAO, 0, ADIANTA_MAX, 'Cortes a mais permitidos');
+  const adianta = inteiro(d.adianta, ADIANTA_PADRAO, 0, ADIANTA_MAX, 'Atendimentos a mais permitidos');
   const acumuloMeses = inteiro(d.acumuloMeses, ACUMULO_PADRAO, 1, ACUMULO_MAX, 'Meses de acúmulo');
-  const intervaloDias = inteiro(d.intervaloDias, INTERVALO_PADRAO, 0, INTERVALO_MAX, 'Intervalo entre cortes (dias)');
+  const intervaloDias = inteiro(d.intervaloDias, INTERVALO_PADRAO, 0, INTERVALO_MAX, 'Intervalo entre atendimentos (dias)');
+  const validadeMeses = inteiro(d.validadeMeses, 0, 0, VALIDADE_MAX, 'Validade (meses)');
   if (erros.length) return { ok: false, erros };
-  return { ok: true, dados: { nome, descricao: limparTexto(String(d.descricao ?? ''), 200).trim(), preco: r2(preco), cortes, servicoIds: [...ids], adianta, acumuloMeses, intervaloDias, ativo: d.ativo !== false } };
+  return { ok: true, dados: { nome, descricao: limparTexto(String(d.descricao ?? ''), 200).trim(), observacoes: limparTexto(String(d.observacoes ?? ''), 300).trim(), produtoIds: [...pids], validadeMeses, preco: r2(preco), cortes, servicoIds: [...ids], adianta, acumuloMeses, intervaloDias, ativo: d.ativo !== false } };
 }
 
 // Cópia do plano como era na hora da contratação: mudar o plano depois não mexe em quem já assinou.
-export const fotoDoPlano = (p) => ({ nome: p.nome, preco: p.preco, cortes: p.cortes, servicoIds: [...p.servicoIds], adianta: p.adianta, acumuloMeses: p.acumuloMeses, intervaloDias: p.intervaloDias });
+export const fotoDoPlano = (p) => ({ nome: p.nome, preco: p.preco, cortes: p.cortes, servicoIds: [...p.servicoIds], produtoIds: [...(p.produtoIds || [])], validadeMeses: p.validadeMeses || 0, adianta: p.adianta, acumuloMeses: p.acumuloMeses, intervaloDias: p.intervaloDias });
+
+// Último mês em que o plano vale (validade em meses a partir do mês de início); sem validade, null.
+export const fimDoPlano = (as) => (as.plano.validadeMeses > 0 && as.inicioMes ? somaMeses(as.inicioMes, as.plano.validadeMeses - 1) : null);
 
 // ---------- uso e cota ----------
-// Corte gasto: qualquer agendamento do plano que não foi cancelado. Cancelado devolve o corte, menos a falta de confirmação de um horário que não nasceu do link
+// Atendimento gasto: qualquer agendamento do plano que não foi cancelado. Cancelado devolve o atendimento, menos a falta de confirmação de um horário que não nasceu do link
 // (o cliente deixou de confirmar; no link quem não confirmou foi o estabelecimento).
 export const consomeCorte = (a) => a.status !== STATUS.CANCELADO || (a.motivoCancelamento === 'falta_confirmacao' && a.origem !== 'link');
 export const usosDaAssinatura = (s, as) => (s.agendamentos || []).filter((a) => a.planoUso && a.planoUso.assinaturaId === as.id && consomeCorte(a));
@@ -108,9 +116,9 @@ export function extrato(s, as, agora, { extras = [], ignoreId = null } = {}) {
   return { linhas, saldo: linhas.length ? linhas[linhas.length - 1].saldoFim : 0, mesAtual };
 }
 
-// O que o cliente (ou o dono) vê agora: cortes que restam, quantos pode ainda pedir a mais e até quando está pago.
+// O que o cliente (ou o dono) vê agora: atendimentos que restam, quantos pode ainda pedir a mais e até quando está pago.
 export function saldoAtual(s, as, agora) {
-  const base = { assinaturaId: as.id, planoNome: as.plano.nome, situacao: as.status, cortesPorMes: as.plano.cortes, mes: mesDe(agora) };
+  const base = { validoAte: fimDoPlano(as), assinaturaId: as.id, planoNome: as.plano.nome, situacao: as.status, cortesPorMes: as.plano.cortes, mes: mesDe(agora) };
   if (as.status !== 'ativa') return { ...base, pagoMes: false, restantes: 0, usadosNoMes: 0, maisPermitidos: 0, pagoAte: null, atrasado: false };
   const ex = extrato(s, as, agora);
   const linha = ex.linhas.filter((l) => mi(l.mes) <= mi(ex.mesAtual)).pop() || ex.linhas[0];
@@ -125,13 +133,15 @@ export function saldoAtual(s, as, agora) {
   };
 }
 
-// Dá para agendar mais um corte nesse plano em `inicio`? Devolve { ok, erro } ou { ok, adiantado, aviso }.
+// Dá para agendar mais um atendimento nesse plano em `inicio`? Devolve { ok, erro } ou { ok, adiantado, aviso }.
 export function podeUsar(s, as, { inicio, agora, ignoreId = null }) {
   if (!as || as.status !== 'ativa') return { ok: false, erro: 'Esse plano não está ativo.' };
   if (!Number.isFinite(inicio)) return { ok: false, erro: 'Escolha um dia e um horário.' };
   if (!pagamentosValidos(as).length) return { ok: false, erro: 'A mensalidade do plano ainda não foi registrada.' };
   const mes = mesDe(inicio);
   if (mi(mes) < mi(as.inicioMes)) return { ok: false, erro: `O plano começa em ${rotuloMes(as.inicioMes)}.` };
+  const fim = fimDoPlano(as);
+  if (fim && mi(mes) > mi(fim)) return { ok: false, erro: `O plano vale até ${rotuloMes(fim)}.` };
   const dias = as.plano.intervaloDias;
   if (dias > 0) {
     const dia = startOfDay(inicio);
@@ -142,7 +152,7 @@ export function podeUsar(s, as, { inicio, agora, ignoreId = null }) {
   const ruim = ex.linhas.find((l) => l.estourou);
   if (ruim) {
     if (!ruim.pago) return { ok: false, erro: `Os cortes do plano acabaram. A mensalidade de ${rotuloMes(ruim.mes)} ainda não foi registrada.` };
-    if (ruim.mes !== mes) return { ok: false, erro: `Esse horário deixaria o plano sem cortes em ${rotuloMes(ruim.mes)}.` };
+    if (ruim.mes !== mes) return { ok: false, erro: `Esse horário deixaria o plano sem atendimentos em ${rotuloMes(ruim.mes)}.` };
     return { ok: false, erro: `Os cortes do plano em ${rotuloMes(mes)} acabaram.` };
   }
   const linha = ex.linhas.find((l) => l.mes === mes);
@@ -151,7 +161,7 @@ export function podeUsar(s, as, { inicio, agora, ignoreId = null }) {
   return { ok: true, adiantado, aviso: adiantado ? `Esse corte foi adiantado do mês seguinte${proximo ? ` (em ${rotuloMes(proximo.mes)} restam ${Math.max(0, proximo.saldoFim)})` : ''}.` : '' };
 }
 
-// Dívida de quem encerrou o plano devendo corte adiantado: os usos que passaram do que foi pago.
+// Dívida de quem encerrou o plano devendo atendimento adiantado: os usos que passaram do que foi pago.
 export function dividaAoEncerrar(s, as, agora) {
   const ex = extrato(s, as, agora);
   return Math.max(0, -ex.saldo);
@@ -167,7 +177,7 @@ export function usoParaAgendamento(s, { assinaturaId, clienteId, servicoIds, ini
   if (!coberturaDoPlano(as.plano, servicoIds).length) return { ok: false, erro: `Nenhum dos serviços escolhidos faz parte do plano ${as.plano.nome}.` };
   const pu = podeUsar(s, as, { inicio, agora, ignoreId });
   if (!pu.ok) return { ok: false, erro: pu.erro };
-  return { ok: true, uso: { assinaturaId: as.id, planoNome: as.plano.nome, incluidos: [...as.plano.servicoIds], em: agora }, aviso: pu.aviso, adiantado: pu.adiantado };
+  return { ok: true, uso: { assinaturaId: as.id, planoNome: as.plano.nome, incluidos: [...as.plano.servicoIds], produtosIncluidos: [...(as.plano.produtoIds || [])], em: agora }, aviso: pu.aviso, adiantado: pu.adiantado };
 }
 
 // Itens (de `itensDoAgendamento`) que o plano cobre: saem de graça. O que não é do plano é cobrado normalmente.
@@ -188,6 +198,7 @@ export function planosPublicos(s) {
   return (s.planos || []).filter((p) => p.ativo !== false).map((p) => ({
     id: p.id, nome: p.nome, descricao: p.descricao || '', preco: p.preco, cortes: p.cortes,
     servicos: p.servicoIds.map((id) => s.servicos.find((x) => x.id === id)?.nome).filter(Boolean),
+    produtos: (p.produtoIds || []).map((id) => (s.materiais || []).find((x) => x.id === id)?.nome).filter(Boolean), validadeMeses: p.validadeMeses || 0,
   }));
 }
 

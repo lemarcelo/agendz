@@ -159,7 +159,7 @@ test('API: pedido pelo link só chega ao dono; isca, repetição e plano desativ
   const p = umPlano().plano;
   auth.logout();
   assert.equal(publico.planos().planos.length, 1);
-  assert.deepEqual(Object.keys(publico.planos().planos[0]).sort(), ['cortes', 'descricao', 'id', 'nome', 'preco', 'servicos']);
+  assert.deepEqual(Object.keys(publico.planos().planos[0]).sort(), ['cortes', 'descricao', 'id', 'nome', 'preco', 'produtos', 'servicos', 'validadeMeses']);
   assert.equal(publico.pedirPlano({ nome: 'Joana', telefone: '(51) 98888-7777', planoId: p.id, site: 'robo' }).ok, false, 'isca preenchida');
   assert.ok(publico.pedirPlano({ nome: 'Joana', telefone: '(51) 98888-7777', planoId: p.id }).ok);
   assert.ok(publico.pedirPlano({ nome: 'Joana', telefone: '(51) 98888-7777', planoId: p.id }).ok, 'repetido: mesma resposta');

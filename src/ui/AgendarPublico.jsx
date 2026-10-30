@@ -1,9 +1,9 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:44e62ebcd1 */
 import { caminhoHttps } from '../domain/localizacao.js';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { MODO_DEMO, publico, store } from '../services/api.js';
 import { DIAS_CURTOS, fmtDayLong, fmtHM, fmtMoney, maiuscula1, startOfDay, ymd } from '../domain/time.js';
-import { formatarTelefone } from '../domain/rules.js';
+import { formatarTelefone, telefoneBrasileiro } from '../domain/rules.js';
 import { EXEMPLO_PORTE, formatarPlaca, placaValida, resumoVeiculo, tipoPlaca } from '../domain/veiculos.js';
 import { Aviso, Btn, Campo, Icon } from './common.jsx';
 import { LogoMarca, RodapePlataforma } from './Marca.jsx';
@@ -92,6 +92,7 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
   const [enviando, setEnviando] = useState(false);
   const [feito, setFeito] = useState(null);
   const [lemb, setLemb] = useState(null);
+  const [usaPlano, setUsaPlano] = useState(false); // o telefone é de quem tem plano com atendimento para este horário (só sim ou não)
   const servicos = cfg.servicos.filter((x) => srv.includes(x.id));
   const total = servicos.reduce((t, x) => t + preco(x), 0);
   const duracao = servicos.reduce((t, x) => t + minutos(x), 0);
@@ -108,12 +109,20 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
   const veiculoOk = placaOk && modelo.trim().length >= 2 && !!porte;
   const rotuloPorte = (cfg.portes || []).find((x) => x.id === porte)?.nome || '';
 
+  // Avisa antes de pedir: "este horário usa um atendimento do seu plano". Só consulta com o telefone completo; o servidor responde apenas sim ou não.
+  useEffect(() => {
+    setUsaPlano(false);
+    if (etapa !== 3 || !escolha || !telefoneBrasileiro(tel)) return;
+    const r = publico.usoDoPlano({ telefone: tel, servicoIds: srv, inicio: escolha.inicio });
+    if (r.ok && r.usaPlano) setUsaPlano(true);
+  }, [etapa, tel, srv, escolha]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const enviar = () => {
     setErro(''); setEnviando(true);
     const r = publico.agendar({ nome, telefone: tel, ...(usaVeiculo ? { placa, marca, modelo, cor, porte } : {}), servicoIds: srv, profissionalId: escolha?.profissionalId || barb, inicio: escolha?.inicio, site: isca });
     setEnviando(false);
     if (!r.ok) { setErro(r.erros[0]); if (/ocupado/.test(r.erros[0])) { setEscolha(null); setEtapa(2); } return; }
-    if (r.token) setToken(r.token); setFeito({ semTelefone: !r.token, inicio: escolha.inicio, profissionalId: escolha.profissionalId, servicos: servicos.map((x) => x.nome), veiculo: usaVeiculo ? `${modelo.trim()} · ${formatarPlaca(placa)}` : '' });
+    if (r.token) setToken(r.token); setFeito({ usouPlano: !!r.usouPlano, semTelefone: !r.token, inicio: escolha.inicio, profissionalId: escolha.profissionalId, servicos: servicos.map((x) => x.nome), veiculo: usaVeiculo ? `${modelo.trim()} · ${formatarPlaca(placa)}` : '' });
     setEtapa(4);
   };
   const lembrar = (quer) => { const r = publico.lembretes(token, quer); if (r.ok) setLemb(quer); else setErro(r.erros[0]); };
@@ -125,6 +134,7 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
         <div className="pub-ok"><Icon n="check" size={26} stroke={3} /></div>
         <h2>Pedido enviado</h2>
         <p>{feito.servicos.join(', ')}{feito.veiculo ? <> para <b>{feito.veiculo}</b></> : null} com <b>{nomeBarb(feito.profissionalId)}</b><br /><b>{fmtDayLong(feito.inicio)}, {fmtHM(feito.inicio)}</b></p>
+        {feito.usouPlano && <p data-testid="pub-feito-plano"><Icon n="ticket" size={14} /> Este horário usa um atendimento do seu plano.</p>}
         <p className="muted">{!feito.semTelefone ? `${cfg.nome} vai confirmar o seu horário. Você acompanha em “Meus agendamentos”.` : `${cfg.nome} vai ver o seu pedido e confirmar o horário. Como não deixou telefone, a loja não consegue avisar você: guarde o dia e a hora.`}</p>
         {!feito.semTelefone && <div className="pub-pergunta" data-testid="pub-lembretes-pergunta">
           <b>Quer receber lembretes?</b>
@@ -237,6 +247,7 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
             <span>{fmtDayLong(escolha.inicio)}, {fmtHM(escolha.inicio)} · {nomeBarb(escolha.profissionalId)}</span>
             <span className="muted">{multiDia ? 'Vários dias' : dur(duracao)} · {fmtMoney(total)}</span>
           </div>
+          {usaPlano && <p className="pub-aviso-plano" role="status" data-testid="pub-usa-plano"><Icon n="ticket" size={14} /> Este horário usa um atendimento do seu plano.</p>}
           <form className="pub-form" onSubmit={(e) => { e.preventDefault(); enviar(); }} noValidate>
             <Campo rotulo="Nome"><input value={nome} onChange={(e) => setNome(e.target.value)} maxLength={60} autoComplete="name" data-testid="pub-nome" /></Campo>
             <Campo rotulo={cfg.exigeTelefone === false ? 'Telefone (WhatsApp), se quiser' : 'Telefone (WhatsApp)'} dica={cfg.exigeTelefone === false ? 'Opcional. Com telefone avisamos do seu horário e você acompanha por aqui; sem ele, só a loja vê o seu pedido.' : 'Com DDD. Só usamos para falar do seu horário.'}><input type="tel" inputMode="tel" value={tel} onChange={(e) => setTel(formatarTelefone(e.target.value))} maxLength={16} autoComplete="tel" placeholder="(51) 99999-9999" data-testid="pub-telefone" /></Campo>

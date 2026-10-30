@@ -766,12 +766,14 @@ export const planos = {
   // POST /planos  |  PUT /planos/{id}
   salvar(entrada) {
     const n = exigir('planos'); if (n) return n;
-    const d = pegar(entrada, ['id', 'nome', 'descricao', 'preco', 'cortes', 'servicoIds', 'adianta', 'acumuloMeses', 'intervaloDias', 'ativo']);
+    const d = pegar(entrada, ['id', 'nome', 'descricao', 'observacoes', 'preco', 'cortes', 'servicoIds', 'produtoIds', 'validadeMeses', 'adianta', 'acumuloMeses', 'intervaloDias', 'ativo']);
     if (d.id === undefined || d.id === null || d.id === '') delete d.id; else if (!idOk(d.id)) return erro('Plano inválido.');
     if (!texto(d.nome, 60)) return erro('Dê um nome ao plano (até 60 letras).');
     if (d.descricao !== undefined && !texto(String(d.descricao), 200, true)) return erro('A descrição pode ter até 200 letras.');
-    for (const k of ['preco', 'cortes', 'adianta', 'acumuloMeses', 'intervaloDias']) if (d[k] !== undefined && d[k] !== null && d[k] !== '' && !finito(d[k])) return erro('Número inválido em ' + k + '.');
+    for (const k of ['preco', 'cortes', 'adianta', 'acumuloMeses', 'intervaloDias', 'validadeMeses']) if (d[k] !== undefined && d[k] !== null && d[k] !== '' && !finito(d[k])) return erro('Número inválido em ' + k + '.');
     if (!(Array.isArray(d.servicoIds) && d.servicoIds.length <= 10 && d.servicoIds.every(idOk))) return erro('Escolha de 1 a 10 serviços.');
+    if (d.produtoIds !== undefined && !(Array.isArray(d.produtoIds) && d.produtoIds.length <= 10 && d.produtoIds.every(idOk))) return erro('Escolha até 10 produtos.');
+    if (d.observacoes !== undefined && !texto(String(d.observacoes), 300)) return erro('As observações podem ter até 300 letras.');
     if (d.ativo !== undefined && typeof d.ativo !== 'boolean') return erro('Situação inválida.');
     return mutate((s, agora) => AS.salvarPlano(s, { ...d, agora }, autor()), { metodo: d.id ? 'PUT' : 'POST', rota: d.id ? `/planos/${d.id}` : '/planos' });
   },
@@ -809,6 +811,14 @@ export const planos = {
   },
   // POST /assinaturas/{id}/quitar
   quitar(id) { return exigir('planos') || (!idOk(id) ? erro('Assinatura inválida.') : mutate((s, agora) => AS.quitarDivida(s, id, autor(), agora), { metodo: 'POST', rota: `/assinaturas/${id}/quitar` })); },
+  // POST /assinaturas/{id}/fixos  ({ fixos: [{ dia 0-6, hm 'HH:MM', profissionalId, servicoIds }] })  — até 3 horários fixos por semana; troca a lista inteira
+  definirFixos(id, entrada) {
+    const n = exigir('planos'); if (n) return n;
+    if (!idOk(id)) return erro('Assinatura inválida.');
+    const d = pegar(entrada, ['fixos']);
+    if (d.fixos !== undefined && !Array.isArray(d.fixos)) return erro('Horários fixos inválidos.');
+    return mutate((s, agora) => AS.definirFixos(s, id, d.fixos || [], autor(), agora), { metodo: 'POST', rota: `/assinaturas/${id}/fixos` });
+  },
   // POST /planos/pedidos/{id}/aceitar  |  /recusar
   aceitarPedido(id) { return exigir('planos') || (!idOk(id) ? erro('Pedido inválido.') : mutate((s, agora) => AS.aceitarPedido(s, id, autor(), agora), { metodo: 'POST', rota: `/planos/pedidos/${id}/aceitar` })); },
   recusarPedido(id) { return exigir('planos') || (!idOk(id) ? erro('Pedido inválido.') : mutate((s, agora) => AS.recusarPedido(s, id, autor(), agora), { metodo: 'POST', rota: `/planos/pedidos/${id}/recusar` })); },
@@ -1367,7 +1377,15 @@ export const publico = {
     if (estourou(`pp:${tel}`, 3, 15 * 60000) || estourou('pp:*', 60, 60000)) return erro(MUITAS);
     return mutate((s, agora) => AS.pedirPlanoPorLink(s, d, agora), P('/publico/planos/pedidos'));
   },
-  // GET /publico/planos/saldo?telefone=  (só quantos cortes restam por plano; resposta genérica se não houver; 5 consultas por telefone a cada 15 min)
+  // GET /publico/planos/uso?telefone=&servicoIds=&inicio=  (a tela do cliente avisa "este horário usa um atendimento do seu plano" antes de pedir; só sim ou não)
+  usoDoPlano(entrada) {
+    const d = pegar(entrada, ['telefone', 'servicoIds', 'inicio']);
+    if (!texto(d.telefone, 30) || !Array.isArray(d.servicoIds) || d.servicoIds.length > 10 || !d.servicoIds.every((x) => texto(x, 60)) || !finito(d.inicio)) return erro('Dados inválidos.');
+    const tel = R.telefoneNacional(d.telefone);
+    if (estourou(`pu:${tel}`, 10, 15 * 60000) || estourou('pu:*', 120, 60000)) return erro(MUITAS);
+    return AS.usoDoPlanoPorTelefone(state, { telefone: d.telefone, servicoIds: d.servicoIds, inicio: Number(d.inicio) }, now());
+  },
+  // GET /publico/planos/saldo?telefone=  (só quantos atendimentos restam por plano; resposta genérica se não houver; 5 consultas por telefone a cada 15 min)
   saldoDoPlano(telefone) {
     if (!texto(telefone, 30)) return erro('Informe o telefone com DDD.');
     const tel = R.telefoneNacional(telefone);

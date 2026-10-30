@@ -5,7 +5,7 @@ import {
   ATIVOS, STATUS, comissaoJaPaga, ERRO_COMISSAO_PAGA, formaEfetiva, formatarTelefone, acharConflitos, cadastroPorCpf, somenteDigitos, telefoneNacional, telefoneDoCanal, errosServicoIds, limparTexto, duracaoMin, exigeConfirmacaoServico, identificarCliente, janelaOcupada,
   montarPlano, montarLembretes, notificacoesEfetivas, ocupadoMin, servicosPorIds, servicosDoAg, validarHorario, congelarComissoes, ocupacaoDe, retiradaDe, nomeBox,
 } from './rules.js';
-import { podeUsar, usoParaAgendamento } from './planos.js';
+import { assinaturaDoCliente, podeUsar, usoParaAgendamento } from './planos.js';
 import { LIMITE_VEICULOS, fotoDoVeiculo, limparVeiculo, resumoVeiculo, veiculoPorPlaca } from './veiculos.js';
 import { fmtDate, fmtHM, fmtMoney, HORA, MIN, startOfDay } from './time.js';
 import { consumoDoAgendamento, r2, r3, totalAgendamento } from './reports.js';
@@ -143,13 +143,19 @@ export function criarAgendamento(s, dados, autor, agora) {
   if (!cliente && !semCliente) return { ok: false, erros: ['Escolha o cliente.'] };
   const rv = resolverVeiculo(s, cliente, dados);
   if (!rv.ok) return { ok: false, erros: rv.erros };
-  const v = validarHorario(s, { profissionalId, inicio, servicoIds, porte: rv.veiculo?.porte, boxId, encaixe, origem, agora });
+  const v = validarHorario(s, { profissionalId, inicio, servicoIds, porte: rv.veiculo?.porte, boxId, encaixe, origem, agora, clienteId: cliente ? clienteId : undefined });
   if (v.erros.length) return { ok: false, erros: v.erros };
   let usoPlano = null;
   if (dados.assinaturaId) {
     const up = usoParaAgendamento(s, { assinaturaId: dados.assinaturaId, clienteId, servicoIds, inicio, agora });
     if (!up.ok) return { ok: false, erros: [up.erro] };
     usoPlano = up;
+  } else if (cliente && (origem === 'link' || origem === 'whatsapp')) {
+    // O próprio cliente com plano ativo agenda (link ou WhatsApp): o horário gasta 1 corte do plano quando algum serviço é coberto e as travas deixam (saldo, intervalo, adiantar).
+    // Sem corte (ou serviço fora do plano) o agendamento segue normal, pelo preço normal; nunca é recusado por causa do plano.
+    const ativa = assinaturaDoCliente(s, clienteId);
+    const up = ativa ? usoParaAgendamento(s, { assinaturaId: ativa.id, clienteId, servicoIds, inicio, agora }) : null;
+    if (up && up.ok) usoPlano = up;
   }
   const plano = montarPlano({ inicio, servicos: v.servicos, estab: s.estabelecimento, agora });
   const semNotificacoes = notificacoesEfetivas(v.servicos, s.estabelecimento).lista.length === 0;
@@ -170,7 +176,7 @@ export function criarAgendamento(s, dados, autor, agora) {
   registrar(s, a, autor, 'criação', null, `${nomesServicos(s, a)} ${a.veiculo ? `(${resumoVeiculo(a.veiculo)}) ` : ''}em ${fmtDate(inicio)} às ${fmtHM(inicio)}`, agora);
   s.agendamentos.push(a);
   if (status === STATUS.CONFIRMADO || status === STATUS.CONCLUIDO) cancelarPendentesConflitantes(s, a, agora);
-  if (usoPlano) registrar(s, a, autor, 'plano', null, `Usa 1 corte do plano ${usoPlano.uso.planoNome}${usoPlano.aviso ? ` (${usoPlano.aviso})` : ''}`, agora);
+  if (usoPlano) registrar(s, a, autor, 'plano', null, `Usa 1 atendimento do plano ${usoPlano.uso.planoNome}${usoPlano.aviso ? ` (${usoPlano.aviso})` : ''}`, agora);
   for (const g of aposCriar) g(s, a, autor, agora);
   tick(s, agora);
   return { ok: true, agendamento: a, avisos: { pendentes: v.pendentes, confirmados: v.confirmados }, ...(usoPlano ? { plano: { nome: usoPlano.uso.planoNome, aviso: usoPlano.aviso, adiantado: usoPlano.adiantado } } : {}) };
@@ -474,7 +480,7 @@ export function registrarAtendimentoLocal(s, { profissionalId, servicoIds, nome,
     if (fechado) a.comissaoEm = agora;
     registrar(s, a, autor, 'lançamento retroativo', null, `${motivoRetro}${fechado ? ' · comissão entra no próximo pagamento (o período já foi pago)' : ''}`, agora);
   }
-  if (usoPlano) registrar(s, a, autor, 'plano', null, `Usa 1 corte do plano ${usoPlano.uso.planoNome}${usoPlano.aviso ? ` (${usoPlano.aviso})` : ''}`, agora);
+  if (usoPlano) registrar(s, a, autor, 'plano', null, `Usa 1 atendimento do plano ${usoPlano.uso.planoNome}${usoPlano.aviso ? ` (${usoPlano.aviso})` : ''}`, agora);
   s.agendamentos.push(a);
   tick(s, agora);
   return { ok: true, agendamento: a, ...(usoPlano ? { plano: { nome: usoPlano.uso.planoNome, aviso: usoPlano.aviso, adiantado: usoPlano.adiantado } } : {}) };
@@ -550,7 +556,10 @@ function incluirProduto(s, a, materialId, qtd, vendedorId) {
   if (m.estoque < falta) return `Estoque insuficiente de ${m.nome} (restam ${m.estoque}).`;
   // percentual congelado na linha: o do produto (se tem) e, senão, o da pessoa que vendeu (Equipe > Comissão sobre produtos); nenhum dos dois = sem comissão
   const pctVendedor = Number((s.usuarios.find((u) => u.id === vend) || {}).comissaoProdutoPct);
-  if (ja) ja.qtd = total; else a.produtos.push({ materialId: m.id, qtd: n, preco: Number(m.preco) || 0, pct: Number(m.comissaoPct) > 0 ? Number(m.comissaoPct) : pctVendedor > 0 ? pctVendedor : 0, vendedorId: vend });
+  // Produto que o plano inclui: 1 unidade por atendimento do plano sai de graça (o preço da linha vira 0 e o de tabela fica guardado, como o desconto do serviço;
+  // a comissão, que é sobre o valor da linha, acompanha). Passou de 1 unidade, a linha toda volta ao preço normal. O estoque baixa do mesmo jeito.
+  const coberto = !!a.planoUso && (a.planoUso.produtosIncluidos || []).includes(m.id) && total === 1;
+  if (ja) { ja.qtd = total; if (ja.plano && total > 1) { ja.preco = ja.precoTabela; delete ja.plano; delete ja.precoTabela; } } else a.produtos.push({ materialId: m.id, qtd: n, preco: coberto ? 0 : Number(m.preco) || 0, ...(coberto ? { plano: true, precoTabela: Number(m.preco) || 0 } : {}), pct: Number(m.comissaoPct) > 0 ? Number(m.comissaoPct) : pctVendedor > 0 ? pctVendedor : 0, vendedorId: vend });
   return null;
 }
 

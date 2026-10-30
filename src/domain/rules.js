@@ -1,6 +1,7 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:672c44b4ea */
 // Regras de negócio puras (sem React, sem armazenamento). Candidatas diretas à migração para o Spring Boot.
-import { addDays, DIA, HORA, MIN, parseHM, startOfDay, tsAt } from './time.js';
+import { addDays, DIA, dow, HORA, MIN, parseHM, startOfDay, tsAt } from './time.js';
+import { ehDoFixo } from './fixos.js';
 import { blocosDeTrabalho, cabeEm, faixasDoProfissional, proximaAbertura } from './schedule.js';
 import { cpfValido } from './pix.js';
 import { limparTexto } from './texto.js';
@@ -205,7 +206,28 @@ export function escolherBox(state, ocup, { boxId, preferido, ignoreId } = {}) {
 
 // Valida data e hora de um agendamento. Erros bloqueiam; avisos só informam. O preço e a duração dependem do porte do veículo.
 // Devolve também o box escolhido (`boxId`), a `retirada` e os `dias` que o carro fica.
-export function validarHorario(state, { profissionalId, inicio, servicoIds, porte, boxId, boxPreferido, ignoreId, encaixe = false, origem = 'painel', agora }) {
+// Horário fixo de assinante (plano): quem não é o assinante nunca toma esse horário, nem antes de o fixo virar agendamento (ele só nasce com DIAS_FIXOS_A_FRENTE de antecedência).
+// Fixo que já virou agendamento vale pelo próprio agendamento (conflito normal); dia em que o fixo foi cancelado fica livre. Só a equipe, marcando encaixe, passa por cima.
+function fixoReservado(state, { profissionalId, ocup, clienteId, agora }) {
+  const ativas = (state.assinaturas || []).filter((as) => as.status === 'ativa' && as.clienteId !== clienteId && (as.fixos || []).length);
+  if (!ativas.length) return false;
+  const dias = new Set(ocup.profissional.map(([a]) => startOfDay(a)));
+  for (const as of ativas) for (const fx of as.fixos) {
+    if (fx.profissionalId !== profissionalId) continue;
+    for (const dia of dias) {
+      if (dow(dia) !== fx.dia) continue;
+      const t = tsAt(dia, fx.hm);
+      if (agora && t <= agora) continue;
+      if (state.agendamentos.some((x) => ehDoFixo(x, fx, t))) continue;
+      const porte = ((state.clientes.find((c) => c.id === as.clienteId) || {}).veiculos || []).find((v) => v.id === fx.veiculoId)?.porte; // tipo com veículo: a janela é a do porte dele
+      const o = ocupacao(state, { profissionalId, inicio: t, servicoIds: fx.servicoIds, porte });
+      if (o && o.profissional.some(([a, b]) => ocup.profissional.some(([c, d]) => sobrepoe(a, b, c, d)))) return true;
+    }
+  }
+  return false;
+}
+
+export function validarHorario(state, { profissionalId, inicio, servicoIds, porte, boxId, boxPreferido, ignoreId, encaixe = false, origem = 'painel', agora, clienteId }) {
   const erros = [];
   const cliente = origem === 'whatsapp' || origem === 'link'; // o próprio cliente agenda: prazos de cliente
   const e0 = errosServicoIds(state, servicoIds);
@@ -232,6 +254,8 @@ export function validarHorario(state, { profissionalId, inicio, servicoIds, port
     if (inicio < agora + min * HORA) erros.push(`Esse serviço exige ${min} h de antecedência.`);
   }
   const conflitos = acharConflitos(state, { profissionalId, ocup, ignoreId });
+  const dono = clienteId ?? (ignoreId ? state.agendamentos.find((x) => x.id === ignoreId)?.clienteId : undefined); // remarcar o próprio horário não esbarra no próprio fixo
+  if ((!encaixe || cliente) && fixoReservado(state, { profissionalId, ocup, clienteId: dono, agora })) erros.push('Esse horário é fixo de um cliente com plano. Escolha outro horário.');
   out.pendentes = conflitos.filter((c) => c.status === STATUS.A_CONFIRMAR);
   out.confirmados = conflitos.filter((c) => c.status !== STATUS.A_CONFIRMAR);
   if (!encaixe && out.confirmados.length) erros.push('Esse horário já está confirmado para outro cliente. Para forçar, marque como encaixe.');
