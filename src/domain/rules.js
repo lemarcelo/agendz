@@ -186,6 +186,9 @@ export function acharConflitos(state, { profissionalId, boxId, inicio, fim, ocup
 }
 
 export const boxesAtivos = (state) => (state.estabelecimento.boxes || []).filter((b) => b.ativo !== false);
+// Estética sem nenhum box ativo (v120): não se atende, não se agenda e o link do cliente não abre até cadastrar um box.
+export const semBoxAtivo = (state) => cap(state.estabelecimento, 'usaRecursoFisico') && boxesAtivos(state).length === 0;
+export const ERRO_SEM_BOX = 'Cadastre ao menos um box (Estabelecimento > Boxes) antes de atender.';
 export const nomeBox = (state, id) => (state.estabelecimento.boxes || []).find((b) => b.id === id)?.nome || '';
 // Box para o atendimento: o pedido (se estiver livre), senão o preferido (o que já tinha), senão o primeiro livre. Box nunca é "forçado": dois carros não ocupam o mesmo.
 export function escolherBox(state, ocup, { boxId, preferido, ignoreId } = {}) {

@@ -3,7 +3,7 @@
 // altera e devolve um resultado. Espelha os casos de uso do futuro back-end.
 import {
   ATIVOS, STATUS, comissaoJaPaga, ERRO_COMISSAO_PAGA, formaEfetiva, formatarTelefone, acharConflitos, cadastroPorCpf, somenteDigitos, telefoneNacional, telefoneDoCanal, errosServicoIds, limparTexto, duracaoMin, exigeConfirmacaoServico, identificarCliente, janelaOcupada,
-  montarPlano, montarLembretes, notificacoesEfetivas, ocupadoMin, servicosPorIds, servicosDoAg, validarHorario, congelarComissoes, ocupacaoDe, retiradaDe, nomeBox,
+  montarPlano, montarLembretes, notificacoesEfetivas, ocupadoMin, servicosPorIds, servicosDoAg, validarHorario, congelarComissoes, ocupacaoDe, retiradaDe, nomeBox, semBoxAtivo, ERRO_SEM_BOX,
 } from './rules.js';
 import { assinaturaDoCliente, podeUsar, usoParaAgendamento } from './planos.js';
 import { LIMITE_VEICULOS, fotoDoVeiculo, limparVeiculo, resumoVeiculo, veiculoPorPlaca } from './veiculos.js';
@@ -496,6 +496,7 @@ export const camposObrigatorios = (s, tipo) => {
   return Array.isArray(c) ? c : CAMPOS_OBRIGATORIOS_PADRAO[tipo];
 };
 export function atender(s, d, autor, agora) {
+  if (semBoxAtivo(s)) return { ok: false, erros: [ERRO_SEM_BOX] }; // estética sem box ativo: nem atendimento local nem agendamento (v120)
   const ids = Array.isArray(d.servicoIds) ? d.servicoIds : [];
   const produtos = Array.isArray(d.produtos) ? d.produtos : [];
   if (!ids.length && !produtos.length) return { ok: false, erros: ['Escolha ao menos um serviço ou um produto.'] };

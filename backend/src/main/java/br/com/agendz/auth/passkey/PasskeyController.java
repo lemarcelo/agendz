@@ -2,6 +2,7 @@ package br.com.agendz.auth.passkey;
 
 import br.com.agendz.auth.LimiteDeLogin;
 import br.com.agendz.auth.Sessao;
+import br.com.agendz.auth.rede.Rede;
 import br.com.agendz.erro.ErroDeNegocio;
 import br.com.agendz.tenant.Loja;
 import br.com.agendz.tenant.LojaContext;
@@ -41,7 +42,7 @@ public class PasskeyController {
     }
 
     public record Entrada(@NotBlank @Size(max = 64) String desafioId, @NotBlank @Size(max = 2000) String credencialId, @NotBlank @Size(max = 4000) String clientDataJSON,
-                          @NotBlank @Size(max = 4000) String authenticatorData, @NotBlank @Size(max = 1000) String assinatura, @Size(max = 200) String userHandle) {
+                          @NotBlank @Size(max = 4000) String authenticatorData, @NotBlank @Size(max = 1000) String assinatura, @Size(max = 200) String userHandle, Boolean loginAutomatico) {
     }
 
     private final PasskeyService servico;
@@ -63,7 +64,8 @@ public class PasskeyController {
 
     @PostMapping("/api/auth/passkey/entrar")
     public Sessao entrar(@Valid @RequestBody Entrada d, HttpServletRequest req) {
-        return servico.entrar(req.getServerName(), d.desafioId(), d.credencialId(), d.clientDataJSON(), d.authenticatorData(), d.assinatura(), d.userHandle());
+        return servico.entrar(req.getServerName(), d.desafioId(), d.credencialId(), d.clientDataJSON(), d.authenticatorData(), d.assinatura(), d.userHandle(),
+                Rede.ip(req), Boolean.TRUE.equals(d.loginAutomatico()));
     }
 
     @PostMapping("/api/usuarios/me/passkeys/desafio")

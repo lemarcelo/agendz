@@ -20,6 +20,7 @@ import { montarLinkAgendamento } from '../../domain/link-publico.js';
 import { numeroWhatsapp, textoConvite, textoReagendamento } from '../../domain/whatsapp.js';
 import { abrirWhatsapp } from '../whatsapp.js';
 import Atender from './Atender.jsx';
+import AvisoSemBox from '../leve/AvisoSemBox.jsx';
 import { useAtualizacaoAutomatica } from './atualizar.js';
 
 const CHAVE_COR = { a_confirmar: 'amarelo', confirmado: 'azul', concluido: 'verde', cancelado: 'cinza' };
@@ -241,7 +242,7 @@ function AvisoRemarcado({ avisar, aoFechar, aoErro }) {
   );
 }
 
-export default function Agenda({ ehProprio = false, ehDono = false, meuId = '', nomeLoja = '', destaqueIds = [], foco = null, recarregar = 0 }) {
+export default function Agenda({ ehProprio = false, ehDono = false, ehProprietario = false, aoIrBoxes = null, meuId = '', nomeLoja = '', destaqueIds = [], foco = null, recarregar = 0 }) {
   const [modo, setModo] = useState('horarios');
   const [cursor, setCursor] = useState(() => startOfDay(Date.now()));
   const [diasAdiante, setDiasAdiante] = useState(7);
@@ -253,6 +254,7 @@ export default function Agenda({ ehProprio = false, ehDono = false, meuId = '', 
   // Link da página do cliente: o geral (#agendar) ou, para o profissional, o da própria agenda (#agendar-<id>). A loja vem do endereço, então não vai no link.
   // Um clique abre o WhatsApp (aba nova, mensagem pronta; sem await antes, senão o navegador bloqueia) e copia o link como reserva.
   const enviarLink = () => {
+    if (semBox) { setSemBoxAberto(true); return; }
     const base = `${globalThis.location.origin}${globalThis.location.pathname}`;
     const link = montarLinkAgendamento({ base, profissionalId: ehProprio ? meuId : '' });
     const abriu = abrirWhatsapp(textoConvite(nomeLoja, link, localizacaoUrl));
@@ -264,6 +266,9 @@ export default function Agenda({ ehProprio = false, ehDono = false, meuId = '', 
   const [clientes, setClientes] = useState(new Map());
   const [profs, setProfs] = useState([]);
   const [boxes, setBoxes] = useState([]);
+  const [boxesPronto, setBoxesPronto] = useState(false);
+  const [semBoxAberto, setSemBoxAberto] = useState(false); // aviso "falta cadastrar o box" (estética): bloqueia Atender e Link Agenda
+  const semBox = capAtiva('usaRecursoFisico') && boxesPronto && boxes.length === 0;
   const [pendLink, setPendLink] = useState([]); // só o proprietário: o que falta cadastrar para o link do cliente ter horários
   const [trocaForma, setTrocaForma] = useState(null); // agendamento cuja forma de pagamento está sendo trocada (segurar o cartão)
   const [avisoRemarcar, setAvisoRemarcar] = useState(null); // { tel, texto } | { semTelefone }: fica na Agenda porque o cartão pode sair da lista ao mudar de dia
@@ -277,7 +282,7 @@ export default function Agenda({ ehProprio = false, ehDono = false, meuId = '', 
     apiProf.listar().then((r) => { if (r.ok) setProfs(r.profissionais); });
     if (ehDono) apiLink.obter().then((r) => { if (r.ok) setPendLink(r.link.pendencias); });
     apiLocal.obter().then((r) => { if (r.ok) { setLocalizacaoUrl(r.local.localizacaoWhatsappUrl); setLojaInfo(r.local.localizacaoNoWhatsapp ? { endereco: r.local.enderecoTexto, mapaUrl: r.local.localizacaoWhatsappUrl } : { endereco: '', mapaUrl: '' }); } });
-    if (capAtiva('usaRecursoFisico')) apiBoxes.listar().then((r) => { if (r.ok) setBoxes(boxesAtivos(r.boxes)); });
+    if (capAtiva('usaRecursoFisico')) apiBoxes.listar().then((r) => { if (r.ok) { setBoxes(boxesAtivos(r.boxes)); setBoxesPronto(true); } });
   }, []);
 
   const de = modo === 'horarios' ? cursor : weekStart(monthStart(cursor));
@@ -373,8 +378,9 @@ export default function Agenda({ ehProprio = false, ehDono = false, meuId = '', 
         <Btn tamanho="sm" onClick={() => passo(1)} aria-label={modo === 'horarios' ? 'Próximo dia' : 'Próximo mês'} data-testid="agenda-proximo"><Icone n="right" size={15} /></Btn>
         <h2 className="agenda-titulo-real" data-testid="agenda-titulo">{titulo}</h2>
         <Btn tamanho="sm" onClick={enviarLink} aria-label="Enviar o link de agendamento pelo WhatsApp" title="Abre o WhatsApp com o link da página do cliente (o link também é copiado)" data-testid="agenda-link"><Icone n={linkCopiado ? 'check' : 'link'} size={15} />{linkCopiado ? 'Copiado' : 'Link Agenda'}</Btn>
-        <Btn variante="primario" tamanho="sm" onClick={() => { setAtendendo(true); setAviso(''); }} disabled={atendendo || atendem.length === 0} data-testid="atender-abrir"><Icone n="plus" size={15} />Atender</Btn>
+        <Btn variante="primario" tamanho="sm" onClick={() => { if (semBox) { setSemBoxAberto(true); return; } setAtendendo(true); setAviso(''); }} disabled={atendendo || atendem.length === 0} data-testid="atender-abrir"><Icone n="plus" size={15} />Atender</Btn>
       </div>
+      {semBox && semBoxAberto && <AvisoSemBox podeCadastrar={ehProprietario && !!aoIrBoxes} aoCadastrar={() => aoIrBoxes('boxes')} aoFechar={() => setSemBoxAberto(false)} />}
       {atendendo && <Atender profissionais={atendem} equipe={profs} meuId={meuId} ehProprio={ehProprio} aoSalvar={atendeu} aoFechar={() => setAtendendo(false)} />}
       {mostrarSeletor && (
         <div className="seletor-chips" role="group" aria-label={Rot('profissional')} data-testid="seletor-profissionais">

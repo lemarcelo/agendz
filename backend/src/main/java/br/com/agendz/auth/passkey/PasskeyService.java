@@ -168,7 +168,7 @@ public class PasskeyService {
     }
 
     /** POST /api/auth/passkey/entrar */
-    public Sessao entrar(String host, String desafioId, String credencialIdB64, String clientDataB64, String authDataB64, String assinaturaB64, String userHandleB64) {
+    public Sessao entrar(String host, String desafioId, String credencialIdB64, String clientDataB64, String authDataB64, String assinaturaB64, String userHandleB64, String ip, boolean loginAutomatico) {
         Loja loja = LojaContext.exigir();
         byte[] desafio = desafios.consumir(desafioId, "entrada", loja.id(), null);
         if (desafio == null) throw recusa();
@@ -189,7 +189,7 @@ public class PasskeyService {
                 jdbc.update("update usuario set ultimo_acesso = now() where id = ?", c.id());
                 return null;
             });
-            return sessao.abrir(c.id(), loja, c.papel(), c.nome(), false);
+            return sessao.abrir(c.id(), loja, c.papel(), c.nome(), false, ip, loginAutomatico);
         } catch (Webauthn.Recusa r) {
             LOG.info("Entrada por passkey recusada loja={} motivo={}", loja.slug(), r.getMessage());
             throw recusa();

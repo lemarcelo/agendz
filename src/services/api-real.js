@@ -25,6 +25,8 @@ export function configurar({ base: b } = {}) {
 
 export const sessaoAtual = () => (sessao ? { ...sessao } : null);
 export const sair = () => { token = null; sessao = null; };
+// Login automático (v119): SÓ o token de uma rede confiável pode ser guardado no aparelho (quem guarda é ui/real/sessao-rede.js; este arquivo nunca toca em storage).
+export const tokenDeRedeConfiavel = () => (token && sessao && sessao.redeConfiavel ? token : null);
 export const quandoEsperar = (f) => { aoEsperar = typeof f === 'function' ? f : null; };
 export const esperandoRede = () => esperas.length > 0;
 // A pessoa desistiu de esperar: as chamadas paradas terminam com a mensagem de sem conexão (nada foi enviado).
@@ -115,20 +117,55 @@ export async function carregarLoja() {
 function guardarSessao(d) {
   if (!d || typeof d.token !== 'string' || !d.token) return false;
   token = d.token;
-  sessao = { id: ID.test(String(d.id)) ? d.id : '', nome: texto(d.nome, 120), papel: texto(d.papel, 20), deveTrocarSenha: d.deveTrocarSenha === true, onboardingPendente: d.onboardingPendente === true, secoes: listaDe(d.secoes, 20).filter((x) => typeof x === 'string' && /^[a-z]{1,20}$/.test(x)) };
+  sessao = { id: ID.test(String(d.id)) ? d.id : '', nome: texto(d.nome, 120), papel: texto(d.papel, 20), deveTrocarSenha: d.deveTrocarSenha === true, onboardingPendente: d.onboardingPendente === true, redeConfiavel: d.redeConfiavel === true, perguntarRede: d.perguntarRede === true, secoes: listaDe(d.secoes, 20).filter((x) => typeof x === 'string' && /^[a-z]{1,20}$/.test(x)) };
   return true;
 }
 
 // POST /api/auth/login
-export async function entrar({ identificador, senha }) {
+export async function entrar({ identificador, senha, loginAutomatico = false }) {
   const id = String(identificador ?? '').trim();
   const sn = String(senha ?? '');
   if (!id || !sn) return { ok: false, status: 0, erro: 'Informe o usuário e a senha' };
-  const r = await chamar('POST', '/api/auth/login', { identificador: id.slice(0, 60), senha: sn.slice(0, 100) });
+  const r = await chamar('POST', '/api/auth/login', { identificador: id.slice(0, 60), senha: sn.slice(0, 100), ...(loginAutomatico === true ? { loginAutomatico: true } : {}) });
   if (!r.ok) return r;
   if (!guardarSessao(r.dados)) return { ok: false, status: 502, erro: mensagemPadrao(500) };
   return { ok: true, sessao: sessaoAtual() };
 }
+
+// ---------- login automático por rede confiável (regras no servidor: RedesConfiaveis, ConferirRedeDoTokenFilter; a rede é a que o SERVIDOR viu) ----------
+const ID_REDE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// GET /api/auth/sessao  com o token que o aparelho guardou: mesma sessão, sem pedir login. 401/403 = o token não vale mais (quem chamou esquece). Sem conexão = status 0.
+export async function restaurar(tokenGuardado) {
+  const t = String(tokenGuardado ?? '');
+  if (!/^[\w-]{10,2000}\.[\w-]{10,2000}\.[\w-]{10,2000}$/.test(t)) return { ok: false, status: 401, erro: 'Sessão guardada inválida.' };
+  token = t; sessao = null;
+  const r = await chamar('GET', '/api/auth/sessao');
+  if (!r.ok) { token = null; sessao = null; return r; }
+  if (!r.dados || r.dados.token !== t || !guardarSessao(r.dados)) { token = null; sessao = null; return { ok: false, status: 401, erro: 'Sessão guardada inválida.' }; }
+  return { ok: true, sessao: sessaoAtual() };
+}
+export const redes = {
+  // POST /api/auth/redes-confiaveis  { rotulo? }  (só logo depois de entrar: até 10 min) → sessão nova, com token de rede confiável
+  async confiar(rotulo) {
+    const r = await chamar('POST', '/api/auth/redes-confiaveis', { rotulo: texto(rotulo, 60).trim() || undefined });
+    if (!r.ok) return r;
+    if (!guardarSessao(r.dados) || !sessao.redeConfiavel) return { ok: false, status: 502, erro: mensagemPadrao(500) };
+    return { ok: true, sessao: sessaoAtual() };
+  },
+  // GET /api/usuarios/me/redes-confiaveis  (as da própria pessoa; `atual` = a rede de onde ela pede agora)
+  async listar() {
+    const r = await chamar('GET', '/api/usuarios/me/redes-confiaveis');
+    return r.ok ? { ok: true, itens: listaDe(r.dados, 5).map((d) => ({ id: ID_REDE.test(String(d && d.id)) ? d.id : '', rotulo: texto(d && d.rotulo, 60), criadoEm: texto(d && d.criadoEm, 40), ultimoUso: d && d.ultimoUso ? texto(d.ultimoUso, 40) : '', atual: !!(d && d.atual === true) })).filter((x) => x.id) } : r;
+  },
+  // DELETE /api/usuarios/me/redes-confiaveis/{id}
+  async remover(id) {
+    if (!ID_REDE.test(String(id))) return { ok: false, status: 0, erro: 'Rede inválida.' };
+    const r = await chamar('DELETE', `/api/usuarios/me/redes-confiaveis/${id}`);
+    return r.ok ? { ok: true } : r;
+  },
+  // POST /api/auth/sair  (o token longo desta rede deixa de valer no servidor; quem chamou também limpa o aparelho). Sem conexão não trava a saída.
+  async encerrar() { if (token && sessao && sessao.redeConfiavel) await tentar('POST', '/api/auth/sair', {}); return { ok: true }; }, // tentar (sem esperar a internet): o cabeçalho sai antes de quem chamou limpar o token
+};
 
 // ---------- login por digital / rosto / PIN do aparelho (passkey, WebAuthn; regras no servidor: PasskeyService) ----------
 // A passkey NUNCA substitui a senha: é uma segunda porta de entrada, que o aparelho assina. Cadastrar pede a senha de novo (recusa = 403, nunca 401).
@@ -157,20 +194,28 @@ export const passkey = {
     return !!(globalThis.isSecureContext && typeof globalThis.PublicKeyCredential === 'function' && globalThis.navigator && globalThis.navigator.credentials && typeof globalThis.btoa === 'function');
   },
   // POST /api/auth/passkey/desafio  →  navigator.credentials.get  →  POST /api/auth/passkey/entrar  (devolve a mesma sessão do login por senha)
-  async entrar() {
+  // `condicional` (preenchimento automático do campo de usuário, autocomplete="username webauthn"): o aparelho oferece a digital junto das sugestões e só abre quando a pessoa escolhe;
+  // `sinal` (AbortSignal) cancela a espera quando a tela sai. Sem suporte do navegador à interface condicional = { ok: false, indisponivel: true } (silencioso).
+  async entrar({ loginAutomatico = false, condicional = false, sinal } = {}) {
     if (!this.disponivel()) return { ok: false, status: 0, erro: 'Este navegador não permite entrar com a digital.' };
+    if (condicional) {
+      let sup = false;
+      try { sup = typeof globalThis.PublicKeyCredential.isConditionalMediationAvailable === 'function' && (await globalThis.PublicKeyCredential.isConditionalMediationAvailable()) === true; } catch { sup = false; }
+      if (!sup) return { ok: false, status: 0, indisponivel: true, erro: '' };
+    }
     const a = await chamar('POST', '/api/auth/passkey/desafio', {});
     const ped = a.ok ? lerPedidoPasskey(a.dados) : null;
     if (!ped) return a.ok ? { ok: false, status: 502, erro: mensagemPadrao(500) } : a;
     let cred;
     try {
-      cred = await globalThis.navigator.credentials.get({ publicKey: { challenge: deB64u(ped.desafio), rpId: ped.rpId, timeout: 60000, userVerification: 'required', allowCredentials: [] } });
-    } catch (e) { return { ok: false, status: 0, erro: recusaDoAparelho(e) }; }
+      cred = await globalThis.navigator.credentials.get({ ...(condicional ? { mediation: 'conditional', signal: sinal } : {}), publicKey: { challenge: deB64u(ped.desafio), rpId: ped.rpId, timeout: condicional ? undefined : 60000, userVerification: 'required', allowCredentials: [] } });
+    } catch (e) { return { ok: false, status: 0, cancelado: !!(e && (e.name === 'AbortError' || e.name === 'NotAllowedError')), erro: e && e.name === 'AbortError' ? '' : recusaDoAparelho(e) }; }
     if (!cred || !cred.response) return { ok: false, status: 0, erro: 'Não foi possível usar a digital neste aparelho.' };
     const r = await chamar('POST', '/api/auth/passkey/entrar', {
       desafioId: ped.desafioId, credencialId: paraB64u(cred.rawId), clientDataJSON: paraB64u(cred.response.clientDataJSON),
       authenticatorData: paraB64u(cred.response.authenticatorData), assinatura: paraB64u(cred.response.signature),
       ...(cred.response.userHandle ? { userHandle: paraB64u(cred.response.userHandle) } : {}),
+      ...(loginAutomatico === true ? { loginAutomatico: true } : {}),
     });
     if (!r.ok) return r;
     if (!guardarSessao(r.dados)) return { ok: false, status: 502, erro: mensagemPadrao(500) };
@@ -258,6 +303,7 @@ function lerEstado(d) {
     jaCadastrados: listaDe(d.jaCadastrados, 60).map((c) => texto(c, 40)),
     comissaoPadrao: Number.isFinite(Number(d.comissaoPadrao)) && d.comissaoPadrao !== null ? Number(d.comissaoPadrao) : 50,
     produtosCadastrados: listaDe(d.produtosCadastrados, 200).map((n) => texto(n, 100)),
+    usaBox: d.usaBox === true, boxes: listaDe(d.boxes, 20).map((n) => texto(n, 30)),
   };
 }
 export const onboarding = {
@@ -285,6 +331,11 @@ export const onboarding = {
   async comissao(padrao) {
     const r = await chamar('POST', '/api/onboarding/comissao', { padrao: Number(padrao) });
     return r.ok ? { ok: true, padrao: Number(r.dados && r.dados.padrao) } : r;
+  },
+  // POST /api/onboarding/boxes  { nomes: ['Box 1', ...] }  (estética; aditivo: nome que já existe não é recriado; 1 a 20 no total; respeita o limite de agendas do Admin)
+  async boxes(nomes) {
+    const r = await chamar('POST', '/api/onboarding/boxes', { nomes: listaDe(nomes, 20).map((n) => texto(n, 30)) });
+    return r.ok ? { ok: true, resultado: { criados: Number(r.dados && r.dados.criados) || 0, jaExistiam: Number(r.dados && r.dados.jaExistiam) || 0 } } : r;
   },
   // POST /api/onboarding/expediente  { semana: { 0..6: { aberto, faixas: [['09:00','12:00']] } } }  (semana vazia = pular)
   async expediente(semana) {

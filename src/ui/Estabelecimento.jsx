@@ -1,4 +1,5 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:003f7f8e99 */
+import { consumirAbaEstabelecimento } from './destino.js';
 import React, { useState } from 'react';
 import { estabelecimento as apiEst, excecoes as apiEx, afetadosPorExcecoes } from '../services/api.js';
 import { FORMAS_PAGAMENTO, ehDono } from '../domain/rules.js';
@@ -183,7 +184,7 @@ import { PainelMarca } from './Marca.jsx';
 export default function Estabelecimento({ user }) {
   const { state: st } = useStore();
   const e = st.estabelecimento;
-  const [aba, setAba] = useState('dados');
+  const [aba, setAba] = useState(() => consumirAbaEstabelecimento() || 'dados');
   const [dados, setDados] = useState({ nome: e.nome, telefone: e.telefone, endereco: e.endereco || '', enderecoNoLink: e.enderecoNoLink !== false, localizacaoNoWhatsapp: !!e.localizacaoNoWhatsapp, localizacao: Number.isFinite(e.latitude) ? `${e.latitude}, ${e.longitude}` : '', email: e.email, visaoPadrao: e.visaoPadrao, grupoMovimentacaoId: e.grupoMovimentacaoId });
   const [notifs, setNotifs] = useState(e.notificacoes);
   const [notifSujo, setNotifSujo] = useState(false);

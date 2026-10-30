@@ -355,6 +355,10 @@ public class AgendaController {
                 if (achado.isEmpty()) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, "Cliente não encontrado.");
                 semNome = achado.get(0);
             }
+            // estética: sem nenhum box ativo não se atende nem se agenda (v120); o front leva o proprietário ao cadastro
+            if (usaBox(loja) && Integer.valueOf(0).equals(jdbc.queryForObject("select count(*) from box where ativo", Integer.class))) {
+                throw new ErroDeNegocio(HttpStatus.CONFLICT, SEM_BOX);
+            }
             // campos obrigatórios do tipo (Estabelecimento > Regras): o que o formulário já traz por padrão (profissional, vendedor, forma padrão) conta como preenchido
             RegrasAtendimento.Regras regras = RegrasAtendimento.ler(jdbc);
             Map<String, Boolean> tem = new LinkedHashMap<>();
@@ -619,6 +623,8 @@ public class AgendaController {
         Integer m = jdbc.queryForObject("select coalesce(sum(duracao_min), 0) from agendamento_servico where agendamento_id = ?", Integer.class, agendamentoId);
         return m == null || m <= 0 ? 1 : m;
     }
+
+    public static final String SEM_BOX = "Cadastre ao menos um box (Estabelecimento > Boxes) antes de atender.";
 
     private static boolean usaBox(Loja loja) {
         return br.com.agendz.tenant.Capacidades.usaRecursoFisico(loja);

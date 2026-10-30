@@ -3,7 +3,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { abreviarNome } from '../domain/abreviar.js';
 import { LOJA_TROCAVEL, MODO_DEMO, agenda as apiAgenda, agendamentosVisiveis, profissionaisVisiveis } from '../services/api.js';
 import { baseDoLink, montarLinkAgendamento } from '../domain/link-publico.js';
-import { ATIVOS, STATUS, boxesAtivos, ocupacaoDe, retiradaDe } from '../domain/rules.js';
+import { ATIVOS, STATUS, boxesAtivos, ocupacaoDe, pode, retiradaDe, semBoxAtivo } from '../domain/rules.js';
+import AvisoSemBox from './leve/AvisoSemBox.jsx';
 import { faixasDoProfissional, excecaoDoDia, TIPOS_EXCECAO } from '../domain/schedule.js';
 import { rotuloDoGrupo, separarCancelados, rotuloCancelados } from '../domain/agenda-grupos.js';
 import { DIAS_CURTOS, addDays, addMonths, fmtDate, fmtDayLong, maiuscula1, fmtDiaMesSemana, fmtHM, fmtMonthYear, monthStart, sameDay, startOfDay, weekStart, fmtDateShort, fmtMoney } from '../domain/time.js';
@@ -131,7 +132,7 @@ function Mes({ cursor, evs, st, agora, onDia, onEvento, mostraBarb }) {
 
 const ultimaRolagem = new Map(); // rolagem da Agenda por usuário, em memória (na mesma sessão)
 
-export default function Agenda({ user, onAbrir, onNovo }) {
+export default function Agenda({ user, onAbrir, onNovo, onIrBoxes }) {
   const { state: st, agora, loja: lojaSlug } = useStore();
   const ehProfissional = user.papel === 'profissional';
   // Duas formas de ver a agenda (v73): Horários (cartões do dia) e Calendário (só o mês). O modo escolhido fica lembrado por usuário neste navegador.
@@ -224,14 +225,16 @@ export default function Agenda({ user, onAbrir, onNovo }) {
     window.addEventListener('scroll', aoRolar, { passive: true });
     return () => { cancelAnimationFrame(volta); clearTimeout(t); window.removeEventListener('scroll', aoRolar); }; // sem gravar aqui: ao sair da tela o navegador já pode ter zerado a rolagem
   }, [chaveRolagem]);
+  const semBox = semBoxAtivo(st);
+  const [avisoBox, setAvisoBox] = useState(false); // estética sem box: Atender e Link Agenda só mostram o aviso
   const botaoLink = (
-  <button type="button" className={`btn btn-link-agendar ${copiado ? 'copiado' : ''}`} onClick={copiarLink} disabled={!linkAtivo} aria-label="Enviar link de agendamento pelo WhatsApp"
+  <button type="button" className={`btn btn-link-agendar ${copiado ? 'copiado' : ''}`} onClick={() => (semBox ? setAvisoBox(true) : copiarLink())} disabled={!linkAtivo} aria-label="Enviar link de agendamento pelo WhatsApp"
     title={linkAtivo ? 'Abrir o WhatsApp com o link da página de agendamento do cliente (o link também é copiado)' : 'Link desligado em Estabelecimento > Regras'} data-testid="copiar-link">
     <Icon n={copiado ? 'check' : 'link'} size={17} /><span className="rotulo-link">{copiado ? 'Link copiado' : 'Link de agendamento'}</span><span className="rotulo-link-curto">{copiado ? 'Copiado' : 'Link Agenda'}</span>
   </button>
   );
   const botaoAtender = (
-  <Btn variante="primario" icone="plus" onClick={() => onNovo({ profissionalId: selecionados.length === 1 ? selecionados[0] : ehProfissional ? user.id : '' })} data-testid="atender">Atender</Btn>
+  <Btn variante="primario" icone="plus" onClick={() => (semBox ? setAvisoBox(true) : onNovo({ profissionalId: selecionados.length === 1 ? selecionados[0] : ehProfissional ? user.id : '' }))} data-testid="atender">Atender</Btn>
   );
   return (
     <section className="tela">
@@ -258,6 +261,7 @@ export default function Agenda({ user, onAbrir, onNovo }) {
 
       <div className="agenda-topo" data-testid="agenda-topo">
         <div className="agenda-acoes">{botaoLink}{botaoAtender}</div>
+        {semBox && avisoBox && <AvisoSemBox podeCadastrar={pode(user, 'estabelecimento') && !!onIrBoxes} aoCadastrar={onIrBoxes} aoFechar={() => setAvisoBox(false)} />}
         <div className="segmentado agenda-modos" role="group" aria-label="Como ver a agenda">
           {[['horarios', 'Horários'], ['calendario', 'Calendário']].map(([k, r]) => (
             <button key={k} type="button" className={modo === k ? 'on' : ''} onClick={() => salvarModo(k)} aria-pressed={modo === k} data-testid={`agenda-modo-${k}`}>{r}</button>

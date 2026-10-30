@@ -124,3 +124,11 @@ Lista simples. Cada item está no histórico do `prompt-agendz-regras.md` (v84 a
 - **Decidi (D4):** comissão sobre preço menos desconto; item coberto pelo plano sai de graça (desconto na linha), então comissiona 0.
 - **Decidi:** "plano" não é forma de pagamento (marca `planoUso` no atendimento); passar do saldo é **recusado** (não só avisado); "pausar" é não registrar a mensalidade do mês; plano esgotado cobra o preço normal; um plano aberto por cliente; dívida de plano encerrado trava um novo.
 - **Dúvida:** horários fixos do assinante (`MAX_FIXOS`, `DIAS_FIXOS_A_FRENTE`), modelos de plano da barbearia e contar agendamento pelo link como corte ainda não foram feitos.
+
+## v119/v120 (30/10): login automático e box
+- **Decidi:** a rede é identificada só pelo servidor, pelo IP público (IPv4 inteiro; IPv6 /64). Nome do Wi-Fi é impossível de ler num site. Efeito: quem troca de internet (4G, outro Wi-Fi, IP que muda) cai em "rede não reconhecida" e o token vale 24 h. **Dúvida para o Marcelo:** se o IP da loja mudar com frequência (operadora), vale oferecer "confiar neste aparelho" (token no aparelho, sem IP)?
+- **Decidi:** confiar numa rede exige ter acabado de entrar (10 min) e a rede é a que o servidor vê agora; até 5 redes por pessoa; senha temporária nunca ganha rede confiável.
+- **Decidi:** a sessão comum passou de 8 h para 24 h para casar com "fora da rede vale 1 dia"; o token longo dura 365 dias e é derrubado por sair, trocar a senha, remover a rede, desativar a pessoa ou mudar o papel.
+- **Decidi:** a digital condicional (campo de usuário) é só um atalho do navegador; a digital continua sem substituir a senha.
+- **Decidi:** o assistente de estética ganhou a etapa Boxes (nome livre, padrão "Box 1"); o `concluir` ainda cria 1 box por profissional se o dono pular, para nunca deixar a loja sem box. Sem box ativo: Atender, Link Agenda e página do cliente ficam bloqueados; o aviso só leva ao cadastro se a pessoa for o proprietário.
+

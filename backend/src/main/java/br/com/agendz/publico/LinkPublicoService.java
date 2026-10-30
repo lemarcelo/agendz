@@ -67,6 +67,7 @@ public class LinkPublicoService {
     public static final int MAX_DIAS_CONSULTA = 31;
     private static final UUID NINGUEM = new UUID(0L, 0L);
     public static final String ERRO_DESLIGADO = "O agendamento pelo link não está disponível agora. Fale com a loja.";
+    public static final String ERRO_SEM_BOX = "A agenda ainda não está disponível (falta cadastrar o box). Fale com a loja.";
     public static final String ERRO_HORARIO = "Esse horário acabou de ser ocupado. Escolha outro.";
     public static final String ERRO_NAO_ACHEI = "Agendamento não encontrado.";
     public static final String ERRO_MUITOS = "Muitos pedidos em pouco tempo. Tente de novo em alguns minutos.";
@@ -165,6 +166,9 @@ public class LinkPublicoService {
             LinkAgendamento.Config cfg = LinkAgendamento.ler(jdbc);
             boolean ativo = cfg.ativo() && LinkAgendamento.tipoSuportado(loja);
             if (!ativo) return new Pagina(false, ERRO_DESLIGADO, cfg.diasMax(), cfg.telefoneObrigatorio(), List.of(), List.of(), null, null, loja.tipo(), List.of());
+            if (Capacidades.usaRecursoFisico(loja) && Integer.valueOf(0).equals(jdbc.queryForObject("select count(*) from box where ativo", Integer.class))) {
+                return new Pagina(false, ERRO_SEM_BOX, cfg.diasMax(), cfg.telefoneObrigatorio(), List.of(), List.of(), null, null, loja.tipo(), List.of()); // estética sem box: a agenda do cliente não abre (v120)
+            }
             boolean porPorte = Capacidades.precoPorPorte(loja);
             List<ServicoPublico> servicos = jdbc.query(
                     "select id, nome, preco, duracao_min, antecedencia_h, precos::text as precos, duracoes::text as duracoes from servico where ativo and not multi_dia order by lower(nome), id",

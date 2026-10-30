@@ -25,6 +25,24 @@ public class JwtService {
         this.relogio = relogio;
     }
 
+    /** Token de rede confiável (v119): `auto` + `rid` (a rede) + `rv` (a versão: "Sair" ou trocar a senha a derruba). Vale por muito tempo, mas o filtro de rede só o aceita fora da rede por 24 h. */
+    public String emitirDeRedeConfiavel(UUID usuarioId, UUID lojaId, String papel, String nome, UUID redeId, int versao) {
+        Instant agora = Instant.now(relogio);
+        JwtClaimsSet claims = JwtClaimsSet.builder()
+                .issuer("agendz")
+                .subject(usuarioId.toString())
+                .issuedAt(agora)
+                .expiresAt(agora.plus(Duration.ofDays(props.validadeRedeConfiavelDias())))
+                .claim("loja", lojaId.toString())
+                .claim("papel", papel)
+                .claim("nome", nome)
+                .claim("auto", true)
+                .claim("rid", redeId.toString())
+                .claim("rv", versao)
+                .build();
+        return encoder.encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims)).getTokenValue();
+    }
+
     /** `trocar` = senha temporária: o token só serve para trocar a senha (TrocarSenhaFilter). */
     public String emitir(UUID usuarioId, UUID lojaId, String papel, String nome, boolean trocar) {
         Instant agora = Instant.now(relogio);

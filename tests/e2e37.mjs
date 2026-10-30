@@ -89,6 +89,19 @@ const semRolagem = async (p, nome) => assert.ok(await p.evaluate(() => document.
   assert.match(await m.p.getByTestId('pa-equipe').innerText(), /Profissionais|esteticistas/i);
   await semRolagem(m.p, 'equipe');
   await m.p.getByTestId('pa-pular-equipe').click();
+  // estética: etapa Boxes (v120) entre Equipe e Expediente; sem box nenhum não avança
+  await m.p.getByTestId('pa-boxes').waitFor(); await semRolagem(m.p, 'boxes');
+  assert.equal(await m.p.getByTestId('pa-etapa-boxes').count(), 1);
+  await m.p.getByTestId('pa-box-0').fill('');
+  await m.p.getByTestId('pa-continuar-boxes').click();
+  assert.match(await m.p.getByTestId('pa-erro').innerText(), /ao menos um box/);
+  await m.p.getByTestId('pa-box-add').click();
+  await m.p.getByTestId('pa-box-0').fill('Box A'); await m.p.getByTestId('pa-box-1').fill('box a');
+  await m.p.getByTestId('pa-continuar-boxes').click();
+  assert.match(await m.p.getByTestId('pa-erro').innerText(), /mesmo nome/);
+  await m.p.getByTestId('pa-box-1').fill('Box B');
+  await semRolagem(m.p, 'boxes com erro');
+  await m.p.getByTestId('pa-continuar-boxes').click();
   await m.p.getByTestId('pa-expediente').waitFor(); await semRolagem(m.p, 'expediente');
   await m.p.getByTestId('pa-pular-expediente').click();
   await m.p.getByTestId('pa-pronto').waitFor(); await semRolagem(m.p, 'pronto');
@@ -124,6 +137,9 @@ const semRolagem = async (p, nome) => assert.ok(await p.evaluate(() => document.
   await r.p.getByTestId('pa-acessos').waitFor();
   assert.match(await r.p.getByTestId('pa-senha-zeca').innerText(), /^[A-HJ-NP-Za-km-z2-9]{12}$/);
   await r.p.getByTestId('pa-anotei').click();
+  await r.p.getByTestId('pa-boxes').waitFor(); // Reconfigurar na estética: os boxes que a loja já tem aparecem preenchidos
+  assert.notEqual(await r.p.getByTestId('pa-box-0').inputValue(), '');
+  await r.p.getByTestId('pa-continuar-boxes').click();
   await r.p.getByTestId('pa-expediente').waitFor();
   assert.equal(await r.p.getByTestId('pa-dia-1').isChecked(), true); // o expediente atual da loja
   assert.equal(await r.p.getByTestId('pa-dia-0').isChecked(), false);

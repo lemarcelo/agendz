@@ -1047,7 +1047,7 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
 .agenda-grupo-real > .link-dia { justify-self: start; text-align: left; } /* título do dia à esquerda, sobre a grade */
 
 /* Entrar com a digital (Meu perfil, site real) */
-.perfil-digital-real { display: grid; gap: 10px; border-top: 1px solid var(--line); padding-top: 14px; }
+.perfil-digital-real, .perfil-redes-real { display: grid; gap: 10px; border-top: 1px solid var(--line); padding-top: 14px; }
 .digital-lista-real { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .digital-lista-real li { display: flex; gap: 8px 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; min-width: 0; overflow-wrap: anywhere; }
 

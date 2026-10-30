@@ -110,3 +110,8 @@ Snapshot do estado com senhas e CPFs em texto puro no navegador; senha comparada
 - O **token de avaliação** (48 hex, um por agendamento) é segredo de acesso: só o SHA-256 fica guardado, 90 dias, uso único; vai no fragmento do link (`#avaliar/<token>`), nunca em URL de servidor, log nem resposta que não seja a do pedido. A página do cliente não mostra o nome dele nem dado de outra pessoa.
 - A **fila de mensagens em lote** guarda nome, telefone **mascarado** (`(51) •••••-1234`), serviços e andamento por contato; o telefone inteiro só sai no clique de "Abrir no WhatsApp" de quem tem a seção, e não é gravado na fila. Quem marcou "não quer receber mensagens" (`semMensagens`) fica fora das filas e do pedido pela estrela.
 
+
+## Rede confiável (v119, login automático)
+- **O que se guarda:** só o **hash** (HMAC com o pepper, amarrado à loja e à pessoa) do IP público da rede; o rótulo que a pessoa dá ("Casa"), a data e o último uso. O IP em texto puro **não** é gravado nem entra em log; a mesma rede em duas contas não gera o mesmo hash.
+- **No aparelho:** só o token de rede confiável fica no `localStorage` (`agendz-rede:<loja>`), apagado ao sair, ao trocar a senha e quando o servidor o recusa. Token comum nunca é guardado.
+- **Direitos:** a pessoa lista e remove as próprias redes em Meu perfil; sair, remover a rede, desativar a pessoa ou mudar seu papel derrubam o token longo.

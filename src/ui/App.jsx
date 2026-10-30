@@ -1,4 +1,5 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:a6fe1e7410 */
+import { pedirAbaEstabelecimento } from './destino.js';
 import React, { useEffect, useLayoutEffect, useState } from 'react';
 import { LOJA_NAO_ENCONTRADA, MODO_DEMO, auth, avisosDoUsuario, equipe, naoLidasDoSuporte, store, suporte } from '../services/api.js';
 import { lerHashAgendar, lerHashAvaliar, lerHashPlanos } from '../domain/link-publico.js';
@@ -175,7 +176,7 @@ function Shell({ user, st, tema, setTema }) {
 
       <div className="corpo">
         <main className="principal">
-          {abaAtual === 'agenda' && <Agenda user={user} onAbrir={abrir} onNovo={novo} />}
+          {abaAtual === 'agenda' && <Agenda user={user} onAbrir={abrir} onNovo={novo} onIrBoxes={() => { pedirAbaEstabelecimento('boxes'); setAba('estab'); }} />}
           {abaAtual === 'clientes' && <Clientes user={user} aoIr={setAba} />}
           {abaAtual === 'servicos' && <Servicos user={user} />}
           {abaAtual === 'relatorios' && <Relatorios user={user} />}

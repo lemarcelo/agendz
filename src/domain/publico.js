@@ -1,7 +1,7 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:f2513d1752 */
 // Autoagendamento pelo link: o cliente (sem login) vê só horários livres, pede um horário e depois gerencia só os próprios agendamentos.
 // Tudo aqui é regra pura. A API pública (`publico.*` em api.js) acrescenta os limites de uso; nada daqui devolve dado de outro cliente.
-import { STATUS, acharConflitos, errosServicoIds, limparTexto, retiradaDe, servicosDoAg, statusVisual, telefoneBrasileiro, telefoneNacional, validarHorario } from './rules.js';
+import { STATUS, acharConflitos, errosServicoIds, limparTexto, retiradaDe, semBoxAtivo, servicosDoAg, statusVisual, telefoneBrasileiro, telefoneNacional, validarHorario } from './rules.js';
 import { PORTES, ROTULO_PORTE, porteValido, resumoVeiculo } from './veiculos.js';
 import { faixasDoProfissional } from './schedule.js';
 import { DIA, MIN, fmtDate, fmtHM, startOfDay } from './time.js';
@@ -39,7 +39,7 @@ export function horarioLivre(s, { profissionalId, inicio, servicoIds, porte, ago
 // O porte do veículo define a duração; sem ele não há horário para mostrar. Um horário só aparece se houver profissional E box livres.
 export function horariosPublicos(s, { profissionalId, servicoIds, porte, dayTs, agora, ignoreId, boxPreferido, limite = Infinity }) {
   const cfg = configLink(s);
-  if (!cfg.ativo || (cap(s.estabelecimento, 'precoPorPorte') && !porteValido(porte)) || errosServicoIds(s, servicoIds, { ativos: true }) || !Number.isFinite(dayTs)) return [];
+  if (!cfg.ativo || semBoxAtivo(s) || (cap(s.estabelecimento, 'precoPorPorte') && !porteValido(porte)) || errosServicoIds(s, servicoIds, { ativos: true }) || !Number.isFinite(dayTs)) return [];
   const dia = startOfDay(dayTs);
   if (dia > agora + cfg.diasMax * DIA) return [];
   const barbs = s.usuarios.filter((u) => u.atende && (!profissionalId || u.id === profissionalId));
@@ -77,7 +77,7 @@ export function mapaDaLoja(e) {
 export function configPublica(s) {
   const cfg = configLink(s);
   return {
-    ativo: cfg.ativo, diasMax: cfg.diasMax, exigeTelefone: cfg.telefoneObrigatorio, tipo: tipoDe(s.estabelecimento), nome: s.estabelecimento.nome, telefone: s.estabelecimento.telefone || '', endereco: s.estabelecimento.enderecoNoLink === false ? '' : s.estabelecimento.endereco || '', mapaUrl: s.estabelecimento.enderecoNoLink === false ? '' : mapaDaLoja(s.estabelecimento),
+    ativo: cfg.ativo && !semBoxAtivo(s), diasMax: cfg.diasMax, exigeTelefone: cfg.telefoneObrigatorio, tipo: tipoDe(s.estabelecimento), nome: s.estabelecimento.nome, telefone: s.estabelecimento.telefone || '', endereco: s.estabelecimento.enderecoNoLink === false ? '' : s.estabelecimento.endereco || '', mapaUrl: s.estabelecimento.enderecoNoLink === false ? '' : mapaDaLoja(s.estabelecimento),
     ...(cap(s.estabelecimento, 'precoPorPorte') ? { portes: PORTES.map((id) => ({ id, nome: ROTULO_PORTE[id] })) } : {}),
     // preço e duração de cada serviço (por porte quando o tipo cobra por porte; a página mostra os do porte escolhido); nada de custo, material ou comissão
     servicos: s.servicos.filter((x) => x.ativo !== false).map((x) => (cap(s.estabelecimento, 'precoPorPorte')
@@ -139,7 +139,7 @@ export function validarCodigo(s, telefone, codigo, agora) {
 // ---------- pedido de horário ----------
 export function agendarPorLink(s, d, agora) {
   const cfg = configLink(s);
-  if (!cfg.ativo) return { ok: false, erros: [ERRO_DESLIGADO] };
+  if (!cfg.ativo || semBoxAtivo(s)) return { ok: false, erros: [ERRO_DESLIGADO] };
   if (d.site) return { ok: false, erros: ['Não foi possível agendar. Tente de novo.'] }; // campo isca preenchido: robô
   const nome = limparTexto(String(d.nome ?? ''), 60).trim();
   if (nome.length < 2) return { ok: false, erros: ['Informe o seu nome.'] };

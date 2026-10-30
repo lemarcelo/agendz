@@ -1,5 +1,6 @@
 package br.com.agendz.seguranca;
 
+import br.com.agendz.auth.rede.RedesConfiaveis;
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
@@ -75,7 +76,7 @@ public class SegurancaConfig {
     }
 
     @Bean
-    SecurityFilterChain filtros(HttpSecurity http, JwtDecoder decoder, JwtAuthenticationConverter conversor) throws Exception {
+    SecurityFilterChain filtros(HttpSecurity http, JwtDecoder decoder, JwtAuthenticationConverter conversor, RedesConfiaveis redes) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable) // sem cookie de sessão: o token vai no cabeçalho Authorization
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -87,7 +88,8 @@ public class SegurancaConfig {
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(o -> o.jwt(j -> j.decoder(decoder).jwtAuthenticationConverter(conversor)))
                 .addFilterAfter(new ConferirLojaDoTokenFilter(), BearerTokenAuthenticationFilter.class)
-                .addFilterAfter(new TrocarSenhaFilter(), ConferirLojaDoTokenFilter.class)
+                .addFilterAfter(new ConferirRedeDoTokenFilter(redes), ConferirLojaDoTokenFilter.class)
+                .addFilterAfter(new TrocarSenhaFilter(), ConferirRedeDoTokenFilter.class)
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable);
         return http.build();

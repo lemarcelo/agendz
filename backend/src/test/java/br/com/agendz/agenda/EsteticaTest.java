@@ -218,6 +218,26 @@ class EsteticaTest extends BaseApi {
     }
 
     @Test
+    void semBoxAtivoNaoSeAtendeNemSeAbreOLinkDoCliente() throws Exception {
+        jdbc.update("update box set ativo = false");
+        String corpo = "{\"profissionalId\":\"" + pabloId + "\",\"servicoIds\":[\"" + lavagem + "\"],\"nome\":\"Caio\",\"telefone\":\"(53) 99900-1003\"" + SUV + "}";
+        mvc.perform(post("/api/atendimentos").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON).content(corpo))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.mensagem").value(AgendaController.SEM_BOX));
+        assertEquals(0, jdbc.queryForObject("select count(*) from agendamento", Integer.class));
+        jdbc.update("insert into configuracao_loja (loja_id, link_ativo, link_dias_max, link_telefone_obrigatorio) values (?::uuid, true, 30, true) on conflict (loja_id) do update set link_ativo = true", EsteticaDeTeste.LOJA_APEX);
+        try {
+            mvc.perform(get("/api/publico/agendar").with(host(APEX))).andExpect(status().isOk()).andExpect(jsonPath("$.ativo").value(false))
+                    .andExpect(jsonPath("$.aviso").value(br.com.agendz.publico.LinkPublicoService.ERRO_SEM_BOX)).andExpect(jsonPath("$.servicos.length()").value(0));
+        } finally {
+            jdbc.update("delete from configuracao_loja where loja_id = ?::uuid", EsteticaDeTeste.LOJA_APEX);
+        }
+        // com um box ativo de novo, tudo volta
+        jdbc.update("update box set ativo = true where nome = 'Box 1'");
+        mvc.perform(post("/api/atendimentos").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON).content(corpo))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
     void atendimentoLocalDaEsteticaUsaOPorteEFicaSemBox() throws Exception {
         mvc.perform(post("/api/atendimentos").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"profissionalId\":\"" + pabloId + "\",\"servicoIds\":[\"" + lavagem + "\"],\"nome\":\"Caio\",\"telefone\":\"(53) 99900-1003\"}"))

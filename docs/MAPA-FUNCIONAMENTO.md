@@ -50,9 +50,10 @@ Só no Artifact: Mensagens (simulador de WhatsApp só nessa tela; com a seção 
 
 1. **Login** (usuário + senha). Errado = mensagem genérica; senha errada em rota protegida é **403**, nunca 401 (o front derruba a sessão em 401).
 2. **Senha temporária** (dono criado pelo Admin, equipe criada pelo dono): a pessoa escolhe **o usuário** (único na loja, minúsculas) e a senha definitiva. Depois entra sozinha: dono → assistente de primeiro acesso; demais → Agenda.
-3. **Assistente do dono**: Serviços → Produtos → Equipe (comissão por pessoa) → Expediente → Pronto. Reabre em Estabelecimento > Reconfigurar (senha do dono, 30 min, reversível por 30 dias; aditivo).
+3. **Assistente do dono**: Serviços → Produtos → Equipe (comissão por pessoa) → **Boxes (só estética, v120: sem box a agenda não aceita carro; aditivo, respeita o limite de agendas do Admin)** → Expediente → Pronto. Reabre em Estabelecimento > Reconfigurar (senha do dono, 30 min, reversível por 30 dias; aditivo).
 4. **Esqueci a senha**: sem canal configurado = pedir ao suporte (redefinição no painel).
-5. **Meu perfil** (toque na foto/nome no topo): dados próprios, foto, senha, **digital do aparelho** (site real; cadastrar pede a senha), som/faixa/vibração do aviso (ficam no aparelho).
+5. **Meu perfil** (toque na foto/nome no topo): dados próprios, foto, senha, **digital do aparelho** (site real; cadastrar pede a senha), **redes confiáveis** (lista e remove), som/faixa/vibração do aviso (ficam no aparelho).
+6. **Login automático (v119, site real)**: caixa "Login automático" no login. Depois de entrar numa rede nova a tela pergunta "Deseja logar automaticamente nesta rede Wi-Fi?" (Sim guarda só o token longo neste aparelho; Agora não não guarda nada). Na rede confiável a sessão não vence e o site reabre sem login; em **outra rede** o acesso vale 1 dia e depois pede a digital ou a senha. A rede é o IP público visto pelo servidor (não o nome do Wi-Fi): trocar de internet = rede não reconhecida. Sair, trocar a senha, remover a rede, desativar a pessoa ou mudar o papel derrubam o token. A digital também aparece como sugestão no campo de usuário (`autocomplete="username webauthn"`).
 
 ## 4. Agenda
 
@@ -61,6 +62,7 @@ Só no Artifact: Mensagens (simulador de WhatsApp só nessa tela; com a seção 
 - **Cancelados do dia** ficam numa linha "Cancelado (N)" no fim da lista; tocar abre os cartões (com o filtro Cancelado ligado ficam na lista).
 - **Status**: a confirmar, confirmado, concluído, cancelado. Escolher à mão com horário já iniciado grava `statusManual` (o tick não conclui nem cancela). "Cliente agendou" é marcador visual sobre a confirmar (`origem: 'link'`).
 - **Conflito de horário nunca duplica** (`validarHorario`/`acharConflitos`): a equipe pode sobrepor um pedido **a confirmar** (aviso; quem confirmar primeiro vence) e um confirmado só com **encaixe**; o **cliente** (link/WhatsApp) nunca ocupa horário pedido ou confirmado por outro. Estética: box também é recurso.
+- **Estética sem box ativo (v120)**: **Atender** e **Link Agenda** não abrem; a Agenda avisa na tela e só o proprietário tem o botão "Cadastrar boxes" (leva a Boxes); os demais só leem o aviso. O servidor recusa (409) e a página do cliente fica indisponível.
 - **Atender** (botão único): sem data/agora/passado = atendimento local concluído; futuro = agendamento. Só serviço ou só produto vale (futuro exige serviço). **Nada é obrigatório de fábrica**: sem telefone e sem cliente escolhido, o futuro fica **sem cadastro** (`nomeAvulso`), confirmado, sem mensagem. O dono marca nome/telefone/profissional/vendedor/forma de pagamento em Estabelecimento > Regras do atendimento (o que está gravado manda). Dia anterior exige motivo (5–300) e só dono/admin/atendente; profissional só hoje e como ele mesmo.
 - **Remarcar**: concluído nunca; cancelado só junto com status não cancelado. **Cancelar pelo cliente** só com 24 h ou mais, conferido na API.
 - **Cupom**: só em agendamento futuro; chave gerada no servidor; resposta ao cliente genérica; 5 chaves erradas = 15 min de bloqueio.

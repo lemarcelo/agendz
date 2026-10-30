@@ -6,6 +6,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { perfil as api, trocarSenha } from '../../services/api-real.js';
 import Digital from './Digital.jsx';
+import RedesConfiaveis from './RedesConfiaveis.jsx';
 import { fotoValida, FOTO_MAX } from '../../domain/foto.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
 import { gravarPrefs, tocarBipe, vibrar } from './alerta.js';
@@ -163,6 +164,7 @@ export default function MeuPerfil({ loja, sessao, dados, prefs, aoPrefs, aoMudou
           <Btn type="submit" disabled={trocando || !senha.atual || !senha.nova} data-testid="perfil-senha-trocar">{trocando ? 'Trocando…' : 'Trocar senha'}</Btn>
         </form>
         <Digital />
+        <RedesConfiaveis />
       </div>
     </div>
   );

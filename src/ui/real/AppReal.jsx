@@ -2,8 +2,9 @@
 // Casca do site publicado (API real), F2: carrega a loja do endereço (GET /api/publico/loja), faz o login real, troca a senha
 // temporária e mostra o painel com o menu. Os módulos entram um a um (Clientes na parte 2, Serviços na 3, Equipe na 4; a agenda na seguinte), cada um só
 // quando o servidor tem a regra inteira. Não importa `api.js` (a simulada) nem `hooks.js`: o estado aqui é só o da sessão real, em memória.
-import React, { useEffect, useMemo, useState } from 'react';
-import { cancelarEspera, carregarLoja, entrar, esperandoRede, onboarding, passkey, perfil as apiPerfil, quandoEsperar, sair, sessaoAtual, suporte as apiSuporte, trocarSenha } from '../../services/api-real.js';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { cancelarEspera, carregarLoja, entrar, esperandoRede, onboarding, passkey, perfil as apiPerfil, quandoEsperar, redes as apiRedes, restaurar, sair, sessaoAtual, suporte as apiSuporte, tokenDeRedeConfiavel, trocarSenha } from '../../services/api-real.js';
+import { esquecerSessaoDaRede, lembrarSessaoDaRede, sessaoGuardada } from './sessao-rede.js';
 import PrimeiroAcesso from '../leve/PrimeiroAcesso.jsx';
 import Agenda from './Agenda.jsx';
 import Clientes from './Clientes.jsx';
@@ -66,11 +67,14 @@ function Login({ loja, aoEntrar }) {
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [esqueci, setEsqueci] = useState(false);
+  const [auto, setAuto] = useState(false); // "Login automático": depois de entrar, o servidor pergunta se esta rede é de confiança
+  const autoRef = useRef(false);
+  autoRef.current = auto;
   const enviar = async (e) => {
     e.preventDefault();
     if (enviando) return;
     setEnviando(true); setErro('');
-    const r = await entrar({ identificador: id, senha });
+    const r = await entrar({ identificador: id, senha, loginAutomatico: auto });
     setEnviando(false);
     if (!r.ok) { setErro(r.erro); setSenha(''); return; }
     aoEntrar(r.sessao, r.sessao.deveTrocarSenha ? senha : '');
@@ -79,22 +83,62 @@ function Login({ loja, aoEntrar }) {
   const entrarComDigital = async () => {
     if (enviando) return;
     setEnviando(true); setErro('');
-    const r = await passkey.entrar();
+    const r = await passkey.entrar({ loginAutomatico: auto });
     setEnviando(false);
     if (!r.ok) { setErro(r.erro); return; }
     aoEntrar(r.sessao, '');
   };
+  // Digital pelo preenchimento do campo de usuário (autocomplete="username webauthn"): o aparelho mostra a digital junto das sugestões; some em quem não tem suporte.
+  useEffect(() => {
+    if (!passkey.disponivel() || typeof AbortController !== 'function') return undefined;
+    const ctl = new AbortController();
+    passkey.entrar({ condicional: true, sinal: ctl.signal, loginAutomatico: autoRef.current }).then((r) => {
+      if (ctl.signal.aborted) return;
+      if (r.ok) aoEntrar(r.sessao, '');
+      else if (r.erro && !r.cancelado && !r.indisponivel) setErro(r.erro);
+    });
+    return () => ctl.abort();
+  }, []);
   return (
     <Cartao loja={loja}>
       <form onSubmit={enviar} className="form-grade um form-acesso-real">
-        <Campo rotulo="Usuário"><input value={id} onChange={(e) => { setId(e.target.value); setErro(''); }} autoComplete="username" autoFocus maxLength={60} data-testid="login-id" /></Campo>
+        <Campo rotulo="Usuário"><input value={id} onChange={(e) => { setId(e.target.value); setErro(''); }} autoComplete="username webauthn" autoFocus maxLength={60} data-testid="login-id" /></Campo>
         <Campo rotulo="Senha"><input type="password" value={senha} onChange={(e) => { setSenha(e.target.value); setErro(''); }} autoComplete="current-password" maxLength={100} data-testid="login-senha" /></Campo>
+        <label className="pa-check" data-testid="login-auto-rotulo"><input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} data-testid="login-auto" /> Login automático</label>
+        {auto && <p className="muted" data-testid="login-auto-ajuda">Depois de entrar, o Agendz pergunta se esta rede (o Wi-Fi ou a internet de onde você está) é de confiança. Nela você não precisa entrar de novo; em qualquer outra rede o acesso pede a digital ou a senha depois de 1 dia.</p>}
         {erro && <Aviso tipo="erro" data-testid="login-erro">{erro}</Aviso>}
         <Btn variante="primario" type="submit" disabled={enviando} data-testid="login-entrar">{enviando ? 'Entrando…' : 'Entrar'}</Btn>
         {passkey.disponivel() && <Btn type="button" disabled={enviando} onClick={entrarComDigital} data-testid="login-digital">Entrar com a digital</Btn>}
         <button type="button" className="link" onClick={() => setEsqueci(!esqueci)} aria-expanded={esqueci} data-testid="login-esqueci">Esqueci minha senha</button>
         {esqueci && <Aviso data-testid="login-esqueci-texto">Ainda não há e-mail nem WhatsApp configurado para recuperar a senha. Peça ao suporte do Agendz para redefinir: você recebe uma senha temporária e escolhe a sua no primeiro acesso.</Aviso>}
       </form>
+    </Cartao>
+  );
+}
+
+// Depois de entrar com "Login automático" numa rede ainda não confiável: o servidor identifica a rede (IP público; nunca o nome do Wi-Fi) e guarda só uma marca irreversível.
+function PerguntaRede({ loja, aoResponder }) {
+  const [rotulo, setRotulo] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState('');
+  const sim = async () => {
+    if (enviando) return;
+    setEnviando(true); setErro('');
+    const r = await apiRedes.confiar(rotulo);
+    setEnviando(false);
+    if (!r.ok) { setErro(r.erro); return; }
+    aoResponder(r.sessao);
+  };
+  return (
+    <Cartao loja={loja}>
+      <div className="form-grade um form-acesso-real" data-testid="pergunta-rede">
+        <p><b>Deseja logar automaticamente nesta rede Wi-Fi?</b></p>
+        <p className="muted">Nesta rede você entra direto, sem digitar nada, e a sessão não vence. Em qualquer outra rede, o acesso dura 1 dia e depois pede a digital ou a senha. Dá para remover a rede quando quiser em Meu perfil. Use só em aparelho e rede que são seus.</p>
+        <Campo rotulo="Nome desta rede (opcional)"><input value={rotulo} onChange={(e) => setRotulo(e.target.value)} maxLength={60} placeholder="Ex.: Casa, Loja" data-testid="rede-rotulo" /></Campo>
+        {erro && <Aviso tipo="erro" data-testid="rede-erro">{erro}</Aviso>}
+        <Btn variante="primario" disabled={enviando} onClick={sim} data-testid="rede-sim">{enviando ? 'Salvando…' : 'Sim, confiar nesta rede'}</Btn>
+        <Btn disabled={enviando} onClick={() => aoResponder(null)} data-testid="rede-nao">Agora não</Btn>
+      </div>
     </Cartao>
   );
 }
@@ -227,7 +271,7 @@ function Painel({ loja, sessao, aoSair, aoMudarMarca }) {
               <Avisos />
             </section>
           )}
-          {aba === 'agenda' && <Agenda destaqueIds={Object.keys(destaques)} foco={foco} recarregar={recarregar} nomeLoja={loja.nome} meuId={sessao.id} ehProprio={sessao.papel === 'profissional'} ehDono={dono || sessao.papel === 'admin' || sessao.papel === 'atendente'} />}
+          {aba === 'agenda' && <Agenda ehProprietario={dono} aoIrBoxes={setAba} destaqueIds={Object.keys(destaques)} foco={foco} recarregar={recarregar} nomeLoja={loja.nome} meuId={sessao.id} ehProprio={sessao.papel === 'profissional'} ehDono={dono || sessao.papel === 'admin' || sessao.papel === 'atendente'} />}
           {aba === 'clientes' && <Clientes podePlanos={dono || (sessao.secoes || []).includes('planos')} aoIr={setAba} />}
           {aba === 'servicos' && <Servicos ehDono={dono || (sessao.secoes || []).includes('servicos')} />}
           {aba === 'equipe' && dono && <Equipe meuId={sessao.id} />}
@@ -270,13 +314,31 @@ export default function AppReal() {
     if (!r.ok) { setEstado({ fase: r.status === 404 ? 'sem-loja' : 'erro', erro: r.erro }); return; }
     if (!tipoValido(r.loja.tipo)) { setEstado({ fase: 'erro', erro: 'Esta loja usa um tipo que este site ainda não conhece. Tente de novo mais tarde.' }); return; }
     definirTipoAtivo({ tipo: r.loja.tipo });
+    // Rede confiável guardada neste aparelho: reabre sem pedir login. Token recusado (401/403) é esquecido; sem conexão ele fica para a próxima vez.
+    if (!sessaoAtual()) {
+      const g = sessaoGuardada(r.loja.slug);
+      if (g) {
+        const s = await restaurar(g);
+        if (s.ok) setSessao(s.sessao);
+        else if (s.status === 401 || s.status === 403) esquecerSessaoDaRede(r.loja.slug);
+      }
+    }
     setEstado({ fase: 'ok', loja: r.loja });
   };
   useEffect(() => { carregar(); }, []);
   const loja = estado.fase === 'ok' ? estado.loja : null;
   useEffect(() => { if (loja) document.documentElement.setAttribute('data-tipo', loja.tipo); }, [loja]);
   const css = useMemo(() => (loja ? cssDaMarca({ logo: loja.logo, corTema: loja.temaCor, corTema2: loja.temaCor2, temaCor: loja.temaCor ? 'logo' : 'padrao' }) : ''), [loja]);
-  const aoSair = () => { sair(); setSessao(null); setSenhaEnviada(''); };
+  const aoSair = () => {
+    if (loja) esquecerSessaoDaRede(loja.slug);
+    apiRedes.encerrar(); // derruba o token longo no servidor (o cabeçalho já saiu); depois limpa a memória
+    sair(); setSessao(null); setSenhaEnviada('');
+  };
+  const aoEntrar = (se, senha) => {
+    setSenhaEnviada(senha || '');
+    if (se.redeConfiavel && loja) lembrarSessaoDaRede(loja.slug, tokenDeRedeConfiavel());
+    setSessao(se);
+  };
 
   if (estado.fase === 'carregando') return <><AvisoRede /><main className="login"><div className="login-cartao" role="status" data-testid="carregando"><p className="muted">Carregando…</p></div></main></>;
   if (estado.fase === 'sem-loja') return <Cartao><h1>Loja não encontrada</h1><p className="muted" data-testid="loja-nao-encontrada">O endereço usado não aponta para nenhuma loja do Agendz. Confira o link com o estabelecimento.</p></Cartao>;
@@ -295,10 +357,11 @@ export default function AppReal() {
     <>
       <AvisoRede />
       {css && <style id="tema-marca">{css}</style>}
-      {!sessao && <Login loja={loja} aoEntrar={(se, senha) => { setSenhaEnviada(senha || ''); setSessao(se); }} />}
-      {sessao && sessao.deveTrocarSenha && <TrocarSenha loja={loja} sessao={sessao} senhaEnviada={senhaEnviada} aoTrocar={(se) => { setSenhaEnviada(''); setSessao(se); }} aoSair={aoSair} />}
-      {sessao && !sessao.deveTrocarSenha && sessao.papel === 'dono' && sessao.onboardingPendente && <PrimeiroAcesso tipo={loja.tipo} nomeLoja={loja.nome} adaptador={onboarding} aoConcluir={() => setSessao({ ...sessao, onboardingPendente: false })} />}
-      {sessao && !sessao.deveTrocarSenha && !(sessao.papel === 'dono' && sessao.onboardingPendente) && <Painel loja={loja} sessao={sessao} aoSair={aoSair} aoMudarMarca={(m) => setEstado((e) => (e.fase === 'ok' ? { ...e, loja: { ...e.loja, logo: m.logo, temaCor: m.temaCor, temaCor2: m.temaCor2 } } : e))} />}
+      {!sessao && <Login loja={loja} aoEntrar={aoEntrar} />}
+      {sessao && sessao.perguntarRede && !sessao.deveTrocarSenha && <PerguntaRede loja={loja} aoResponder={(se) => { if (se) aoEntrar(se, ''); else setSessao({ ...sessao, perguntarRede: false }); }} />}
+      {sessao && !sessao.perguntarRede && sessao.deveTrocarSenha && <TrocarSenha loja={loja} sessao={sessao} senhaEnviada={senhaEnviada} aoTrocar={(se) => { esquecerSessaoDaRede(loja.slug); setSenhaEnviada(''); setSessao(se); }} aoSair={aoSair} />}
+      {sessao && !sessao.perguntarRede && !sessao.deveTrocarSenha && sessao.papel === 'dono' && sessao.onboardingPendente && <PrimeiroAcesso tipo={loja.tipo} nomeLoja={loja.nome} adaptador={onboarding} aoConcluir={() => setSessao({ ...sessao, onboardingPendente: false })} />}
+      {sessao && !sessao.perguntarRede && !sessao.deveTrocarSenha && !(sessao.papel === 'dono' && sessao.onboardingPendente) && <Painel loja={loja} sessao={sessao} aoSair={aoSair} aoMudarMarca={(m) => setEstado((e) => (e.fase === 'ok' ? { ...e, loja: { ...e.loja, logo: m.logo, temaCor: m.temaCor, temaCor2: m.temaCor2 } } : e))} />}
     </>
   );
 }

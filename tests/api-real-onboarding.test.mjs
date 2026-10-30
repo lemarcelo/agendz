@@ -52,3 +52,23 @@ test('estado e histórico: leitura defensiva dos campos novos', async () => {
   const h = await onboarding.historico();
   assert.equal(h.itens[0].produtosCriados, 2); assert.equal(h.itens[0].comissaoTrocada, true);
 });
+
+test('boxes (v120): manda só os nomes (máx. 20, 30 letras); estado traz usaBox e os boxes ativos, com leitura defensiva', async () => {
+  servidor({ criados: 2, jaExistiam: 1 });
+  const r = await onboarding.boxes(['Box 1', 'x'.repeat(50), 'Box 3']);
+  assert.deepEqual(r, { ok: true, resultado: { criados: 2, jaExistiam: 1 } });
+  assert.equal(chamadas[0].url, 'https://loja.teste/api/onboarding/boxes');
+  assert.equal(chamadas[0].metodo, 'POST');
+  assert.deepEqual(Object.keys(chamadas[0].corpo), ['nomes']);
+  assert.ok(chamadas[0].corpo.nomes.every((n) => n.length <= 30));
+  servidor({ tipo: 'estetica_automotiva', passo: 'equipe', concluido: false, servicos: [], usaBox: true, boxes: ['Box 1', 7, null] });
+  let e = (await onboarding.carregar()).estado;
+  assert.equal(e.usaBox, true);
+  assert.equal(e.boxes[0], 'Box 1');
+  servidor({ tipo: 'barbearia', passo: 'servicos', concluido: false, servicos: [] });
+  e = (await onboarding.carregar()).estado;
+  assert.equal(e.usaBox, false);
+  assert.deepEqual(e.boxes, []);
+  servidor({ mensagem: 'O limite de 3 agendas deste estabelecimento foi atingido.' }, 409);
+  assert.equal((await onboarding.boxes(['A'])).ok, false);
+});

@@ -79,6 +79,7 @@ for (const loja of ['dalforno', 'apex']) {
     await T('pa-criar-acessos').click();
     await T('pa-acessos').waitFor();
     await T('pa-anotei').click();
+    if (loja === 'apex') { await T('pa-boxes').waitFor(); await T('pa-continuar-boxes').click(); } // estética: etapa Boxes (v120)
     await T('pa-expediente').waitFor();
     ok(`${loja} ${vp.width}px: produtos e comissão (serviços e produtos) por pessoa no assistente`);
     await ctx.close();
