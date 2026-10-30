@@ -352,7 +352,7 @@ Situação: aberto → em atendimento → aguardando cliente → resolvido (vale
 
 > v109: `POST /api/atendimentos` com data futura aceita **sem cliente** (sem `clienteId`, nome ou telefone, se as regras do atendimento não exigirem): grava `cliente_id` nulo e `nome_avulso`, status `confirmado`, sem aviso ao cliente. `POST /api/agendamentos` continua exigindo `clienteId`. De fábrica `campos_futuro` é vazio.
 
-## 10n. Planos de serviço (v111; seção de permissão `planos`; `PlanosTest`, `equivalencia/planos.json` no servidor — em andamento)
+## 10n. Planos de serviço (v111; seção de permissão `planos`; `PlanosTest`, `PlanosEquivalenciaTest`, `equivalencia/planos.json`; servidor V32)
 Mensalidade por mês; o pagamento é direto com o profissional (só se registra). **Saldo derivado dos atendimentos**: nunca há contador gravado (`domain/planos.js` `extrato`). Seção `planos`: dono libera por pessoa, padrão ninguém (Relatórios continua só dono/master). Tabelas novas: `plano`, `assinatura`, `assinatura_pagamento`, `pedido_plano` e `agendamento.plano_uso` (todas com `loja_id` + RLS + FK composta + teste de isolamento).
 
 | Método do `api.js` | Rota | Permissão | Regra e teste |
@@ -371,3 +371,11 @@ Mensalidade por mês; o pagamento é direto com o profissional (só se registra)
 | `publico.planos` | `GET /api/publico/planos` | sem login | só nome, descrição, valor, cortes e nomes dos serviços |
 | `publico.pedirPlano` | `POST /api/publico/planos/pedidos` | sem login | isca `site`; 3 por telefone/15 min; máx. 30 pedidos abertos; repetido = mesma resposta |
 | `publico.saldoDoPlano` | `GET /api/publico/planos/saldo` | sem login | só `{plano, mes, restantes, cortesPorMes, pagoMes}`; sem plano = resposta genérica; 5 consultas/telefone/15 min (429) |
+
+**Servidor (v113):** migração V32 (`plano`, `plano_servico`, `assinatura`, `assinatura_pagamento`, `assinatura_evento`, `pedido_plano` com RLS; `agendamento.plano_*`). Código em `planos/` (`PlanoRegras`, `PlanoService`, `PlanoController`, `PlanoPublicoController`). Seção `planos` está em `Permissoes.LIBERAVEIS` (nenhum perfil tem por padrão). O servidor **só registra** a mensalidade (não lança receita: ainda não há financeiro no servidor). Cliente/plano/assinatura/pedido de outra loja = 404; regra = 409; validação = 400. Link desligado: página de planos vazia e pedido = 403. Cliente não remarca sozinho horário de plano pelo link (409). Serviço dentro de plano só desativa. Falta: uso de plano pelo link público, produto no plano, seletor de plano no Atender real e página pública real.
+
+## 10o. Estabelecimento no site real (v114; V33)
+| Rota | Permissão | Regra e teste |
+|---|---|---|
+| `GET/PUT /api/estabelecimento/escala` | ler: agenda; gravar: só o dono | até 6 faixas por dia, sem sobreposição, início antes do fim; `tests/expediente.test.mjs` |
+| `GET/PUT /api/estabelecimento/marca` | só o dono grava | logo PNG/JPEG/WebP até 100 KB conferida pelo **conteúdo**; cores `#rrggbb` juntas ou as duas nulas; `MarcaDaLoja`, `MarcaDaLojaTest`, `tests/marca-loja.test.mjs` |

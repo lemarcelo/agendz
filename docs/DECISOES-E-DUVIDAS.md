@@ -117,3 +117,10 @@ Lista simples. Cada item está no histórico do `prompt-agendz-regras.md` (v84 a
 - **Digital (passkey):** pede a senha de novo para cadastrar; exige verificação do usuário (`UV`); só atestado `none`. Dúvida para o Marcelo: aceitar também chave de segurança USB sem `UV`? Hoje não.
 - **Imagens do chamado:** bytes no banco do Admin (sem disco), 3 por mensagem, 1,5 MB cada. A tela reduz e redesenha como JPEG (tira GPS). Dúvida: liberar PDF? Hoje não (risco de script).
 - Telefone do link obrigatório por padrão; a loja pode desmarcar. Aviso de remarcação só quando o horário muda.
+
+## Planos de serviço (v113)
+- **Decidi (D2):** cobrança e inadimplência andam juntas: a mensalidade é registrada à mão (pagamento direto com o profissional) e a tela mostra "a receber" do mês; dois meses sem pagar zeram o saldo acumulado.
+- **Decidi (D3):** o cliente vê plano e saldo pelo link `#planos` consultando por telefone; resposta genérica, 5 consultas por telefone a cada 15 min, só contagens.
+- **Decidi (D4):** comissão sobre preço menos desconto; item coberto pelo plano sai de graça (desconto na linha), então comissiona 0.
+- **Decidi:** "plano" não é forma de pagamento (marca `planoUso` no atendimento); passar do saldo é **recusado** (não só avisado); "pausar" é não registrar a mensalidade do mês; plano esgotado cobra o preço normal; um plano aberto por cliente; dívida de plano encerrado trava um novo.
+- **Dúvida:** horários fixos do assinante (`MAX_FIXOS`, `DIAS_FIXOS_A_FRENTE`), modelos de plano da barbearia e contar agendamento pelo link como corte ainda não foram feitos.

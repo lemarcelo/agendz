@@ -30,6 +30,7 @@ Um ícone distinto por aba (`tests/menu-icones.test.mjs`). **Não existe aba "In
 | Serviços | tesoura/pincel do tipo | sim | se liberada | sim (leitura) | leitura |
 | Equipe | team | sim | não | não | não |
 | Boxes (estética) | car | sim | não | não | não |
+| Planos | ticket | sim | se liberada | se liberada | não |
 | Cupons | tag | sim | com Estabelecimento | com Estabelecimento | não |
 | Estoque | box | sim | se liberada | se liberada | se liberada |
 | Estabelecimento | store | sim | se liberada | se liberada | não |
@@ -70,7 +71,7 @@ Sem usuário: confere que o agendamento pertence ao número do remetente. Númer
 
 ## 7. Estabelecimento (dono/liberado)
 
-Dados e endereço, logo e tema (cores só por `tema.js`), expediente e escala, regras do atendimento, link de agendamento, boxes (estética), cupons, comissão geral, reconfigurar. O tipo do estabelecimento **nunca muda** depois de criado.
+Dados e endereço, logo e tema (cores só por `tema.js`), expediente e escala, regras do atendimento, link de agendamento, boxes (estética), cupons, comissão geral, reconfigurar. O tipo do estabelecimento **nunca muda** depois de criado. No site real o dono edita o **horário de funcionamento** (`Expediente.jsx`) e a **logo e cor do tema** (`MarcaLoja.jsx`).
 
 ## 8. Admin da plataforma e Suporte
 
