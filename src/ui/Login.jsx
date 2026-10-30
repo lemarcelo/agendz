@@ -80,6 +80,12 @@ export default function Login() {
               </div>
             </div>
           )}
+          {MODO_DEMO && (
+            <label className="servico-op" data-testid="sim-admin">
+              <input type="checkbox" checked={st.regrasPlataforma?.avaliacaoMostraAnonimo === true} onChange={(e) => store.simularAdmin('avaliacaoMostraAnonimo', e.target.checked, 'Simulação do Admin na demonstração')} data-testid="sim-admin-anonimo" />
+              <span><b>Simular o Admin: mostrar quem avalia como anônimo</b><small className="muted">Na plataforma só o Admin muda isto, com motivo. A loja nunca escolhe.</small></span>
+            </label>
+          )}
           <p className="muted"><a href="#primeiro-acesso" data-testid="ver-primeiro-acesso">Ver o assistente de primeiro acesso</a> (pré-visualização, nada é gravado)</p>
           <p className="muted"><b>Para testar</b> (senha de todos: 1234)</p>
           <div className="acoes">

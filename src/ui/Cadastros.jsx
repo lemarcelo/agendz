@@ -1,18 +1,20 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:48b7831473 */
 import { proximoCodigo } from '../domain/codigo.js';
 import React, { useState } from 'react';
-import { clientes as apiCli, servicos as apiSrv, equipe as apiEq, demo, MODO_DEMO, modelos as apiMod, agenda, avisosDoUsuario, pedidosVinculoVisiveis } from '../services/api.js';
+import { clientes as apiCli, servicos as apiSrv, equipe as apiEq, demo, MODO_DEMO, modelos as apiMod, agenda, avisosDoUsuario, pedidosVinculoVisiveis, avaliacoes as apiAv } from '../services/api.js';
 import { SECOES, SECOES_LIBERAVEIS, ehGestor, formatarCpf, formatarTelefone, papelRotulo, pode, podeAutorizarVinculo, ultimoAtendimento, ehDono } from '../domain/rules.js';
 import { creditoDoCliente } from '../domain/financeiro.js';
 import { CATEGORIAS, renderizar, validarModelo, variaveisDoCorpo } from '../domain/templates.js';
 import { fmtDate, fmtDateTime, fmtDuration, fmtHM, fmtMoney } from '../domain/time.js';
 import { LIMITE_VEICULOS, PORTES, ROTULO_PORTE, placaValida, rotuloVeiculo } from '../domain/veiculos.js';
-import { Aviso, Avatar, Btn, Campo, Icon, Interruptor, Modal, Vazio } from './common.jsx';
+import { Abas, Aviso, Avatar, Btn, Campo, Icon, Interruptor, Modal, Vazio } from './common.jsx';
 import { FotoCampo } from './Foto.jsx';
 import { fotoDeExemplo } from './imagem.js';
 import { EditorNotificacoes, EditorPixCancelamento } from './Notif.jsx';
 import { SeletorGrupo, rotuloGrupo } from './Grupo.jsx';
 import { PainelEscala } from './Estabelecimento.jsx';
+import { ListaAvaliacoes } from './Avaliacoes.jsx';
+import FilaMensagens from './FilaMensagens.jsx';
 import { textoUltimo } from './format.js';
 import { toast, useStore } from './hooks.js';
 import Tabela from './Tabela.jsx';
@@ -131,6 +133,7 @@ function FormCliente({ c, onClose, plano }) {
         <Campo rotulo="Telefone (WhatsApp)"><input value={f.telefone} inputMode="tel" onChange={(e) => setF({ ...f, telefone: formatarTelefone(e.target.value) })} placeholder="(55) 99999-9999" data-testid="cli-tel" /></Campo>
         <Campo rotulo="CPF (opcional)"><input value={f.cpf || ''} inputMode="numeric" onChange={(e) => setF({ ...f, cpf: formatarCpf(e.target.value) })} /></Campo>
         <Campo rotulo="Nascimento (opcional)"><input type="date" value={f.nascimento || ''} onChange={(e) => setF({ ...f, nascimento: e.target.value })} /></Campo>
+        <label className="servico-op campo-largo" data-testid="cli-sem-mensagens-rotulo"><input type="checkbox" checked={f.semMensagens === true} onChange={(e) => setF({ ...f, semMensagens: e.target.checked })} data-testid="cli-sem-mensagens" /><span><b>Não quer receber mensagens da loja</b><small className="muted">Fica fora dos pedidos de avaliação e das mensagens em lote.</small></span></label>
       </div>
       {capAtiva('usaVeiculo') && <fieldset className="conj" data-testid="cli-veiculos">
         <legend>Veículos</legend>
@@ -187,6 +190,7 @@ export function Servicos({ user }) {
               <li><Icon n="check" size={14} /> {s.confirmacaoServico === null || s.confirmacaoServico === undefined ? `${Voc('confirmacao')}: padrão` : s.confirmacaoServico ? `Exige ${voc('confirmacao')}` : `Sem ${voc('confirmacao')}`}</li>
             </ul>
             {s.ativo === false && <span className="chip chip-p">Desativado</span>}
+            {pode(user, 'avaliacoes') && <ResumoDoServico id={s.id} />}
             {podeEditar && <Btn tamanho="sm" icone="edit" onClick={() => setEdit(s)} aria-label={`Editar ${s.nome}`}>Editar</Btn>}
           </article>
         ))}
@@ -194,6 +198,14 @@ export function Servicos({ user }) {
       {edit && <FormServico s={edit} user={user} onClose={() => setEdit(null)} />}
     </section>
   );
+}
+
+// Linha de avaliações no cartão do serviço (média e total só deste serviço); quem tem a seção Avaliações.
+function ResumoDoServico({ id }) {
+  const { state: st } = useStore();
+  const r = React.useMemo(() => apiAv.resumo({ servicoId: id }), [st, id]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!r.ok) return null;
+  return <small className="muted" data-testid={`srv-nota-${id}`}><Icon n="star" size={13} /> {r.total ? `${String(r.media).replace('.', ',')} · ${r.total} ${r.total === 1 ? 'avaliação' : 'avaliações'}` : 'Sem avaliações'}</small>;
 }
 
 function FormServico({ s, user, onClose }) {
@@ -279,6 +291,12 @@ function FormServico({ s, user, onClose }) {
         <Btn tamanho="sm" icone="plus" onClick={() => setF({ ...f, materiais: [...(f.materiais || []), { materialId: '', qtd: 1 }] })} disabled={!st.materiais.some((x) => x.tipo !== 'produto')} data-testid="add-material">Adicionar material</Btn>
         {st.materiais.length === 0 && <p className="muted">Cadastre materiais primeiro, na tela Estoque.</p>}
       </fieldset>
+      {s.id && pode(user, 'avaliacoes') && (
+        <fieldset className="conj" data-testid="srv-avaliacoes">
+          <legend>Avaliações deste serviço</legend>
+          <ListaAvaliacoes user={user} filtros={{ servicoId: s.id }} vazio={<p className="muted">Nenhum cliente avaliou este serviço ainda.</p>} />
+        </fieldset>
+      )}
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
     </Modal>
   );
@@ -390,13 +408,19 @@ export function MinhaEscala({ user }) {
 export function Modelos({ user }) {
   const { state: st } = useStore();
   const [edit, setEdit] = useState(null);
+  const [aba, setAba] = useState('modelos');
   const podeEditar = pode(user, 'estabelecimento');
+  const podeLote = pode(user, 'avaliacoes');
+  const naAba = podeLote ? aba : 'modelos';
   return (
     <section className="tela">
       <header className="tela-topo">
         <h1>Mensagens</h1>
-        {podeEditar && <Btn variante="primario" icone="plus" onClick={() => setEdit({ nome: '', corpo: '', botoes: [], categoria: 'Utilidade', variaveis: [] })} data-testid="novo-modelo">Novo modelo</Btn>}
+        {podeEditar && naAba === 'modelos' && <Btn variante="primario" icone="plus" onClick={() => setEdit({ nome: '', corpo: '', botoes: [], categoria: 'Utilidade', variaveis: [] })} data-testid="novo-modelo">Novo modelo</Btn>}
       </header>
+      {podeLote && <Abas valor={naAba} onChange={setAba} ordem="mensagens" itens={[['modelos', 'Modelos'], ['lote', 'Mensagens em lote']]} />}
+      {naAba === 'lote' && <FilaMensagens user={user} />}
+      {naAba === 'modelos' && <>
       {!podeEditar && <Aviso>Os modelos de mensagem vão para todos os clientes. Somente o proprietário (ou um admin com permissão de estabelecimento) cria ou altera.</Aviso>}
       <p className="muted">Modelos de mensagem no formato do WhatsApp Business (Meta): variáveis numeradas como {'{{1}}'}, categoria e botões. Cada modelo novo precisa de aprovação da Meta antes de ser usado de verdade.</p>
       <div className="grade-cards">
@@ -410,6 +434,7 @@ export function Modelos({ user }) {
         ))}
       </div>
       {edit && <FormModelo m={edit} onClose={() => setEdit(null)} somenteLeitura={!podeEditar} />}
+      </>}
     </section>
   );
 }

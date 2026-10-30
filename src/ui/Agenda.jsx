@@ -20,6 +20,7 @@ import { alternarMulti, escolherUnico, removerUm, sanearSelecao } from '../domai
 import { BotaoRemover, useGestosSelecao } from './selecao.jsx';
 import { copiarTexto } from './clipboard.js';
 import { abrirWhatsapp } from './whatsapp.js';
+import { EstrelaAvaliar } from './PedirAvaliacao.jsx';
 import { textoConvite } from '../domain/whatsapp.js';
 import { rot } from '../domain/tipos.js';
 
@@ -44,7 +45,10 @@ function FotoProfissional({ u }) {
 
 function CartaoAgendamento({ a, st, agora, onClick, mostraBarb, testid = 'cartao' }) {
   const v = visualDoCartao(a, agora);
+  const podePedir = a.status === STATUS.CONCLUIDO && (a.servicoIds || []).length > 0;
+  const avaliada = (st.avaliacoes || []).some((x) => x.agendamentoId === a.id);
   return (
+    <div className="cartao-bloco">
     <button type="button" className={`cartao st-${v.chave}`} onClick={onClick} data-testid={testid} data-status={v.chave}
       title={`${fmtHM(a.inicio)} ${nomeCliente(st, a)} · ${nomeServicos(st, a)}${a.veiculo ? ` · ${textoVeiculo(a)}` : ''} · ${v.rotulo}`}>
       <div className="cartao-topo">
@@ -66,9 +70,13 @@ function CartaoAgendamento({ a, st, agora, onClick, mostraBarb, testid = 'cartao
         {totalAcrescimos(a) > 0 && <span className="chip chip-acr" title="Valor a mais, separado do serviço">Acréscimo {fmtMoney(totalAcrescimos(a))}</span>}
         {(() => { const l = cobrancasDoAgendamento(st, a).filter((c) => c.status === 'paga' || c.status === 'pendente'); if (!l.length) return null; const pend = l.some((c) => c.status === 'pendente'); const pagas = l.some((c) => c.status === 'paga'); const k = pend ? 'pendente' : 'paga'; return <span className={`chip chip-p chip-cob-${k}`} data-testid="chip-pix">{pend ? (pagas ? 'Pix parcial' : 'Pix aguardando') : 'Pix pago'}</span>; })()}
         {a.faltaConfirmacao && a.status === STATUS.A_CONFIRMAR && <span className="chip chip-alerta"><Icon n="alert" size={12} /> Sem confirmação</span>}
+        {podePedir && avaliada && <span className="chip chip-p chip-nivel-ok" data-testid="cartao-avaliado">Avaliado</span>}
+        {podePedir && !avaliada && a.avaliacaoPedida && <span className="chip chip-p" data-testid="cartao-avaliacao-pedida">Avaliação pedida em {fmtDateShort(a.avaliacaoPedida.em)}</span>}
         <span className="muted cartao-ultimo">{textoUltimo(st, a)}</span>
       </div>
     </button>
+    {podePedir && <EstrelaAvaliar a={a} st={st} />}
+    </div>
   );
 }
 

@@ -31,6 +31,7 @@ Um ícone distinto por aba (`tests/menu-icones.test.mjs`). **Não existe aba "In
 | Equipe | team | sim | não | não | não |
 | Boxes (estética) | car | sim | não | não | não |
 | Planos | ticket | sim | se liberada | se liberada | não |
+| Avaliações | star | sim (oculta com motivo) | se liberada | se liberada | "Minhas avaliações" (só as dele, mesmo sem a seção) |
 | Cupons | tag | sim | com Estabelecimento | com Estabelecimento | não |
 | Estoque | box | sim | se liberada | se liberada | se liberada |
 | Estabelecimento | store | sim | se liberada | se liberada | não |
@@ -43,6 +44,7 @@ Um ícone distinto por aba (`tests/menu-icones.test.mjs`). **Não existe aba "In
 **Plano na ficha do cliente** (Clientes > Editar, bloco "Plano"; só com a seção Planos, senão o bloco nem monta e a API de planos não é chamada): plano em andamento (saldo, vencimento, horários fixos no Artifact), histórico curto, "Sem plano" + Adicionar plano (sem plano cadastrado: aviso com atalho para Planos), Editar (trocar de plano com motivo, horários fixos, registrar mensalidade) e Encerrar. Usa as mesmas rotas da aba Planos; `tests/e2e90.mjs` (Artifact) e `tests/e2e91.mjs` (site real).
 
 Só no Artifact: Mensagens (simulador de WhatsApp só nessa tela), Financeiro, Minha escala (profissional). Só no site real: nada a mais.
+Só no Artifact: Mensagens (simulador de WhatsApp só nessa tela; com a seção Avaliações ganha a aba **Mensagens em lote**), Financeiro, Minha escala (profissional), Avaliações (fase 1 da F5). Só no site real: nada a mais.
 
 ## 3. Entrar e primeiro acesso
 
@@ -55,6 +57,7 @@ Só no Artifact: Mensagens (simulador de WhatsApp só nessa tela), Financeiro, M
 ## 4. Agenda
 
 - **Horários** (cartões do dia + próximos 7 dias por vez, agrupados por dia) e **Calendário** (mês). Seletor único de profissional (Todos, seta). Cartão: data (no dia de hoje também a data, não a palavra "Hoje"), hora grande, cliente, serviço, profissional; no desktop os cartões formam **grade de tamanho igual**.
+- **Estrela de avaliação** (v116): no cartão do atendimento **concluído com serviço**, confirma na tela e abre o `wa.me` (aba nova, mensagem e link prontos; o link também é copiado). Cliente **sem telefone válido**, **sem cadastro** ou que **não quer mensagens**: aviso na tela (`avaliar-sem-telefone`, `avaliar-sem-cadastro`, `avaliar-sem-mensagens`), nunca silêncio. Marca "Avaliação pedida em dd/mm" e depois "Avaliado". Futuro, cancelado e só produto não têm estrela.
 - **Cancelados do dia** ficam numa linha "Cancelado (N)" no fim da lista; tocar abre os cartões (com o filtro Cancelado ligado ficam na lista).
 - **Status**: a confirmar, confirmado, concluído, cancelado. Escolher à mão com horário já iniciado grava `statusManual` (o tick não conclui nem cancela). "Cliente agendou" é marcador visual sobre a confirmar (`origem: 'link'`).
 - **Conflito de horário nunca duplica** (`validarHorario`/`acharConflitos`): a equipe pode sobrepor um pedido **a confirmar** (aviso; quem confirmar primeiro vence) e um confirmado só com **encaixe**; o **cliente** (link/WhatsApp) nunca ocupa horário pedido ou confirmado por outro. Estética: box também é recurso.
@@ -66,6 +69,10 @@ Só no Artifact: Mensagens (simulador de WhatsApp só nessa tela), Financeiro, M
 ## 5. Cliente pelo link (`#agendar`)
 
 Sem login. Etapas: (estética: veículo/porte) → serviço → horário → dados → pedido. O pedido entra **a confirmar**, `origem: 'link'`, máx. 3 abertos. Vê só horários livres. Acessa os próprios horários por token pessoal (um agendamento) ou telefone + código; **telefone sozinho nunca basta**. Cancela e remarca com 24 h ou mais. Lembretes de 24 h e 2 h só com aceite. Link desligado = 403. Botões e destaques seguem as cores do tema da loja.
+
+## 5b. Avaliação do atendimento (`#avaliar/<token>`, v116)
+
+Sem login. Token pessoal por agendamento (48 hex, só o hash guardado, 90 dias, uso único, um vivo por agendamento) no **fragmento**. De 1 a 5 estrelas, comentário opcional (até 500), caixa "Avaliar como anônimo". Token errado, vencido ou usado = a **mesma** mensagem genérica. A página nunca mostra o nome do cliente. No painel: **Anônimo** (sem nenhum campo de identidade no DTO) enquanto a regra da loja `avaliacaoMostraAnonimo` estiver desligada (padrão; só o Admin muda, com motivo; no Artifact é a caixa "Simular o Admin" da tela de entrada); ligada mostra o nome e "(avaliado como anônimo)". Dono oculta com motivo (não apaga). Profissional vê só as próprias; atendente/admin só com a seção `avaliacoes`. **Mensagens em lote** (aba da tela Mensagens, seção `avaliacoes`): período de atendimentos concluídos (máx. 366 dias) × profissional × serviço, só quem tem WhatsApp válido e não pediu para não receber, uma linha por pessoa, até 200; sem a API da Meta cada contato abre o `wa.me` (um clique por pessoa), com enviado/pular e pausa. Teste: `tests/e2e78.mjs`.
 
 ## 6. WhatsApp (simulado no Artifact)
 
@@ -90,6 +97,7 @@ Dados e endereço, logo e tema (cores só por `tema.js`), expediente e escala, r
 | Estética: Atender | completo | com veículo/porte/box |
 | Primeiro acesso | pré-visualização (nada gravado) | grava |
 | Login por digital | não existe (iframe) | existe (Meu perfil cadastra; tela de entrada tem "Entrar com a digital"; a senha continua valendo) |
+| Avaliações e mensagens em lote | existem (fase 1) | ainda não (fase 2: `docs/F5-avaliacoes.md`) |
 | Suporte com imagens | até 3 por mensagem (simulado) | até 3 por mensagem, bytes no banco do Admin |
 
 ## 10. Como a varredura usa este mapa
