@@ -5,7 +5,7 @@ import { LOJA_TROCAVEL, MODO_DEMO, agendamentosVisiveis, profissionaisVisiveis }
 import { baseDoLink, montarLinkAgendamento } from '../domain/link-publico.js';
 import { ATIVOS, STATUS, boxesAtivos, ocupacaoDe, retiradaDe } from '../domain/rules.js';
 import { faixasDoProfissional, excecaoDoDia, TIPOS_EXCECAO } from '../domain/schedule.js';
-import { rotuloDoGrupo } from '../domain/agenda-grupos.js';
+import { rotuloDoGrupo, separarCancelados, rotuloCancelados } from '../domain/agenda-grupos.js';
 import { DIAS_CURTOS, addDays, addMonths, fmtDate, fmtDayLong, maiuscula1, fmtDiaMesSemana, fmtHM, fmtMonthYear, monthStart, sameDay, startOfDay, weekStart, fmtDateShort, fmtMoney } from '../domain/time.js';
 import { cobrancasDoAgendamento } from '../domain/financeiro.js';
 import { totalAcrescimos } from '../domain/reports.js';
@@ -182,6 +182,10 @@ export default function Agenda({ user, onAbrir, onNovo }) {
   const noBox = viewEfetiva === 'dia' ? exibidos.filter((a) => a.status === STATUS.CONFIRMADO && !a.local && a.inicio < startOfDay(cursor) && (retiradaDe(st, a) ?? 0) > startOfDay(cursor)).sort(ordem) : [];
   const exDia = viewEfetiva === 'dia' ? excecaoDoDia(st.estabelecimento.escala, cursor) : null;
   const listaDia = exibidos.filter((a) => sameDay(a.inicio, cursor)).sort(ordem);
+  // Cancelados do dia ficam numa linha só no fim (abre ao tocar); se o filtro já pede "Cancelado", ficam na lista.
+  const { ativos: ativosDia, cancelados: canceladosDia } = separarCancelados(listaDia, marcados.includes('cancelado'));
+  const [canceladosAbertos, setCanceladosAbertos] = useState(null); // dia (início) com a linha aberta
+  const abertoCancelados = canceladosAbertos === startOfDay(cursor);
   // Próximos agendamentos (v86): depois do dia que está na tela, os dias seguintes com agendamento, agrupados por dia (a partir de amanhã, 7 dias por vez).
   // Sem filtro de marcador, cancelados e faltas não entram (o que já passou do prazo é histórico, não "próximo").
   const [diasAdiante, setDiasAdiante] = useState(7);
@@ -286,7 +290,7 @@ export default function Agenda({ user, onAbrir, onNovo }) {
             </div>
           )}
           {exDia && exDia.tipo !== 'horario' && <div className="faixa-ex"><Icon n="calendar" size={15} /> {exDia.rotulo || TIPOS_EXCECAO[exDia.tipo]} · sem atendimento</div>}
-          <h3 className="agenda-titulo-dia">Agendamentos do dia <span className="chip chip-p">{listaDia.length}</span></h3>
+          <h3 className="agenda-titulo-dia">Agendamentos do dia <span className="chip chip-p" data-testid="dia-total">{ativosDia.length}</span></h3>
           {listaDia.length === 0 && <Vazio icone="calendar" titulo="Dia livre" texto={marcados.length ? "Nenhum agendamento com o marcador escolhido nesta data." : "Nenhum agendamento nesta data."} />}
           {noBox.length > 0 && (
             <div className="no-box" data-testid="carros-no-box">
@@ -295,8 +299,16 @@ export default function Agenda({ user, onAbrir, onNovo }) {
             </div>
           )}
           <div className="cartoes agenda-cartoes" data-testid="agenda-cartoes">
-            {listaDia.map((a) => <CartaoAgendamento key={a.id} a={a} st={st} agora={agora} mostraBarb={ativosSel.length > 1} onClick={() => onAbrir(a.id)} />)}
+            {ativosDia.map((a) => <CartaoAgendamento key={a.id} a={a} st={st} agora={agora} mostraBarb={ativosSel.length > 1} onClick={() => onAbrir(a.id)} />)}
           </div>
+          {canceladosDia.length > 0 && (
+            <div className="cancelados-dia" data-testid="cancelados-dia">
+              <button type="button" className="cancelados-resumo" aria-expanded={abertoCancelados} onClick={() => setCanceladosAbertos(abertoCancelados ? null : startOfDay(cursor))} data-testid="cancelados-resumo">
+                <span>{rotuloCancelados(canceladosDia.length)}</span><Icon n={abertoCancelados ? 'up' : 'down'} size={15} />
+              </button>
+              {abertoCancelados && <div className="cartoes agenda-cartoes" data-testid="cancelados-cartoes">{canceladosDia.map((a) => <CartaoAgendamento key={a.id} a={a} st={st} agora={agora} mostraBarb={ativosSel.length > 1} onClick={() => onAbrir(a.id)} />)}</div>}
+            </div>
+          )}
           {gruposProximos.length > 0 && (
             <div className="agenda-proximos" data-testid="agenda-proximos">
               <h3 className="agenda-titulo-proximos">Próximos agendamentos <span className="chip chip-p">{gruposProximos.reduce((n, g) => n + g.lista.length, 0)}</span></h3>

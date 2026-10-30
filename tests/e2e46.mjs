@@ -78,7 +78,7 @@ const textoDe = (p, t) => p.getByTestId(t).innerText();
 // 1. Horários: cartões do dia (inclusive o cancelado) e próximos agendamentos por dia, sem cancelados
 {
   const { ctx, p } = await abrir();
-  await p.waitForFunction(() => document.querySelectorAll('[data-testid="cartao"]').length === 3);
+  await p.waitForFunction(() => document.querySelectorAll('[data-testid="cartao"]').length === 2);
   assert.match(await textoDe(p, 'agenda-titulo'), /quarta, 28 de outubro/i);
   assert.equal(await p.locator('[data-testid="cartao-proximo"]').count(), 3, 'próximos: 29/10, 31/10 e 03/11; o de 10/11 só com "Ver mais"');
   assert.equal(await p.locator('[data-testid="proximo-dia"]').count(), 3);
@@ -86,11 +86,15 @@ const textoDe = (p, t) => p.getByTestId(t).innerText();
   const primeiro = p.locator('[data-testid="cartao"]').first();
   assert.match(await primeiro.innerText(), /09:00/); assert.match(await primeiro.innerText(), /Bruno/); assert.match(await primeiro.innerText(), /Corte/);
   assert.match(await p.locator('[data-testid="cartao"]').nth(1).innerText(), /Caio Souza/, 'sem apelido: o nome');
-  assert.equal(await p.locator('[data-testid="cartao"][data-status="cancelado"]').count(), 1);
+  assert.equal(await p.locator('[data-testid="cartao"][data-status="cancelado"]').count(), 0, 'cancelado sai da lista do dia');
+  assert.equal((await textoDe(p, 'cancelados-resumo')).trim(), 'Cancelado (1)', 'e vira uma linha no fim');
+  await p.getByTestId('cancelados-resumo').click();
+  assert.equal(await p.locator('[data-testid="cartao"][data-status="cancelado"]').count(), 1, 'ao tocar na linha, abre o cartão');
+  await p.getByTestId('cancelados-resumo').click();
   assert.match(await p.locator('[data-testid="cartao-proximo"]').nth(1).innerText(), /Cliente agendou/, 'pedido pelo link');
   const lis = ultimo('GET', '/api/agendamentos');
   assert.match(lis.q, /de=2026-10-28T03%3A00%3A00\.000Z/); // meia-noite de Brasília
-  ok('Horários: dia com 3 cartões, próximos por dia sem cancelados, cliente por apelido ou nome, "Cliente agendou" pelo link');
+  ok('Horários: dia com 2 cartões + linha de cancelados, próximos por dia sem cancelados, cliente por apelido ou nome, "Cliente agendou" pelo link');
 
   // 2. seletor de profissional (dono vê todos; escolher um mostra só a agenda dele)
   await p.getByTestId('seletor-profissionais').waitFor();
@@ -98,7 +102,7 @@ const textoDe = (p, t) => p.getByTestId(t).innerText();
   assert.equal(await p.locator('[data-testid="cartao"]').count(), 1);
   assert.match(await p.locator('[data-testid="cartao"]').first().innerText(), /Caio Souza/);
   await p.getByTestId('sel-todos').click();
-  assert.equal(await p.locator('[data-testid="cartao"]').count(), 3);
+  assert.equal(await p.locator('[data-testid="cartao"]').count(), 2);
   ok('seletor: um profissional por vez e Todos');
 
   // 3. confirmar: PUT status; aviso; lista recarregada
@@ -118,8 +122,9 @@ const textoDe = (p, t) => p.getByTestId(t).innerText();
   await p.getByTestId('cancelar-nao').click();
   assert.equal(chamadas.filter((c) => c.u.endsWith('/status')).length, antes, 'voltar não cancela');
   await p.getByTestId('acao-cancelar').click(); await p.getByTestId('cancelar-sim').click();
-  await p.waitForFunction(() => document.querySelectorAll('[data-testid="cartao"][data-status="cancelado"]').length === 2);
+  await p.waitForFunction(() => document.querySelector('[data-testid="cancelados-resumo"]')?.textContent.trim() === 'Cancelados (2)');
   assert.deepEqual(ultimo('PUT', '/status').corpo, { status: 'cancelado' });
+  await p.getByTestId('cancelados-resumo').click();
   ok('cancelar pede confirmação na própria tela (nada de diálogo do navegador)');
 
   // 5. reativar o cancelado
@@ -178,7 +183,7 @@ const textoDe = (p, t) => p.getByTestId(t).innerText();
 {
   papel = 'profissional';
   const { ctx, p } = await abrir();
-  await p.waitForFunction(() => document.querySelectorAll('[data-testid="cartao"]').length === 2);
+  await p.waitForFunction(() => document.querySelectorAll('[data-testid="cartao"]').length === 1);
   assert.equal(await p.getByTestId('seletor-profissionais').count(), 0);
   const abaP = ctx.waitForEvent('page', { timeout: 6000 });
   await p.getByTestId('agenda-link').click();
@@ -193,7 +198,7 @@ const textoDe = (p, t) => p.getByTestId(t).innerText();
 {
   const { ctx, p } = await abrir({ width: 390, height: 780 });
   await p.addStyleTag({ content: '*{font-family:"DejaVu Sans" !important}' });
-  await p.waitForFunction(() => document.querySelectorAll('[data-testid="cartao"]').length === 3);
+  await p.waitForFunction(() => document.querySelectorAll('[data-testid="cartao"]').length === 2);
   const semRolagem = async (n) => assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `${n}: rolagem horizontal`);
   await semRolagem('horários');
   const bl = await p.getByTestId('agenda-link').boundingBox(); const bat = await p.getByTestId('atender-abrir').boundingBox();
@@ -210,15 +215,15 @@ const textoDe = (p, t) => p.getByTestId(t).innerText();
 // 5. computador: cartões do dia em grade de colunas iguais (não ocupam a linha inteira), mesma altura na linha, cartão do dia com a data; 390 px uma coluna
 for (const [w, h] of [[1366, 820], [1920, 1000], [390, 800]]) {
   const { ctx, p } = await abrir({ width: w, height: h });
-  await p.waitForFunction(() => document.querySelectorAll('[data-testid="cartao"]').length === 3);
+  await p.waitForFunction(() => document.querySelectorAll('[data-testid="cartao"]').length === 2);
   const m = await p.evaluate(() => ({ lista: [...document.querySelectorAll('[data-testid="cartao"]')].map((e) => { const r = e.getBoundingClientRect(); return { y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height), data: e.querySelector('[data-testid="cartao-data"]')?.textContent || '' }; }), largo: document.documentElement.scrollWidth > window.innerWidth + 1 }));
   assert.ok(!m.largo, `${w}: rolagem lateral`);
   assert.equal(new Set(m.lista.map((c) => c.w)).size, 1, `${w}: mesma largura ${JSON.stringify(m.lista)}`);
   assert.equal(new Set(m.lista.map((c) => c.h)).size, 1, `${w}: mesma altura ${JSON.stringify(m.lista)}`);
   for (const c of m.lista) assert.match(c.data, /^[a-zç]{3} \d\d\/\d\d$/i, `${w}: o cartão do dia mostra a data, não "Hoje"`);
   const linhas = new Set(m.lista.map((c) => c.y)).size;
-  if (w >= 1000) { assert.equal(linhas, 1, `${w}: os três cartões cabem numa linha`); assert.ok(m.lista[0].w < w * 0.5, `${w}: cartão não ocupa a linha inteira (${m.lista[0].w})`); }
-  else assert.equal(linhas, 3, `${w}: no celular uma coluna`);
+  if (w >= 1000) { assert.equal(linhas, 1, `${w}: os cartões cabem numa linha`); assert.ok(m.lista[0].w < w * 0.5, `${w}: cartão não ocupa a linha inteira (${m.lista[0].w})`); }
+  else assert.equal(linhas, 2, `${w}: no celular uma coluna`);
   ok(`${w} px: cartões do dia em grade igual (${m.lista[0].w} px, ${linhas} linha(s))`);
   await ctx.close();
 }

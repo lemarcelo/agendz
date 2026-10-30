@@ -856,6 +856,11 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
 .agenda-proximos-real { margin-top: 12px; }
 .agenda-titulo-proximos-real { margin: 0; font-size: 14px; color: var(--muted); }
 .agenda-grupo-real { display: grid; gap: 6px; }
+/* Linha dos cancelados do dia (recolhida; abre os cartões). Vale na tela simulada e no site real. */
+.cancelados-dia { display: grid; gap: 8px; margin-top: 4px; }
+.agenda-dia-real > .cancelados-dia { grid-column: 1 / -1; }
+.cancelados-resumo { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 44px; padding: 8px 14px; border-radius: var(--raio); border: 1px dashed var(--line-strong); background: var(--cinza-bg); color: var(--cinza); font: inherit; font-weight: 600; cursor: pointer; text-align: left; }
+.cancelados-resumo:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .seletor-chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .seletor-chips .chip { border: 1px solid var(--line); cursor: pointer; }
 .seletor-chips .chip.on { background: var(--ink); color: var(--ink-fg); border-color: var(--ink); }

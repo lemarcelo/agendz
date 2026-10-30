@@ -8,7 +8,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { agenda as api, boxes as apiBoxes, clientes as apiClientes, local as apiLocal, profissionais as apiProf } from '../../services/api-real.js';
 import { DIAS_CURTOS, addDays, addMonths, fmtDateTime, fmtDayLong, maiuscula1, fmtDiaMesSemana, fmtHM, fmtMoney, fmtMonthYear, monthStart, sameDay, startOfDay, weekStart, ymd } from '../../domain/time.js';
 import { ATIVOS, ROTULO_STATUS } from '../../domain/rules.js';
-import { agruparPorDia, rotuloDoGrupo } from '../../domain/agenda-grupos.js';
+import { agruparPorDia, rotuloCancelados, rotuloDoGrupo, separarCancelados } from '../../domain/agenda-grupos.js';
 import { abreviarNome } from '../../domain/abreviar.js';
 import { Rot, capAtiva } from '../../domain/tipos.js';
 import { ROTULO_PORTE, rotuloVeiculo } from '../../domain/veiculos.js';
@@ -298,7 +298,11 @@ export default function Agenda({ ehProprio = false, ehDono = false, meuId = '', 
   const nomeProf = (id) => (profs.find((p) => p.id === id) || {}).nome || Rot('profissional');
   const nomeCliente = (a) => (a.clienteId ? clientes.get(a.clienteId) : a.nomeAvulso) || (a.clienteId ? 'Cliente' : a.local || a.origem === 'atendimento' ? 'Atendimento local' : 'Sem cadastro');
   const visiveis = useMemo(() => (lista || []).filter((a) => selecionado === 'todos' || a.profissionalId === selecionado).sort((x, y) => x.inicio - y.inicio), [lista, selecionado]);
-  const doDia = visiveis.filter((a) => a.inicio >= cursor && a.inicio < addDays(cursor, 1));
+  const doDiaTodos = visiveis.filter((a) => a.inicio >= cursor && a.inicio < addDays(cursor, 1));
+  // Cancelados do dia: uma linha só no fim, que abre os cartões ao tocar (pedido do Marcelo, 30/10).
+  const { ativos: doDia, cancelados: canceladosDia } = separarCancelados(doDiaTodos);
+  const [canceladosAbertos, setCanceladosAbertos] = useState(null); // início do dia com a linha aberta
+  const abertoCancelados = canceladosAbertos === cursor;
   const futuros = visiveis.filter((a) => a.inicio >= addDays(cursor, 1) && ATIVOS.includes(a.status));
   const grupos = agruparPorDia(futuros);
   const agora = Date.now();
@@ -354,7 +358,15 @@ export default function Agenda({ ehProprio = false, ehDono = false, meuId = '', 
       {lista !== null && modo === 'horarios' && (
         <>
           <div className="agenda-dia-real" data-testid="agenda-dia">
-            {doDia.length === 0 ? <p className="muted vazio" data-testid="agenda-vazio">Nenhum agendamento neste dia.</p> : doDia.map((a) => cartao(a, 'cartao'))}
+            {doDiaTodos.length === 0 ? <p className="muted vazio" data-testid="agenda-vazio">Nenhum agendamento neste dia.</p> : doDia.map((a) => cartao(a, 'cartao'))}
+            {canceladosDia.length > 0 && (
+              <div className="cancelados-dia cancelados-dia-real" data-testid="cancelados-dia">
+                <button type="button" className="cancelados-resumo" aria-expanded={abertoCancelados} onClick={() => setCanceladosAbertos(abertoCancelados ? null : cursor)} data-testid="cancelados-resumo">
+                  <span>{rotuloCancelados(canceladosDia.length)}</span><Icone n={abertoCancelados ? 'up' : 'down'} size={15} />
+                </button>
+                {abertoCancelados && <div className="agenda-lista-real" data-testid="cancelados-cartoes">{canceladosDia.map((a) => cartao(a, 'cartao'))}</div>}
+              </div>
+            )}
           </div>
           <div className="agenda-proximos-real" data-testid="agenda-proximos">
             <h3 className="agenda-titulo-proximos-real">Próximos agendamentos</h3>
