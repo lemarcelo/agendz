@@ -272,8 +272,9 @@ class LinkPublicoTest extends BaseApi {
         meus(OFFBOX, texto(r, "token")).andExpect(jsonPath("$", hasSize(1)));
         avisosDe(dono).andExpect(jsonPath("$[?(@.tipo=='pedido')].texto", hasSize(1)));
         pedir(OFFBOX, corpo("Fone Ruim", "12345", s, as(dia, 10, 0), "")).andExpect(status().isBadRequest()).andExpect(jsonPath("$.mensagem").value("Informe o telefone com DDD."));
-        // o horário já pedido continua ocupado para o próximo
-        pedir(OFFBOX, corpo("Outro", "", s, as(dia, 9, 0), "")).andExpect(status().isConflict());
+        // o horário já pedido continua ocupado: a loja tem dois profissionais, então o segundo pedido sem telefone fica com o outro e o terceiro é recusado
+        pedir(OFFBOX, corpo("Outro", "", s, as(dia, 9, 0), "")).andExpect(status().isCreated());
+        pedir(OFFBOX, corpo("Mais Um", "", s, as(dia, 9, 0), "")).andExpect(status().isConflict()).andExpect(jsonPath("$.mensagem").value(LinkPublicoService.ERRO_HORARIO));
     }
 
     @Test
