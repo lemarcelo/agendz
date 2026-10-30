@@ -444,7 +444,7 @@ class AtendimentoTest extends BaseApi {
         regras(APEX, pablo, "{\"formaPagamentoPadrao\":\"pix\"}").andExpect(status().isForbidden());
         // o profissional lê as regras (o formulário precisa do padrão e dos obrigatórios), mas não muda
         mvc.perform(get("/api/estabelecimento/regras-atendimento").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(pablo))).andExpect(status().isOk())
-                .andExpect(jsonPath("$.formaPagamentoPadrao").value("pix")).andExpect(jsonPath("$.futuro[0]").value("nome")).andExpect(jsonPath("$.futuro[1]").value("telefone"))
+                .andExpect(jsonPath("$.formaPagamentoPadrao").value("pix")).andExpect(jsonPath("$.futuro", hasSize(0)))
                 .andExpect(jsonPath("$.local", hasSize(0)));
     }
 
@@ -453,7 +453,7 @@ class AtendimentoTest extends BaseApi {
         regras(APEX, davi, "{\"formaPagamentoPadrao\":\"cartao\",\"camposObrigatorios\":{\"futuro\":[\"nome\"],\"local\":[\"telefone\"]}}").andExpect(status().isOk());
         String alan = token(DALFORNO, "alan");
         mvc.perform(get("/api/estabelecimento/regras-atendimento").with(host(DALFORNO)).header(HttpHeaders.AUTHORIZATION, bearer(alan))).andExpect(status().isOk())
-                .andExpect(jsonPath("$.formaPagamentoPadrao").value("pix")).andExpect(jsonPath("$.local", hasSize(0))).andExpect(jsonPath("$.futuro", hasSize(2)));
+                .andExpect(jsonPath("$.formaPagamentoPadrao").value("pix")).andExpect(jsonPath("$.local", hasSize(0))).andExpect(jsonPath("$.futuro", hasSize(0))); // de fábrica nada é obrigatório
         mvc.perform(get("/api/estabelecimento/regras-atendimento").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi))).andExpect(status().isOk())
                 .andExpect(jsonPath("$.formaPagamentoPadrao").value("cartao")).andExpect(jsonPath("$.local[0]").value("telefone"));
         // gravar só a forma não apaga os campos já escolhidos
