@@ -195,7 +195,7 @@ public class LinkPublicoService {
         return banco.naLoja(jdbc -> {
             LinkAgendamento.Config cfg = config(jdbc, loja);
             if (!cfg.ativo()) return List.<Horario>of();
-            List<Svc> servicos = servicosDoLink(jdbc, ids(servicoIds), porteDoPedido(jdbc, loja, porte));
+            List<Svc> servicos = servicosDoLink(jdbc, ids(servicoIds), porteDoPedido(jdbc, loja, porte, cfg.veiculoObrigatorio().contains("porte")));
             Base base = base(jdbc, loja, profissionalId);
             return horariosDoDia(jdbc, cfg, base, dia, servicos, relogio.instant(), false, null);
         });
@@ -210,7 +210,7 @@ public class LinkPublicoService {
         return banco.naLoja(jdbc -> {
             LinkAgendamento.Config cfg = config(jdbc, loja);
             if (!cfg.ativo() || n == 0) return List.<LocalDate>of();
-            List<Svc> servicos = servicosDoLink(jdbc, ids(servicoIds), porteDoPedido(jdbc, loja, porte));
+            List<Svc> servicos = servicosDoLink(jdbc, ids(servicoIds), porteDoPedido(jdbc, loja, porte, cfg.veiculoObrigatorio().contains("porte")));
             Base base = base(jdbc, loja, profissionalId);
             Instant agora = relogio.instant();
             List<LocalDate> livres = new ArrayList<>();
@@ -646,9 +646,10 @@ public class LinkPublicoService {
     }
 
     /** Porte pedido nas consultas de horário: no tipo que cobra por porte é obrigatório e válido; nos outros é ignorado. */
-    private static String porteDoPedido(JdbcTemplate jdbc, Loja loja, String porte) {
+    private static String porteDoPedido(JdbcTemplate jdbc, Loja loja, String porte, boolean exigir) {
         if (!Capacidades.precoPorPorte(loja)) return null;
         String p = porte == null ? "" : porte.trim().toLowerCase(java.util.Locale.ROOT);
+        if (p.isEmpty() && exigir) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha o porte do veículo.");
         if (p.isEmpty()) return PorteController.PADRAO; // o dono pode tirar a obrigatoriedade do porte: quem não escolhe fica no Médio
         if (!PorteController.ativos(jdbc).contains(p)) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha o porte do veículo.");
         return p;

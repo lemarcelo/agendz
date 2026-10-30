@@ -243,7 +243,7 @@ const texto = (p, t) => p.getByTestId(t).innerText();
 {
   const { ctx, p } = await abrir();
   await p.getByTestId('nav-estabelecimento').click();
-  await p.getByTestId('regras-real').waitFor();
+  await p.getByTestId('regras-forma').waitFor(); // o cartão aparece "Carregando…" com o mesmo testid: espera o formulário
   for (const k of ['veiculo', 'placa', 'modelo', 'porte']) assert.equal(await p.getByTestId(`regras-local-${k}`).count(), 1, `${k} é regra do atendimento feito`);
   assert.equal(await p.getByTestId('regras-local-placa').isChecked(), true);
   await p.getByTestId('regras-local-placa').uncheck(); await p.getByTestId('regras-local-modelo').uncheck(); await p.getByTestId('regras-local-porte').uncheck();

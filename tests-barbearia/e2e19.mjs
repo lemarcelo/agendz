@@ -41,10 +41,10 @@ for (const [nome, vp, touch] of [['computador', { width: 1280, height: 800 }, fa
     await semRolagem(p, `${nome}: modal local`);
     await T('salvar-atender').click();
     await T('salvar-atender').waitFor({ state: 'detached' });
-    // serviços mais feitos primeiro (histórico somado): o que acabou de ser registrado sobe na lista
+    // v123 (exceção à v64): serviços mais usados primeiro; o que acabou de ser registrado não desce (com empate de uso fica onde está)
     await T('atender').click();
     const idsDepois = await p.locator('[data-testid^="atender-srv-"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')));
-    assert.ok(idsDepois.indexOf(ultimo) < idsAntes.indexOf(ultimo), `${nome}: o serviço que acabou de ser feito sobe na lista (histórico somado)`);
+    assert.ok(idsDepois.indexOf(ultimo) <= idsAntes.indexOf(ultimo), `${nome}: o serviço que acabou de ser feito não desce na lista (v123: mais usados primeiro; empate segue a ordem do dono)`);
     await p.getByRole('button', { name: 'Cancelar' }).click();
     // nome + telefone novo: o cadastro é criado sozinho
     await T('nav-clientes').click();
