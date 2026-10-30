@@ -26,7 +26,9 @@ import org.springframework.web.bind.annotation.RestController;
  *   GET  /interno/plataforma/lojas                               → lojas com situação e contagens (nada de cliente final)
  *   POST /interno/plataforma/lojas                               → cria loja + dono (senha temporária uma vez) + suporte
  *   GET  /interno/plataforma/lojas/{slug}/usuarios               → equipe visível (sem suporte e fumaça)
+ *   POST /interno/plataforma/lojas/{slug}/usuarios               → cria usuário da equipe {nome, usuario, papel, apelido?}; senha temporária gerada aqui, devolvida uma vez (201)
  *   POST /interno/plataforma/lojas/{slug}/usuarios/{id}/senha    → nova senha temporária (uma vez)
+ *   PUT  /interno/plataforma/lojas/{slug}/usuarios/{id}/papel    → {papel} dono|admin|atendente|profissional → {usuario, papel, anterior, mudou}; o proprietário nunca muda de perfil por aqui
  *   PUT  /interno/plataforma/lojas/{slug}/usuarios/{id}/ativo    → {ativo}; nunca deixa a loja sem proprietário ativo
  *   GET|PUT /interno/plataforma/lojas/{slug}/regras              → limites e campos obrigatórios (a loja aplica no servidor)
  *   GET|PUT /interno/plataforma/lojas/{slug}/status              → em_teste | ativo | em_atraso | suspenso | encerrado (suspenso/encerrado = 402 na loja)
@@ -38,6 +40,9 @@ import org.springframework.web.bind.annotation.RestController;
 public class PlataformaInternaController {
 
     public record CorpoAtivo(Boolean ativo) {
+    }
+
+    public record CorpoPapel(String papel) {
     }
 
     public record CorpoStatus(String status) {
@@ -75,6 +80,18 @@ public class PlataformaInternaController {
     public ResponseEntity<List<PlataformaService.UsuarioDaLoja>> usuarios(@PathVariable String slug, @RequestHeader(value = "X-Interno-Chave", required = false) String enviada) {
         conferir(enviada);
         return ResponseEntity.ok().header("Cache-Control", "no-store").body(servico.usuarios(servico.loja(slug)));
+    }
+
+    @PostMapping("/interno/plataforma/lojas/{slug}/usuarios")
+    public ResponseEntity<PlataformaService.UsuarioCriado> criarUsuario(@PathVariable String slug, @RequestBody PlataformaService.NovoUsuario corpo, @RequestHeader(value = "X-Interno-Chave", required = false) String enviada) {
+        conferir(enviada);
+        return ResponseEntity.status(HttpStatus.CREATED).header("Cache-Control", "no-store").body(servico.criarUsuario(servico.loja(slug), corpo));
+    }
+
+    @PutMapping("/interno/plataforma/lojas/{slug}/usuarios/{id}/papel")
+    public ResponseEntity<PlataformaService.PerfilMudado> papel(@PathVariable String slug, @PathVariable UUID id, @RequestBody CorpoPapel corpo, @RequestHeader(value = "X-Interno-Chave", required = false) String enviada) {
+        conferir(enviada);
+        return ResponseEntity.ok().header("Cache-Control", "no-store").body(servico.mudarPerfil(servico.loja(slug), id, corpo == null ? null : corpo.papel()));
     }
 
     @PostMapping("/interno/plataforma/lojas/{slug}/usuarios/{id}/senha")
