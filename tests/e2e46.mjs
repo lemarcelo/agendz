@@ -10,7 +10,7 @@ const pagina = readFileSync(new URL('../dist/index-real.html', import.meta.url),
 const ok = (m) => console.log('✓', m);
 const U = (s) => new Date(`${s}-03:00`).toISOString();
 const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
-const ALAN = id(1), KIKO = id(2), BRUNO = id(11), CAIO = id(12);
+const ALAN = id(1), KIKO = id(2), BRUNO = id(11), CAIO = id(12), DEBORA = id(13);
 const banco = [];
 const ag = (n, inicio, min, prof, cli, status, nome, extra = {}) => banco.push({ id: id(100 + n), clienteId: cli, profissionalId: prof, inicio: U(inicio), fim: new Date(new Date(U(inicio)).getTime() + min * 60000).toISOString(), fimOcupado: new Date(new Date(U(inicio)).getTime() + (min + 10) * 60000).toISOString(), status, encaixe: false, total: 45, servicos: [{ servicoId: id(50), nome, preco: 45, duracaoMin: min }], conflitosPendentes: [], origem: 'painel', reagendado: false, statusManual: false, historico: [], ...extra });
 ag(1, '2026-10-28T09:00:00', 45, ALAN, BRUNO, 'confirmado', 'Corte');
@@ -34,7 +34,7 @@ const servidor = http.createServer((req, res) => {
     chamadas.push({ m: req.method, u: u.pathname, q: u.search, corpo: corpo ? JSON.parse(corpo) : null });
     if (u.pathname === '/api/publico/loja') return json(200, { slug: 'dalforno', nome: 'Dalforno', tipo: 'barbearia', logo: null, temaCor: null, temaCor2: null });
     if (u.pathname === '/api/auth/login') return json(200, { token: 'tok', id: ALAN, nome: 'Alan', papel, deveTrocarSenha: false, onboardingPendente: false, secoes: ['agenda', 'clientes'] });
-    if (u.pathname === '/api/clientes') return json(200, [{ id: BRUNO, nome: 'Bruno Lima', apelido: 'Bruno', telefone: '11999990001' }, { id: CAIO, nome: 'Caio Souza', apelido: '', telefone: '11999990002' }]);
+    if (u.pathname === '/api/clientes') return json(200, [{ id: BRUNO, nome: 'Bruno Lima', apelido: 'Bruno', telefone: '11999990001' }, { id: CAIO, nome: 'Caio Souza', apelido: '', telefone: '11999990002' }, { id: DEBORA, nome: 'Débora Reis', apelido: '', telefone: '' }]);
     if (u.pathname === '/api/profissionais') return json(200, [{ id: ALAN, nome: 'Alan', papel: 'dono', atende: true }, { id: KIKO, nome: 'Kiko', papel: 'profissional', atende: true }]);
     if (u.pathname === '/api/agendamentos' && req.method === 'GET') {
       const de = Date.parse(u.searchParams.get('de')), ate = Date.parse(u.searchParams.get('ate'));
@@ -177,6 +177,61 @@ const textoDe = (p, t) => p.getByTestId(t).innerText();
   await p.waitForFunction(() => document.querySelectorAll('[data-testid="cartao"]').length === 1);
   ok('calendário: contagem por dia e clique abre o dia');
   await ctx.close();
+}
+
+// 8b. aviso depois de remarcar em TODAS as situações (o bug: o aviso sumia quando o cartão saía da lista, e cliente sem telefone não era avisado)
+{
+  const antes = banco.length;
+  ag(20, '2026-10-28T16:00:00', 30, ALAN, CAIO, 'confirmado', 'Corte');   // com telefone
+  ag(21, '2026-10-28T17:00:00', 30, ALAN, DEBORA, 'confirmado', 'Corte'); // cadastro sem telefone
+  ag(22, '2026-10-28T18:00:00', 30, ALAN, null, 'confirmado', 'Corte', { nomeAvulso: 'Passante' }); // sem cadastro
+  const remarcarDe = async (p, horaCartao, destino) => {
+    await p.locator('[data-testid="cartao"]', { hasText: horaCartao }).first().locator('[data-testid="cartao-abrir"]').click();
+    await p.getByTestId('acao-remarcar').click();
+    await p.getByTestId('remarcar-quando').fill(destino);
+    await p.getByTestId('remarcar-salvar').click();
+  };
+  const semAviso = async (p) => assert.equal(await p.locator('[data-testid="avisar-whats"], [data-testid="avisar-sem-telefone-bloco"]').count(), 0, 'nenhum aviso aberto');
+  // a) com telefone, para OUTRO dia: o cartão sai da lista do dia e o aviso continua na tela
+  {
+    const { ctx, p } = await abrir();
+    await remarcarDe(p, '16:00', '2026-11-20T10:00');
+    await p.getByTestId('avisar-whats-pergunta').waitFor();
+    await p.waitForFunction(() => !/16:00/.test(document.querySelector('[data-testid="agenda-dia"]')?.textContent || ''));
+    assert.equal(await p.getByTestId('avisar-whats-pergunta').count(), 1, 'o aviso sobrevive à saída do cartão da lista');
+    await p.getByTestId('avisar-whats-nao').click();
+    await p.waitForFunction(() => !document.querySelector('[data-testid="avisar-whats"]'));
+    await semAviso(p);
+    ok('remarcar para outro dia (cartão sai da lista): o aviso de WhatsApp continua na tela');
+    // b) cliente sem telefone: avisa "sem telefone"
+    await remarcarDe(p, '17:00', '2026-10-28T19:00');
+    await p.getByTestId('avisar-sem-telefone').waitFor();
+    assert.match(await textoDe(p, 'avisar-sem-telefone'), /sem telefone|não há telefone/i);
+    assert.equal(await p.getByTestId('avisar-whats-pergunta').count(), 0, 'não oferece WhatsApp sem telefone');
+    await p.getByTestId('avisar-sem-telefone-ok').click();
+    await p.waitForFunction(() => !document.querySelector('[data-testid="avisar-sem-telefone"]'));
+    ok('remarcar cliente sem telefone: avisa que não há telefone');
+    await ctx.close();
+    // c) cliente sem telefone e para outro dia (abaixo)
+  }
+  {
+    ag(23, '2026-10-28T20:00:00', 30, ALAN, DEBORA, 'confirmado', 'Corte');
+    const { ctx, p } = await abrir();
+    await remarcarDe(p, '20:00', '2026-11-21T10:00');
+    await p.getByTestId('avisar-sem-telefone').waitFor();
+    ok('remarcar sem telefone para outro dia: o aviso também aparece');
+    await ctx.close();
+  }
+  // d) atendimento sem cadastro
+  {
+    const { ctx, p } = await abrir();
+    await remarcarDe(p, '18:00', '2026-10-28T19:30');
+    await p.getByTestId('avisar-sem-telefone').waitFor();
+    assert.match(await textoDe(p, 'avisar-sem-telefone'), /sem cadastro/i);
+    ok('remarcar atendimento sem cadastro: avisa que não há como avisar o cliente');
+    await ctx.close();
+  }
+  banco.splice(antes);
 }
 
 // 9. profissional: sem seletor; o servidor só devolve a agenda dele
