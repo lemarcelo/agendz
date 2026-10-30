@@ -123,9 +123,11 @@ public class OnboardingController {
     private final EscalaService escalas;
     private final ReconfiguracaoService reconfiguracoes;
     private final ProdutoService produtosDaLoja;
+    private final br.com.agendz.interno.RegrasDaLoja regras;
 
     public OnboardingController(LojaJdbc banco, CatalogoDeServicos catalogos, PasswordEncoder encoder, ObjectMapper json, EscalaService escalas, ReconfiguracaoService reconfiguracoes,
-                                ProdutoService produtosDaLoja) {
+                                ProdutoService produtosDaLoja, br.com.agendz.interno.RegrasDaLoja regras) {
+        this.regras = regras;
         this.reconfiguracoes = reconfiguracoes;
         this.produtosDaLoja = produtosDaLoja;
         this.banco = banco;
@@ -225,8 +227,10 @@ public class OnboardingController {
         List<PessoaCriada> criadas = banco.naLoja(jdbc -> {
             UUID reconf = reconfiguracoes.autorizada(jdbc, quem);
             Set<String> logins = new HashSet<>(jdbc.queryForList("select identificador from usuario", String.class));
+            Integer ativos = jdbc.queryForObject("select count(*) from usuario where ativo and " + br.com.agendz.validacao.Reservados.OCULTOS_SQL, Integer.class);
             List<PessoaCriada> saida = new ArrayList<>();
             for (NovaPessoa p : corpo.pessoas()) {
+                regras.exigirVagaDeUsuario(loja.id(), (ativos == null ? 0 : ativos) + saida.size()); // limite de usuários da plataforma (Admin): o assistente não passa por cima
                 String nome = Texto.limpar(p.nome());
                 if (nome.isEmpty()) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe o nome");
                 br.com.agendz.validacao.Reservados.exigirLivre(nome);
@@ -322,6 +326,8 @@ public class OnboardingController {
                 if (boxes != null && boxes == 0) {
                     Integer atendem = jdbc.queryForObject("select count(*) from usuario where ativo and atende", Integer.class);
                     int n = Math.max(1, Math.min(20, atendem == null ? 1 : atendem));
+                    Integer limite = regras.ler(loja.id()).limiteAgendas(); // limite de agendas da plataforma (Admin): cria só as que cabem (nunca menos de 1)
+                    if (limite != null) n = Math.max(1, Math.min(n, limite));
                     for (int i = 1; i <= n; i++) jdbc.update("insert into box (loja_id, nome, ordem) values (?::uuid, ?, ?)", loja.id().toString(), "Box " + i, i - 1);
                 }
             }
