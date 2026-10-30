@@ -106,3 +106,9 @@ Lista simples. Cada item está no histórico do `prompt-agendz-regras.md` (v84 a
 - v101: o usuário `suporte` é perfil `admin` (gestor sem ser dono), escondido da equipe da loja e sem poder trocar de nome; "salvo por cliente no Admin" = existe por cliente e aparece na ficha, mas a senha nunca é guardada (só redefinida e mostrada uma vez). **Dúvida (não bloqueia):** se preferir que o `suporte` apareça (somente leitura) na equipe do próprio cliente, é só avisar.
 - v107: Suporte sem anexo de imagem (adiado); Admin fora do ar = "O suporte não está disponível agora" (503, nada vaza); resolvido fecha sozinho em 7 dias; cliente que responde reabre resolvido/aguardando; limites 5 chamados e 20 respostas por hora por usuário. **Dúvida:** `INTERNO_CHAVE` precisa estar no `.env` da VPS e o Admin precisa ser reimplantado para criar as tabelas.
 - v108: domínio próprio: verificação por botão (sem tarefa periódica); depois de verificado falta o CNAME para `alias.<domínio>`; sem renovação da prova. **Dúvida:** domínio próprio exige plano pago? (regra comercial, ainda em aberto)
+
+## v109 (30/10)
+- Horário futuro sem cliente nasce **confirmado** (sem cadastro não há a quem pedir confirmação nem enviar mensagem). Dúvida para o Marcelo: preferir "a confirmar"? Hoje o dono confirma na hora.
+- O padrão vazio vale também para a estética; exceção registrada em `docs/EQUIVALENCIA-BARBEARIA.md`.
+- Os dois pedidos do link para 02/11 16:30 eram de profissionais diferentes (o servidor do link já era estrito por profissional); o furo real era o cliente via WhatsApp/simulador poder sobrepor um pedido a confirmar, agora fechado.
+- Aro do botão do link: `--tema-btn-aro` (cor do degradê com transparência), nunca cor solta.

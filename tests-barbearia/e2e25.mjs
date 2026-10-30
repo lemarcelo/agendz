@@ -57,6 +57,11 @@ assert.match(await T('salvar-atender').innerText(), /Registrar/);
 await salvar();
 ok('data passada registra atendimento');
 
+// de fábrica o agendamento futuro não exige dados do cliente: o dono marca nome e telefone em Regras
+await T('nav-estab').click();
+await p.getByRole('tab', { name: 'Regras' }).click();
+await T('obrig-futuro-nome').check(); await T('obrig-futuro-telefone').check();
+await T('nav-agenda').click();
 await T('atender').click();
 await primeiroServico();
 await T('atender-quando').click();

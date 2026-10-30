@@ -334,3 +334,5 @@ Qualquer usuário logado (menos o que ainda está com senha temporária). O serv
 | `suporte.obter` | `GET /api/suporte/chamados/{id}` | conversa; **abrir marca como lido**; id que não é UUID = 404 sem chamar o Admin |
 | `suporte.responder` | `POST /api/suporte/chamados/{id}/mensagens` | `{ texto ≤ 4000 }`; 20 por hora por chamado (429); resolvido ou aguardando volta a "em atendimento"; **fechado = 409** (abrir outro) |
 Situação: aberto → em atendimento → aguardando cliente → resolvido (vale 7 dias para o cliente reabrir respondendo; depois fecha sozinho com aviso do sistema) → fechado (só o administrador fecha à mão, com motivo).
+
+> v109: `POST /api/atendimentos` com data futura aceita **sem cliente** (sem `clienteId`, nome ou telefone, se as regras do atendimento não exigirem): grava `cliente_id` nulo e `nome_avulso`, status `confirmado`, sem aviso ao cliente. `POST /api/agendamentos` continua exigindo `clienteId`. De fábrica `campos_futuro` é vazio.

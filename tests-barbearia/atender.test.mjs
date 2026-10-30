@@ -47,7 +47,8 @@ test('telefone cria o cadastro (nome opcional); só nome não cria; mesmo telefo
   assert.equal(agenda.atender({ servicoIds: ['s-tesoura'], profissionalId: 'u-kiko', telefone: '123' }).ok, false);
 });
 
-test('data futura vira agendamento: exige nome e telefone por padrão, cria o cadastro, aceita produto e valida horário', () => {
+test('data futura vira agendamento: com nome e telefone marcados como obrigatórios, exige, cria o cadastro, aceita produto e valida horário', () => {
+  assert.ok(estabelecimento.salvar({ camposObrigatorios: { futuro: ['nome', 'telefone'], local: [] } }).ok);
   const inicio = tsAt(dia(9), '10:00');
   const sem = agenda.atender({ servicoIds: ['s-tesoura'], profissionalId: 'u-kiko', inicio });
   assert.equal(sem.ok, false); assert.match(sem.erros[0], /nome, telefone/);
@@ -78,7 +79,7 @@ test('campos obrigatórios por tipo são configuráveis (nome, telefone, barbeir
   assert.ok(estabelecimento.salvar({ camposObrigatorios: { futuro: [], local: ['telefone'] } }).ok);
   assert.equal(agenda.atender({ servicoIds: ['s-tesoura'], profissionalId: 'u-kiko', formaPagamento: 'pix' }).ok, false);
   const f = agenda.atender({ servicoIds: ['s-tesoura'], profissionalId: 'u-kiko', inicio: tsAt(dia(11), '10:00') });
-  assert.equal(f.ok, false); assert.match(f.erros[0], /telefone/, 'agendar sempre pede o telefone');
+  assert.equal(f.ok, true, 'a regra do futuro está vazia: agendar não pede telefone');
   for (const ruim of [{ futuro: ['forma'], local: [] }, { futuro: ['formaPagamento'], local: [] }, { futuro: [], local: ['nome', 'nome'] }, { futuro: [] }, 'x'])
     assert.equal(estabelecimento.salvar({ camposObrigatorios: ruim }).ok, false, JSON.stringify(ruim));
 });
