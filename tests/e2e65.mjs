@@ -3,6 +3,7 @@
 // fechado/erro aparecem na tela; 390 px sem rolagem lateral; texto de pessoa fica como texto.
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
+import { liberarSuporte } from './e2e-util.mjs';
 
 const ok = (m) => console.log('✓', m);
 const url = new URL('../dist/index.html', import.meta.url).href;
@@ -23,6 +24,11 @@ const semRolagem = async (p, onde) => assert.equal(await p.evaluate(() => docume
 for (const vp of [{ width: 1440, height: 900 }, { width: 390, height: 780 }]) {
   const { ctx, p } = await abrir(vp);
   const T = (id) => p.getByTestId(id);
+  // v119: de fábrica só o proprietário abre chamado: o profissional nem vê o menu; o dono libera no cadastro de cada um
+  await T('demo-pablo').click(); await T('agenda-topo').waitFor();
+  assert.equal(await T('nav-suporte').count(), 0, 'profissional sem a seção não vê o Suporte');
+  await T('sair').click();
+  await liberarSuporte(p, T, ['Pablo', 'Marcelo']);
   // profissional abre um chamado
   await T('demo-pablo').click(); await T('agenda-topo').waitFor();
   await T('nav-suporte').click();

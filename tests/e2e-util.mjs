@@ -47,3 +47,14 @@ export async function pubVeiculo(p, { placa = 'PUB1A23', modelo = 'Onix', porte 
   await (toque ? T(`pub-porte-${porte}`).tap() : T(`pub-porte-${porte}`).click());
   await (toque ? T('pub-continuar-0').tap() : T('pub-continuar-0').click());
 }
+
+// v119: o proprietário (Davi, Apex) libera a seção Suporte no cadastro de cada pessoa; volta à tela de entrada. Só no Artifact (demonstração).
+export async function liberarSuporte(p, T, nomes) {
+  await T('demo-davi').click(); await T('agenda-topo').waitFor();
+  await T('nav-equipe').click();
+  for (const nome of nomes) {
+    await p.getByRole('button', { name: new RegExp(`Editar ${nome}`) }).first().click();
+    await T('acesso-suporte').check(); await T('salvar-usuario').click(); await p.waitForTimeout(250);
+  }
+  await T('sair').click(); await T('login-id').waitFor();
+}

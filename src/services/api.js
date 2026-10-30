@@ -1656,31 +1656,33 @@ export const publico = {
 // ---------- suporte (chamados com a equipe da plataforma) ----------
 // No sistema real isto fala com a Admin API pelo servidor (`/api/suporte/*`); aqui o chamado fica no estado da loja e a demonstração responde sozinha.
 // Loja e usuário vêm da sessão, nunca da entrada.
+// v119: só o proprietário abre chamados de fábrica; os outros só se o proprietário liberar a seção Suporte no cadastro deles.
+const usuarioSuporte = () => { const u = usuario(); return u && R.pode(u, 'suporte') ? u : null; };
 export const suporte = {
   // GET /suporte/chamados
-  listar() { const u = usuario(); return u ? { ok: true, chamados: chamadosDoUsuario(state, u) } : semPermissao(); },
+  listar() { const u = usuarioSuporte(); return u ? { ok: true, chamados: chamadosDoUsuario(state, u) } : semPermissao(); },
   // GET /suporte/chamados/nao-lidas
-  naoLidas() { const u = usuario(); return u ? { ok: true, naoLidas: SU.naoLidasDoUsuario(state, u) } : semPermissao(); },
+  naoLidas() { const u = usuarioSuporte(); return u ? { ok: true, naoLidas: SU.naoLidasDoUsuario(state, u) } : semPermissao(); },
   // POST /suporte/chamados  { assunto, categoria, texto, anexos? }  (até 3 imagens em base64; tipo pelo conteúdo)
   abrir(entrada) {
-    const u = usuario(); if (!u) return semPermissao();
+    const u = usuarioSuporte(); if (!u) return semPermissao();
     return mutate((s, agora) => SU.abrirChamado(s, s.usuarios.find((x) => x.id === u.id), pegar(entrada, ['assunto', 'categoria', 'texto', 'anexos']), agora), { metodo: 'POST', rota: '/suporte/chamados' });
   },
   // GET /suporte/chamados/{id}  (abrir marca como lido)
   obter(id) {
-    const u = usuario(); if (!u) return semPermissao();
+    const u = usuarioSuporte(); if (!u) return semPermissao();
     if (!texto(id, 40)) return erro('Chamado não encontrado.');
     return mutate((s) => SU.lerChamado(s, s.usuarios.find((x) => x.id === u.id), id), { metodo: 'GET', rota: `/suporte/chamados/${String(id).slice(0, 20)}`, silencioso: true });
   },
   // GET /suporte/chamados/{id}/anexos/{anexoId}  (os bytes da imagem; de outro usuário = não existe)
   imagem(id, anexoId) {
-    const u = usuario(); if (!u) return semPermissao();
+    const u = usuarioSuporte(); if (!u) return semPermissao();
     if (!texto(id, 40) || !texto(anexoId, 40)) return erro('Imagem não encontrada.');
     return SU.imagemDoChamado(state, state.usuarios.find((x) => x.id === u.id), id, anexoId);
   },
   // POST /suporte/chamados/{id}/mensagens  { texto, anexos? }
   responder(id, textoNovo, anexos) {
-    const u = usuario(); if (!u) return semPermissao();
+    const u = usuarioSuporte(); if (!u) return semPermissao();
     if (!texto(id, 40)) return erro('Chamado não encontrado.');
     if (typeof textoNovo !== 'string') return erro('A mensagem é obrigatória.');
     return mutate((s, agora) => SU.responderChamado(s, s.usuarios.find((x) => x.id === u.id), id, textoNovo, agora, Array.isArray(anexos) ? anexos : undefined), { metodo: 'POST', rota: `/suporte/chamados/${String(id).slice(0, 20)}/mensagens` });

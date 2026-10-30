@@ -358,7 +358,7 @@ export function identificarCliente(clientes, { telefone, cpf, nome }) {
 }
 
 // ---------- permissões ----------
-export const SECOES = { clientes: 'Clientes', servicos: 'Serviços', estabelecimento: 'Estabelecimento', agenda: 'Agenda', relatorios: 'Relatórios', estoque: 'Estoque', financeiro: 'Financeiro', planos: 'Planos', avaliacoes: 'Avaliações' };
+export const SECOES = { clientes: 'Clientes', servicos: 'Serviços', estabelecimento: 'Estabelecimento', agenda: 'Agenda', relatorios: 'Relatórios', estoque: 'Estoque', financeiro: 'Financeiro', planos: 'Planos', avaliacoes: 'Avaliações', suporte: 'Suporte' };
 
 // Grupos de menu que o proprietário libera ou bloqueia para qualquer usuário. Relatórios fica de fora: é só do proprietário e do master
 // (o profissional vê apenas os próprios números, e isso não é uma liberação).

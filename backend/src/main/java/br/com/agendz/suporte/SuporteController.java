@@ -38,7 +38,7 @@ import org.springframework.web.bind.annotation.RestController;
  * | GET  /api/suporte/chamados/{id}/anexos/{aid} | os bytes de uma imagem (PNG, JPEG ou WebP)
  */
 @RestController
-@PreAuthorize("hasAnyRole('DONO','ADMIN','ATENDENTE','PROFISSIONAL')")
+@PreAuthorize("hasAnyRole('DONO','ADMIN','ATENDENTE','PROFISSIONAL') and @perm.pode(authentication, 'suporte')")
 public class SuporteController {
 
     public record Novo(@NotNull @Size(min = 1, max = 120, message = "O assunto pode ter até 120 caracteres") String assunto, @NotNull @Size(max = 20) String categoria,

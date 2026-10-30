@@ -28,7 +28,7 @@ const servidor = http.createServer((req, res) => {
     if (u.pathname === '/') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); return res.end(pagina); }
     chamadas.push({ m: req.method, u: u.pathname, auth: req.headers.authorization || '', corpo: corpo && req.headers['content-type'] === 'application/json' ? JSON.parse(corpo) : null });
     if (u.pathname === '/api/publico/loja') return json(200, { slug: 'dalforno', nome: 'Dalforno', tipo: 'barbearia', logo: null, temaCor: null, temaCor2: null });
-    if (u.pathname === '/api/auth/login') return json(200, { token: 'tok', id: EU, nome: 'Alan', papel: 'profissional', deveTrocarSenha: false, onboardingPendente: false, secoes: [] });
+    if (u.pathname === '/api/auth/login') return json(200, { token: 'tok', id: EU, nome: 'Alan', papel: 'profissional', deveTrocarSenha: false, onboardingPendente: false, secoes: ['suporte'] });
     if (u.pathname === '/api/usuarios/me') return json(200, { id: EU, nome: 'Alan Dalforno', apelido: 'Alan', usuario: 'alan', papel: 'profissional', email: '', telefone: '', nascimento: '', foto: null });
     if (u.pathname === '/api/suporte/chamados/nao-lidas') return json(200, { naoLidas: 0 });
     if (u.pathname === '/api/suporte/chamados' && req.method === 'GET') return json(200, chamado ? [{ ...visao(), msgs: undefined }] : []);

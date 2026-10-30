@@ -158,7 +158,7 @@ function Painel({ loja, sessao, aoSair, aoMudarMarca }) {
   useEffect(() => { apiPerfil.obter().then((r) => { if (r.ok) setMeus(r.dados); }); }, []);
   // Selo do Suporte: respostas novas da equipe da plataforma (consulta de fundo; se falhar, o selo só não muda).
   const [chamadosNovos, setChamadosNovos] = useState(0);
-  const lerChamadosNovos = () => { apiSuporte.naoLidas().then((r) => { if (r.ok) setChamadosNovos(r.naoLidas); }); };
+  const lerChamadosNovos = () => { if (!(sessao.papel === 'dono' || (sessao.secoes || []).includes('suporte'))) return; apiSuporte.naoLidas().then((r) => { if (r.ok) setChamadosNovos(r.naoLidas); }); };
   useEffect(lerChamadosNovos, []);
   useAtualizacaoAutomatica(lerChamadosNovos);
   useEffect(() => {
@@ -196,7 +196,8 @@ function Painel({ loja, sessao, aoSair, aoMudarMarca }) {
   if (dono) itens.push(['comissoes', 'Comissões', 'wallet']);
   else itens.push(['ganhos', 'Meus ganhos', 'gauge']);
   if (dono || (sessao.secoes || []).includes('agenda')) itens.push(['avisos', 'Avisos', 'bell']);
-  itens.push(['suporte', 'Suporte', 'info']);
+  const comSuporte = dono || (sessao.secoes || []).includes('suporte'); // v119: de fábrica só o proprietário; os outros se ele liberar
+  if (comSuporte) itens.push(['suporte', 'Suporte', 'info']);
   return (
     <div className="app">
       <header className="topo">

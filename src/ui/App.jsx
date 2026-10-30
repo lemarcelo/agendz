@@ -136,7 +136,7 @@ function Shell({ user, st, tema, setTema }) {
     user.papel === 'profissional' && ['escala', 'Minha escala', 'clock'],
     ['mensagens', 'Mensagens', 'msg'],
     pode(user, 'agenda') && ['avisos', 'Avisos', 'bell'],
-    ['suporte', 'Suporte', 'info'],
+    pode(user, 'suporte') && ['suporte', 'Suporte', 'info'],
   ].filter(Boolean);
   const abaAtual = itens.some((i) => i[0] === aba) ? aba : itens[0][0];
   // O simulador de WhatsApp (conversa com o robô da loja) existe SÓ na tela Mensagens: nas outras telas nem o painel nem o botão aparecem.
