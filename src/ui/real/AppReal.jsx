@@ -146,7 +146,7 @@ function LogoPequena({ loja }) {
 }
 
 // Área logada: menu com as telas que já existem no site real. Telas que ainda não chegaram não aparecem (nada de botão morto).
-function Painel({ loja, sessao, aoSair }) {
+function Painel({ loja, sessao, aoSair, aoMudarMarca }) {
   // Depois de entrar (e de concluir o assistente) a pessoa cai na Agenda, que é o que ela usa todo dia; quem não tem a agenda abre a primeira tela do menu.
   const [aba, setAba] = useState(() => (sessao.papel === 'dono' || (sessao.secoes || []).includes('agenda') ? 'agenda' : (sessao.secoes || []).includes('clientes') ? 'clientes' : 'servicos'));
   const [reconfigurando, setReconfigurando] = useState(false);
@@ -234,7 +234,7 @@ function Painel({ loja, sessao, aoSair }) {
           {aba === 'boxes' && dono && <Boxes />}
           {aba === 'cupons' && (dono || (sessao.secoes || []).includes('estabelecimento')) && <Cupons />}
           {aba === 'estoque' && (dono || (sessao.secoes || []).includes('estoque')) && <Estoque ehDono={dono} />}
-          {aba === 'estabelecimento' && (dono || (sessao.secoes || []).includes('estabelecimento')) && <Estabelecimento ehDono={dono} aoReconfigurar={() => setReconfigurando(true)} />}
+          {aba === 'estabelecimento' && (dono || (sessao.secoes || []).includes('estabelecimento')) && <Estabelecimento ehDono={dono} aoReconfigurar={() => setReconfigurando(true)} aoMudarMarca={aoMudarMarca} />}
           {aba === 'relatorios' && dono && <Relatorios />}
           {aba === 'comissoes' && dono && <Comissoes />}
           {aba === 'ganhos' && !dono && <Ganhos />}
@@ -297,7 +297,7 @@ export default function AppReal() {
       {!sessao && <Login loja={loja} aoEntrar={(se, senha) => { setSenhaEnviada(senha || ''); setSessao(se); }} />}
       {sessao && sessao.deveTrocarSenha && <TrocarSenha loja={loja} sessao={sessao} senhaEnviada={senhaEnviada} aoTrocar={(se) => { setSenhaEnviada(''); setSessao(se); }} aoSair={aoSair} />}
       {sessao && !sessao.deveTrocarSenha && sessao.papel === 'dono' && sessao.onboardingPendente && <PrimeiroAcesso tipo={loja.tipo} nomeLoja={loja.nome} adaptador={onboarding} aoConcluir={() => setSessao({ ...sessao, onboardingPendente: false })} />}
-      {sessao && !sessao.deveTrocarSenha && !(sessao.papel === 'dono' && sessao.onboardingPendente) && <Painel loja={loja} sessao={sessao} aoSair={aoSair} />}
+      {sessao && !sessao.deveTrocarSenha && !(sessao.papel === 'dono' && sessao.onboardingPendente) && <Painel loja={loja} sessao={sessao} aoSair={aoSair} aoMudarMarca={(m) => setEstado((e) => (e.fase === 'ok' ? { ...e, loja: { ...e.loja, logo: m.logo, temaCor: m.temaCor, temaCor2: m.temaCor2 } } : e))} />}
     </>
   );
 }
