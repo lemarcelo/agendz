@@ -418,7 +418,7 @@ class PlanosTest extends BaseApi {
         pedirPlano("10.41.0.5", "Maria", novoTelefone(), UUID.randomUUID().toString(), null).andExpect(status().isBadRequest());
         assertEquals(1, contar("select count(*) from pedido_plano"));
         // o painel: sem a seção, 403; o pedido aparece na listagem com o telefone decifrado
-        ler("/api/planos", dono).andExpect(jsonPath("$.pedidos", hasSize(1))).andExpect(jsonPath("$.pedidos[0].telefone").value(tel));
+        ler("/api/planos", dono).andExpect(jsonPath("$.pedidos", hasSize(1))).andExpect(jsonPath("$.pedidos[0].telefone").value("55" + tel));
         String pedido = jdbc.queryForObject("select id::text from pedido_plano", String.class);
         escrever(post("/api/planos/pedidos/" + pedido + "/aceitar"), colaborador, "").andExpect(status().isForbidden());
         escrever(post("/api/planos/pedidos/" + pedido + "/aceitar"), dono, "").andExpect(status().isOk()).andExpect(jsonPath("$.status").value("pendente"))
