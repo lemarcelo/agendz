@@ -41,6 +41,12 @@ export default function LinkAgendamento() {
     <form className="regras-real" onSubmit={salvar} data-testid="link-real" aria-label="Link de agendamento do cliente">
       <h3>Link de agendamento do cliente</h3>
       <p className="muted">O cliente abre este endereço, vê só os horários livres e pede o dele. O pedido entra “a confirmar” na agenda.</p>
+      {link.pendencias.length > 0 && (
+        <Aviso tipo="erro" data-testid="link-pendencias">
+          <b>O cliente não está vendo horários.</b>
+          <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>{link.pendencias.map((x, i) => <li key={i} data-testid="link-pendencia">{x}</li>)}</ul>
+        </Aviso>
+      )}
       {!link.disponivel && <Aviso data-testid="link-indisponivel">O link não está disponível para esta loja no momento.</Aviso>}
       <Campo rotulo="Endereço da página do cliente"><input readOnly value={endereco} onFocus={(e) => e.target.select()} data-testid="link-endereco" /></Campo>
       <div className="acoes">

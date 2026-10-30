@@ -1,6 +1,8 @@
 package br.com.agendz.configuracao;
 
 import br.com.agendz.erro.ErroDeNegocio;
+import br.com.agendz.escala.EscalaService;
+import br.com.agendz.tenant.Capacidades;
 import br.com.agendz.tenant.Loja;
 import br.com.agendz.tenant.LojaContext;
 import br.com.agendz.tenant.LojaJdbc;
@@ -27,16 +29,31 @@ public class LinkAgendamento {
     public record Config(boolean ativo, int diasMax, boolean telefoneObrigatorio) {
     }
 
-    public record Resposta(boolean ativo, int diasMax, boolean disponivel, boolean telefoneObrigatorio) {
+    public record Resposta(boolean ativo, int diasMax, boolean disponivel, boolean telefoneObrigatorio, List<String> pendencias) {
     }
 
     public record Corpo(Boolean ativo, Integer diasMax, Boolean telefoneObrigatorio) {
     }
 
     private final LojaJdbc banco;
+    private final EscalaService escalas;
 
-    public LinkAgendamento(LojaJdbc banco) {
+    public LinkAgendamento(LojaJdbc banco, EscalaService escalas) {
         this.banco = banco;
+        this.escalas = escalas;
+    }
+
+    /** Por que o cliente veria "não há horários livres": o que falta cadastrar (só o proprietário lê; dentro de uma transação já aberta). */
+    List<String> pendencias(JdbcTemplate jdbc, Loja loja) {
+        List<String> l = new java.util.ArrayList<>();
+        if (!EscalaService.temFaixa(escalas.ler(jdbc, null))) l.add("O expediente da loja não está cadastrado (Estabelecimento > Expediente): sem ele o cliente não vê nenhum horário.");
+        Integer atendem = jdbc.queryForObject("select count(*) from usuario where ativo and atende", Integer.class);
+        if (atendem == null || atendem == 0) l.add("Nenhuma pessoa da equipe está marcada como \"atende\" (Equipe): sem profissional o cliente não vê nenhum horário.");
+        if (Capacidades.usaRecursoFisico(loja)) {
+            Integer boxes = jdbc.queryForObject("select count(*) from box where ativo", Integer.class);
+            if (boxes == null || boxes == 0) l.add("Nenhum box ativo cadastrado (Estabelecimento > Boxes): na estética o carro precisa de um box, então o cliente não vê nenhum horário.");
+        }
+        return l;
     }
 
     /** O tipo agenda pelo link? Todos agendam (a estética pede veículo e porte, e só oferece horário com profissional e box livres). */
@@ -54,8 +71,10 @@ public class LinkAgendamento {
     @PreAuthorize("hasRole('DONO')")
     public Resposta obter() {
         Loja loja = LojaContext.exigir();
-        Config c = banco.naLoja(LinkAgendamento::ler);
-        return new Resposta(c.ativo(), c.diasMax(), tipoSuportado(loja), c.telefoneObrigatorio());
+        return banco.naLoja(jdbc -> {
+            Config c = ler(jdbc);
+            return new Resposta(c.ativo(), c.diasMax(), tipoSuportado(loja), c.telefoneObrigatorio(), pendencias(jdbc, loja));
+        });
     }
 
     @PutMapping("/api/estabelecimento/link-agendamento")
@@ -64,14 +83,13 @@ public class LinkAgendamento {
         Loja loja = LojaContext.exigir();
         if (c == null) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe a configuração do link.");
         if (c.diasMax() != null && (c.diasMax() < 1 || c.diasMax() > DIAS_MAXIMO)) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe de 1 a " + DIAS_MAXIMO + " dias.");
-        Config nova = banco.naLoja(jdbc -> {
+        return banco.naLoja(jdbc -> {
             Config atual = ler(jdbc);
             Config n = new Config(c.ativo() == null ? atual.ativo() : c.ativo(), c.diasMax() == null ? atual.diasMax() : c.diasMax(), c.telefoneObrigatorio() == null ? atual.telefoneObrigatorio() : c.telefoneObrigatorio());
             jdbc.update("insert into configuracao_loja (loja_id, link_ativo, link_dias_max, link_telefone_obrigatorio) values (?::uuid, ?, ?, ?) "
                             + "on conflict (loja_id) do update set link_ativo = excluded.link_ativo, link_dias_max = excluded.link_dias_max, link_telefone_obrigatorio = excluded.link_telefone_obrigatorio, atualizado_em = now()",
                     loja.id().toString(), n.ativo(), n.diasMax(), n.telefoneObrigatorio());
-            return n;
+            return new Resposta(n.ativo(), n.diasMax(), tipoSuportado(loja), n.telefoneObrigatorio(), pendencias(jdbc, loja));
         });
-        return new Resposta(nova.ativo(), nova.diasMax(), tipoSuportado(loja), nova.telefoneObrigatorio());
     }
 }

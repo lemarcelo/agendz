@@ -1,6 +1,7 @@
 package br.com.agendz.publico;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -122,6 +123,20 @@ class LinkPublicoEsteticaTest extends BaseApi {
     private int contar(String sql, Object... args) {
         Integer n = jdbc.queryForObject(sql, Integer.class, args);
         return n == null ? 0 : n;
+    }
+
+    @Test
+    void oProprietarioVeOQueFaltaQuandoOClienteNaoVeHorarios() throws Exception {
+        mvc.perform(get("/api/estabelecimento/link-agendamento").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.pendencias", hasSize(0)));
+        jdbc.update("update box set ativo = false where loja_id = ?::uuid", LOJA_APEX);
+        mvc.perform(get("/api/estabelecimento/link-agendamento").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.pendencias", hasSize(1))).andExpect(jsonPath("$.pendencias[0]", containsString("Boxes")));
+        mvc.perform(put("/api/estabelecimento/link-agendamento").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON).content("{\"diasMax\":30}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.pendencias[0]", containsString("Boxes")));
+        jdbc.update("delete from escala_faixa");
+        mvc.perform(get("/api/estabelecimento/link-agendamento").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.pendencias", hasItem(containsString("expediente"))));
     }
 
     @Test

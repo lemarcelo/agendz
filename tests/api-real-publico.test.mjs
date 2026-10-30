@@ -112,10 +112,17 @@ test('cancelar: o token vai no cabeçalho X-Acesso; id ou token ruim nem sai', a
   assert.equal((await publico.cancelar(AG, TOKEN)).erro, 'Esse horário não pode mais ser cancelado por aqui (faltam menos de 24 horas). Fale com a loja.');
 });
 
+test('linkAgendamento: pendências (o que falta para o cliente ver horários) só entram como texto curto, no máximo 5', async () => {
+  servidor({ ativo: true, diasMax: 30, disponivel: true, pendencias: ['Nenhum box ativo.', '', 7, null, { a: 1 }, 'x'.repeat(400), 'c', 'd', 'e', 'f'] });
+  const r = await linkAgendamento.obter();
+  assert.equal(r.link.pendencias.length, 5); assert.equal(r.link.pendencias[0], 'Nenhum box ativo.'); assert.ok(r.link.pendencias.every((x) => typeof x === 'string' && x.length <= 300));
+  servidor({ ativo: true, diasMax: 30, disponivel: true, pendencias: 'texto solto' });
+  assert.deepEqual((await linkAgendamento.obter()).link.pendencias, []);
+});
 test('linkAgendamento: GET e PUT do proprietário; dias fora de 1 a 60 nem saem', async () => {
   servidor({ ativo: false, diasMax: 14, disponivel: false });
   const r = await linkAgendamento.obter();
-  assert.deepEqual(r.link, { ativo: false, diasMax: 14, disponivel: false, telefoneObrigatorio: true }, 'telefone obrigatório de fábrica');
+  assert.deepEqual(r.link, { ativo: false, diasMax: 14, disponivel: false, telefoneObrigatorio: true, pendencias: [] }, 'telefone obrigatório de fábrica');
   assert.deepEqual([chamadas[0].metodo, chamadas[0].url], ['GET', 'https://loja.teste/api/estabelecimento/link-agendamento']);
   servidor({ ativo: true, diasMax: 20, disponivel: true });
   const g = await linkAgendamento.gravar({ ativo: true, diasMax: 20 });

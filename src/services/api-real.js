@@ -1035,7 +1035,8 @@ export const regras = {
 const lerLink = (d) => {
   d = d && typeof d === 'object' ? d : {};
   const dm = Number.isInteger(d.diasMax) ? Math.min(60, Math.max(1, d.diasMax)) : 30;
-  return { ativo: d.ativo !== false, diasMax: dm, disponivel: d.disponivel !== false, telefoneObrigatorio: d.telefoneObrigatorio !== false };
+  return { ativo: d.ativo !== false, diasMax: dm, disponivel: d.disponivel !== false, telefoneObrigatorio: d.telefoneObrigatorio !== false,
+    pendencias: Array.isArray(d.pendencias) ? d.pendencias.filter((x) => typeof x === 'string' && x).slice(0, 5).map((x) => x.slice(0, 300)) : [] }; // v119: o que falta cadastrar para o cliente ver horários
 };
 export const linkAgendamento = {
   // GET /api/estabelecimento/link-agendamento

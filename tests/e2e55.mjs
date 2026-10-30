@@ -19,6 +19,7 @@ const CUPOM_BOM = 'ABCD-EFGH-JKLM';
 const chamadas = [];
 let ativo = true;
 let falhaOcupado = true;
+let semBox = false; // v119: o servidor avisa o que falta para o cliente ver horários
 let link = { ativo: true, diasMax: 30, disponivel: true, telefoneObrigatorio: true };
 let seq = 0;
 const ocupados = new Set();
@@ -42,7 +43,7 @@ const servidor = http.createServer((req, res) => {
     if (u.pathname === '/api/estabelecimento/regras-atendimento') return json(200, { formaPagamentoPadrao: 'pix', futuro: ['nome', 'telefone'], local: [] });
     if (u.pathname === '/api/estabelecimento/link-agendamento') {
       if (req.method === 'PUT') { link = { ...link, ...c }; return json(200, link); }
-      return json(200, link);
+      return json(200, { ...link, pendencias: semBox ? ['Nenhum box ativo cadastrado (Estabelecimento > Boxes): na estética o carro precisa de um box, então o cliente não vê nenhum horário.'] : [] });
     }
     // ---- rotas do cliente (sem login)
     if (u.pathname === '/api/publico/agendar') return json(200, ativo ? { ativo: true, aviso: null, diasMax: 30, exigeTelefone: link.telefoneObrigatorio !== false, servicos, profissionais } : { ativo: false, aviso: 'O agendamento pelo link não está disponível agora. Fale com a loja.', diasMax: 30, servicos: [], profissionais: [] });
@@ -232,6 +233,15 @@ let contexto;
   assert.equal(deHoje('PUT', '/api/estabelecimento/link-agendamento').at(-1).corpo.telefoneObrigatorio, false);
   assert.equal(link.telefoneObrigatorio, false);
   ok('Estabelecimento: telefone obrigatório no link, desligável com aviso');
+  // v119: sem box (estética) o cliente não vê horário: o servidor diz o motivo e o proprietário vê na tela do link e na Agenda
+  assert.equal(await p.getByTestId('link-pendencias').count(), 0, 'sem pendência: sem aviso');
+  semBox = true;
+  await p.getByTestId('nav-agenda').click(); await p.getByTestId('agenda-link-pendencia').waitFor();
+  assert.match(await p.getByTestId('agenda-link-pendencia').innerText(), /sem horários.*box/i);
+  await p.getByTestId('nav-estabelecimento').click(); await p.getByTestId('link-pendencias').waitFor();
+  assert.match(await p.getByTestId('link-pendencia').first().innerText(), /Boxes/);
+  semBox = false;
+  ok('pendências do link: motivo na Agenda e na tela do link');
   link = { ativo: true, diasMax: 30, disponivel: true, telefoneObrigatorio: true };
   // logado, o link do cliente mostra o aviso e volta ao painel
   await p.evaluate(() => { window.location.hash = '#agendar'; });
