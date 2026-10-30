@@ -19,7 +19,7 @@ const CUPOM_BOM = 'ABCD-EFGH-JKLM';
 const chamadas = [];
 let ativo = true;
 let falhaOcupado = true;
-let link = { ativo: true, diasMax: 30, disponivel: true };
+let link = { ativo: true, diasMax: 30, disponivel: true, telefoneObrigatorio: true };
 let seq = 0;
 const ocupados = new Set();
 const feitos = []; // { token, resumo }
@@ -45,7 +45,7 @@ const servidor = http.createServer((req, res) => {
       return json(200, link);
     }
     // ---- rotas do cliente (sem login)
-    if (u.pathname === '/api/publico/agendar') return json(200, ativo ? { ativo: true, aviso: null, diasMax: 30, servicos, profissionais } : { ativo: false, aviso: 'O agendamento pelo link não está disponível agora. Fale com a loja.', diasMax: 30, servicos: [], profissionais: [] });
+    if (u.pathname === '/api/publico/agendar') return json(200, ativo ? { ativo: true, aviso: null, diasMax: 30, exigeTelefone: link.telefoneObrigatorio !== false, servicos, profissionais } : { ativo: false, aviso: 'O agendamento pelo link não está disponível agora. Fale com a loja.', diasMax: 30, servicos: [], profissionais: [] });
     if (u.pathname === '/api/publico/dias') return json(200, DIAS.filter((d) => d >= u.searchParams.get('de')));
     if (u.pathname === '/api/publico/horarios') {
       const d = u.searchParams.get('data');
@@ -53,6 +53,7 @@ const servidor = http.createServer((req, res) => {
     }
     if (u.pathname === '/api/publico/agendamentos' && req.method === 'POST') {
       if (c.inicio && falhaOcupado) { falhaOcupado = false; ocupados.add(c.inicio.replace('.000Z', 'Z')); return json(409, { mensagem: OCUPADO }); }
+      if (!c.telefone && link.telefoneObrigatorio !== false) return json(400, { mensagem: 'Informe o telefone com DDD.' });
       if (c.cupomChave && c.cupomChave.toUpperCase() !== CUPOM_BOM) return json(400, { mensagem: GENERICO });
       seq += 1;
       const quando = Date.parse(c.inicio);
@@ -165,7 +166,8 @@ let contexto;
   await p.getByTestId(`pub-srv-${SRV_CORTE}`).check(); await p.getByTestId(`pub-barb-${ALAN}`).click();
   await p.getByTestId('pub-continuar-1').click();
   await p.getByTestId('pub-dia-2026-10-31').click();
-  await p.getByTestId('pub-hora-1000').click(); await p.getByTestId('pub-continuar-2').click();
+  await p.getByTestId('pub-hora-1000').waitFor();
+  await p.getByTestId('pub-hora-1000').dispatchEvent('click'); await p.getByTestId('pub-continuar-2').click();
   await p.getByTestId('pub-nome').fill('Maria Souza'); await p.getByTestId('pub-tel').fill('53999000001');
   await p.getByTestId('pub-enviar').click(); await p.getByTestId('pub-feito').waitFor();
   assert.equal(deHoje('POST', '/api/publico/agendamentos').at(-1).corpo.profissionalId, ALAN);
@@ -218,10 +220,19 @@ let contexto;
   assert.equal(deHoje('PUT', '/api/estabelecimento/link-agendamento').length, 0, 'dias fora de 1 a 60 nem saem');
   await p.getByTestId('link-dias').fill('14'); await p.getByTestId('link-ativo').uncheck();
   await p.getByTestId('link-salvar').click(); await p.getByTestId('link-ok').waitFor();
-  assert.deepEqual(deHoje('PUT', '/api/estabelecimento/link-agendamento').at(-1).corpo, { ativo: false, diasMax: 14 });
+  assert.deepEqual(deHoje('PUT', '/api/estabelecimento/link-agendamento').at(-1).corpo, { ativo: false, diasMax: 14, telefoneObrigatorio: true });
   assert.equal(link.ativo, false);
   ok('Início: endereço do link, abrir em aba nova, dias de 1 a 60, ligar/desligar');
-  link = { ativo: true, diasMax: 30, disponivel: true };
+  // telefone obrigatório de fábrica; o dono tira e a tela avisa o que isso significa
+  await p.getByTestId('link-ativo').check();
+  assert.equal(await p.getByTestId('link-telefone-obrigatorio').isChecked(), true, 'de fábrica o telefone é obrigatório');
+  await p.getByTestId('link-telefone-obrigatorio').uncheck();
+  assert.match(await p.getByTestId('link-telefone-aviso').innerText(), /sem cadastro/);
+  await p.getByTestId('link-salvar').click(); await p.getByTestId('link-ok').waitFor();
+  assert.equal(deHoje('PUT', '/api/estabelecimento/link-agendamento').at(-1).corpo.telefoneObrigatorio, false);
+  assert.equal(link.telefoneObrigatorio, false);
+  ok('Estabelecimento: telefone obrigatório no link, desligável com aviso');
+  link = { ativo: true, diasMax: 30, disponivel: true, telefoneObrigatorio: true };
   // logado, o link do cliente mostra o aviso e volta ao painel
   await p.evaluate(() => { window.location.hash = '#agendar'; });
   await p.getByTestId('pub-banner').waitFor();
@@ -229,6 +240,27 @@ let contexto;
   await p.getByTestId('pub-voltar-painel').click();
   await p.getByTestId('nav-estabelecimento').click(); await p.getByTestId('tela-estabelecimento').waitFor();
   ok('logado, a página do cliente avisa, não manda o token do painel e volta ao painel');
+  await ctx.close();
+}
+
+// 7b. página do cliente com telefone opcional: o campo vira "se quiser" e o pedido sai sem telefone
+{
+  link = { ...link, telefoneObrigatorio: false }; falhaOcupado = false;
+  const { ctx, p } = await abrir();
+  await p.getByTestId(`pub-srv-${SRV_CORTE}`).check();
+  await p.getByTestId('pub-continuar-1').click();
+  const horarios = p.waitForResponse((r) => r.url().includes('/api/publico/horarios') && r.url().includes('2026-10-31'));
+  await p.getByTestId('pub-dia-2026-10-31').click();
+  await horarios; // a lista de horas é trocada quando a resposta do dia chega: só então o horário é estável para clicar
+  await p.getByTestId('pub-hora-0900').click(); // 10:00 de 31/10 já foi pedido acima e saiu da lista do servidor de mentira
+  await p.getByTestId('pub-continuar-2').click();
+  assert.match(await p.getByTestId('pub-tel').locator('xpath=ancestor::label').innerText(), /se quiser/);
+  await p.getByTestId('pub-nome').fill('Sem Fone');
+  await p.getByTestId('pub-enviar').click();
+  await p.getByTestId('pub-feito').waitFor();
+  assert.equal(deHoje('POST', '/api/publico/agendamentos').at(-1).corpo.telefone, '', 'o pedido sai sem telefone');
+  link = { ...link, telefoneObrigatorio: true };
+  ok('link do cliente com telefone opcional: pedido sem telefone');
   await ctx.close();
 }
 

@@ -3,7 +3,7 @@
 // temporária e mostra o painel com o menu. Os módulos entram um a um (Clientes na parte 2, Serviços na 3, Equipe na 4; a agenda na seguinte), cada um só
 // quando o servidor tem a regra inteira. Não importa `api.js` (a simulada) nem `hooks.js`: o estado aqui é só o da sessão real, em memória.
 import React, { useEffect, useMemo, useState } from 'react';
-import { cancelarEspera, carregarLoja, entrar, esperandoRede, loginValido, onboarding, perfil as apiPerfil, quandoEsperar, sair, sessaoAtual, suporte as apiSuporte, trocarSenha } from '../../services/api-real.js';
+import { cancelarEspera, carregarLoja, entrar, esperandoRede, loginValido, onboarding, passkey, perfil as apiPerfil, quandoEsperar, sair, sessaoAtual, suporte as apiSuporte, trocarSenha } from '../../services/api-real.js';
 import PrimeiroAcesso from '../leve/PrimeiroAcesso.jsx';
 import Agenda from './Agenda.jsx';
 import Clientes from './Clientes.jsx';
@@ -74,6 +74,15 @@ function Login({ loja, aoEntrar }) {
     if (!r.ok) { setErro(r.erro); setSenha(''); return; }
     aoEntrar(r.sessao, r.sessao.deveTrocarSenha ? senha : '');
   };
+  // Entrar com a digital: o aparelho assina, o servidor confere; a sessão é a mesma do login por senha.
+  const entrarComDigital = async () => {
+    if (enviando) return;
+    setEnviando(true); setErro('');
+    const r = await passkey.entrar();
+    setEnviando(false);
+    if (!r.ok) { setErro(r.erro); return; }
+    aoEntrar(r.sessao, '');
+  };
   return (
     <Cartao loja={loja}>
       <form onSubmit={enviar} className="form-grade um">
@@ -81,6 +90,7 @@ function Login({ loja, aoEntrar }) {
         <Campo rotulo="Senha"><input type="password" value={senha} onChange={(e) => { setSenha(e.target.value); setErro(''); }} autoComplete="current-password" maxLength={100} data-testid="login-senha" /></Campo>
         {erro && <Aviso tipo="erro" data-testid="login-erro">{erro}</Aviso>}
         <Btn variante="primario" type="submit" disabled={enviando} data-testid="login-entrar">{enviando ? 'Entrando…' : 'Entrar'}</Btn>
+        {passkey.disponivel() && <Btn type="button" disabled={enviando} onClick={entrarComDigital} data-testid="login-digital">Entrar com a digital</Btn>}
         <button type="button" className="link" onClick={() => setEsqueci(!esqueci)} aria-expanded={esqueci} data-testid="login-esqueci">Esqueci minha senha</button>
         {esqueci && <Aviso data-testid="login-esqueci-texto">Ainda não há e-mail nem WhatsApp configurado para recuperar a senha. Peça ao suporte do Agendz para redefinir: você recebe uma senha temporária e escolhe a sua no primeiro acesso.</Aviso>}
       </form>

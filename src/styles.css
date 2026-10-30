@@ -1013,3 +1013,32 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
 .pub-hora { min-height: 48px; border-radius: 12px; } .pub-barb { min-height: 48px; }
 .pub-hora.on, .pub-dia.on, .pub-barb.on, .pub-porte.on { box-shadow: 0 0 0 3px var(--tema-btn-aro, transparent); }
 .pub-item { min-height: 56px; border-radius: 14px; } .pub-item.on { border-color: var(--tema-btn-aro, var(--ink)); box-shadow: 0 0 0 2px var(--tema-btn-aro, var(--ink)); }
+
+/* Agenda > Horários no computador: cartões em grade de colunas iguais (o Artifact e o site real usam a mesma largura mínima); nome e serviço longos abreviam com reticências.
+   O cartão aberto (ficha inline do site real) ocupa a linha inteira. */
+.agenda-dia-real, .agenda-lista-real { grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); align-items: stretch; }
+.agenda-dia-real > .vazio { grid-column: 1 / -1; }
+.agenda-dia-real > .cartao-real, .agenda-lista-real > .cartao-real { display: grid; min-width: 0; }
+.agenda-dia-real > .cartao-real > .cartao, .agenda-lista-real > .cartao-real > .cartao, .agenda-cartoes > .cartao { height: 100%; align-content: start; }
+.agenda-dia-real > .cartao-real:has(> .cartao[aria-expanded="true"]), .agenda-lista-real > .cartao-real:has(> .cartao[aria-expanded="true"]) { grid-column: 1 / -1; }
+.cartao-servico, .cartao-nome { min-width: 0; }
+.agenda-grupo-real > .link-dia { justify-self: start; text-align: left; } /* título do dia à esquerda, sobre a grade */
+
+/* Entrar com a digital (Meu perfil, site real) */
+.perfil-digital-real { display: grid; gap: 10px; border-top: 1px solid var(--line); padding-top: 14px; }
+.digital-lista-real { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.digital-lista-real li { display: flex; gap: 8px 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; min-width: 0; overflow-wrap: anywhere; }
+
+/* Imagens do chamado de suporte (Artifact e site real) */
+.sup-imagens { display: grid; gap: 8px; justify-items: start; min-width: 0; }
+.sup-previas { list-style: none; margin: 0; padding: 0; display: flex; gap: 8px; flex-wrap: wrap; }
+.sup-previas li { position: relative; width: 64px; height: 64px; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); background: var(--surface-2); }
+.sup-previas img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sup-previas .icone-btn { position: absolute; top: 2px; right: 2px; width: 22px; height: 22px; padding: 0; background: var(--surface); border-radius: 999px; }
+.sup-dica { font-size: 12.5px; }
+.sup-anexos { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; min-width: 0; }
+.sup-img { padding: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface-2); cursor: zoom-in; max-width: 100%; }
+.sup-img img { display: block; width: 120px; height: 120px; object-fit: cover; }
+.sup-img.grande { cursor: zoom-out; width: 100%; }
+.sup-img.grande img { width: 100%; height: auto; max-height: 70vh; object-fit: contain; }
+.sup-img-falha, .sup-img-carregando { font-size: 12.5px; }

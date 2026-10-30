@@ -42,6 +42,7 @@ class SuporteChamadosTest extends BaseApi {
     private static final AtomicReference<String> corpo = new AtomicReference<>();
     private static volatile int respostaStatus = 200;
     private static volatile String respostaCorpo = "[]";
+    private static volatile byte[] respostaBytes = null;
 
     private static HttpServer subir() {
         try {
@@ -51,8 +52,8 @@ class SuporteChamadosTest extends BaseApi {
                 consulta.set(ex.getRequestURI().getRawQuery());
                 chaveRecebida.set(ex.getRequestHeaders().getFirst("X-Interno-Chave"));
                 corpo.set(new String(ex.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
-                byte[] b = respostaCorpo.getBytes(StandardCharsets.UTF_8);
-                ex.getResponseHeaders().add("Content-Type", "application/json");
+                byte[] b = respostaBytes != null ? respostaBytes : respostaCorpo.getBytes(StandardCharsets.UTF_8);
+                ex.getResponseHeaders().add("Content-Type", respostaBytes != null ? "application/octet-stream" : "application/json");
                 ex.sendResponseHeaders(respostaStatus, b.length);
                 ex.getResponseBody().write(b);
                 ex.close();
@@ -81,6 +82,7 @@ class SuporteChamadosTest extends BaseApi {
     void zerar() {
         respostaStatus = 200;
         respostaCorpo = "[]";
+        respostaBytes = null;
         caminho.set(null);
         consulta.set(null);
         corpo.set(null);
@@ -163,5 +165,50 @@ class SuporteChamadosTest extends BaseApi {
         jdbc.update("update loja set status = 'suspenso' where slug = 'offbox'");
         mvc.perform(get("/api/suporte/chamados").with(host(OFFBOX)).header(HttpHeaders.AUTHORIZATION, bearer(dono))).andExpect(status().isOk());
         mvc.perform(get("/api/clientes").with(host(OFFBOX)).header(HttpHeaders.AUTHORIZATION, bearer(dono))).andExpect(status().isPaymentRequired());
+    }
+
+    private static byte[] png() {
+        byte[] b = new byte[40];
+        byte[] cab = {(byte) 0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13};
+        System.arraycopy(cab, 0, b, 0, cab.length);
+        return b;
+    }
+
+    @Test
+    void imagemDoChamadoPassaPelaRotaAutenticadaComOTipoDoConteudo() throws Exception {
+        String colega = token(OFFBOX, "colaborador1");
+        String chamado = UUID.randomUUID().toString(), anexo = UUID.randomUUID().toString();
+        mvc.perform(get("/api/suporte/chamados/" + chamado + "/anexos/" + anexo).with(host(OFFBOX))).andExpect(status().isUnauthorized());
+        assertNull(caminho.get());
+        respostaBytes = png();
+        mvc.perform(get("/api/suporte/chamados/" + chamado + "/anexos/" + anexo).with(host(OFFBOX)).header(HttpHeaders.AUTHORIZATION, bearer(colega)))
+                .andExpect(status().isOk()).andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("Content-Type", "image/png"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("X-Content-Type-Options", "nosniff"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("Cache-Control", containsString("no-store")));
+        assertEquals("/interno/chamados/" + chamado + "/anexos/" + anexo, caminho.get());
+        assertEquals("loja=offbox&usuario=" + idDe("colaborador1") + "&todos=false", consulta.get());
+        // o Admin entregou algo que não é imagem (ou o tipo não bate): nunca é servido
+        respostaBytes = "<html><script>alert(1)</script></html>".getBytes(StandardCharsets.UTF_8);
+        mvc.perform(get("/api/suporte/chamados/" + chamado + "/anexos/" + anexo).with(host(OFFBOX)).header(HttpHeaders.AUTHORIZATION, bearer(colega))).andExpect(status().isNotFound());
+        // ids que não são UUID = 404 sem chamar o Admin
+        caminho.set(null);
+        mvc.perform(get("/api/suporte/chamados/" + chamado + "/anexos/abc").with(host(OFFBOX)).header(HttpHeaders.AUTHORIZATION, bearer(colega))).andExpect(status().isNotFound());
+        assertNull(caminho.get());
+    }
+
+    @Test
+    void imagensSaoConferidasAntesDeIrAoAdmin() throws Exception {
+        String colega = token(OFFBOX, "colaborador1");
+        String ok = java.util.Base64.getEncoder().encodeToString(png());
+        String svg = java.util.Base64.getEncoder().encodeToString("<svg xmlns=\"http://www.w3.org/2000/svg\"><script>1</script></svg>".getBytes(StandardCharsets.UTF_8));
+        String base = "{\"assunto\":\"Erro\",\"categoria\":\"problema\",\"texto\":\"Veja\",\"anexos\":";
+        mvc.perform(post("/api/suporte/chamados").with(host(OFFBOX)).header(HttpHeaders.AUTHORIZATION, bearer(colega)).contentType(MediaType.APPLICATION_JSON).content(base + "[\"" + svg + "\"]}")).andExpect(status().isBadRequest());
+        mvc.perform(post("/api/suporte/chamados").with(host(OFFBOX)).header(HttpHeaders.AUTHORIZATION, bearer(colega)).contentType(MediaType.APPLICATION_JSON)
+                .content(base + "[\"" + ok + "\",\"" + ok + "\",\"" + ok + "\",\"" + ok + "\"]}")).andExpect(status().isBadRequest());
+        assertNull(caminho.get());
+        respostaStatus = 201;
+        respostaCorpo = "{\"id\":\"" + UUID.randomUUID() + "\",\"status\":\"aberto\"}";
+        mvc.perform(post("/api/suporte/chamados").with(host(OFFBOX)).header(HttpHeaders.AUTHORIZATION, bearer(colega)).contentType(MediaType.APPLICATION_JSON).content(base + "[\"" + ok + "\"]}")).andExpect(status().isCreated());
+        assertTrue(corpo.get().contains("\"anexos\":[\"" + ok + "\"]"));
     }
 }

@@ -1,4 +1,4 @@
-# Mapa de funcionamento do Agendz (v109)
+# Mapa de funcionamento do Agendz (v110)
 
 Referência de **como a aplicação deve funcionar**, por perfil e por fluxo. Serve de roteiro para a varredura ponta a ponta (`tests/e2e67.mjs`) e para conferir se uma tela nova respeita as regras. A fonte da verdade das regras de negócio continua sendo `prompt-agendz-regras.md`; este mapa diz **o que cada pessoa vê e faz**.
 
@@ -47,7 +47,7 @@ Só no Artifact: Mensagens (simulador de WhatsApp só nessa tela), Financeiro, M
 2. **Senha temporária** (dono criado pelo Admin, equipe criada pelo dono): a pessoa escolhe **o usuário** (único na loja, minúsculas) e a senha definitiva. Depois entra sozinha: dono → assistente de primeiro acesso; demais → Agenda.
 3. **Assistente do dono**: Serviços → Produtos → Equipe (comissão por pessoa) → Expediente → Pronto. Reabre em Estabelecimento > Reconfigurar (senha do dono, 30 min, reversível por 30 dias; aditivo).
 4. **Esqueci a senha**: sem canal configurado = pedir ao suporte (redefinição no painel).
-5. **Meu perfil** (toque na foto/nome no topo): dados próprios, foto, senha, som/faixa/vibração do aviso (ficam no aparelho).
+5. **Meu perfil** (toque na foto/nome no topo): dados próprios, foto, senha, **digital do aparelho** (site real; cadastrar pede a senha), som/faixa/vibração do aviso (ficam no aparelho).
 
 ## 4. Agenda
 
@@ -85,7 +85,8 @@ Dados e endereço, logo e tema (cores só por `tema.js`), expediente e escala, r
 | Pix / WhatsApp | simulados | adiados |
 | Estética: Atender | completo | com veículo/porte/box |
 | Primeiro acesso | pré-visualização (nada gravado) | grava |
-| Login por digital | não existe (iframe) | planejado (passkey) |
+| Login por digital | não existe (iframe) | existe (Meu perfil cadastra; tela de entrada tem "Entrar com a digital"; a senha continua valendo) |
+| Suporte com imagens | até 3 por mensagem (simulado) | até 3 por mensagem, bytes no banco do Admin |
 
 ## 10. Como a varredura usa este mapa
 

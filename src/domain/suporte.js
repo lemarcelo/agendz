@@ -4,6 +4,7 @@
 // mais mensagens (abre outro); 5 chamados novos por hora por usuário e 20 mensagens por hora por chamado. A demonstração responde sozinha ao abrir.
 import { limparTexto } from './texto.js';
 import { nextId } from './engine.js';
+import { conferirImagens } from './imagem-chamado.js';
 
 export const CATEGORIAS = ['duvida', 'problema', 'sugestao', 'cobranca', 'outro'];
 export const NOVOS_POR_HORA = 5;
@@ -24,7 +25,9 @@ export const naoLidasDoUsuario = (st, user) => chamadosVisiveis(st, user).reduce
 // O que o cliente enxerga de um chamado (sem mensagens, para a lista) e com a conversa.
 const resumo = (c) => ({ id: c.id, usuarioNome: c.usuarioNome, assunto: c.assunto, categoria: c.categoria, status: c.status, criadoEm: c.criadoEm, atualizadoEm: c.atualizadoEm, naoLidas: c.naoLidas || 0 });
 export const resumoDoChamado = resumo;
-export const conversaDoChamado = (c) => ({ ...resumo(c), msgs: c.msgs.map((m) => ({ id: m.id, autorTipo: m.autorTipo, autorNome: m.autorNome, texto: m.texto, criadoEm: m.criadoEm })) });
+// As imagens saem só como resumo (id, tipo, tamanho); os bytes vêm por `imagemDoChamado`, que confere quem pede.
+const resumoAnexos = (m) => (m.anexos || []).map((a) => ({ id: a.id, tipo: a.tipo, tamanho: a.tamanho }));
+export const conversaDoChamado = (c) => ({ ...resumo(c), msgs: c.msgs.map((m) => ({ id: m.id, autorTipo: m.autorTipo, autorNome: m.autorNome, texto: m.texto, criadoEm: m.criadoEm, anexos: resumoAnexos(m) })) });
 
 export function abrirChamado(s, user, entrada, agora) {
   if (!user) return erro('Você não tem permissão para isso.');
@@ -35,13 +38,29 @@ export function abrirChamado(s, user, entrada, agora) {
   if (!assunto) return erro('O assunto é obrigatório.');
   if (!texto) return erro('A mensagem é obrigatória.');
   if (!CATEGORIAS.includes(entrada && entrada.categoria)) return erro('Escolha o tipo do chamado.');
+  const im = imagensDaMensagem(s, entrada && entrada.anexos);
+  if (!im.ok) return erro(im.erro);
   s.suporteChamados = s.suporteChamados || [];
   if (s.suporteChamados.filter((c) => c.usuarioId === user.id && agora - c.criadoEm < HORA).length >= NOVOS_POR_HORA) return erro('Você abriu muitos chamados em pouco tempo. Aguarde um pouco.');
   const c = { id: nextId(s, 'ch'), usuarioId: user.id, usuarioNome: user.apelido || user.nome, usuarioPapel: user.papel, assunto, categoria: entrada.categoria, status: 'em_atendimento', criadoEm: agora, atualizadoEm: agora, naoLidas: 1, msgs: [] };
-  c.msgs.push({ id: nextId(s, 'cm'), autorTipo: 'cliente', autorNome: c.usuarioNome, texto, criadoEm: agora });
+  c.msgs.push({ id: nextId(s, 'cm'), autorTipo: 'cliente', autorNome: c.usuarioNome, texto, criadoEm: agora, anexos: im.anexos });
   c.msgs.push({ id: nextId(s, 'cm'), autorTipo: 'suporte', autorNome: 'Suporte Agendz', texto: 'Recebemos o seu chamado e já estamos olhando. (Resposta automática da demonstração: no sistema real, quem responde é a equipe do Agendz.)', criadoEm: agora });
   s.suporteChamados.push(c);
   return { ok: true, chamado: conversaDoChamado(c) };
+}
+
+// Confere as imagens (mesmas regras do servidor: até 3, 1,5 MB, tipo pelo conteúdo) e dá um id a cada uma. Os bytes (base64) ficam no estado, nunca na resposta.
+function imagensDaMensagem(s, lista) {
+  const r = conferirImagens(lista);
+  if (!r.ok) return r;
+  return { ok: true, anexos: r.anexos.map((a) => ({ id: nextId(s, 'ca'), tipo: a.tipo, tamanho: a.tamanho, dados: a.dados })) };
+}
+
+// Bytes de uma imagem como endereço de dados (só nesta demonstração; no sistema real é uma rota com login). De outro usuário = não existe.
+export function imagemDoChamado(s, user, id, anexoId) {
+  const c = achar(s, user, id);
+  const a = c && c.msgs.flatMap((m) => m.anexos || []).find((x) => x.id === anexoId);
+  return a ? { ok: true, url: `data:${a.tipo};base64,${a.dados}` } : erro('Imagem não encontrada.');
 }
 
 function achar(s, user, id) {
@@ -57,7 +76,7 @@ export function lerChamado(s, user, id) {
   return { ok: true, chamado: conversaDoChamado(c) };
 }
 
-export function responderChamado(s, user, id, texto, agora) {
+export function responderChamado(s, user, id, texto, agora, anexos) {
   const c = achar(s, user, id);
   if (!c) return erro('Chamado não encontrado.');
   if (c.status === 'fechado') return erro('Este chamado foi fechado. Abra um novo chamado.');
@@ -65,7 +84,9 @@ export function responderChamado(s, user, id, texto, agora) {
   if (t === null) return erro('A mensagem pode ter até 4000 caracteres.');
   if (!t) return erro('A mensagem é obrigatória.');
   if (c.msgs.filter((m) => m.autorTipo === 'cliente' && agora - m.criadoEm < HORA).length >= MENSAGENS_POR_HORA) return erro('Muitas mensagens em pouco tempo. Aguarde um pouco.');
-  c.msgs.push({ id: nextId(s, 'cm'), autorTipo: 'cliente', autorNome: user.apelido || user.nome, texto: t, criadoEm: agora });
+  const im = imagensDaMensagem(s, anexos);
+  if (!im.ok) return erro(im.erro);
+  c.msgs.push({ id: nextId(s, 'cm'), autorTipo: 'cliente', autorNome: user.apelido || user.nome, texto: t, criadoEm: agora, anexos: im.anexos });
   if (c.status === 'aguardando_cliente' || c.status === 'resolvido') c.status = 'em_atendimento';
   c.atualizadoEm = agora;
   c.naoLidas = 0;

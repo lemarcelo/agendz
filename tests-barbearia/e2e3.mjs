@@ -39,6 +39,7 @@ await p.getByRole('button', { name: 'Hora mais' }).click();
 await T('status-confirmado').check();
 await shot('50-remarcar');
 await T('salvar-agendamento').click();
+await T('avisar-whats-nao').click(); // cliente com telefone: a tela pergunta se avisa pelo WhatsApp
 await p.getByText('Reagendado').first().waitFor(); ok('remarcar pelo barbeiro gera etiqueta Reagendado');
 await T('gaveta').waitFor(); await shot('51-gaveta-reagendado');
 // cancelar

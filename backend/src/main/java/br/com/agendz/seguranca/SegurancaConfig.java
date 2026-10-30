@@ -81,7 +81,7 @@ public class SegurancaConfig {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(a -> a
                         .requestMatchers(HttpMethod.GET, "/api/publico/**", "/actuator/health").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/passkey/desafio", "/api/auth/passkey/entrar").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/publico/agendamentos", "/api/publico/agendamentos/*/cancelar", "/api/publico/agendamentos/*/remarcar", "/api/publico/meus").permitAll() // link do cliente: sem login
                         .requestMatchers("/interno/**").permitAll() // só a rede interna (o Caddy não publica /interno)
                         .anyRequest().authenticated())

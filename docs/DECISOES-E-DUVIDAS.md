@@ -112,3 +112,8 @@ Lista simples. Cada item está no histórico do `prompt-agendz-regras.md` (v84 a
 - O padrão vazio vale também para a estética; exceção registrada em `docs/EQUIVALENCIA-BARBEARIA.md`.
 - Os dois pedidos do link para 02/11 16:30 eram de profissionais diferentes (o servidor do link já era estrito por profissional); o furo real era o cliente via WhatsApp/simulador poder sobrepor um pedido a confirmar, agora fechado.
 - Aro do botão do link: `--tema-btn-aro` (cor do degradê com transparência), nunca cor solta.
+
+## v110 (30/10)
+- **Digital (passkey):** pede a senha de novo para cadastrar; exige verificação do usuário (`UV`); só atestado `none`. Dúvida para o Marcelo: aceitar também chave de segurança USB sem `UV`? Hoje não.
+- **Imagens do chamado:** bytes no banco do Admin (sem disco), 3 por mensagem, 1,5 MB cada. A tela reduz e redesenha como JPEG (tira GPS). Dúvida: liberar PDF? Hoje não (risco de script).
+- Telefone do link obrigatório por padrão; a loja pode desmarcar. Aviso de remarcação só quando o horário muda.

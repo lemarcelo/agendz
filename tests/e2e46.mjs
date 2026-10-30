@@ -21,6 +21,7 @@ ag(5, '2026-10-31T14:00:00', 30, KIKO, BRUNO, 'a_confirmar', 'Barba', { origem: 
 ag(6, '2026-11-03T09:00:00', 45, ALAN, CAIO, 'confirmado', 'Corte');
 ag(7, '2026-11-10T09:00:00', 45, ALAN, CAIO, 'confirmado', 'Corte'); // fora dos 7 dias: só aparece com "Ver mais"
 const chamadas = [];
+const pedidosWa = [];
 let papel = 'dono';
 let ocupadoEm = null; // remarcar para este horário responde 409
 const servidor = http.createServer((req, res) => {
@@ -61,7 +62,7 @@ async function abrir(viewport = { width: 1280, height: 860 }) {
   const touch = viewport.width < 700;
   const ctx = await b.newContext({ viewport, hasTouch: touch, isMobile: touch, locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' });
   await ctx.clock.setFixedTime(new Date('2026-10-28T10:00:00-03:00'));
-  await ctx.route(/^https:\/\/(wa\.me|web\.whatsapp\.com)\//, (r) => r.fulfill({ contentType: 'text/html', body: '<title>wa</title>' }));
+  await ctx.route(/^https:\/\/(wa\.me|web\.whatsapp\.com)\//, (r) => { pedidosWa.push(r.request().url()); return r.fulfill({ contentType: 'text/html', body: '<title>wa</title>' }); });
   const p = await ctx.newPage(); p.setDefaultTimeout(8000);
   p.on('pageerror', (e) => erros.push('PAGE: ' + e.message));
   p.on('dialog', async (d) => { erros.push('DIALOG: ' + d.message()); await d.dismiss(); });
@@ -144,6 +145,15 @@ const textoDe = (p, t) => p.getByTestId(t).innerText();
   assert.equal(ultimo('PUT', '/remarcar').corpo.inicio, U('2026-10-29T17:00:00'));
   await p.waitForFunction(() => /17:00/.test(document.querySelector('[data-testid="cartao-proximo"]')?.textContent || ''));
   ok('remarcar: mensagem do servidor na tela, depois certo; horário novo na lista');
+  // 6b. horário mudou e o cliente tem telefone: a tela pergunta se avisa pelo WhatsApp; "Avisar" abre o wa.me com a mensagem pronta
+  await p.getByTestId('avisar-whats-pergunta').waitFor();
+  assert.match(await textoDe(p, 'avisar-whats-texto'), /reagendar/i);
+  await p.getByTestId('avisar-whats-sim').click();
+  await p.waitForFunction(() => !document.querySelector('[data-testid="avisar-whats"]'));
+  await p.waitForTimeout(300);
+  assert.equal(pedidosWa.length, 1, 'abriu o WhatsApp uma vez');
+  assert.match(pedidosWa[0], /^https:\/\/wa\.me\/5511999990\d{3}\?text=/, 'wa.me com o telefone do cliente: ' + pedidosWa[0]);
+  ok('remarcar: pergunta se avisa o cliente e abre o WhatsApp com a mensagem');
 
   // 7. ver mais 7 dias
   await p.getByTestId('proximos-mais').click();
@@ -194,6 +204,22 @@ const textoDe = (p, t) => p.getByTestId(t).innerText();
   await p.locator('[data-testid="cartao"][data-status="confirmado"]').first().locator('[data-testid="cartao-abrir"]').click(); await p.getByTestId('acao-remarcar').click(); await semRolagem('remarcar');
   await p.getByTestId('aba-calendario').click(); await p.getByTestId('calendario').waitFor(); await semRolagem('calendário');
   ok('390 px com fonte larga: sem rolagem lateral');
+  await ctx.close();
+}
+
+// 5. computador: cartões do dia em grade de colunas iguais (não ocupam a linha inteira), mesma altura na linha, cartão do dia com a data; 390 px uma coluna
+for (const [w, h] of [[1366, 820], [1920, 1000], [390, 800]]) {
+  const { ctx, p } = await abrir({ width: w, height: h });
+  await p.waitForFunction(() => document.querySelectorAll('[data-testid="cartao"]').length === 3);
+  const m = await p.evaluate(() => ({ lista: [...document.querySelectorAll('[data-testid="cartao"]')].map((e) => { const r = e.getBoundingClientRect(); return { y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height), data: e.querySelector('[data-testid="cartao-data"]')?.textContent || '' }; }), largo: document.documentElement.scrollWidth > window.innerWidth + 1 }));
+  assert.ok(!m.largo, `${w}: rolagem lateral`);
+  assert.equal(new Set(m.lista.map((c) => c.w)).size, 1, `${w}: mesma largura ${JSON.stringify(m.lista)}`);
+  assert.equal(new Set(m.lista.map((c) => c.h)).size, 1, `${w}: mesma altura ${JSON.stringify(m.lista)}`);
+  for (const c of m.lista) assert.match(c.data, /^[a-zç]{3} \d\d\/\d\d$/i, `${w}: o cartão do dia mostra a data, não "Hoje"`);
+  const linhas = new Set(m.lista.map((c) => c.y)).size;
+  if (w >= 1000) { assert.equal(linhas, 1, `${w}: os três cartões cabem numa linha`); assert.ok(m.lista[0].w < w * 0.5, `${w}: cartão não ocupa a linha inteira (${m.lista[0].w})`); }
+  else assert.equal(linhas, 3, `${w}: no celular uma coluna`);
+  ok(`${w} px: cartões do dia em grade igual (${m.lista[0].w} px, ${linhas} linha(s))`);
   await ctx.close();
 }
 

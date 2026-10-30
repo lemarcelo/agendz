@@ -295,6 +295,20 @@ Ainda não existe no servidor (continua no 10b): código por telefone, lembretes
 
 `MODO_DEMO` (código de recuperação na resposta), `bancoSimulado`, `store.avancar`/`reiniciar`, snapshot com senhas e CPFs, sessão em variável do navegador, contadores de login na memória, chave de autoria no front. Todos substituídos pelas camadas das seções 0 a 10.
 
+## 10m. Login por digital (v110, passkey/WebAuthn; `WebauthnTest`, `PasskeyTest`)
+Só existe no site real. A senha continua valendo; a digital é outra porta que termina na mesma sessão (JWT). Recusa é **403** (401 derruba a sessão no site). O `rpId` é o Host da loja; desafio de 32 bytes, **uso único**, vence em poucos minutos.
+
+| Rota | Quem | Regra |
+|---|---|---|
+| `POST /api/auth/passkey/desafio` | sem login | devolve `{ desafioId, desafio, rpId, ... }` (desafio de uso único; no máximo 500 abertos por loja) |
+| `POST /api/auth/passkey/entrar` | sem login | `{ desafioId, credencialId, clientDataJSON, authenticatorData, assinatura, userHandle }`: confere tipo `webauthn.get`, desafio, origem = Host, `rpId`, `UP`+`UV`, assinatura (ES256/RS256) e contador crescente (contador que volta = clone = recusa); devolve a mesma sessão do login |
+| `POST /api/usuarios/me/passkeys/desafio` | logado (dono, admin, atendente, profissional) | `{ senha }`: a mesma trava da troca de senha (5 erros = 15 min); senha errada = 403 |
+| `POST /api/usuarios/me/passkeys` | logado | `{ desafioId, nome, clientDataJSON, atestado }`: tipo `webauthn.create`, atestado `none`, chave COSE EC2 (ES256) ou RSA (RS256) guardada; **no máximo 5 aparelhos por pessoa** (6º = 409); `excluir` no desafio evita cadastrar o mesmo aparelho duas vezes |
+| `GET /api/usuarios/me/passkeys` | logado | só as do próprio usuário: `{ id, nome, criadaEm, ultimoUso }` (nunca a chave) |
+| `DELETE /api/usuarios/me/passkeys/{id}` | logado | só a própria; outra pessoa = 404 |
+
+Migração V31 (`passkey`, RLS por loja, `ON DELETE CASCADE` com o usuário: apagar a pessoa apaga as digitais). Usuário `suporte` não cadastra. Teste: assinatura inválida, desafio reusado, origem trocada, contador que volta, outro usuário e outra loja.
+
 ## 10d. Expediente e escala no servidor (v76, `escala/`; `EscalaTest`)
 | Rota | Quem | O que faz | Regras |
 |---|---|---|---|
@@ -330,9 +344,10 @@ Qualquer usuário logado (menos o que ainda está com senha temporária). O serv
 |---|---|---|
 | `suporte.listar` | `GET /api/suporte/chamados` | do usuário; o dono vê a loja toda; resumo (sem mensagens) |
 | `suporte.naoLidas` | `GET /api/suporte/chamados/nao-lidas` | `{ naoLidas }`; selo do menu; consulta de fundo a cada 20 s no site real |
-| `suporte.abrir` | `POST /api/suporte/chamados` | `{ assunto ≤ 120, categoria duvida\|problema\|sugestao\|cobranca\|outro, texto ≤ 4000 }`; 5 novos por hora por usuário (429); texto acima do limite é recusado, nunca cortado |
+| `suporte.abrir` | `POST /api/suporte/chamados` | `{ assunto ≤ 120, categoria duvida\|problema\|sugestao\|cobranca\|outro, texto ≤ 4000, anexos? ≤ 3 }`; 5 novos por hora por usuário (429); texto acima do limite é recusado, nunca cortado; **imagens (v110)**: até 3 em base64 (PNG, JPEG ou WebP **pelo conteúdo**, 1,5 MB cada, 4 MB no total; SVG, GIF, HTML e PDF = 400), conferidas no servidor da loja e de novo na Admin API |
 | `suporte.obter` | `GET /api/suporte/chamados/{id}` | conversa; **abrir marca como lido**; id que não é UUID = 404 sem chamar o Admin |
-| `suporte.responder` | `POST /api/suporte/chamados/{id}/mensagens` | `{ texto ≤ 4000 }`; 20 por hora por chamado (429); resolvido ou aguardando volta a "em atendimento"; **fechado = 409** (abrir outro) |
+| `suporte.responder` | `POST /api/suporte/chamados/{id}/mensagens` | `{ texto ≤ 4000, anexos? ≤ 3 }` (mesmas regras de imagem); 20 por hora por chamado (429); resolvido ou aguardando volta a "em atendimento"; **fechado = 409** (abrir outro) |
+| `suporte.imagem` (v110) | `GET /api/suporte/chamados/{id}/anexos/{anexoId}` | os bytes de **uma** imagem, só com login e só de quem enxerga o chamado (o próprio usuário; o dono, a loja toda); **outro usuário, outra loja e imagem de nota interna = 404**; o tipo é o decidido pelo conteúdo, com `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none'; sandbox`, `Cache-Control: private, no-store`; nunca há URL pública (o site baixa com o token e mostra por endereço local `blob:`); ids que não são UUID = 404 sem chamar o Admin |
 Situação: aberto → em atendimento → aguardando cliente → resolvido (vale 7 dias para o cliente reabrir respondendo; depois fecha sozinho com aviso do sistema) → fechado (só o administrador fecha à mão, com motivo).
 
 > v109: `POST /api/atendimentos` com data futura aceita **sem cliente** (sem `clienteId`, nome ou telefone, se as regras do atendimento não exigirem): grava `cliente_id` nulo e `nome_avulso`, status `confirmado`, sem aviso ao cliente. `POST /api/agendamentos` continua exigindo `clienteId`. De fábrica `campos_futuro` é vazio.

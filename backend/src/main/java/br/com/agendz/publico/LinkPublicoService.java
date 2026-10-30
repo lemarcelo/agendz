@@ -85,7 +85,7 @@ public class LinkPublicoService {
     }
 
     /** `endereco` e `mapaUrl` só vêm quando o proprietário ligou "mostrar o endereço no link" e há endereço gravado. */
-    public record Pagina(boolean ativo, String aviso, int diasMax, List<ServicoPublico> servicos, List<ProfissionalPublico> profissionais, String endereco, String mapaUrl,
+    public record Pagina(boolean ativo, String aviso, int diasMax, boolean exigeTelefone, List<ServicoPublico> servicos, List<ProfissionalPublico> profissionais, String endereco, String mapaUrl,
                          String tipo, List<PortePublico> portes) {
     }
 
@@ -164,7 +164,7 @@ public class LinkPublicoService {
         return banco.naLoja(jdbc -> {
             LinkAgendamento.Config cfg = LinkAgendamento.ler(jdbc);
             boolean ativo = cfg.ativo() && LinkAgendamento.tipoSuportado(loja);
-            if (!ativo) return new Pagina(false, ERRO_DESLIGADO, cfg.diasMax(), List.of(), List.of(), null, null, loja.tipo(), List.of());
+            if (!ativo) return new Pagina(false, ERRO_DESLIGADO, cfg.diasMax(), cfg.telefoneObrigatorio(), List.of(), List.of(), null, null, loja.tipo(), List.of());
             boolean porPorte = Capacidades.precoPorPorte(loja);
             List<ServicoPublico> servicos = jdbc.query(
                     "select id, nome, preco, duracao_min, antecedencia_h, precos::text as precos, duracoes::text as duracoes from servico where ativo and not multi_dia order by lower(nome), id",
@@ -176,7 +176,7 @@ public class LinkPublicoService {
             LocalDaLoja.Local local = LocalDaLoja.ler(jdbc);
             boolean mostra = local.enderecoNoLink() && local.temEndereco();
             List<PortePublico> portes = porPorte ? PORTES.stream().map(x -> new PortePublico(x, ROTULO_PORTE.get(x))).toList() : List.of();
-            return new Pagina(true, null, cfg.diasMax(), servicos, profissionais, mostra ? local.enderecoTexto() : null, mostra ? local.mapaUrl() : null, loja.tipo(), portes);
+            return new Pagina(true, null, cfg.diasMax(), cfg.telefoneObrigatorio(), servicos, profissionais, mostra ? local.enderecoTexto() : null, mostra ? local.mapaUrl() : null, loja.tipo(), portes);
         });
     }
 
@@ -223,7 +223,7 @@ public class LinkPublicoService {
 
     private LinkAgendamento.Config config(JdbcTemplate jdbc, Loja loja) {
         LinkAgendamento.Config c = LinkAgendamento.ler(jdbc);
-        return new LinkAgendamento.Config(c.ativo() && LinkAgendamento.tipoSuportado(loja), c.diasMax());
+        return new LinkAgendamento.Config(c.ativo() && LinkAgendamento.tipoSuportado(loja), c.diasMax(), c.telefoneObrigatorio());
     }
 
     private Base base(JdbcTemplate jdbc, Loja loja, UUID profissionalId) {
@@ -295,12 +295,14 @@ public class LinkPublicoService {
         String nome = p.nome() == null ? "" : Texto.limpar(p.nome()).trim();
         if (nome.length() < 2) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe o seu nome.");
         if (nome.length() > 60) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "O nome pode ter até 60 letras.");
-        String tel = Documentos.telefone(p.telefone());
-        if (tel == null) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe o telefone com DDD.");
+        // telefone digitado precisa ser válido; em branco só vale se o proprietário tirou a obrigatoriedade (conferido de novo dentro da transação)
+        boolean telefoneEmBranco = p.telefone() == null || p.telefone().replaceAll("\\D", "").isEmpty();
+        String tel = telefoneEmBranco ? null : Documentos.telefone(p.telefone());
+        if (tel == null && !telefoneEmBranco) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe o telefone com DDD.");
         List<UUID> servicoIds = ids(p.servicoIds());
         if (Capacidades.usaVeiculo(loja) && p.veiculo() == null) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe o veículo (placa, modelo e porte).");
         boolean comCupom = p.cupomChave() != null && !p.cupomChave().isBlank();
-        boolean liberado = limite.liberar("agendar-tel:" + loja.id() + ":" + tel, 5, Duration.ofMinutes(1))
+        boolean liberado = (tel == null || limite.liberar("agendar-tel:" + loja.id() + ":" + tel, 5, Duration.ofMinutes(1)))
                 && limite.liberar("agendar-ip:" + loja.id() + ":" + ip, 20, Duration.ofMinutes(10))
                 && limite.liberar("agendar-loja:" + loja.id(), 120, Duration.ofMinutes(10))
                 && (!comCupom || limite.liberar("cupom-loja:" + loja.id(), 30, Duration.ofMinutes(15)));
@@ -309,6 +311,7 @@ public class LinkPublicoService {
             Instant agora = relogio.instant();
             LinkAgendamento.Config cfg = config(jdbc, loja);
             if (!cfg.ativo()) throw new ErroDeNegocio(HttpStatus.FORBIDDEN, ERRO_DESLIGADO);
+            if (tel == null && cfg.telefoneObrigatorio()) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe o telefone com DDD.");
             // estética: o veículo vem do pedido (não entra no cadastro de quem já é cliente) e o porte dele define preço e duração
             ClienteService.VeiculoDoAgendamento vei = !Capacidades.usaVeiculo(loja) ? null
                     : clientes.resolverVeiculo(jdbc, loja, null, null, new ClienteService.EntradaVeiculo(null, p.veiculo().placa(), p.veiculo().marca(), p.veiculo().modelo(), p.veiculo().cor(), p.veiculo().porte()));
@@ -346,15 +349,19 @@ public class LinkPublicoService {
             if (profissional == null) throw new ErroDeNegocio(HttpStatus.CONFLICT, ERRO_HORARIO);
             UUID boxId = escolherBoxDoLink(jdbc, loja, inicio, fimServico, fimOcupado, null, NINGUEM);
 
-            ClienteService.DoLink cli = clientes.resolverDoLink(jdbc, nome, tel);
-            Integer abertos = jdbc.queryForObject("select count(*) from agendamento where cliente_id = ? and status in ('a_confirmar', 'confirmado') and inicio > ?", Integer.class, cli.clienteId(), utc(agora));
-            if (abertos != null && abertos >= MAX_ABERTOS) {
-                throw new ErroDeNegocio(HttpStatus.CONFLICT, "Você já tem " + MAX_ABERTOS + " horários marcados. Cancele um deles para agendar outro.");
+            // sem telefone não há cadastro: o pedido guarda só o nome (`nome_avulso`) e o limite de abertos fica por conta do limite por IP e da loja
+            ClienteService.DoLink cli = tel == null ? null : clientes.resolverDoLink(jdbc, nome, tel);
+            UUID clienteId = cli == null ? null : cli.clienteId();
+            if (cli != null) {
+                Integer abertos = jdbc.queryForObject("select count(*) from agendamento where cliente_id = ? and status in ('a_confirmar', 'confirmado') and inicio > ?", Integer.class, cli.clienteId(), utc(agora));
+                if (abertos != null && abertos >= MAX_ABERTOS) {
+                    throw new ErroDeNegocio(HttpStatus.CONFLICT, "Você já tem " + MAX_ABERTOS + " horários marcados. Cancele um deles para agendar outro.");
+                }
             }
             UUID id = jdbc.queryForObject(
-                    "insert into agendamento (loja_id, cliente_id, profissional_id, inicio, fim_servico, fim_ocupado, status, encaixe, total, origem, box_id, porte, veiculo_placa, veiculo_marca, veiculo_modelo, veiculo_cor) "
-                            + "values (?::uuid, ?, ?, ?, ?, ?, 'a_confirmar', false, ?, 'link', ?, ?, ?, ?, ?, ?) returning id",
-                    UUID.class, loja.id().toString(), cli.clienteId(), profissional, utc(inicio), utc(fimServico), utc(fimOcupado), total, boxId,
+                    "insert into agendamento (loja_id, cliente_id, nome_avulso, profissional_id, inicio, fim_servico, fim_ocupado, status, encaixe, total, origem, box_id, porte, veiculo_placa, veiculo_marca, veiculo_modelo, veiculo_cor) "
+                            + "values (?::uuid, ?, ?, ?, ?, ?, ?, 'a_confirmar', false, ?, 'link', ?, ?, ?, ?, ?, ?) returning id",
+                    UUID.class, loja.id().toString(), clienteId, clienteId == null ? nome : null, profissional, utc(inicio), utc(fimServico), utc(fimOcupado), total, boxId,
                     vei == null ? null : vei.porte(), vei == null ? null : vei.placa(), vei == null ? null : vei.marca(), vei == null ? null : vei.modelo(), vei == null ? null : vei.cor());
             short ordem = 0;
             for (Svc s : servicos) {
@@ -368,7 +375,7 @@ public class LinkPublicoService {
                 CupomService.Aplicado ap = cupons.aplicar(jdbc, loja.id(), id, null, "link:" + ip, p.cupomChave(), agora);
                 evento(jdbc, loja.id(), id, "cupom", null, ap.nome() + ": desconto de " + CupomService.reais(ap.desconto()));
             }
-            avisar(jdbc, loja.id(), id, "pedido", nome + " pediu horário pelo link" + (vei == null ? "" : " para o " + vei.modelo() + " " + vei.placa()) + ": " + dataHora(inicio) + " (aguardando a sua confirmação).");
+            avisar(jdbc, loja.id(), id, "pedido", nome + (clienteId == null ? " (sem telefone)" : "") + " pediu horário pelo link" + (vei == null ? "" : " para o " + vei.modelo() + " " + vei.placa()) + ": " + dataHora(inicio) + " (aguardando a sua confirmação).");
             String token = novoToken();
             jdbc.update("delete from acesso_publico where expira_em < ?", utc(agora));
             jdbc.update("insert into acesso_publico (loja_id, agendamento_id, token_hash, expira_em) values (?::uuid, ?, ?, ?)",
@@ -553,7 +560,7 @@ public class LinkPublicoService {
     }
 
     private String nomeDoCliente(JdbcTemplate jdbc, UUID agendamentoId) {
-        List<String> n = jdbc.queryForList("select coalesce(nullif(c.apelido, ''), c.nome) from agendamento a join cliente c on c.id = a.cliente_id where a.id = ?", String.class, agendamentoId);
+        List<String> n = jdbc.queryForList("select coalesce(nullif(c.apelido, ''), c.nome, a.nome_avulso) from agendamento a left join cliente c on c.id = a.cliente_id where a.id = ?", String.class, agendamentoId);
         return n.isEmpty() || n.get(0) == null ? "O cliente" : n.get(0);
     }
 

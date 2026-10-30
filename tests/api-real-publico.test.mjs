@@ -115,12 +115,15 @@ test('cancelar: o token vai no cabeçalho X-Acesso; id ou token ruim nem sai', a
 test('linkAgendamento: GET e PUT do proprietário; dias fora de 1 a 60 nem saem', async () => {
   servidor({ ativo: false, diasMax: 14, disponivel: false });
   const r = await linkAgendamento.obter();
-  assert.deepEqual(r.link, { ativo: false, diasMax: 14, disponivel: false });
+  assert.deepEqual(r.link, { ativo: false, diasMax: 14, disponivel: false, telefoneObrigatorio: true }, 'telefone obrigatório de fábrica');
   assert.deepEqual([chamadas[0].metodo, chamadas[0].url], ['GET', 'https://loja.teste/api/estabelecimento/link-agendamento']);
   servidor({ ativo: true, diasMax: 20, disponivel: true });
   const g = await linkAgendamento.gravar({ ativo: true, diasMax: 20 });
   assert.equal(g.link.diasMax, 20);
   assert.deepEqual([chamadas[0].metodo, chamadas[0].corpo], ['PUT', { ativo: true, diasMax: 20 }]);
+  servidor({ ativo: true, diasMax: 20, disponivel: true, telefoneObrigatorio: false });
+  const t = await linkAgendamento.gravar({ telefoneObrigatorio: false });
+  assert.equal(t.link.telefoneObrigatorio, false); assert.deepEqual(chamadas[0].corpo, { telefoneObrigatorio: false });
   servidor({});
   for (const ruim of [0, 61, 1.5, '30', null]) assert.equal((await linkAgendamento.gravar({ diasMax: ruim })).ok, false);
   assert.equal(chamadas.length, 0);

@@ -983,7 +983,8 @@ export const estabelecimento = {
     if ('linkAgendamento' in patch) {
       const l = patch.linkAgendamento;
       if (!(l && typeof l === 'object' && typeof l.ativo === 'boolean' && Number.isInteger(l.diasMax) && l.diasMax >= 1 && l.diasMax <= 60)) return erro('Link de agendamento inválido: ligado ou desligado e de 1 a 60 dias à frente.');
-      patch.linkAgendamento = { ativo: l.ativo, diasMax: l.diasMax };
+      if ('telefoneObrigatorio' in l && typeof l.telefoneObrigatorio !== 'boolean') return erro('Link de agendamento inválido: telefone obrigatório é sim ou não.');
+      patch.linkAgendamento = { ativo: l.ativo, diasMax: l.diasMax, telefoneObrigatorio: l.telefoneObrigatorio !== false };
     }
     if ('usaIntegracaoPix' in patch && typeof patch.usaIntegracaoPix !== 'boolean') return erro('Opção de integração Pix inválida.');
     if ('formaPagamentoPadrao' in patch && patch.formaPagamentoPadrao !== '' && !R.formaValida(patch.formaPagamentoPadrao)) return erro('Forma de pagamento padrão inválida.');
@@ -1351,10 +1352,10 @@ export const suporte = {
   listar() { const u = usuario(); return u ? { ok: true, chamados: chamadosDoUsuario(state, u) } : semPermissao(); },
   // GET /suporte/chamados/nao-lidas
   naoLidas() { const u = usuario(); return u ? { ok: true, naoLidas: SU.naoLidasDoUsuario(state, u) } : semPermissao(); },
-  // POST /suporte/chamados  { assunto, categoria, texto }
+  // POST /suporte/chamados  { assunto, categoria, texto, anexos? }  (até 3 imagens em base64; tipo pelo conteúdo)
   abrir(entrada) {
     const u = usuario(); if (!u) return semPermissao();
-    return mutate((s, agora) => SU.abrirChamado(s, s.usuarios.find((x) => x.id === u.id), pegar(entrada, ['assunto', 'categoria', 'texto']), agora), { metodo: 'POST', rota: '/suporte/chamados' });
+    return mutate((s, agora) => SU.abrirChamado(s, s.usuarios.find((x) => x.id === u.id), pegar(entrada, ['assunto', 'categoria', 'texto', 'anexos']), agora), { metodo: 'POST', rota: '/suporte/chamados' });
   },
   // GET /suporte/chamados/{id}  (abrir marca como lido)
   obter(id) {
@@ -1362,11 +1363,17 @@ export const suporte = {
     if (!texto(id, 40)) return erro('Chamado não encontrado.');
     return mutate((s) => SU.lerChamado(s, s.usuarios.find((x) => x.id === u.id), id), { metodo: 'GET', rota: `/suporte/chamados/${String(id).slice(0, 20)}`, silencioso: true });
   },
-  // POST /suporte/chamados/{id}/mensagens  { texto }
-  responder(id, textoNovo) {
+  // GET /suporte/chamados/{id}/anexos/{anexoId}  (os bytes da imagem; de outro usuário = não existe)
+  imagem(id, anexoId) {
+    const u = usuario(); if (!u) return semPermissao();
+    if (!texto(id, 40) || !texto(anexoId, 40)) return erro('Imagem não encontrada.');
+    return SU.imagemDoChamado(state, state.usuarios.find((x) => x.id === u.id), id, anexoId);
+  },
+  // POST /suporte/chamados/{id}/mensagens  { texto, anexos? }
+  responder(id, textoNovo, anexos) {
     const u = usuario(); if (!u) return semPermissao();
     if (!texto(id, 40)) return erro('Chamado não encontrado.');
     if (typeof textoNovo !== 'string') return erro('A mensagem é obrigatória.');
-    return mutate((s, agora) => SU.responderChamado(s, s.usuarios.find((x) => x.id === u.id), id, textoNovo, agora), { metodo: 'POST', rota: `/suporte/chamados/${String(id).slice(0, 20)}/mensagens` });
+    return mutate((s, agora) => SU.responderChamado(s, s.usuarios.find((x) => x.id === u.id), id, textoNovo, agora, Array.isArray(anexos) ? anexos : undefined), { metodo: 'POST', rota: `/suporte/chamados/${String(id).slice(0, 20)}/mensagens` });
   },
 };

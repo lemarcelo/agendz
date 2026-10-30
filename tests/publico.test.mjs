@@ -232,3 +232,23 @@ test('fuzz: pedidos, remarcações e cancelamentos aleatórios nunca duplicam ho
     assert.ok(x.inicio + dx <= y.inicio || y.inicio + dx <= x.inicio, `sobreposição ${fmtHM(x.inicio)} x ${fmtHM(y.inicio)}`);
   }
 });
+
+test('telefone é obrigatório no link por padrão; o dono pode tirar e o pedido fica sem cadastro, a confirmar, sem mensagem nem acesso', () => {
+  assert.equal(publico.config().exigeTelefone, true, 'de fábrica o telefone é obrigatório');
+  const h = slots()[0].inicio;
+  const sem = publico.agendar({ nome: 'Sem Fone', telefone: '', servicoIds: SV, profissionalId: 'u-pablo', inicio: h });
+  assert.equal(sem.ok, false); assert.match(sem.erros[0], /telefone/i);
+  const n = st().clientes.length; const m = st().mensagensCliente.length;
+  assert.ok(estabelecimento.salvar({ linkAgendamento: { ativo: true, diasMax: 30, telefoneObrigatorio: false } }).ok);
+  assert.equal(publico.config().exigeTelefone, false);
+  const r = publico.agendar({ nome: 'Sem Fone', telefone: '', servicoIds: SV, profissionalId: 'u-pablo', inicio: h });
+  assert.ok(r.ok, JSON.stringify(r)); assert.equal(r.token, null); assert.equal(r.semTelefone, true);
+  const a = ag(r.agendamentoId);
+  assert.equal(a.status, 'a_confirmar'); assert.equal(a.clienteId, null); assert.equal(a.nomeAvulso, 'Sem Fone'); assert.equal(a.origem, 'link');
+  assert.equal(st().clientes.length, n, 'sem cadastro'); assert.equal(st().mensagensCliente.length, m, 'sem mensagem');
+  assert.ok(st().avisosPainel.some((x) => x.agendamentoId === a.id && /sem telefone/.test(x.texto)), 'o painel é avisado');
+  // o horário continua ocupado para o próximo cliente, e telefone digitado errado continua recusado
+  assert.equal(pedir(7, h).ok, false);
+  assert.equal(publico.agendar({ nome: 'Fone Ruim', telefone: '123', servicoIds: SV, profissionalId: 'u-pablo', inicio: slots()[2].inicio }).ok, false);
+  assert.equal(estabelecimento.salvar({ linkAgendamento: { ativo: true, diasMax: 30, telefoneObrigatorio: 'sim' } }).ok, false, 'valor inválido recusado');
+});

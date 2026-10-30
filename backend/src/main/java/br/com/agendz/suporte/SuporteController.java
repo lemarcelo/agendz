@@ -10,6 +10,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
@@ -30,20 +31,23 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * | rota                                     |
  * | GET  /api/suporte/chamados               | lista (do usuário; o dono vê a loja toda)
- * | POST /api/suporte/chamados               | { assunto, categoria, texto }
+ * | POST /api/suporte/chamados               | { assunto, categoria, texto, anexos? } (até 3 imagens em base64)
  * | GET  /api/suporte/chamados/nao-lidas     | { naoLidas }
  * | GET  /api/suporte/chamados/{id}          | conversa (abrir marca como lido)
- * | POST /api/suporte/chamados/{id}/mensagens| { texto }
+ * | POST /api/suporte/chamados/{id}/mensagens| { texto, anexos? }
+ * | GET  /api/suporte/chamados/{id}/anexos/{aid} | os bytes de uma imagem (PNG, JPEG ou WebP)
  */
 @RestController
 @PreAuthorize("hasAnyRole('DONO','ADMIN','ATENDENTE','PROFISSIONAL')")
 public class SuporteController {
 
     public record Novo(@NotNull @Size(min = 1, max = 120, message = "O assunto pode ter até 120 caracteres") String assunto, @NotNull @Size(max = 20) String categoria,
-                       @NotNull @Size(min = 1, max = 4000, message = "A mensagem pode ter até 4000 caracteres") String texto) {
+                       @NotNull @Size(min = 1, max = 4000, message = "A mensagem pode ter até 4000 caracteres") String texto,
+                       @Size(max = 3, message = "Até 3 imagens por mensagem.") List<String> anexos) {
     }
 
-    public record Resposta(@NotNull @Size(min = 1, max = 4000, message = "A mensagem pode ter até 4000 caracteres") String texto) {
+    public record Resposta(@NotNull @Size(min = 1, max = 4000, message = "A mensagem pode ter até 4000 caracteres") String texto,
+                           @Size(max = 3, message = "Até 3 imagens por mensagem.") List<String> anexos) {
     }
 
     private final AdminLigacao admin;
@@ -77,6 +81,24 @@ public class SuporteController {
         }
     }
 
+    /** Imagens da mensagem: conferidas aqui (tipo pelo conteúdo, tamanho, quantidade) e repassadas como estão; a Admin API confere de novo. */
+    private static void anexos(ObjectNode corpo, List<String> lista) {
+        List<String> ok = ImagensDoChamado.conferir(lista);
+        if (ok.isEmpty()) return;
+        var arr = corpo.putArray("anexos");
+        ok.forEach(arr::add);
+    }
+
+    // GET /api/suporte/chamados/{id}/anexos/{anexoId}  (os bytes da imagem; só quem enxerga o chamado; nota interna, outro usuário e outra loja = 404)
+    @GetMapping("/api/suporte/chamados/{id}/anexos/{anexoId}")
+    public ResponseEntity<byte[]> imagem(@PathVariable String id, @PathVariable String anexoId, @AuthenticationPrincipal Jwt t) {
+        Loja loja = LojaContext.exigir();
+        AdminLigacao.Imagem im = admin.obterImagem("/" + id(id) + "/anexos/" + id(anexoId) + "?" + quem(loja.slug(), t, ehDono(t)));
+        return ResponseEntity.ok().contentType(org.springframework.http.MediaType.parseMediaType(im.tipo())).cacheControl(CacheControl.noStore().cachePrivate())
+                .header("X-Content-Type-Options", "nosniff").header("Content-Security-Policy", "default-src 'none'; sandbox").header("Cross-Origin-Resource-Policy", "same-origin")
+                .header("Content-Disposition", "inline; filename=\"imagem\"").body(im.dados());
+    }
+
     // GET /api/suporte/chamados
     @GetMapping("/api/suporte/chamados")
     public ResponseEntity<JsonNode> listar(@AuthenticationPrincipal Jwt t) {
@@ -98,6 +120,7 @@ public class SuporteController {
         ObjectNode corpo = admin.objetos().createObjectNode();
         corpo.put("loja", loja.slug()).put("lojaNome", loja.nome()).put("usuario", t.getSubject()).put("usuarioNome", nome(t)).put("usuarioPapel", String.valueOf(t.getClaimAsString("papel")))
                 .put("todos", ehDono(t)).put("assunto", n.assunto()).put("categoria", n.categoria()).put("texto", n.texto());
+        anexos(corpo, n.anexos());
         return semCache(HttpStatus.CREATED, admin.enviar("", corpo));
     }
 
@@ -114,6 +137,7 @@ public class SuporteController {
         Loja loja = LojaContext.exigir();
         ObjectNode corpo = admin.objetos().createObjectNode();
         corpo.put("loja", loja.slug()).put("usuario", t.getSubject()).put("usuarioNome", nome(t)).put("todos", ehDono(t)).put("texto", r.texto());
+        anexos(corpo, r.anexos());
         return semCache(HttpStatus.CREATED, admin.enviar("/" + id(id) + "/mensagens", corpo));
     }
 }

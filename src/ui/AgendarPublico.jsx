@@ -113,7 +113,7 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
     const r = publico.agendar({ nome, telefone: tel, ...(usaVeiculo ? { placa, marca, modelo, cor, porte } : {}), servicoIds: srv, profissionalId: escolha?.profissionalId || barb, inicio: escolha?.inicio, site: isca });
     setEnviando(false);
     if (!r.ok) { setErro(r.erros[0]); if (/ocupado/.test(r.erros[0])) { setEscolha(null); setEtapa(2); } return; }
-    setToken(r.token); setFeito({ inicio: escolha.inicio, profissionalId: escolha.profissionalId, servicos: servicos.map((x) => x.nome), veiculo: usaVeiculo ? `${modelo.trim()} · ${formatarPlaca(placa)}` : '' });
+    if (r.token) setToken(r.token); setFeito({ semTelefone: !r.token, inicio: escolha.inicio, profissionalId: escolha.profissionalId, servicos: servicos.map((x) => x.nome), veiculo: usaVeiculo ? `${modelo.trim()} · ${formatarPlaca(placa)}` : '' });
     setEtapa(4);
   };
   const lembrar = (quer) => { const r = publico.lembretes(token, quer); if (r.ok) setLemb(quer); else setErro(r.erros[0]); };
@@ -125,8 +125,8 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
         <div className="pub-ok"><Icon n="check" size={26} stroke={3} /></div>
         <h2>Pedido enviado</h2>
         <p>{feito.servicos.join(', ')}{feito.veiculo ? <> para <b>{feito.veiculo}</b></> : null} com <b>{nomeBarb(feito.profissionalId)}</b><br /><b>{fmtDayLong(feito.inicio)}, {fmtHM(feito.inicio)}</b></p>
-        <p className="muted">{cfg.nome} vai confirmar o seu horário. Você acompanha em “Meus agendamentos”.</p>
-        <div className="pub-pergunta" data-testid="pub-lembretes-pergunta">
+        <p className="muted">{!feito.semTelefone ? `${cfg.nome} vai confirmar o seu horário. Você acompanha em “Meus agendamentos”.` : `${cfg.nome} vai ver o seu pedido e confirmar o horário. Como não deixou telefone, a loja não consegue avisar você: guarde o dia e a hora.`}</p>
+        {!feito.semTelefone && <div className="pub-pergunta" data-testid="pub-lembretes-pergunta">
           <b>Quer receber lembretes?</b>
           <span className="muted">Avisamos 24 horas e 2 horas antes do seu horário.</span>
           {lemb === null ? (
@@ -135,10 +135,10 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
               <Btn onClick={() => lembrar(false)} data-testid="pub-lembrete-nao">Agora não</Btn>
             </div>
           ) : <p data-testid="pub-lembrete-resp"><Icon n="check" size={14} stroke={3} /> {lemb ? 'Combinado! Vamos avisar você.' : 'Tudo bem, sem lembretes. Você pode mudar em “Meus agendamentos”.'}</p>}
-        </div>
+        </div>}
         {erro && <Aviso tipo="erro">{erro}</Aviso>}
         <div className="pub-linha">
-          <Btn onClick={irParaMeus} data-testid="pub-ver-meus">Ver meus agendamentos</Btn>
+          {!feito.semTelefone && <Btn onClick={irParaMeus} data-testid="pub-ver-meus">Ver meus agendamentos</Btn>}
           <Btn variante="fantasma" onClick={recomecar} data-testid="pub-novo">Agendar outro</Btn>
         </div>
       </section>
@@ -239,7 +239,7 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
           </div>
           <form className="pub-form" onSubmit={(e) => { e.preventDefault(); enviar(); }} noValidate>
             <Campo rotulo="Nome"><input value={nome} onChange={(e) => setNome(e.target.value)} maxLength={60} autoComplete="name" data-testid="pub-nome" /></Campo>
-            <Campo rotulo="Telefone (WhatsApp)" dica="Com DDD. Só usamos para falar do seu horário."><input type="tel" inputMode="tel" value={tel} onChange={(e) => setTel(formatarTelefone(e.target.value))} maxLength={16} autoComplete="tel" placeholder="(51) 99999-9999" data-testid="pub-telefone" /></Campo>
+            <Campo rotulo={cfg.exigeTelefone === false ? 'Telefone (WhatsApp), se quiser' : 'Telefone (WhatsApp)'} dica={cfg.exigeTelefone === false ? 'Opcional. Com telefone avisamos do seu horário e você acompanha por aqui; sem ele, só a loja vê o seu pedido.' : 'Com DDD. Só usamos para falar do seu horário.'}><input type="tel" inputMode="tel" value={tel} onChange={(e) => setTel(formatarTelefone(e.target.value))} maxLength={16} autoComplete="tel" placeholder="(51) 99999-9999" data-testid="pub-telefone" /></Campo>
             <input className="pub-isca" tabIndex={-1} aria-hidden="true" autoComplete="off" name="site" value={isca} onChange={(e) => setIsca(e.target.value)} data-testid="pub-isca" />
             {erro && <Aviso tipo="erro"><span data-testid="pub-erro">{erro}</span></Aviso>}
             <div className="pub-rodape">

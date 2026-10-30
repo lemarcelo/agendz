@@ -252,6 +252,31 @@ class LinkPublicoTest extends BaseApi {
     }
 
     @Test
+    void telefoneObrigatorioPorPadraoETiravelPeloDonoPedidoSemCadastro() throws Exception {
+        String s = "\"" + corte + "\"";
+        // de fábrica o telefone é obrigatório (em branco é recusado) e a página diz isso
+        pedir(OFFBOX, corpo("Sem Fone", "", s, as(dia, 9, 0), "")).andExpect(status().isBadRequest()).andExpect(jsonPath("$.mensagem").value("Informe o telefone com DDD."));
+        mvc.perform(doCliente(get("/api/publico/agendar")).with(host(OFFBOX))).andExpect(status().isOk()).andExpect(jsonPath("$.exigeTelefone").value(true));
+        mvc.perform(get("/api/estabelecimento/link-agendamento").with(host(OFFBOX)).header(HttpHeaders.AUTHORIZATION, bearer(dono))).andExpect(jsonPath("$.telefoneObrigatorio").value(true));
+        // só o proprietário tira a obrigatoriedade
+        mvc.perform(put("/api/estabelecimento/link-agendamento").with(host(OFFBOX)).header(HttpHeaders.AUTHORIZATION, bearer(colaborador)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"telefoneObrigatorio\":false}")).andExpect(status().isForbidden());
+        mvc.perform(put("/api/estabelecimento/link-agendamento").with(host(OFFBOX)).header(HttpHeaders.AUTHORIZATION, bearer(dono)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"telefoneObrigatorio\":false}")).andExpect(status().isOk()).andExpect(jsonPath("$.telefoneObrigatorio").value(false)).andExpect(jsonPath("$.ativo").value(true));
+        mvc.perform(doCliente(get("/api/publico/agendar")).with(host(OFFBOX))).andExpect(jsonPath("$.exigeTelefone").value(false));
+        int clientes = contar("select count(*) from cliente");
+        // sem telefone: pedido a confirmar, sem cadastro, só com o nome; o token do horário continua valendo; telefone digitado errado continua recusado
+        String r = pedir(OFFBOX, corpo("Sem Fone", "", s, as(dia, 9, 0), "")).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        assertEquals(clientes, contar("select count(*) from cliente"));
+        assertEquals(1, contar("select count(*) from agendamento where id = ?::uuid and cliente_id is null and nome_avulso = 'Sem Fone' and status = 'a_confirmar' and origem = 'link'", id(r)));
+        meus(OFFBOX, texto(r, "token")).andExpect(jsonPath("$", hasSize(1)));
+        avisosDe(dono).andExpect(jsonPath("$[?(@.tipo=='pedido')].texto", hasSize(1)));
+        pedir(OFFBOX, corpo("Fone Ruim", "12345", s, as(dia, 10, 0), "")).andExpect(status().isBadRequest()).andExpect(jsonPath("$.mensagem").value("Informe o telefone com DDD."));
+        // o horário já pedido continua ocupado para o próximo
+        pedir(OFFBOX, corpo("Outro", "", s, as(dia, 9, 0), "")).andExpect(status().isConflict());
+    }
+
+    @Test
     void validacoesDoPedidoEIscaDeRobo() throws Exception {
         String s = "\"" + corte + "\"";
         Instant bom = as(dia, 9, 0);

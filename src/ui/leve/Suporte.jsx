@@ -1,10 +1,11 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
 // Suporte dentro do sistema da loja (A4): chamados com a equipe da plataforma. Uma tela só, usada no Artifact (adaptador simulado) e no site real
-// (adaptador de api-real.js). Fala com um `adaptador` async { listar, abrir, obter, responder }, sempre { ok, erro, ... }. O dono vê todos os chamados da
+// (adaptador de api-real.js). Fala com um `adaptador` async { listar, abrir, obter, responder, imagem? } (as imagens vão em `anexos`: base64 de até 3 JPEG; `imagem(chamadoId, anexoId)` devolve { ok, url }), sempre { ok, erro, ... }. O dono vê todos os chamados da
 // loja; os demais, só os que abriram (quem filtra é o servidor). Texto de pessoa entra só como texto. Atualiza sozinho a cada 15 s enquanto está aberto.
 // Não importa a API simulada nem hooks.js (usada também pelo site real).
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Aviso, Btn, Campo, Icone } from './mini.jsx';
+import { EscolherImagens, ImagensDaMensagem } from './ImagensChamado.jsx';
 
 const CATEGORIAS = [['duvida', 'Dúvida'], ['problema', 'Problema'], ['sugestao', 'Sugestão'], ['cobranca', 'Cobrança'], ['outro', 'Outro']];
 const ROT_CATEGORIA = Object.fromEntries(CATEGORIAS);
@@ -18,6 +19,7 @@ function Conversa({ id, adaptador, aoVoltar, aoMudou }) {
   const [c, setC] = useState(null);
   const [erro, setErro] = useState('');
   const [texto, setTexto] = useState('');
+  const [imagens, setImagens] = useState([]);
   const [enviando, setEnviando] = useState(false);
   const fim = useRef(null);
   const carregar = useCallback(async (fundo) => {
@@ -31,9 +33,9 @@ function Conversa({ id, adaptador, aoVoltar, aoMudou }) {
     e.preventDefault();
     if (enviando || !texto.trim()) return;
     setEnviando(true); setErro('');
-    const r = await adaptador.responder(id, texto);
+    const r = await adaptador.responder(id, texto, imagens.map((x) => x.dados));
     setEnviando(false);
-    if (r.ok) { setTexto(''); setC(r.chamado); aoMudou && aoMudou(); } else setErro(r.erro);
+    if (r.ok) { setTexto(''); setImagens([]); setC(r.chamado); aoMudou && aoMudou(); } else setErro(r.erro);
   };
   if (!c) return <div className="sup-conversa">{erro ? <Aviso tipo="erro" data-testid="sup-erro">{erro}</Aviso> : <p className="muted" role="status">Carregando…</p>}<Btn onClick={aoVoltar} data-testid="sup-voltar">Voltar</Btn></div>;
   const fechado = c.status === 'fechado';
@@ -48,6 +50,7 @@ function Conversa({ id, adaptador, aoVoltar, aoMudou }) {
           <div key={m.id} className={`sup-balao sup-${m.autorTipo}`} data-testid="sup-msg">
             {m.autorTipo !== 'sistema' && <span className="sup-quem"><b>{m.autorNome}</b><span>{quando(m.criadoEm)}</span></span>}
             <span className="sup-texto">{m.texto}</span>
+            <ImagensDaMensagem chamadoId={c.id} anexos={m.anexos} adaptador={adaptador} />
           </div>
         ))}
         <span ref={fim} />
@@ -55,6 +58,7 @@ function Conversa({ id, adaptador, aoVoltar, aoMudou }) {
       {fechado ? <Aviso>Este chamado foi fechado. Abra um novo chamado se precisar.</Aviso> : (
         <form onSubmit={enviar} className="sup-form">
           <Campo rotulo="Sua mensagem"><textarea value={texto} onChange={(e) => { setTexto(e.target.value); setErro(''); }} maxLength={4000} rows={3} data-testid="sup-resposta" /></Campo>
+          <EscolherImagens valor={imagens} aoMudar={setImagens} desabilitado={enviando} />
           {erro && <Aviso tipo="erro" data-testid="sup-erro">{erro}</Aviso>}
           <div className="sup-acoes"><Btn variante="primario" type="submit" disabled={enviando || !texto.trim()} data-testid="sup-enviar">{enviando ? 'Enviando…' : 'Enviar'}</Btn><Btn onClick={aoVoltar} data-testid="sup-voltar">Voltar</Btn></div>
         </form>
@@ -67,13 +71,14 @@ function Conversa({ id, adaptador, aoVoltar, aoMudou }) {
 
 function NovoChamado({ adaptador, aoCriado, aoCancelar }) {
   const [f, setF] = useState({ assunto: '', categoria: 'duvida', texto: '' });
+  const [imagens, setImagens] = useState([]);
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
   const enviar = async (e) => {
     e.preventDefault();
     if (enviando) return;
     setEnviando(true); setErro('');
-    const r = await adaptador.abrir(f);
+    const r = await adaptador.abrir({ ...f, anexos: imagens.map((x) => x.dados) });
     setEnviando(false);
     if (r.ok) aoCriado(r.chamado); else setErro(r.erro);
   };
@@ -83,6 +88,7 @@ function NovoChamado({ adaptador, aoCriado, aoCancelar }) {
       <Campo rotulo="Assunto"><input value={f.assunto} onChange={(e) => { setF({ ...f, assunto: e.target.value }); setErro(''); }} maxLength={120} data-testid="sup-assunto" /></Campo>
       <Campo rotulo="Tipo"><select value={f.categoria} onChange={(e) => setF({ ...f, categoria: e.target.value })} data-testid="sup-categoria">{CATEGORIAS.map(([k, r]) => <option key={k} value={k}>{r}</option>)}</select></Campo>
       <Campo rotulo="O que está acontecendo?"><textarea value={f.texto} onChange={(e) => { setF({ ...f, texto: e.target.value }); setErro(''); }} maxLength={4000} rows={5} data-testid="sup-texto" /></Campo>
+      <EscolherImagens valor={imagens} aoMudar={setImagens} desabilitado={enviando} />
       {erro && <Aviso tipo="erro" data-testid="sup-erro">{erro}</Aviso>}
       <div className="sup-acoes"><Btn variante="primario" type="submit" disabled={enviando || !f.assunto.trim() || !f.texto.trim()} data-testid="sup-abrir">{enviando ? 'Enviando…' : 'Abrir chamado'}</Btn><Btn onClick={aoCancelar} data-testid="sup-cancelar">Cancelar</Btn></div>
     </form>

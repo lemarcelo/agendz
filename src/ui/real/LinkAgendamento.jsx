@@ -29,7 +29,7 @@ export default function LinkAgendamento() {
     const n = Number(dias);
     if (!Number.isInteger(n) || n < 1 || n > 60) { setErro('Informe de 1 a 60 dias.'); return; }
     setSalvando(true); setErro(''); setOk('');
-    const r = await api.gravar({ ativo: link.ativo, diasMax: n });
+    const r = await api.gravar({ ativo: link.ativo, diasMax: n, telefoneObrigatorio: link.telefoneObrigatorio });
     setSalvando(false);
     if (!r.ok) { setErro(r.erro); return; }
     setLink(r.link); setDias(String(r.link.diasMax)); setOk('Link salvo.');
@@ -48,6 +48,8 @@ export default function LinkAgendamento() {
         <a className="btn btn-neutro" href="#agendar" target="_blank" rel="noopener noreferrer" data-testid="link-abrir">Abrir a página</a>
       </div>
       <label className="check-linha"><input type="checkbox" checked={link.ativo} onChange={(e) => { setOk(''); setErro(''); setLink({ ...link, ativo: e.target.checked }); }} data-testid="link-ativo" /><span>Link ligado</span></label>
+      <label className="check-linha"><input type="checkbox" checked={link.telefoneObrigatorio} onChange={(e) => { setOk(''); setErro(''); setLink({ ...link, telefoneObrigatorio: e.target.checked }); }} data-testid="link-telefone-obrigatorio" /><span>Telefone obrigatório para pedir o horário</span></label>
+      {!link.telefoneObrigatorio && <p className="muted" data-testid="link-telefone-aviso">Sem telefone o pedido fica sem cadastro (só o nome) e a loja não consegue avisar o cliente pelo WhatsApp.</p>}
       <Campo rotulo="Oferecer horários até quantos dias à frente (1 a 60)"><input inputMode="numeric" value={dias} onChange={(e) => { setOk(''); setErro(''); setDias(e.target.value.replace(/\D/g, '').slice(0, 2)); }} maxLength={2} data-testid="link-dias" /></Campo>
       {erro && <Aviso tipo="erro" data-testid="link-erro">{erro}</Aviso>}
       {ok && <p className="msg-ok" role="status" data-testid="link-ok">{ok}</p>}

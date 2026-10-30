@@ -335,12 +335,13 @@ function PagamentoRegras({ st, e }) {
 
 // Link de agendamento do cliente: liga/desliga e até quantos dias à frente o cliente pode marcar.
 function LinkAgendamentoRegras({ e }) {
-  const cfg = e.linkAgendamento || { ativo: true, diasMax: 30 };
+  const cfg = e.linkAgendamento || { ativo: true, diasMax: 30, telefoneObrigatorio: true };
   const salvar = (patch, msg) => { const r = apiEst.salvar({ linkAgendamento: { ...cfg, ...patch } }); if (r.ok) toast(msg); else toast(r.erros[0], 'erro'); };
   return (
     <div className="bloco" data-testid="regras-link">
       <h3>Link de agendamento do cliente</h3>
       <Interruptor checked={cfg.ativo !== false} onChange={(v) => salvar({ ativo: v }, v ? 'Link ligado.' : 'Link desligado.')} rotulo="Cliente agenda pelo link" descricao="O botão “Link de agendamento” fica na Agenda. Desligado, a página do cliente avisa que está indisponível." />
+      <Interruptor checked={cfg.telefoneObrigatorio !== false} onChange={(v) => salvar({ telefoneObrigatorio: v }, v ? 'Telefone obrigatório no link.' : 'Telefone opcional no link.')} rotulo="Telefone obrigatório no link" descricao="Ligado (padrão), o cliente só pede o horário com telefone e recebe os avisos. Desligado, ele pode pedir só com o nome; o pedido fica sem cadastro e sem aviso por WhatsApp." testid="link-telefone-obrigatorio" />
       <Campo rotulo="Até quantos dias à frente o cliente pode marcar" dica="De 1 a 60. A antecedência mínima de cada serviço continua valendo.">
         <select value={cfg.diasMax} onChange={(x) => salvar({ diasMax: Number(x.target.value) }, 'Prazo salvo.')} data-testid="link-dias-max">
           {[7, 14, 30, 45, 60].map((d) => <option key={d} value={d}>{d} dias</option>)}

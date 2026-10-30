@@ -3,10 +3,10 @@
 // Usa um link comum com target="_blank" (o caminho que vale também dentro do Artifact) e nunca sai da página do painel.
 import { enderecosWhatsapp } from '../domain/whatsapp.js';
 
-export function abrirWhatsapp(texto) {
+export function abrirWhatsapp(texto, telefone) {
   try {
     const a = document.createElement('a');
-    a.href = enderecosWhatsapp(texto).wa; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.style.display = 'none';
+    a.href = enderecosWhatsapp(texto, telefone).wa; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.style.display = 'none';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     return true;
   } catch { return false; }

@@ -64,14 +64,14 @@ const NOMES_DO_SEED = ['Igor', 'Marcos', 'Rafael'];
 
   // dono desliga o link: botão e página indisponíveis
   await T('nav-estab').click(); await p.getByRole('tab', { name: 'Regras' }).click();
-  await T('regras-link').locator('.trilho').click();
+  await T('regras-link').locator('.trilho').first().click();
   await T('nav-agenda').click();
   assert.equal(await T('copiar-link').isDisabled(), true, 'link desligado: botão desabilitado');
   await p.evaluate(() => { location.hash = 'agendar'; });
   await T('pub-desligado').waitFor();
   await p.evaluate(() => { location.hash = ''; });
   await T('nav-estab').click(); await p.getByRole('tab', { name: 'Regras' }).click();
-  await T('regras-link').locator('.trilho').click();
+  await T('regras-link').locator('.trilho').first().click();
   await T('nav-agenda').click();
   assert.equal(await T('copiar-link').isDisabled(), false);
   ok('dono liga e desliga o link');

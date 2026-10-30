@@ -28,7 +28,8 @@ const adaptadorSuporte = {
   listar: async () => suporte.listar(),
   abrir: async (d) => { const r = suporte.abrir(d); return r.ok ? r : { ok: false, erro: (r.erros || [])[0] || 'Não foi possível abrir o chamado.' }; },
   obter: async (id) => { const r = suporte.obter(id); return r.ok ? r : { ok: false, erro: (r.erros || [])[0] || 'Chamado não encontrado.' }; },
-  responder: async (id, t) => { const r = suporte.responder(id, t); return r.ok ? r : { ok: false, erro: (r.erros || [])[0] || 'Não foi possível enviar.' }; },
+  responder: async (id, t, anexos) => { const r = suporte.responder(id, t, anexos); return r.ok ? r : { ok: false, erro: (r.erros || [])[0] || 'Não foi possível enviar.' }; },
+  imagem: async (id, anexoId) => { const r = suporte.imagem(id, anexoId); return r.ok ? r : { ok: false, erro: (r.erros || [])[0] || 'Imagem não encontrada.' }; },
 };
 
 function AlterarSenha({ onClose }) {

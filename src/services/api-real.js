@@ -6,6 +6,8 @@
 // página pede o login de novo); nenhuma função lança erro: devolve { ok, ... } com mensagem em português; erro técnico nunca vira texto cru na tela.
 // Docs: docs/F2-front-na-api-real.md. Rotas: POST /api/auth/login, PUT /api/usuarios/me/senha, GET /api/publico/loja, /api/onboarding/*, /api/clientes, /api/servicos, /api/usuarios.
 
+import { MAX_BYTES, conferirImagens, lerResumoAnexo, tipoPorConteudo } from '../domain/imagem-chamado.js';
+
 let base = ''; // '' = mesmo endereço do site (o Caddy manda /api/* para a API); os testes apontam para um servidor falso
 let token = null;
 let sessao = null; // { nome, papel, deveTrocarSenha, onboardingPendente } (sem o token)
@@ -125,6 +127,89 @@ export async function entrar({ identificador, senha }) {
   if (!guardarSessao(r.dados)) return { ok: false, status: 502, erro: mensagemPadrao(500) };
   return { ok: true, sessao: sessaoAtual() };
 }
+
+// ---------- login por digital / rosto / PIN do aparelho (passkey, WebAuthn; regras no servidor: PasskeyService) ----------
+// A passkey NUNCA substitui a senha: é uma segunda porta de entrada, que o aparelho assina. Cadastrar pede a senha de novo (recusa = 403, nunca 401).
+const paraB64u = (buf) => {
+  const b = new Uint8Array(buf);
+  let t = '';
+  for (let i = 0; i < b.length; i++) t += String.fromCharCode(b[i]);
+  return globalThis.btoa(t).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+};
+const deB64u = (v) => {
+  const t = globalThis.atob(String(v).replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(String(v).length / 4) * 4, '='));
+  const b = new Uint8Array(t.length);
+  for (let i = 0; i < t.length; i++) b[i] = t.charCodeAt(i);
+  return b;
+};
+const B64U = /^[A-Za-z0-9_-]{1,2000}$/;
+const lerPedidoPasskey = (d) => {
+  d = d && typeof d === 'object' ? d : {};
+  const ok = typeof d.desafioId === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(d.desafioId) && B64U.test(d.desafio || '') && typeof d.rpId === 'string' && d.rpId.length > 0 && d.rpId.length <= 253;
+  return ok ? { desafioId: d.desafioId, desafio: d.desafio, rpId: d.rpId, usuarioHandle: B64U.test(d.usuarioHandle || '') ? d.usuarioHandle : '', usuarioNome: texto(d.usuarioNome, 150), excluir: (Array.isArray(d.excluir) ? d.excluir : []).filter((x) => typeof x === 'string' && B64U.test(x)).slice(0, 10) } : null;
+};
+const recusaDoAparelho = (e) => (e && e.name === 'NotAllowedError' ? 'Cancelado ou sem resposta do aparelho.' : e && e.name === 'InvalidStateError' ? 'Este aparelho já está cadastrado.' : 'Não foi possível usar a digital neste aparelho.');
+export const passkey = {
+  // O navegador sabe fazer? (precisa de endereço seguro: https ou localhost)
+  disponivel() {
+    return !!(globalThis.isSecureContext && typeof globalThis.PublicKeyCredential === 'function' && globalThis.navigator && globalThis.navigator.credentials && typeof globalThis.btoa === 'function');
+  },
+  // POST /api/auth/passkey/desafio  →  navigator.credentials.get  →  POST /api/auth/passkey/entrar  (devolve a mesma sessão do login por senha)
+  async entrar() {
+    if (!this.disponivel()) return { ok: false, status: 0, erro: 'Este navegador não permite entrar com a digital.' };
+    const a = await chamar('POST', '/api/auth/passkey/desafio', {});
+    const ped = a.ok ? lerPedidoPasskey(a.dados) : null;
+    if (!ped) return a.ok ? { ok: false, status: 502, erro: mensagemPadrao(500) } : a;
+    let cred;
+    try {
+      cred = await globalThis.navigator.credentials.get({ publicKey: { challenge: deB64u(ped.desafio), rpId: ped.rpId, timeout: 60000, userVerification: 'required', allowCredentials: [] } });
+    } catch (e) { return { ok: false, status: 0, erro: recusaDoAparelho(e) }; }
+    if (!cred || !cred.response) return { ok: false, status: 0, erro: 'Não foi possível usar a digital neste aparelho.' };
+    const r = await chamar('POST', '/api/auth/passkey/entrar', {
+      desafioId: ped.desafioId, credencialId: paraB64u(cred.rawId), clientDataJSON: paraB64u(cred.response.clientDataJSON),
+      authenticatorData: paraB64u(cred.response.authenticatorData), assinatura: paraB64u(cred.response.signature),
+      ...(cred.response.userHandle ? { userHandle: paraB64u(cred.response.userHandle) } : {}),
+    });
+    if (!r.ok) return r;
+    if (!guardarSessao(r.dados)) return { ok: false, status: 502, erro: mensagemPadrao(500) };
+    return { ok: true, sessao: sessaoAtual() };
+  },
+  // POST /api/usuarios/me/passkeys/desafio { senha } → navigator.credentials.create → POST /api/usuarios/me/passkeys { desafioId, nome, clientDataJSON, atestado }
+  async cadastrar({ senha, nome }) {
+    if (!this.disponivel()) return { ok: false, status: 0, erro: 'Este navegador não permite cadastrar a digital.' };
+    const sn = String(senha ?? '');
+    if (!sn) return { ok: false, status: 0, erro: 'Digite a sua senha para cadastrar este aparelho.' };
+    const a = await chamar('POST', '/api/usuarios/me/passkeys/desafio', { senha: sn.slice(0, 100) });
+    const ped = a.ok ? lerPedidoPasskey(a.dados) : null;
+    if (!ped || !ped.usuarioHandle) return a.ok ? { ok: false, status: 502, erro: mensagemPadrao(500) } : a;
+    let cred;
+    try {
+      cred = await globalThis.navigator.credentials.create({ publicKey: {
+        rp: { id: ped.rpId, name: 'Agendz' }, user: { id: deB64u(ped.usuarioHandle), name: ped.usuarioNome || 'usuario', displayName: ped.usuarioNome || 'usuario' },
+        challenge: deB64u(ped.desafio), pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }], timeout: 60000, attestation: 'none',
+        authenticatorSelection: { residentKey: 'required', requireResidentKey: true, userVerification: 'required' },
+        excludeCredentials: ped.excluir.map((x) => ({ type: 'public-key', id: deB64u(x) })),
+      } });
+    } catch (e) { return { ok: false, status: 0, erro: recusaDoAparelho(e) }; }
+    if (!cred || !cred.response || !cred.response.attestationObject) return { ok: false, status: 0, erro: 'Não foi possível usar a digital neste aparelho.' };
+    const r = await chamar('POST', '/api/usuarios/me/passkeys', {
+      desafioId: ped.desafioId, nome: texto(nome, 60).trim() || 'Este aparelho', clientDataJSON: paraB64u(cred.response.clientDataJSON), atestado: paraB64u(cred.response.attestationObject),
+    });
+    return r.ok ? { ok: true, item: lerItemPasskey(r.dados) } : r;
+  },
+  // GET /api/usuarios/me/passkeys
+  async listar() {
+    const r = await chamar('GET', '/api/usuarios/me/passkeys');
+    return r.ok ? { ok: true, itens: (Array.isArray(r.dados) ? r.dados : []).slice(0, 10).map(lerItemPasskey) } : r;
+  },
+  // DELETE /api/usuarios/me/passkeys/{id}
+  async remover(id) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id))) return { ok: false, status: 0, erro: 'Aparelho inválido.' };
+    const r = await chamar('DELETE', `/api/usuarios/me/passkeys/${id}`);
+    return r.ok ? { ok: true } : r;
+  },
+};
+const lerItemPasskey = (d) => { d = d && typeof d === 'object' ? d : {}; return { id: texto(d.id, 40), nome: texto(d.nome, 60), criadoEm: texto(d.criadoEm, 40), ultimoUso: d.ultimoUso ? texto(d.ultimoUso, 40) : '' }; };
 
 // Usuário (login) que a pessoa escolhe no primeiro acesso: minúsculas, 2 a 60 (mesma regra do servidor).
 export const loginValido = (v) => /^[a-z0-9._-]{2,60}$/.test(String(v ?? ''));
@@ -779,7 +864,7 @@ export const regras = {
 const lerLink = (d) => {
   d = d && typeof d === 'object' ? d : {};
   const dm = Number.isInteger(d.diasMax) ? Math.min(60, Math.max(1, d.diasMax)) : 30;
-  return { ativo: d.ativo !== false, diasMax: dm, disponivel: d.disponivel !== false };
+  return { ativo: d.ativo !== false, diasMax: dm, disponivel: d.disponivel !== false, telefoneObrigatorio: d.telefoneObrigatorio !== false };
 };
 export const linkAgendamento = {
   // GET /api/estabelecimento/link-agendamento
@@ -787,9 +872,10 @@ export const linkAgendamento = {
     const r = await chamar('GET', '/api/estabelecimento/link-agendamento');
     return r.ok ? { ok: true, link: lerLink(r.dados) } : r;
   },
-  // PUT /api/estabelecimento/link-agendamento  { ativo?, diasMax? }
-  async gravar({ ativo, diasMax } = {}) {
+  // PUT /api/estabelecimento/link-agendamento  { ativo?, diasMax?, telefoneObrigatorio? }
+  async gravar({ ativo, diasMax, telefoneObrigatorio } = {}) {
     const corpo = {};
+    if (telefoneObrigatorio !== undefined) corpo.telefoneObrigatorio = telefoneObrigatorio === true;
     if (ativo !== undefined) corpo.ativo = ativo === true;
     if (diasMax !== undefined) {
       if (!Number.isInteger(diasMax) || diasMax < 1 || diasMax > 60) return { ok: false, status: 0, erro: 'Informe de 1 a 60 dias.' };
@@ -865,7 +951,7 @@ function lerPaginaPublica(d) {
   return {
     endereco: opcional(d.endereco, 300), mapaUrl: httpsOuVazio(d.mapaUrl),
     ativo: d.ativo === true, aviso: texto(d.aviso, 200), diasMax: Number.isInteger(d.diasMax) ? Math.min(60, Math.max(1, d.diasMax)) : 30,
-    tipo: texto(d.tipo, 40),
+    tipo: texto(d.tipo, 40), exigeTelefone: d.exigeTelefone !== false, // telefone obrigatório de fábrica
     portes: listaDe(d.portes, 10).filter((x) => x && PORTES_PUB.includes(x.id)).map((x) => ({ id: x.id, nome: texto(x.nome, 20) })),
     servicos: listaDe(d.servicos, 200).filter((x) => x && IDV(x.id)).map((x) => ({
       id: x.id, nome: texto(x.nome, 120), duracao: inteiroOuZero(x.duracao), preco: dinheiroOuZero(x.preco), antecedenciaH: inteiroOuZero(x.antecedenciaH),
@@ -1012,7 +1098,10 @@ const CAT_SUP = ['duvida', 'problema', 'sugestao', 'cobranca', 'outro'];
 const TIPO_MSG = ['cliente', 'suporte', 'sistema'];
 const lerMsgSuporte = (m) => {
   m = m && typeof m === 'object' ? m : {};
-  return { id: texto(String(m.id ?? ''), 30), autorTipo: TIPO_MSG.includes(m.autorTipo) ? m.autorTipo : 'sistema', autorNome: texto(m.autorNome, 100), texto: texto(m.texto, 4000), criadoEm: texto(m.criadoEm, 40) };
+  return {
+    id: texto(String(m.id ?? ''), 30), autorTipo: TIPO_MSG.includes(m.autorTipo) ? m.autorTipo : 'sistema', autorNome: texto(m.autorNome, 100), texto: texto(m.texto, 4000), criadoEm: texto(m.criadoEm, 40),
+    anexos: listaDe(m.anexos, 3).map(lerResumoAnexo).filter(Boolean),
+  };
 };
 const lerChamado = (c) => {
   c = c && typeof c === 'object' ? c : {};
@@ -1023,6 +1112,20 @@ const lerChamado = (c) => {
   if (Array.isArray(c.msgs)) o.msgs = listaDe(c.msgs, 500).map(lerMsgSuporte);
   return o;
 };
+// Baixa uma imagem protegida: fetch com o token do painel, confere o tipo pelo conteúdo e entrega um endereço blob (válido só nesta aba).
+async function baixarImagem(caminho) {
+  if (!token) return { ok: false, status: 401, erro: 'Sessão vencida.' };
+  const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+  const t = ctl ? setTimeout(() => ctl.abort(), TEMPO_MAX_MS) : null;
+  try {
+    const r = await fetch(`${base}${caminho}`, { method: 'GET', headers: { Authorization: `Bearer ${token}` }, credentials: 'omit', cache: 'no-store', signal: ctl ? ctl.signal : undefined });
+    if (!r.ok) return { ok: false, status: r.status, erro: 'Imagem não encontrada.' };
+    const bytes = new Uint8Array(await r.arrayBuffer());
+    const tipo = tipoPorConteudo(bytes);
+    if (!tipo || bytes.length > MAX_BYTES) return { ok: false, status: 0, erro: 'Imagem não encontrada.' };
+    return { ok: true, url: globalThis.URL.createObjectURL(new Blob([bytes], { type: tipo })) };
+  } catch { return { ok: false, status: 0, erro: 'Não foi possível carregar a imagem.' }; } finally { if (t) clearTimeout(t); }
+}
 export const suporte = {
   // GET /api/suporte/chamados  (o dono vê os da loja; os demais, só os próprios)
   async listar() {
@@ -1034,10 +1137,12 @@ export const suporte = {
     const r = await chamar('GET', '/api/suporte/chamados/nao-lidas');
     return r.ok ? { ok: true, naoLidas: Number.isInteger(r.dados && r.dados.naoLidas) && r.dados.naoLidas > 0 ? Math.min(r.dados.naoLidas, 9999) : 0 } : r;
   },
-  // POST /api/suporte/chamados  { assunto, categoria, texto }
+  // POST /api/suporte/chamados  { assunto, categoria, texto, anexos? }  (anexos: até 3 imagens JPEG em base64, já reduzidas na tela; o servidor confere o tipo pelo conteúdo)
   async abrir(d) {
     d = d || {};
-    const r = await chamar('POST', '/api/suporte/chamados', { assunto: texto(d.assunto, 120).trim(), categoria: d.categoria, texto: texto(d.texto, 4000).trim() });
+    const im = conferirImagens(d.anexos);
+    if (!im.ok) return { ok: false, status: 0, erro: im.erro };
+    const r = await chamar('POST', '/api/suporte/chamados', { assunto: texto(d.assunto, 120).trim(), categoria: d.categoria, texto: texto(d.texto, 4000).trim(), ...(im.anexos.length ? { anexos: im.anexos.map((a) => a.dados) } : {}) });
     return r.ok ? { ok: true, chamado: lerChamado(r.dados) } : r;
   },
   // GET /api/suporte/chamados/{id}  (abrir marca como lido)
@@ -1046,10 +1151,17 @@ export const suporte = {
     const r = await chamar('GET', `/api/suporte/chamados/${id}`);
     return r.ok ? { ok: true, chamado: lerChamado(r.dados) } : r;
   },
-  // POST /api/suporte/chamados/{id}/mensagens  { texto }
-  async responder(id, t) {
+  // POST /api/suporte/chamados/{id}/mensagens  { texto, anexos? }
+  async responder(id, t, anexos) {
     if (!ID.test(String(id))) return { ok: false, status: 0, erro: 'Chamado não encontrado.' };
-    const r = await chamar('POST', `/api/suporte/chamados/${id}/mensagens`, { texto: texto(t, 4000).trim() });
+    const im = conferirImagens(anexos);
+    if (!im.ok) return { ok: false, status: 0, erro: im.erro };
+    const r = await chamar('POST', `/api/suporte/chamados/${id}/mensagens`, { texto: texto(t, 4000).trim(), ...(im.anexos.length ? { anexos: im.anexos.map((a) => a.dados) } : {}) });
     return r.ok ? { ok: true, chamado: lerChamado(r.dados) } : r;
+  },
+  // GET /api/suporte/chamados/{id}/anexos/{anexoId}: os bytes só vêm com o login (cabeçalho Authorization); viram um endereço local (blob), nunca uma URL pública.
+  async imagem(id, anexoId) {
+    if (!ID.test(String(id)) || !ID.test(String(anexoId))) return { ok: false, status: 0, erro: 'Imagem não encontrada.' };
+    return baixarImagem(`/api/suporte/chamados/${id}/anexos/${anexoId}`);
   },
 };

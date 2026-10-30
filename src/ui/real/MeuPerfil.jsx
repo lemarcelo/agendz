@@ -5,6 +5,7 @@
 // Não importa `api.js`, `hooks.js` nem `common.jsx` (tests/estatico.test.mjs). Classes de CSS terminam em `-real`.
 import React, { useEffect, useRef, useState } from 'react';
 import { perfil as api, trocarSenha } from '../../services/api-real.js';
+import Digital from './Digital.jsx';
 import { fotoValida, FOTO_MAX } from '../../domain/foto.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
 import { gravarPrefs, tocarBipe, vibrar } from './alerta.js';
@@ -161,6 +162,7 @@ export default function MeuPerfil({ loja, sessao, dados, prefs, aoPrefs, aoMudou
           <Campo rotulo="Repita a nova senha"><input type="password" value={senha.repetir} maxLength={100} autoComplete="new-password" onChange={(e) => setSenha({ ...senha, repetir: e.target.value })} data-testid="perfil-senha-repetir" /></Campo>
           <Btn type="submit" disabled={trocando || !senha.atual || !senha.nova} data-testid="perfil-senha-trocar">{trocando ? 'Trocando…' : 'Trocar senha'}</Btn>
         </form>
+        <Digital />
       </div>
     </div>
   );

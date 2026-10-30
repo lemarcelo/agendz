@@ -15,7 +15,7 @@ import { ROTULO_PORTE, rotuloVeiculo } from '../../domain/veiculos.js';
 import { boxesAtivos } from '../../domain/atender-form.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
 import { montarLinkAgendamento } from '../../domain/link-publico.js';
-import { textoConvite } from '../../domain/whatsapp.js';
+import { numeroWhatsapp, textoConvite, textoReagendamento } from '../../domain/whatsapp.js';
 import { abrirWhatsapp } from '../whatsapp.js';
 import Atender from './Atender.jsx';
 import { useAtualizacaoAutomatica } from './atualizar.js';
@@ -62,7 +62,7 @@ function Cartao({ a, nomeCliente, nomeProf, mostraProf, aberto, aoAbrir, testid,
 }
 
 // Detalhes e ações de um agendamento aberto: status, cancelar com confirmação na tela, remarcar e histórico.
-function Detalhe({ a, nomeProf, nomeDe, profissionais, boxes, ehDono, aoAlterar }) {
+function Detalhe({ a, nomeProf, nomeDe, profissionais, boxes, ehDono, aoAlterar, cliente = null, loja = null }) {
   const [hist, setHist] = useState(null);
   const [erro, setErro] = useState('');
   const [ocupado, setOcupado] = useState(false);
@@ -73,6 +73,7 @@ function Detalhe({ a, nomeProf, nomeDe, profissionais, boxes, ehDono, aoAlterar 
   const [boxEscolhido, setBoxEscolhido] = useState(''); // '' = manter o box atual (o servidor tenta o mesmo e, se ocupado, outro livre)
   const [cupomAberto, setCupomAberto] = useState(false);
   const [chave, setChave] = useState('');
+  const [avisar, setAvisar] = useState(null); // { tel, texto }: depois de remarcar o horário de um cliente com telefone, pergunta na tela se avisa pelo WhatsApp
   useEffect(() => { let vivo = true; api.obter(a.id).then((r) => { if (vivo && r.ok) setHist(r.agendamento.historico); }); return () => { vivo = false; }; }, [a.id, a.status, a.inicio]);
   const executar = async (fn, aviso) => {
     if (ocupado) return;
@@ -88,8 +89,20 @@ function Detalhe({ a, nomeProf, nomeDe, profissionais, boxes, ehDono, aoAlterar 
     e.preventDefault();
     const ts = doLocal(quando);
     if (ts === null) { setErro('Informe a nova data e hora.'); return; }
-    executar(() => api.remarcar(a.id, { inicio: ts, ...(ehDono && prof !== a.profissionalId ? { profissionalId: prof } : {}), ...(boxEscolhido ? { boxId: boxEscolhido } : {}) }), 'Agendamento remarcado.');
+    executar(async () => {
+      const r = await api.remarcar(a.id, { inicio: ts, ...(ehDono && prof !== a.profissionalId ? { profissionalId: prof } : {}), ...(boxEscolhido ? { boxId: boxEscolhido } : {}) });
+      // horário mudou e o cliente tem telefone de WhatsApp válido (a loja só entra com a localização se ligou o envio no WhatsApp)
+      if (r.ok && r.agendamento.inicio !== a.inicio && cliente && numeroWhatsapp(cliente.telefone)) {
+        setAvisar({
+          tel: cliente.telefone,
+          texto: textoReagendamento({ nomeEstab: loja ? loja.nome : '', nomeCliente: cliente.nome, servicos: a.servicos.map((x) => x.nome).join(', '), dataHora: `${fmtDayLong(r.agendamento.inicio)}, às ${fmtHM(r.agendamento.inicio)}`, endereco: loja ? loja.endereco : '', mapaUrl: loja ? loja.mapaUrl : '' }),
+        });
+      }
+      return r;
+    }, 'Agendamento remarcado.');
   };
+  // Chamado direto do clique (sem await antes): o navegador só deixa abrir a aba nova nesse momento.
+  const avisarCliente = () => { const abriu = abrirWhatsapp(avisar.texto, avisar.tel); if (!abriu) setErro('Não foi possível abrir o WhatsApp.'); setAvisar(null); };
   const ativoStatus = a.status;
   const podeCupom = (ativoStatus === 'a_confirmar' || ativoStatus === 'confirmado') && a.origem !== 'atendimento'; // atendimento local nunca usa cupom
   return (
@@ -114,6 +127,14 @@ function Detalhe({ a, nomeProf, nomeDe, profissionais, boxes, ehDono, aoAlterar 
             <Btn variante="primario" tamanho="sm" type="submit" disabled={ocupado} data-testid="cupom-aplicar">{ocupado ? 'Aplicando…' : 'Aplicar'}</Btn>
           </div>
         </form>
+      )}
+      {avisar && (
+        <div className="confirmar-linha" data-testid="avisar-whats">
+          <span data-testid="avisar-whats-pergunta">Horário remarcado. Avisar o cliente pelo WhatsApp? Abrimos a conversa com a mensagem pronta; você confere e envia.</span>
+          <p className="muted" data-testid="avisar-whats-texto" style={{ whiteSpace: 'pre-line' }}>{avisar.texto}</p>
+          <Btn tamanho="sm" variante="primario" onClick={avisarCliente} data-testid="avisar-whats-sim">Avisar no WhatsApp</Btn>
+          <Btn tamanho="sm" onClick={() => setAvisar(null)} data-testid="avisar-whats-nao">Agora não</Btn>
+        </div>
       )}
       {!cancelando && !remarcando && (
         <div className="acoes">
@@ -217,13 +238,15 @@ export default function Agenda({ ehProprio = false, ehDono = false, meuId = '', 
   const [clientes, setClientes] = useState(new Map());
   const [profs, setProfs] = useState([]);
   const [boxes, setBoxes] = useState([]);
+  const [fichas, setFichas] = useState(new Map()); // id → { nome, telefone }: só para avisar o cliente pelo WhatsApp (quem não lê Clientes fica sem o aviso)
+  const [lojaInfo, setLojaInfo] = useState({ endereco: '', mapaUrl: '' });
   const [localizacaoUrl, setLocalizacaoUrl] = useState(''); // link do mapa: o servidor só o devolve quando a loja ligou o envio da localização no WhatsApp
   const ultima = useRef(0);
 
   useEffect(() => {
-    apiClientes.listar().then((r) => { if (r.ok) setClientes(new Map(r.clientes.map((c) => [c.id, c.apelido || c.nome]))); });
+    apiClientes.listar().then((r) => { if (r.ok) { setClientes(new Map(r.clientes.map((c) => [c.id, c.apelido || c.nome]))); setFichas(new Map(r.clientes.map((c) => [c.id, { nome: c.apelido || c.nome, telefone: c.telefone }]))); } });
     apiProf.listar().then((r) => { if (r.ok) setProfs(r.profissionais); });
-    apiLocal.obter().then((r) => { if (r.ok) setLocalizacaoUrl(r.local.localizacaoWhatsappUrl); });
+    apiLocal.obter().then((r) => { if (r.ok) { setLocalizacaoUrl(r.local.localizacaoWhatsappUrl); setLojaInfo(r.local.localizacaoNoWhatsapp ? { endereco: r.local.enderecoTexto, mapaUrl: r.local.localizacaoWhatsappUrl } : { endereco: '', mapaUrl: '' }); } });
     if (capAtiva('usaRecursoFisico')) apiBoxes.listar().then((r) => { if (r.ok) setBoxes(boxesAtivos(r.boxes)); });
   }, []);
 
@@ -288,7 +311,7 @@ export default function Agenda({ ehProprio = false, ehDono = false, meuId = '', 
   };
   const atendeu = (texto, ag) => {
     setAtendendo(false);
-    apiClientes.listar().then((r) => { if (r.ok) setClientes(new Map(r.clientes.map((c) => [c.id, c.apelido || c.nome]))); });
+    apiClientes.listar().then((r) => { if (r.ok) { setClientes(new Map(r.clientes.map((c) => [c.id, c.apelido || c.nome]))); setFichas(new Map(r.clientes.map((c) => [c.id, { nome: c.apelido || c.nome, telefone: c.telefone }]))); } });
     setModo('horarios'); setCursor(startOfDay(ag.inicio)); setDiasAdiante(7); setAberto(null);
     alterou(texto, ag);
   };
@@ -300,7 +323,7 @@ export default function Agenda({ ehProprio = false, ehDono = false, meuId = '', 
   const cartao = (a, testid) => (
     <Cartao key={a.id} a={a} testid={testid} nomeCliente={nomeCliente(a)} nomeProf={nomeProf(a.profissionalId)} mostraProf={!ehProprio && selecionado === 'todos' && atendem.length > 1}
       aberto={aberto === a.id} aoAbrir={() => setAberto(aberto === a.id ? null : a.id)} destaque={destaqueIds.includes(a.id)}>
-      <Detalhe a={a} nomeProf={nomeProf(a.profissionalId)} nomeDe={nomeProf} profissionais={atendem} boxes={boxes} ehDono={ehDono} aoAlterar={alterou} />
+      <Detalhe a={a} nomeProf={nomeProf(a.profissionalId)} nomeDe={nomeProf} profissionais={atendem} boxes={boxes} ehDono={ehDono} aoAlterar={alterou} cliente={a.clienteId ? fichas.get(a.clienteId) || null : null} loja={{ nome: nomeLoja, ...lojaInfo }} />
     </Cartao>
   );
 

@@ -44,6 +44,32 @@ public class AdminLigacao {
         return chamar("POST", caminho, corpo);
     }
 
+    /** Uma imagem de chamado: o tipo vem da Admin API (que o decidiu pelo conteúdo) e é conferido de novo aqui; qualquer outra coisa vira 404. */
+    public record Imagem(String tipo, byte[] dados) {
+    }
+
+    /** GET dos bytes de uma imagem anexada (rota interna da Admin API, com a chave). */
+    public Imagem obterImagem(String caminhoComQuery) {
+        if (base.isEmpty() || chave.length() < 16) throw indisponivel();
+        try {
+            HttpRequest rq = HttpRequest.newBuilder(URI.create(base + "/interno/chamados" + caminhoComQuery)).timeout(Duration.ofSeconds(15)).header("X-Interno-Chave", chave).GET().build();
+            HttpResponse<byte[]> r = http.send(rq, HttpResponse.BodyHandlers.ofByteArray());
+            int s = r.statusCode();
+            if (s == 404 || s == 400) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, "Imagem não encontrada.");
+            if (s != 200) throw indisponivel();
+            String tipo = ImagensDoChamado.tipoPorConteudo(r.body());
+            if (tipo == null) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, "Imagem não encontrada.");
+            return new Imagem(tipo, r.body());
+        } catch (ErroDeNegocio e) {
+            throw e;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw indisponivel();
+        } catch (IOException | RuntimeException e) {
+            throw indisponivel();
+        }
+    }
+
     private JsonNode chamar(String metodo, String caminho, Object corpo) {
         if (base.isEmpty() || chave.length() < 16) throw indisponivel();
         try {

@@ -9,6 +9,7 @@ import { visualDoCartao } from '../domain/marcadores.js';
 import { valoresPadraoModelo, MODELOS_SO_AUTOMATICOS } from '../domain/engine.js';
 import { renderizar, variaveisDoCorpo } from '../domain/templates.js';
 import { itensDoAgendamento, produtosDoAgendamento, somaItens, totalAcrescimos, totalProdutos } from '../domain/reports.js';
+import { fmtDayLong } from '../domain/time.js';
 import { MIN, fmtDate, fmtDateTime, fmtDuration, fmtHM, fmtMoney, fmtRelative, fromYmd, pad, startOfDay, tsAt, ymd } from '../domain/time.js';
 import { Aviso, Btn, Campo, Etiquetas, Icon, Modal, StatusChip } from './common.jsx';
 import { profissionalDe, campoLog, clienteDe, nomeProfissional, nomeCliente, nomeServicos, textoSemConfirmacao, textoUltimo } from './format.js';
@@ -17,6 +18,9 @@ import { comissaoJaPaga, ehDono, formatarTelefone, usaIntegracaoPix } from '../d
 import { agendamentosVisiveis } from '../services/api.js';
 import { partesDoAgendamento } from '../domain/comissao.js';
 import { toast, useStore } from './hooks.js';
+import { abrirWhatsapp } from './whatsapp.js';
+import { numeroWhatsapp, textoReagendamento } from '../domain/whatsapp.js';
+import { mapaDaLoja } from '../domain/publico.js';
 import { capAtiva, rot, Rot, Voc } from '../domain/tipos.js';
 
 // Seletor de hora no estilo despertador: setas e roda do mouse em horas e minutos.
@@ -77,6 +81,7 @@ export function FormAgendamento({ user, inicial = {}, remarcarId, onClose, onSal
   const servicos = porUltimoUso(st.servicos.filter((s) => s.ativo !== false || servicoIds.includes(s.id)), agendamentosVisiveis(st, user), 'servico');
   const sel = servicosPorIds(st, servicoIds, alvo?.porte);
   const nomeDe = (a) => `${nomeCliente(st, a)} às ${fmtHM(a.inicio)}`;
+  const [avisar, setAvisar] = useState(null); // { tel, texto }: pergunta se avisa o cliente depois de remarcar
   const hasServico = servicoIds.length > 0;
   const bloqueios = v ? v.erros.filter((e) => hasServico || !/serviço/i.test(e)) : [];
   const efetivas = hasServico ? notificacoesEfetivas(sel, st.estabelecimento).lista : [];
@@ -96,9 +101,31 @@ export function FormAgendamento({ user, inicial = {}, remarcarId, onClose, onSal
     if (!r.ok) { setErros(r.erros); return; }
     toast(remarcarId ? 'Agendamento remarcado.' : 'Agendamento criado.');
     onSalvo && onSalvo(r.agendamento);
+    // remarcou o horário de um cliente com telefone: pergunta (na própria tela) se quer avisar pelo WhatsApp; sem telefone ou sem cadastro, fecha direto
+    if (remarcarId && alvo && inicio !== alvo.inicio) {
+      const cli = st.clientes.find((c) => c.id === alvo.clienteId);
+      const tel = cli && numeroWhatsapp(cli.telefone) ? cli.telefone : '';
+      if (tel) {
+        const e = st.estabelecimento;
+        const mostra = e.enderecoNoLink !== false;
+        setAvisar({ tel, texto: textoReagendamento({ nomeEstab: e.nome, nomeCliente: cli.apelido || cli.nome, servicos: nomeServicos(st, alvo), dataHora: `${fmtDayLong(inicio)}, às ${fmtHM(inicio)}`, endereco: e.endereco || '', mapaUrl: mostra ? mapaDaLoja(e) : '' }) });
+        return;
+      }
+    }
     onClose();
   };
+  // Chamado direto do clique (sem await antes): o navegador só deixa abrir a aba nova nesse momento.
+  const avisarCliente = () => { const abriu = abrirWhatsapp(avisar.texto, avisar.tel); if (!abriu) toast('Não foi possível abrir o WhatsApp.', 'erro'); onClose(); };
 
+  if (avisar) {
+    return (
+      <Modal titulo="Avisar o cliente?" sub={alvo ? nomeCliente(st, alvo) : undefined} onClose={onClose}
+        rodape={<><Btn onClick={onClose} data-testid="avisar-whats-nao">Agora não</Btn><Btn variante="primario" icone="msg" onClick={avisarCliente} data-testid="avisar-whats-sim">Avisar no WhatsApp</Btn></>}>
+        <p data-testid="avisar-whats-pergunta">O horário foi remarcado. Quer avisar o cliente pelo WhatsApp? Abrimos a conversa com a mensagem pronta; você confere e envia.</p>
+        <p className="muted" data-testid="avisar-whats-texto" style={{ whiteSpace: 'pre-line' }}>{avisar.texto}</p>
+      </Modal>
+    );
+  }
   return (
     <Modal titulo={remarcarId ? 'Remarcar agendamento' : 'Novo agendamento'} sub={remarcarId ? `${nomeCliente(st, alvo)} · ${nomeServicos(st, alvo)}` : undefined} onClose={onClose} largura={640}
       rodape={<><Btn onClick={onClose}>Cancelar</Btn><Btn variante="primario" onClick={salvar} data-testid="salvar-agendamento">{remarcarId ? 'Remarcar' : 'Agendar'}</Btn></>}>
