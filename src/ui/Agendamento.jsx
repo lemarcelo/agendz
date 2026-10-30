@@ -132,7 +132,7 @@ export function FormAgendamento({ user, inicial = {}, remarcarId, onClose, onSal
       <Modal titulo="Avisar o cliente?" sub={alvo ? nomeCliente(st, alvo) : undefined} onClose={onClose}
         rodape={<><Btn onClick={onClose} data-testid="avisar-whats-nao">Agora não</Btn><Btn variante="primario" icone="msg" onClick={avisarCliente} data-testid="avisar-whats-sim">Avisar no WhatsApp</Btn></>}>
         <p data-testid="avisar-whats-pergunta">O horário foi remarcado. Quer avisar o cliente pelo WhatsApp? Abrimos a conversa com a mensagem pronta; você confere e envia.</p>
-        <p className="muted" data-testid="avisar-whats-texto" style={{ whiteSpace: 'pre-line' }}>{avisar.texto}</p>
+        <p className="muted" data-testid="avisar-whats-texto" style={{ whiteSpace: 'pre-line', overflowWrap: 'anywhere' }}>{avisar.texto}</p>
       </Modal>
     );
   }
