@@ -5,6 +5,7 @@ import { LOJA_TROCAVEL, MODO_DEMO, agendamentosVisiveis, profissionaisVisiveis }
 import { baseDoLink, montarLinkAgendamento } from '../domain/link-publico.js';
 import { ATIVOS, STATUS, boxesAtivos, ocupacaoDe, retiradaDe } from '../domain/rules.js';
 import { faixasDoProfissional, excecaoDoDia, TIPOS_EXCECAO } from '../domain/schedule.js';
+import { rotuloDoGrupo } from '../domain/agenda-grupos.js';
 import { DIAS_CURTOS, addDays, addMonths, fmtDate, fmtDayLong, maiuscula1, fmtDiaMesSemana, fmtHM, fmtMonthYear, monthStart, sameDay, startOfDay, weekStart, fmtDateShort, fmtMoney } from '../domain/time.js';
 import { cobrancasDoAgendamento } from '../domain/financeiro.js';
 import { totalAcrescimos } from '../domain/reports.js';
@@ -34,7 +35,6 @@ function agruparPorDia(lista) {
   }
   return grupos;
 }
-const rotuloDoGrupo = (dia, agora) => (sameDay(dia, addDays(startOfDay(agora), 1)) ? `Amanhã · ${maiuscula1(fmtDayLong(dia))}` : sameDay(dia, agora) ? `Hoje · ${maiuscula1(fmtDayLong(dia))}` : maiuscula1(fmtDayLong(dia)));
 
 // Miniatura redonda do profissional (foto, ou inicial com cor própria) para os eventos do calendário.
 function FotoProfissional({ u }) {

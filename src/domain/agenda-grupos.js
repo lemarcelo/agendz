@@ -1,6 +1,6 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
 // Agrupa agendamentos (já ordenados por início) por dia: [{ dia, lista }]. Usado nos "próximos agendamentos" do site real.
-import { startOfDay } from './time.js';
+import { addDays, fmtDayLong, maiuscula1, sameDay, startOfDay } from './time.js';
 
 export function agruparPorDia(lista) {
   const grupos = [];
@@ -11,3 +11,6 @@ export function agruparPorDia(lista) {
   }
   return grupos;
 }
+
+// Título do grupo de um dia: a DATA por extenso. Sem a palavra "Hoje" (a data já diz; pedido do Marcelo, 29/10); só "Amanhã" ganha prefixo.
+export const rotuloDoGrupo = (dia, agora) => (sameDay(dia, addDays(startOfDay(agora), 1)) ? `Amanhã · ${maiuscula1(fmtDayLong(dia))}` : maiuscula1(fmtDayLong(dia)));
