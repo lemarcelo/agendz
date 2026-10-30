@@ -129,6 +129,7 @@ export function saldoAtual(s, as, agora) {
 export function podeUsar(s, as, { inicio, agora, ignoreId = null }) {
   if (!as || as.status !== 'ativa') return { ok: false, erro: 'Esse plano não está ativo.' };
   if (!Number.isFinite(inicio)) return { ok: false, erro: 'Escolha um dia e um horário.' };
+  if (!pagamentosValidos(as).length) return { ok: false, erro: 'A mensalidade do plano ainda não foi registrada.' };
   const mes = mesDe(inicio);
   if (mi(mes) < mi(as.inicioMes)) return { ok: false, erro: `O plano começa em ${rotuloMes(as.inicioMes)}.` };
   const dias = as.plano.intervaloDias;
