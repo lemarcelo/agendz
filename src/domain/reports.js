@@ -3,6 +3,7 @@
 import { ATIVOS, STATUS, materiaisDoServico, servicoNoPorte, servicosPorIds } from './rules.js';
 import { addMonths, monthStart } from './time.js';
 import { descontosDoCupom } from './cupons.js';
+import { descontosDoPlano } from './planos.js';
 
 export const r2 = (n) => Math.round(n * 100) / 100;
 export const r3 = (n) => Math.round(n * 1000) / 1000;
@@ -14,9 +15,11 @@ export function itensDoAgendamento(st, a) {
     const s = st.servicos.find((x) => x.id === id);
     return { id, nome: s ? s.nome : id, valor: r2((a.precos && Object.hasOwn(a.precos, id) ? a.precos[id] : s && servicoNoPorte(s, a.porte).preco) ?? 0), acrescimo: r2(a.acrescimos?.[id] || 0) };
   });
+  // Plano do cliente: os serviços que o plano inclui saem de graça (a mensalidade foi paga direto ao profissional). O cupom só vale para o resto.
+  const dp = descontosDoPlano(a.planoUso, itens);
   // Cupom aplicado ao agendamento: o desconto sai do serviço (e é recalculado a cada edição de serviços).
-  const d = descontosDoCupom(a.cupom, itens);
-  return itens.map((i) => ({ ...i, desconto: r2(d[i.id] || 0) }));
+  const d = descontosDoCupom(a.cupom, itens.filter((i) => dp[i.id] === undefined));
+  return itens.map((i) => ({ ...i, desconto: r2(dp[i.id] ?? d[i.id] ?? 0), ...(dp[i.id] !== undefined ? { plano: true } : {}) }));
 }
 // Produtos vendidos no atendimento (materiais do tipo "produto"): quantidade e preço congelados ao adicionar. Não entram em desconto de cupom nem em comissão.
 export function produtosDoAgendamento(st, a) {
