@@ -5,10 +5,10 @@ import { LOGO_APEX } from '../tipos/estetica_automotiva/logo-apex.js';
 import { LOGO_DALFORNO } from '../tipos/barbearia/logo-dalforno.js';
 import { LOGO_OFFBOX } from '../tipos/barbearia/logo-offbox.js';
 import { iconeMarcaAtivo } from '../domain/tipos.js';
-import { LOGO_MAX, PALETAS, coresDoTema, coresDominantes, cssDaMarca, logoValida } from '../domain/tema.js';
+import { PALETAS, coresDoTema, cssDaMarca, logoValida } from '../domain/tema.js';
 import { Aviso, Btn, Icon } from './common.jsx';
 import { toast, useStore } from './hooks.js';
-import { LIMITE_FOTO_MB, abrirImagem } from './imagem.js';
+import { prepararLogo } from './logo-arquivo.js';
 
 // Assinatura da plataforma (o nome do app, não o da loja): aparece só no rodapé do login e da página do cliente.
 export function RodapePlataforma() {
@@ -33,35 +33,6 @@ export function LogoMarca({ tamanho = 32, comNome = false }) {
   }
   const daApex = [LOGO_APEX, LOGO_DALFORNO, LOGO_OFFBOX].includes(enviada); // logos que já trazem o nome da loja
   return <><img className="marca-logo" src={enviada} alt={daApex ? nome : ''} width={tamanho} height={tamanho} data-testid="logo-marca" />{comNome && !daApex && <b className="marca-nome">{nome}</b>}</>;
-}
-
-// Lê o arquivo, reduz para caber (até 384 px), acha as duas cores dominantes e devolve { logo, cores }.
-// Foto de celular é grande (10 MB ou mais) e às vezes chega sem tipo informado: aceita qualquer imagem que o aparelho consiga abrir e
-// sempre grava uma imagem nova (PNG, WebP ou JPEG) desenhada por nós, nunca o arquivo original.
-async function prepararLogo(arquivo) {
-  if (arquivo.type && !/^image\//.test(arquivo.type)) throw new Error('Escolha uma imagem (PNG, JPEG ou WebP).');
-  if (arquivo.size > LIMITE_FOTO_MB * 1024 * 1024) throw new Error(`Imagem grande demais (máximo ${LIMITE_FOTO_MB} MB).`);
-  const { img, fim } = await abrirImagem(arquivo);
-  try {
-    const nw = img.naturalWidth || img.width, nh = img.naturalHeight || img.height;
-    if (!nw || !nh) throw new Error('Não consegui abrir essa imagem.');
-    let lado = 384;
-    for (let tentativa = 0; tentativa < 6; tentativa++) {
-      const f = Math.min(1, lado / Math.max(nw, nh));
-      const w = Math.max(1, Math.round(nw * f)), h = Math.max(1, Math.round(nh * f));
-      const c = document.createElement('canvas'); c.width = w; c.height = h;
-      const x = c.getContext('2d'); x.drawImage(img, 0, 0, w, h);
-      const candidatos = [c.toDataURL('image/png'), c.toDataURL('image/webp', 0.9), c.toDataURL('image/jpeg', 0.88)].filter((u) => /^data:image\/(png|webp|jpeg);base64,/.test(u) && logoValida(u));
-      const melhor = candidatos.sort((a, b) => a.length - b.length)[0];
-      if (melhor) {
-        const p = document.createElement('canvas'); p.width = 48; p.height = 48;
-        const px = p.getContext('2d'); px.drawImage(img, 0, 0, 48, 48);
-        return { logo: melhor, cores: coresDominantes(px.getImageData(0, 0, 48, 48).data) };
-      }
-      lado = Math.round(lado * 0.7);
-    }
-    throw new Error(`Não consegui deixar a imagem abaixo de ${Math.round(LOGO_MAX / 1400)} KB. Tente uma imagem mais simples.`);
-  } finally { fim(); }
 }
 
 export function PainelMarca() {

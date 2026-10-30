@@ -171,3 +171,22 @@ export function cssDaMarca(estab) {
   }
   return out.join('\n');
 }
+
+// ---------- tema da loja no site real ----------
+// No servidor o tema é só o par de cores (#rrggbb): `temaCor` e `temaCor2` (os dois nulos = padrão). A tela escolhe entre padrão, paletas prontas e as cores da logo.
+export const corTemaDaPaleta = (id) => { const p = PALETAS.find((x) => x.id === id); return p ? { temaCor: p.cores[0], temaCor2: p.cores[1] } : null; };
+// Qual opção da tela corresponde ao par gravado: 'padrao', o id da paleta (mesmas duas cores) ou 'logo' (qualquer outro par válido).
+export function opcaoDoTema(temaCor, temaCor2) {
+  if (!corValida(temaCor)) return 'padrao';
+  const igual = (a, b) => typeof a === 'string' && typeof b === 'string' && a.toLowerCase() === b.toLowerCase();
+  const p = PALETAS.find((x) => igual(x.cores[0], temaCor) && igual(x.cores[1], temaCor2));
+  return p ? p.id : 'logo';
+}
+// Confere a marca antes de enviar: logo nula ou válida; as duas cores juntas, #rrggbb, ou as duas nulas. Devolve o texto do erro ou null.
+export function erroDaMarca({ logo, temaCor, temaCor2 }) {
+  if (logo !== null && logo !== undefined && !logoValida(logo)) return 'Logo inválida: use uma imagem PNG, JPEG ou WebP de até 100 KB.';
+  const a = temaCor ?? null, b = temaCor2 ?? null;
+  if (a === null && b === null) return null;
+  if (!corValida(a) || (b !== null && !corValida(b))) return 'Cor do tema inválida.';
+  return null;
+}

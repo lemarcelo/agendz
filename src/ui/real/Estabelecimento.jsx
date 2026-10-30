@@ -3,6 +3,7 @@
 //  1) Endereço e localização (GPS): endereço em campos, latitude/longitude (digitadas, coladas de um link do Google Maps ou pelo GPS deste aparelho) e dois
 //     interruptores, desligados de fábrica: mostrar o endereço no link de agendamento e mandar o link da localização junto da mensagem de WhatsApp.
 //  2) Comissão geral da loja (vale quando a pessoa e o serviço não têm percentual próprio).
+//  3) Horário de funcionamento (`Expediente.jsx`) e logo + cor do tema (`MarcaLoja.jsx`), só do proprietário.
 // Toda a regra e o link do mapa vêm do servidor (LocalDaLoja); a tela mostra o que ele devolve e as mensagens dele.
 // Não importa `api.js`, `hooks.js` nem `common.jsx` (tests/estatico.test.mjs).
 import React, { useEffect, useState } from 'react';
@@ -11,6 +12,8 @@ import { caminhoHttps, coordenadasDeTexto, latitudeValida, longitudeValida } fro
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
 import RegrasAtendimento from './RegrasAtendimento.jsx';
 import LinkAgendamento from './LinkAgendamento.jsx';
+import Expediente from './Expediente.jsx';
+import MarcaLoja from './MarcaLoja.jsx';
 
 const txt = (n) => (n === null || n === undefined ? '' : String(n).replace('.', ','));
 const numero = (s) => { const t = String(s ?? '').trim().replace(',', '.'); if (t === '') return null; const n = Number(t); return Number.isFinite(n) ? n : NaN; };
@@ -139,7 +142,7 @@ function ComissaoGeral() {
   );
 }
 
-export default function Estabelecimento({ ehDono, aoReconfigurar }) {
+export default function Estabelecimento({ ehDono, aoReconfigurar, aoMudarMarca }) {
   return (
     <section className="tela estabelecimento-real" data-testid="tela-estabelecimento">
       <header className="tela-topo"><h1>Estabelecimento</h1></header>
@@ -148,6 +151,14 @@ export default function Estabelecimento({ ehDono, aoReconfigurar }) {
           {aoReconfigurar && <div className="acoes"><Btn onClick={aoReconfigurar} data-testid="reconfigurar-abrir">Reconfigurar estabelecimento</Btn></div>}
           <RegrasAtendimento />
           <LinkAgendamento />
+        </>
+      )}
+      {ehDono && (
+        <>
+          <h2 className="est-subtitulo-real">Horário de funcionamento</h2>
+          <Expediente />
+          <h2 className="est-subtitulo-real">Logo e cor do tema</h2>
+          <MarcaLoja aoMudar={aoMudarMarca} />
         </>
       )}
       <h2 className="est-subtitulo-real">Endereço e localização</h2>

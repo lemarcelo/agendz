@@ -7,6 +7,8 @@
 // Docs: docs/F2-front-na-api-real.md. Rotas: POST /api/auth/login, PUT /api/usuarios/me/senha, GET /api/publico/loja, /api/onboarding/*, /api/clientes, /api/servicos, /api/usuarios.
 
 import { MAX_BYTES, conferirImagens, lerResumoAnexo, tipoPorConteudo } from '../domain/imagem-chamado.js';
+import { corpoDaSemana, erroDaSemana } from '../domain/expediente.js';
+import { corValida, erroDaMarca, logoValida } from '../domain/tema.js';
 
 let base = ''; // '' = mesmo endereço do site (o Caddy manda /api/* para a API); os testes apontam para um servidor falso
 let token = null;
@@ -930,6 +932,43 @@ export const comissaoGeral = {
     if (typeof valor !== 'number' || !Number.isFinite(valor) || valor < 0 || valor > 100) return { ok: false, status: 0, erro: 'A comissão padrão vai de 0 a 100%.' };
     const r = await chamar('PUT', '/api/estabelecimento/comissao', { comissaoPadrao: valor });
     return r.ok ? { ok: true, comissaoPadrao: numeroOuNulo(r.dados && r.dados.comissaoPadrao) ?? valor } : r;
+  },
+};
+
+export const expediente = {
+  // GET /api/estabelecimento/escala  (expediente da loja: { semana: { 0..6: { aberto, faixas: [["09:00","12:00"]] } } }; dia 0 = domingo; sem faixa nenhuma = loja sem expediente)
+  async obter() {
+    const r = await chamar('GET', '/api/estabelecimento/escala');
+    return r.ok ? { ok: true, escala: lerSemana(r.dados) || { semana: {} } } : r;
+  },
+  // PUT /api/estabelecimento/escala  (só quem tem a seção Estabelecimento; troca a semana inteira; pelo menos um dia aberto)
+  async gravar(campos) {
+    if (!campos || typeof campos !== 'object' || !campos.dias) return { ok: false, status: 0, erro: 'Informe o horário de funcionamento.' };
+    const erro = erroDaSemana(campos);
+    if (erro) return { ok: false, status: 0, erro };
+    const r = await chamar('PUT', '/api/estabelecimento/escala', corpoDaSemana(campos));
+    return r.ok ? { ok: true, escala: lerSemana(r.dados) || { semana: {} } } : r;
+  },
+};
+const lerMarca = (d) => {
+  d = d && typeof d === 'object' ? d : {};
+  return { logo: logoValida(d.logo) ? d.logo : null, temaCor: corValida(d.temaCor) ? d.temaCor : null, temaCor2: corValida(d.temaCor2) ? d.temaCor2 : null };
+};
+export const marca = {
+  // GET /api/estabelecimento/marca  (logo em data URL e as duas cores do tema; só quem tem a seção Estabelecimento)
+  async obter() {
+    const r = await chamar('GET', '/api/estabelecimento/marca');
+    return r.ok ? { ok: true, marca: lerMarca(r.dados) } : r;
+  },
+  // PUT /api/estabelecimento/marca  { logo, temaCor, temaCor2 }  (o corpo inteiro substitui; logo nula remove; as duas cores nulas = tema padrão)
+  async gravar(m) {
+    m = m && typeof m === 'object' ? m : {};
+    const corpo = { logo: m.logo ?? null, temaCor: m.temaCor ?? null, temaCor2: m.temaCor2 ?? null };
+    const erro = erroDaMarca(corpo);
+    if (erro) return { ok: false, status: 0, erro };
+    if (corpo.temaCor === null) corpo.temaCor2 = null;
+    const r = await chamar('PUT', '/api/estabelecimento/marca', corpo);
+    return r.ok ? { ok: true, marca: lerMarca(r.dados) } : r;
   },
 };
 
