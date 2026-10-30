@@ -19,7 +19,7 @@ const PAUSA = 1000; // 1 s entre interações: não sobrecarrega a VPS nem dispa
 const pausa = (p) => p.waitForTimeout(PAUSA);
 mkdirSync('shots-smoke', { recursive: true });
 
-const relatorio = { url: URL_SITE, rede: {}, telasAnalisadas: 0, falhas: [] };
+const relatorio = { url: URL_SITE, rede: {}, telasAnalisadas: 0, falhas: [], avisos: [] };
 const falha = (onde, o) => { relatorio.falhas.push({ onde, ...o }); console.log('✗', onde, o.tipo, o.detalhe); };
 
 // ---------------------------------------------------------------- 1. rede
@@ -68,8 +68,17 @@ async function varrer() {
           await p.getByTestId('login-senha').fill(SENHA);
           await pausa(p);
           await p.getByTestId('login-entrar').click();
-          await p.locator('[data-testid^="nav-"]').first().waitFor();
-        } catch (e) { falha(onde(), { tipo: 'login', detalhe: String(e.message).split('\n')[0] }); await ctx.close(); continue; }
+          // O dono de uma loja que ainda não concluiu o assistente de início cai no assistente (testid `pa`), não no menu: isso é o esperado no primeiro acesso.
+          const chegou = await Promise.race([
+            p.locator('[data-testid^="nav-"]').first().waitFor().then(() => 'menu'),
+            p.getByTestId('pa').waitFor().then(() => 'assistente'),
+          ]);
+          if (chegou === 'assistente') { relatorio.avisos.push(`${onde()}: o assistente de início ainda está aberto nesta loja (o dono cai nele ao entrar)`); await ctx.close(); continue; }
+        } catch (e) {
+          // diagnóstico sem segredo: só o que está visível na tela depois do login (títulos e ids de teste)
+          const visto = await p.evaluate(() => ({ h: [...document.querySelectorAll('h1,h2,[role=alert]')].map((e) => (e.textContent || '').trim().slice(0, 60)).slice(0, 3), ids: [...document.querySelectorAll('[data-testid]')].map((e) => e.getAttribute('data-testid')).slice(0, 6) })).catch(() => ({}));
+          falha(onde(), { tipo: 'login', detalhe: `${String(e.message).split('\n')[0]} · tela: ${JSON.stringify(visto)}` }); await ctx.close(); continue;
+        }
         const ids = await p.locator('[data-testid^="nav-"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')));
         for (const id of [...new Set(ids)]) {
           tela = id;
@@ -106,12 +115,14 @@ try { if (redeOk) await varrer(); } catch (e) { falha('execução', { tipo: 'exc
 // ---------------------------------------------------------------- 3. relatório (só exceções + resumo)
 const unicas = [...new Map(relatorio.falhas.map((f) => [`${f.onde}|${f.tipo}|${f.detalhe}`, f])).values()];
 relatorio.falhas = unicas;
+relatorio.avisos = [...new Set(relatorio.avisos)];
 writeFileSync('smoke-relatorio.json', JSON.stringify(relatorio, null, 1));
 const md = [`## Fumaça no site real: ${URL_SITE}`, '', `- Rede: Google DNS \`${[].concat(relatorio.rede.google).join(',')}\` · Cloudflare \`${[].concat(relatorio.rede.cloudflare).join(',')}\` · porta 443: ${relatorio.rede.porta443} · ${relatorio.rede.https}${relatorio.rede.fallback ? ` · ${relatorio.rede.fallback}` : ''}`,
-  `- Telas analisadas: ${relatorio.telasAnalisadas} · falhas: ${unicas.length}`, '', ...(unicas.length ? ['| Onde | Tipo | Detalhe |', '|---|---|---|', ...unicas.map((f) => `| ${f.onde} | ${f.tipo} | ${String(f.detalhe).replace(/\|/g, '/')} |`)] : ['Nenhuma falha.'])].join('\n');
+  `- Telas analisadas: ${relatorio.telasAnalisadas} · falhas: ${unicas.length}`, ...relatorio.avisos.map((a) => `- Aviso: ${a}`), '', ...(unicas.length ? ['| Onde | Tipo | Detalhe |', '|---|---|---|', ...unicas.map((f) => `| ${f.onde} | ${f.tipo} | ${String(f.detalhe).replace(/\|/g, '/')} |`)] : ['Nenhuma falha.'])].join('\n');
 writeFileSync('smoke-relatorio.md', md);
 if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, md + '\n');
 console.log(md);
 // anotações do GitHub (aparecem no job e na API de anotações, que é o que o agente de trabalho consegue ler)
+if (process.env.GITHUB_ACTIONS) for (const a of relatorio.avisos.slice(0, 8)) console.log(`::warning title=Fumaça aviso::${a}`);
 if (process.env.GITHUB_ACTIONS) for (const f of unicas.slice(0, 40)) console.log(`::error title=Fumaça ${f.tipo}::${f.onde} — ${String(f.detalhe).replace(/[\r\n%]/g, ' ').slice(0, 300)}`);
 process.exit(unicas.length ? 1 : 0);
