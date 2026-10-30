@@ -11,7 +11,7 @@ import { renderizar, variaveisDoCorpo } from '../domain/templates.js';
 import { itensDoAgendamento, produtosDoAgendamento, somaItens, totalAcrescimos, totalProdutos } from '../domain/reports.js';
 import { fmtDayLong } from '../domain/time.js';
 import { MIN, fmtDate, fmtDateTime, fmtDuration, fmtHM, fmtMoney, fmtRelative, fromYmd, pad, startOfDay, tsAt, ymd } from '../domain/time.js';
-import { Aviso, Btn, Campo, Etiquetas, Icon, Modal, StatusChip } from './common.jsx';
+import { Aviso, rolarAoErro, Btn, Campo, Etiquetas, Icon, Modal, StatusChip } from './common.jsx';
 import { profissionalDe, campoLog, clienteDe, nomeProfissional, nomeCliente, nomeServicos, textoSemConfirmacao, textoUltimo } from './format.js';
 import { Pagamento } from './Pagamento.jsx';
 import { comissaoJaPaga, ehDono, formatarTelefone, usaIntegracaoPix } from '../domain/rules.js';
@@ -88,17 +88,17 @@ export function FormAgendamento({ user, inicial = {}, remarcarId, onClose, onSal
 
   const salvar = () => {
     setTentou(true);
-    if (!remarcarId && !novo && !clienteId) { setErros(['Escolha o cliente.']); return; }
+    if (!remarcarId && !novo && !clienteId) { setErros(['Escolha o cliente.']); rolarAoErro(); return; }
     let cid = clienteId;
     if (!remarcarId && novo) {
       const r = apiClientes.salvar({ nome: nc.nome, telefone: nc.telefone });
-      if (!r.ok) { setErros(r.erros); return; }
+      if (!r.ok) { setErros(r.erros); rolarAoErro(); return; }
       cid = r.cliente.id;
     }
     const r = remarcarId
       ? agenda.remarcar(remarcarId, { inicio, status, profissionalId, boxId: boxId || undefined })
       : agenda.criar({ clienteId: cid, profissionalId, servicoIds, inicio, status, encaixe, cupomChave: chaveCupom.trim() || undefined });
-    if (!r.ok) { setErros(r.erros); return; }
+    if (!r.ok) { setErros(r.erros); rolarAoErro(); return; }
     toast(remarcarId ? 'Agendamento remarcado.' : 'Agendamento criado.');
     onSalvo && onSalvo(r.agendamento);
     // remarcou o horário de um cliente com telefone: pergunta (na própria tela) se quer avisar pelo WhatsApp; sem telefone ou sem cadastro, avisa na tela que não dá para avisar

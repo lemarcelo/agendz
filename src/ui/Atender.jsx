@@ -8,7 +8,7 @@ import { acharClientePorTelefone, camposObrigatorios, nomeMaisCompleto } from '.
 import { FORMAS_PAGAMENTO, STATUS, boxesAtivos, duracaoMin, formaEfetiva, formatarTelefone, nomeBox, ocupadoMin, servicoNoPorte, servicosPorIds, telefoneNacional, totalPreco, usaIntegracaoPix } from '../domain/rules.js';
 import { EXEMPLO_PORTE, PORTES, PORTE_PADRAO, ROTULO_PORTE, placaValida, rotuloVeiculo } from '../domain/veiculos.js';
 import { MIN, fmtDate, fmtDuration, fmtHM, fmtMoney, fromYmd, startOfDay, tsAt, ymd } from '../domain/time.js';
-import { Aviso, Btn, Campo, Icon, Modal } from './common.jsx';
+import { Aviso, rolarAoErro, Btn, Campo, Icon, Modal } from './common.jsx';
 import { SeletorHora } from './Agendamento.jsx';
 import { nomeCliente } from './format.js';
 import { toast, useStore } from './hooks.js';
@@ -114,7 +114,7 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
       ...(temServico && usaVeiculo ? (veicSel === 'novo' ? { veiculo: vNovo } : veicSel ? { veiculoId: veicSel } : {}) : {}),
       ...(futuro ? { status, encaixe, boxId: boxId || undefined, cupomChave: chaveCupom.trim() || undefined } : {}),
     });
-    if (!r.ok) { setErros(r.erros); return; }
+    if (!r.ok) { setErros(r.erros); rolarAoErro(); return; }
     toast(r.tipo === 'futuro' ? 'Agendamento criado.' : 'Atendimento registrado.');
     if (r.plano?.aviso) toast(`Plano ${r.plano.nome}: ${r.plano.aviso}`); // o aviso vem DEPOIS de salvar: nunca atrasa nem bloqueia o agendamento
     onSalvo && onSalvo(r.agendamento, r.tipo);
