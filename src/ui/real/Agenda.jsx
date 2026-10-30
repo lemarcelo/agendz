@@ -231,7 +231,7 @@ function AvisoRemarcado({ avisar, aoFechar, aoErro }) {
   return (
     <div className="confirmar-linha" data-testid="avisar-whats">
       <span data-testid="avisar-whats-pergunta">Horário remarcado. Avisar o cliente pelo WhatsApp? Abrimos a conversa com a mensagem pronta; você confere e envia.</span>
-      <p className="muted" data-testid="avisar-whats-texto" style={{ whiteSpace: 'pre-line' }}>{avisar.texto}</p>
+      <p className="muted" data-testid="avisar-whats-texto" style={{ whiteSpace: 'pre-line', overflowWrap: 'anywhere' }}>{avisar.texto}</p>
       <Btn tamanho="sm" variante="primario" onClick={avisarCliente} data-testid="avisar-whats-sim">Avisar no WhatsApp</Btn>
       <Btn tamanho="sm" onClick={aoFechar} data-testid="avisar-whats-nao">Agora não</Btn>
     </div>

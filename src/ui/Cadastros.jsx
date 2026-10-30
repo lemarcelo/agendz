@@ -7,7 +7,7 @@ import { creditoDoCliente } from '../domain/financeiro.js';
 import { CATEGORIAS, renderizar, validarModelo, variaveisDoCorpo } from '../domain/templates.js';
 import { fmtDate, fmtDateTime, fmtDuration, fmtHM, fmtMoney } from '../domain/time.js';
 import { LIMITE_VEICULOS, PORTES, ROTULO_PORTE, placaValida, rotuloVeiculo } from '../domain/veiculos.js';
-import { Abas, Aviso, Avatar, Btn, Campo, Icon, Interruptor, Modal, Vazio } from './common.jsx';
+import { Abas, Aviso, rolarAoErro, Avatar, Btn, Campo, Icon, Interruptor, Modal, Vazio } from './common.jsx';
 import { FotoCampo } from './Foto.jsx';
 import { fotoDeExemplo } from './imagem.js';
 import { EditorNotificacoes, EditorPixCancelamento } from './Notif.jsx';
@@ -77,7 +77,7 @@ function PedidosVinculo({ user }) {
   if (!todos.length) return null;
   const confirmar = () => {
     const r = alvo.aprovar ? apiCli.aprovarVinculo(alvo.p.id) : apiCli.recusarVinculo(alvo.p.id);
-    if (!r.ok) { setErro(r.erros[0]); return; }
+    if (!r.ok) { setErro(r.erros[0]); rolarAoErro(); return; }
     toast(alvo.aprovar ? 'Número vinculado ao cadastro.' : 'Pedido recusado.');
     setAlvo(null); setErro('');
   };
@@ -124,7 +124,7 @@ function PedidosVinculo({ user }) {
 function FormCliente({ c, onClose, plano }) {
   const [f, setF] = useState(c);
   const [erro, setErro] = useState('');
-  const salvar = () => { const r = apiCli.salvar(f); if (!r.ok) { setErro(r.erros[0]); return; } toast('Cliente salvo.'); onClose(); };
+  const salvar = () => { const r = apiCli.salvar(f); if (!r.ok) { setErro(r.erros[0]); rolarAoErro(); return; } toast('Cliente salvo.'); onClose(); };
   return (
     <Modal titulo={c.id ? 'Editar cliente' : 'Novo cliente'} onClose={onClose} rodape={<><Btn onClick={onClose}>Cancelar</Btn><Btn variante="primario" onClick={salvar} data-testid="salvar-cliente">Salvar</Btn></>}>
       <div className="form-grade">
@@ -213,11 +213,11 @@ function FormServico({ s, user, onClose }) {
   const [f, setF] = useState(s.id ? s : { ...s, codigo: proximoCodigo(st.servicos) }); // serviço novo já vem com o próximo código (dá para trocar)
   const [erro, setErro] = useState('');
   const proprias = Array.isArray(f.notificacoes);
-  const salvar = () => { const r = apiSrv.salvar(f); if (!r.ok) { setErro(r.erros[0]); return; } toast('Serviço salvo.'); onClose(); };
+  const salvar = () => { const r = apiSrv.salvar(f); if (!r.ok) { setErro(r.erros[0]); rolarAoErro(); return; } toast('Serviço salvo.'); onClose(); };
   const num = (k) => (e) => setF({ ...f, [k]: e.target.value === '' ? '' : Number(e.target.value) });
   return (
     <Modal titulo={s.id ? 'Editar serviço' : 'Novo serviço'} onClose={onClose} largura={680}
-      rodape={<>{s.id && <Btn variante="perigo" icone="trash" onClick={() => { const r = apiSrv.remover(s.id); if (r.ok) { toast(r.desativado ? 'O serviço tem histórico e foi desativado.' : 'Serviço removido.'); onClose(); } }}>Remover</Btn>}<span className="espaco" /><Btn onClick={onClose}>Cancelar</Btn><Btn variante="primario" onClick={salvar} data-testid="salvar-servico">Salvar</Btn></>}>
+      rodape={<>{s.id && <Btn variante="perigo" icone="trash" onClick={() => { const r = apiSrv.remover(s.id); if (r.ok) { toast(r.desativado ? 'O serviço tem histórico e foi desativado.' : 'Serviço removido.'); onClose(); } else { setErro(r.erros[0]); rolarAoErro(); } }}>Remover</Btn>}<span className="espaco" /><Btn onClick={onClose}>Cancelar</Btn><Btn variante="primario" onClick={salvar} data-testid="salvar-servico">Salvar</Btn></>}>
       <div className="form-grade">
         <Campo rotulo="Nome do serviço" className="campo-largo"><input value={f.nome} onChange={(e) => setF({ ...f, nome: e.target.value })} data-testid="srv-nome" /></Campo>
         <Campo rotulo="Código" dica="Número automático; pode trocar. Não repete entre serviços."><input value={f.codigo ?? ''} maxLength={20} onChange={(e) => setF({ ...f, codigo: e.target.value })} data-testid="srv-codigo" /></Campo>
@@ -347,7 +347,7 @@ function FormUsuario({ u, user, onClose }) {
   const { sessao } = useStore();
   const [f, setF] = useState({ ...u, senha: '' });
   const [erro, setErro] = useState('');
-  const salvar = () => { const r = apiEq.salvar(f); if (!r.ok) { setErro(r.erros[0]); return; } toast('Usuário salvo.'); onClose(); };
+  const salvar = () => { const r = apiEq.salvar(f); if (!r.ok) { setErro(r.erros[0]); rolarAoErro(); return; } toast('Usuário salvo.'); onClose(); };
   const ehMaster = u.papel === 'master';
   return (
     <Modal titulo={u.id ? 'Editar usuário' : 'Novo usuário'} onClose={onClose} largura={640}
@@ -446,7 +446,7 @@ function FormModelo({ m, onClose, somenteLeitura = false }) {
   const so = !!m.sistema || somenteLeitura;
   const problemas = f.corpo ? validarModelo(f.corpo) : [];
   const n = [...new Set(variaveisDoCorpo(f.corpo))].length;
-  const salvar = () => { const r = apiMod.salvar(f); if (!r.ok) { setErro(r.erros.join(' ')); return; } toast('Modelo salvo.'); onClose(); };
+  const salvar = () => { const r = apiMod.salvar(f); if (!r.ok) { setErro(r.erros.join(' ')); rolarAoErro(); return; } toast('Modelo salvo.'); onClose(); };
   return (
     <Modal titulo={so ? m.nome : m.id ? 'Editar modelo' : 'Novo modelo'} onClose={onClose} largura={640}
       rodape={<>{m.id && !so && <Btn variante="perigo" icone="trash" onClick={() => { apiMod.remover(m.id); onClose(); }}>Remover</Btn>}<span className="espaco" /><Btn onClick={onClose}>{so ? 'Fechar' : 'Cancelar'}</Btn>{!so && <Btn variante="primario" onClick={salvar} data-testid="salvar-modelo">Salvar</Btn>}</>}>
