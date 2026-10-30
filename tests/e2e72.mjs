@@ -128,7 +128,7 @@ const ultima = (m, u) => [...chamadas].reverse().find((c) => c.m === m && c.u ==
   await p.getByTestId(paleta[0]).click();
   await p.waitForFunction(() => !!document.getElementById('tema-marca'));
   assert.match(ultima('PUT', '/api/estabelecimento/marca').corpo.temaCor, /^#[0-9a-f]{6}$/i);
-  assert.equal(await p.getByTestId(paleta[0]).getAttribute('aria-pressed'), 'true');
+  await p.waitForFunction((t) => document.querySelector(`[data-testid="${t}"]`)?.getAttribute('aria-pressed') === 'true', paleta[0]);
   ok('paleta escolhida: gravada e aplicada na hora');
 
   await p.getByTestId('marca-remover').click();
