@@ -8,12 +8,14 @@ import { capAtiva, rot } from '../../domain/tipos.js';
 import { formatarCpf, formatarTelefone, somenteDigitos } from '../../domain/rules.js';
 import { LIMITE_VEICULOS, PORTES, ROTULO_PORTE, placaValida, rotuloVeiculo } from '../../domain/veiculos.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
+import { BlocoPlanoReal, FormEscolherPlanoReal } from './PlanoDoCliente.jsx';
+import { FormEncerrar, FormMensalidade } from './Planos.jsx';
 
 // 5553999000001 → (53) 99900-0001
 const telNacional = (t) => { const d = somenteDigitos(t); return d.startsWith('55') && d.length >= 12 ? d.slice(2) : d; };
 const fmtTel = (t) => formatarTelefone(telNacional(t));
 
-function FormCliente({ ficha, aoSalvar, aoCancelar }) {
+function FormCliente({ ficha, aoSalvar, aoCancelar, plano }) {
   const novo = !ficha.id;
   const [f, setF] = useState({
     nome: ficha.nome || '', apelido: ficha.apelido || '', telefone: ficha.telefone ? fmtTel(ficha.telefone) : '',
@@ -71,6 +73,7 @@ function FormCliente({ ficha, aoSalvar, aoCancelar }) {
             <p className="muted">O porte (pequeno, médio, grande, SUV, pickup) define o preço e o tempo dos serviços.</p>
           </fieldset>
         )}
+        {plano && <BlocoPlanoReal cliente={ficha} {...plano} />}
         {erro && <Aviso tipo="erro" data-testid="cli-erro">{erro}</Aviso>}
         <div className="acoes">
           <Btn onClick={aoCancelar} data-testid="cli-cancelar">Cancelar</Btn>
@@ -81,13 +84,17 @@ function FormCliente({ ficha, aoSalvar, aoCancelar }) {
   );
 }
 
-export default function Clientes() {
+export default function Clientes({ podePlanos = false, aoIr = null }) {
   const [busca, setBusca] = useState('');
   const [lista, setLista] = useState(null); // null = carregando
   const [erro, setErro] = useState('');
   const [ficha, setFicha] = useState(null); // cliente aberto no formulário ({} = novo)
   const [aviso, setAviso] = useState('');
   const [versao, setVersao] = useState(0);
+  // Plano na ficha: o formulário aberto, o aviso e a recarga moram AQUI (o bloco recarrega e a ficha fica montada, escondida), não no bloco.
+  const [planoModo, setPlanoModo] = useState(null);
+  const [planoAviso, setPlanoAviso] = useState('');
+  const [planoVersao, setPlanoVersao] = useState(0);
   const ultima = useRef(0);
   const veiculos = capAtiva('usaVeiculo');
 
@@ -110,7 +117,19 @@ export default function Clientes() {
   };
 
   if (ficha) {
-    return <FormCliente ficha={ficha} aoCancelar={() => setFicha(null)} aoSalvar={() => { setFicha(null); setAviso('Cliente salvo.'); setVersao((v) => v + 1); }} />;
+    const fecharPlano = () => { setPlanoModo(null); };
+    const feito = (msg) => { setPlanoModo(null); setPlanoAviso(msg); setPlanoVersao((v) => v + 1); };
+    const plano = podePlanos && ficha.id ? { aviso: planoAviso, versao: planoVersao, aoAbrir: (m) => { setPlanoAviso(''); setPlanoModo(m); }, aoFeito: feito, aoIr: aoIr ? (a) => { setFicha(null); setPlanoAviso(''); aoIr(a); } : null } : null;
+    return (
+      <>
+        <div hidden={!!planoModo}>
+          <FormCliente ficha={ficha} plano={plano} aoCancelar={() => { setFicha(null); setPlanoAviso(''); }} aoSalvar={() => { setFicha(null); setPlanoAviso(''); setAviso('Cliente salvo.'); setVersao((v) => v + 1); }} />
+        </div>
+        {planoModo && (planoModo.tipo === 'pagar' ? <FormMensalidade a={planoModo.a} mesInicial={planoModo.mes} aoCancelar={fecharPlano} aoFeito={feito} />
+          : planoModo.tipo === 'encerrar' ? <FormEncerrar a={planoModo.a} aoCancelar={fecharPlano} aoFeito={feito} />
+            : <FormEscolherPlanoReal modo={planoModo} cliente={ficha} aoCancelar={fecharPlano} aoFeito={feito} />)}
+      </>
+    );
   }
   return (
     <section className="tela" data-testid="tela-clientes">

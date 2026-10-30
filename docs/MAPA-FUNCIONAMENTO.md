@@ -40,6 +40,8 @@ Um ícone distinto por aba (`tests/menu-icones.test.mjs`). **Não existe aba "In
 | Avisos | bell | sim | com Agenda | com Agenda | com Agenda |
 | Suporte | info | sim | sim | sim | sim |
 
+**Plano na ficha do cliente** (Clientes > Editar, bloco "Plano"; só com a seção Planos, senão o bloco nem monta e a API de planos não é chamada): plano em andamento (saldo, vencimento, horários fixos no Artifact), histórico curto, "Sem plano" + Adicionar plano (sem plano cadastrado: aviso com atalho para Planos), Editar (trocar de plano com motivo, horários fixos, registrar mensalidade) e Encerrar. Usa as mesmas rotas da aba Planos; `tests/e2e90.mjs` (Artifact) e `tests/e2e91.mjs` (site real).
+
 Só no Artifact: Mensagens (simulador de WhatsApp só nessa tela), Financeiro, Minha escala (profissional). Só no site real: nada a mais.
 
 ## 3. Entrar e primeiro acesso

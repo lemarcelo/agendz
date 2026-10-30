@@ -230,7 +230,7 @@ function Painel({ loja, sessao, aoSair, aoMudarMarca }) {
             </section>
           )}
           {aba === 'agenda' && <Agenda destaqueIds={Object.keys(destaques)} foco={foco} recarregar={recarregar} nomeLoja={loja.nome} meuId={sessao.id} ehProprio={sessao.papel === 'profissional'} ehDono={dono || sessao.papel === 'admin' || sessao.papel === 'atendente'} />}
-          {aba === 'clientes' && <Clientes />}
+          {aba === 'clientes' && <Clientes podePlanos={dono || (sessao.secoes || []).includes('planos')} aoIr={setAba} />}
           {aba === 'servicos' && <Servicos ehDono={dono || (sessao.secoes || []).includes('servicos')} />}
           {aba === 'equipe' && dono && <Equipe meuId={sessao.id} />}
           {aba === 'boxes' && dono && <Boxes />}

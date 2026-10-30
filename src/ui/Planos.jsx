@@ -106,7 +106,7 @@ function Assinaturas({ dados, st, recarregar }) {
 }
 
 // Até MAX_FIXOS horários por semana do assinante. O sistema cria o agendamento de cada um com DIAS_FIXOS_A_FRENTE dias de antecedência, gastando 1 atendimento do plano.
-function FormFixos({ a, st, onClose }) {
+export function FormFixos({ a, st, onClose, aoFeito }) {
   const profs = st.usuarios.filter((u) => u.atende);
   const servs = a.plano.servicoIds.map((id) => st.servicos.find((x) => x.id === id)).filter(Boolean);
   const veiculos = (st.clientes.find((c) => c.id === a.clienteId)?.veiculos) || [];
@@ -118,7 +118,8 @@ function FormFixos({ a, st, onClose }) {
   const salvar = () => {
     const r = api.definirFixos(a.id, { fixos: linhas.map((l) => ({ dia: Number(l.dia), hm: l.hm, profissionalId: l.profissionalId, servicoIds: [l.servicoId], ...(comVeiculo && l.veiculoId ? { veiculoId: l.veiculoId } : {}) })) });
     if (!r.ok) { setErro(r.erros[0]); return; }
-    toast(r.apagados ? `Horários fixos salvos. ${r.apagados} agendamento(s) que não valem mais saíram da agenda.` : 'Horários fixos salvos.');
+    const msg = r.apagados ? `Horários fixos salvos. ${r.apagados} agendamento(s) que não valem mais saíram da agenda.` : 'Horários fixos salvos.';
+    toast(msg); if (aoFeito) aoFeito(msg);
     onClose();
   };
   return (
@@ -180,14 +181,15 @@ function FormAssinatura({ dados, clientes, onClose }) {
   );
 }
 
-function FormMensalidade({ a, mesInicial, onClose }) {
+export function FormMensalidade({ a, mesInicial, onClose, aoFeito }) {
   const [mes, setMes] = useState(mesInicial);
   const [forma, setForma] = useState('pix');
   const [erro, setErro] = useState('');
   const salvar = () => {
     const r = api.pagar(a.id, { mes, forma });
     if (!r.ok) { setErro(r.erros[0]); return; }
-    toast(`Mensalidade de ${rotuloMes(mes)} registrada.`);
+    const msg = `Mensalidade de ${rotuloMes(mes)} registrada.`;
+    toast(msg); if (aoFeito) aoFeito(msg);
     onClose();
   };
   return (
@@ -211,13 +213,14 @@ function FormMensalidade({ a, mesInicial, onClose }) {
   );
 }
 
-function FormEncerrar({ a, onClose }) {
+export function FormEncerrar({ a, onClose, aoFeito }) {
   const [motivo, setMotivo] = useState('');
   const [erro, setErro] = useState('');
   const salvar = () => {
     const r = api.encerrar(a.id, motivo);
     if (!r.ok) { setErro(r.erros[0]); return; }
-    toast(r.divida > 0 ? `Plano encerrado. ${r.divida} atendimento(s) adiantado(s) ficaram como dívida.` : 'Plano encerrado.');
+    const msg = r.divida > 0 ? `Plano encerrado. ${r.divida} atendimento(s) adiantado(s) ficaram como dívida.` : 'Plano encerrado.';
+    toast(msg); if (aoFeito) aoFeito(msg);
     onClose();
   };
   return (
