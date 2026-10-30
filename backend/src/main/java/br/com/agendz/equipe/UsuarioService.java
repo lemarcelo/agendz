@@ -105,7 +105,12 @@ public class UsuarioService {
 
     /** Ficha: CPF completo e nascimento (a lista só traz o CPF mascarado). */
     public Usuario obter(UUID id) {
-        Linha l = banco.naLoja(jdbc -> buscar(jdbc, id));
+        return obterEm(LojaContext.exigir().id(), id);
+    }
+
+    /** Mesma ficha, com a loja dada (o Admin da plataforma não tem Host: a loja vem do slug da rota interna). */
+    private Usuario obterEm(UUID lojaId, UUID id) {
+        Linha l = banco.naLoja(lojaId, jdbc -> buscar(jdbc, id));
         if (l == null) throw naoEncontrado();
         return paraUsuario(l, true);
     }
@@ -113,12 +118,16 @@ public class UsuarioService {
     // ---------- criar ----------
 
     public ComSenha criar(Dados d) {
-        Loja loja = LojaContext.exigir();
+        return criar(LojaContext.exigir(), d);
+    }
+
+    /** Cria na loja dada (painel da loja: a do Host; Admin da plataforma: a do slug). As regras são as mesmas: limite de usuários, nome reservado, duplicidade. */
+    public ComSenha criar(Loja loja, Dados d) {
         Validado v = validar(d, true);
         String senha = v.senhaTemporaria != null ? v.senhaTemporaria : Temporarias.senha();
         String hash = encoder.encode(senha);
         try {
-            UUID id = banco.naLoja(jdbc -> {
+            UUID id = banco.naLoja(loja.id(), jdbc -> {
                 Integer ativos = jdbc.queryForObject("select count(*) from usuario where ativo and " + br.com.agendz.validacao.Reservados.OCULTOS_SQL, Integer.class);
                 regras.exigirVagaDeUsuario(loja.id(), ativos == null ? 0 : ativos);
                 conferirDuplicados(jdbc, loja.id(), v, null);
@@ -135,7 +144,7 @@ public class UsuarioService {
                         cif(v.email), hashDe(loja.id(), "email", v.email == null ? null : v.email.toLowerCase(Locale.ROOT)), cif(v.telefone),
                         cif(v.cpf), hashDe(loja.id(), "cpf", v.cpf), cif(v.nascimento));
             });
-            return new ComSenha(obter(id), senha);
+            return new ComSenha(obterEm(loja.id(), id), senha);
         } catch (DuplicateKeyException e) { // corrida entre duas gravações: a trava única do banco decide
             throw new ErroDeNegocio(HttpStatus.CONFLICT, "Já existe alguém com esses dados. Confira o CPF, o apelido, o e-mail e o usuário.");
         }

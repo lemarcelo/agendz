@@ -2,13 +2,16 @@ package br.com.agendz.interno;
 
 import br.com.agendz.auth.Temporarias;
 import br.com.agendz.equipe.SuporteDaLoja;
+import br.com.agendz.equipe.UsuarioService;
 import br.com.agendz.erro.ErroDeNegocio;
 import br.com.agendz.tenant.Loja;
 import br.com.agendz.tenant.LojaJdbc;
 import br.com.agendz.tenant.LojaRepository;
 import br.com.agendz.validacao.Reservados;
+import br.com.agendz.validacao.Texto;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -30,6 +33,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class PlataformaService {
 
     public static final Set<String> STATUS = Set.of("em_teste", "ativo", "em_atraso", "suspenso", "encerrado");
+    /** Perfis da equipe da loja (os mesmos de `UsuarioService`). */
+    public static final List<String> PAPEIS = List.of("dono", "admin", "atendente", "profissional");
     public static final Set<String> TIPOS = Set.of("estetica_automotiva", "barbearia");
     private static final Pattern SLUG = Pattern.compile("^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$");
     private static final Set<String> SLUGS_RESERVADOS = Set.of("www", "app", "api", "admin", "painel", "static", "assets", "mail", "agendar", "login", "suporte", "status");
@@ -51,15 +56,30 @@ public class PlataformaService {
     public record SenhaNova(String usuario, String senhaTemporaria) {
     }
 
+    /** Corpo de POST /usuarios: sem CPF, e-mail, telefone nem senha (a senha é sempre gerada aqui). `apelido` é opcional (padrão: o primeiro nome, com número se já existir). */
+    public record NovoUsuario(String nome, String usuario, String papel, String apelido) {
+    }
+
+    /** Resposta de mudar o perfil: `mudou` é falso quando a pessoa já tinha esse perfil (o Admin não grava evento à toa). */
+    public record PerfilMudado(String usuario, String papel, String anterior, boolean mudou) {
+    }
+
+    /** Resposta de criar: a senha temporária aparece só aqui, uma vez. */
+    public record UsuarioCriado(UUID id, String usuario, String nome, String papel, boolean atende, boolean ativo, String senhaTemporaria) {
+    }
+
     private final JdbcTemplate jdbc;
     private final LojaJdbc banco;
     private final LojaRepository lojas;
     private final PasswordEncoder encoder;
     private final SuporteDaLoja suporte;
     private final RegrasDaLoja regras;
+    private final UsuarioService equipe;
     private final TransactionTemplate tx;
 
-    public PlataformaService(JdbcTemplate jdbc, LojaJdbc banco, LojaRepository lojas, PasswordEncoder encoder, SuporteDaLoja suporte, RegrasDaLoja regras, PlatformTransactionManager tm) {
+    public PlataformaService(JdbcTemplate jdbc, LojaJdbc banco, LojaRepository lojas, PasswordEncoder encoder, SuporteDaLoja suporte, RegrasDaLoja regras, UsuarioService equipe,
+                             PlatformTransactionManager tm) {
+        this.equipe = equipe;
         this.jdbc = jdbc;
         this.banco = banco;
         this.lojas = lojas;
@@ -192,5 +212,63 @@ public class PlataformaService {
         });
         if (ok == null) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, "Usuário não encontrado.");
         if (!ok) throw new ErroDeNegocio(HttpStatus.CONFLICT, "A loja precisa ter ao menos um proprietário ativo.");
+    }
+
+    /**
+     * Cria um usuário na equipe da loja (pela mesma regra do painel da loja: limite de usuários da plataforma = 409, `suporte`/fumaça = 400 "Nome reservado.",
+     * usuário e apelido únicos = 409). Senha temporária gerada AQUI e devolvida uma vez; a pessoa troca no primeiro acesso. CPF e nascimento obrigatórios são
+     * regra do cadastro de CLIENTE, não da equipe; a pessoa completa os próprios dados em "Meu perfil".
+     */
+    public UsuarioCriado criarUsuario(Loja loja, NovoUsuario d) {
+        if (d == null) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe os dados do usuário.");
+        String nome = d.nome() == null ? "" : Texto.limpar(d.nome());
+        if (nome.isEmpty() || nome.length() > 80) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "O nome precisa ter de 1 a 80 caracteres.");
+        String papel = papelValido(d.papel());
+        String login = d.usuario() == null ? "" : d.usuario().trim().toLowerCase(Locale.ROOT);
+        if (!LOGIN.matcher(login).matches()) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Usuário: de 2 a 60 caracteres, só letras, números, ponto, hífen e sublinhado.");
+        Reservados.exigirLivre(login, nome, d.apelido());
+        String apelido = d.apelido() == null || Texto.limpar(d.apelido()).isEmpty() ? apelidoLivre(loja, nome) : Texto.limpar(d.apelido());
+        if (apelido.length() > 60) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "O apelido pode ter até 60 caracteres.");
+        UsuarioService.ComSenha novo = equipe.criar(loja, new UsuarioService.Dados(nome, apelido, login, null, null, null, null, papel, null, null, null, null, null, null, null));
+        UsuarioService.Usuario u = novo.usuario();
+        return new UsuarioCriado(u.id(), u.usuario(), u.nome(), u.papel(), u.atende(), true, novo.senhaTemporaria());
+    }
+
+    /**
+     * Muda o perfil (papel) de um usuário da equipe. Perfil fora dos quatro = 400; usuário de outra loja, inexistente, `suporte` ou fumaça = 404; o proprietário
+     * nunca passa para outro perfil por aqui (409), então a loja não fica sem dono. Mesmo perfil = sem mudança (200). As permissões escolhidas pelo dono para a
+     * pessoa continuam; Atenção: o token já emitido leva o perfil antigo até vencer (8 h) ou até a pessoa entrar de novo; para efeito imediato, desativar e reativar derruba o acesso na hora.
+     */
+    public PerfilMudado mudarPerfil(Loja loja, UUID usuarioId, String papelNovo) {
+        String papel = papelValido(papelNovo);
+        PerfilMudado resultado = banco.naLoja(loja.id(), j -> {
+            List<Object[]> atual = j.query("select identificador, papel from usuario where id = ? and " + Reservados.OCULTOS_SQL,
+                    (rs, i) -> new Object[] {rs.getString("identificador"), rs.getString("papel")}, usuarioId);
+            if (atual.isEmpty()) return null;
+            String login = (String) atual.get(0)[0];
+            String antes = (String) atual.get(0)[1];
+            if (antes.equals(papel)) return new PerfilMudado(login, papel, antes, false);
+            if ("dono".equals(antes)) throw new ErroDeNegocio(HttpStatus.CONFLICT, "O proprietário não muda de perfil por aqui: a loja precisa ter um proprietário.");
+            j.update("update usuario set papel = ? where id = ?", papel, usuarioId);
+            return new PerfilMudado(login, papel, antes, true);
+        });
+        if (resultado == null) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, "Usuário não encontrado.");
+        return resultado;
+    }
+
+    private static String papelValido(String bruto) {
+        String p = bruto == null ? "" : bruto.trim().toLowerCase(Locale.ROOT);
+        if (!PAPEIS.contains(p)) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Perfil inválido: use dono, admin, atendente ou profissional.");
+        return p;
+    }
+
+    /** Primeiro nome; se alguém da loja já tem esse apelido (sem diferenciar maiúsculas), acrescenta 2, 3, ... */
+    private String apelidoLivre(Loja loja, String nome) {
+        Set<String> usados = new HashSet<>(banco.naLoja(loja.id(), j -> j.queryForList("select lower(apelido) from usuario where apelido is not null", String.class)));
+        String base = nome.split("\\s+")[0];
+        if (base.length() > 50) base = base.substring(0, 50);
+        String apelido = base;
+        for (int n = 2; usados.contains(apelido.toLowerCase(Locale.ROOT)) || Reservados.reservado(apelido); n++) apelido = base + " " + n;
+        return apelido;
     }
 }

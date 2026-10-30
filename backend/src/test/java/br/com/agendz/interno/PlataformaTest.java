@@ -182,4 +182,103 @@ class PlataformaTest extends BaseApi {
         mvc.perform(put(BASE + "/" + SLUG + "/status").header("X-Interno-Chave", CHAVE).contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"ativo\"}")).andExpect(status().isOk());
         mvc.perform(get("/api/clientes").with(host(HOST)).header(HttpHeaders.AUTHORIZATION, bearer(dono))).andExpect(status().isOk());
     }
+
+    private String criarUsuarioNaLoja(String corpo, int status) throws Exception {
+        return mvc.perform(post(BASE + "/" + SLUG + "/usuarios").header("X-Interno-Chave", CHAVE).contentType(MediaType.APPLICATION_JSON).content(corpo))
+                .andExpect(status().is(status)).andReturn().getResponse().getContentAsString();
+    }
+
+    private String idDe(String login) {
+        return jdbc.queryForObject("select id::text from usuario where identificador = ? and loja_id = (select id from loja where slug = ?)", String.class, login, SLUG);
+    }
+
+    @Test
+    void adminCriaUsuarioDaEquipeComSenhaTemporariaUmaVezSo() throws Exception {
+        criarLoja("barbearia");
+        String url = BASE + "/" + SLUG + "/usuarios";
+        // sem chave ou com chave errada nada acontece
+        mvc.perform(post(url).contentType(MediaType.APPLICATION_JSON).content("{\"nome\":\"Ana Souza\",\"usuario\":\"ana\",\"papel\":\"atendente\"}")).andExpect(status().isForbidden());
+        mvc.perform(post(url).header("X-Interno-Chave", "errada-errada-errada").contentType(MediaType.APPLICATION_JSON).content("{\"nome\":\"Ana Souza\",\"usuario\":\"ana\",\"papel\":\"atendente\"}"))
+                .andExpect(status().isForbidden());
+        assertEquals(0, jdbc.queryForObject("select count(*) from usuario where identificador = 'ana'", Integer.class));
+        // cria: 201, a senha vem uma vez e a pessoa entra com ela, obrigada a trocar
+        String json = criarUsuarioNaLoja("{\"nome\":\"Ana Souza\",\"usuario\":\"Ana\",\"papel\":\"atendente\"}", 201);
+        String temporaria = campo(json, "senhaTemporaria");
+        assertEquals(12, temporaria.length());
+        mvc.perform(post("/api/auth/login").with(host(HOST)).contentType(MediaType.APPLICATION_JSON).content(corpoLogin("ana", temporaria)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.deveTrocarSenha").value(true)).andExpect(jsonPath("$.papel").value("atendente"));
+        // a lista da equipe mostra a pessoa, sem senha nem hash
+        mvc.perform(get(url).header("X-Interno-Chave", CHAVE)).andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.usuario=='ana')].papel").value(hasItem("atendente")))
+                .andExpect(jsonPath("$[?(@.usuario=='ana')].nome").value(hasItem("Ana Souza")))
+                .andExpect(jsonPath("$[0].senhaTemporaria").doesNotExist()).andExpect(jsonPath("$[0].senha").doesNotExist()).andExpect(jsonPath("$[0].senhaHash").doesNotExist());
+        // a senha nunca fica em claro no banco
+        assertEquals(0, jdbc.queryForObject("select count(*) from usuario where senha_hash = ?", Integer.class, temporaria));
+        // apelido padrão = primeiro nome; outra Ana ganha número (não estoura 409)
+        assertEquals("Ana", jdbc.queryForObject("select apelido from usuario where identificador = 'ana' and loja_id = (select id from loja where slug = ?)", String.class, SLUG));
+        criarUsuarioNaLoja("{\"nome\":\"Ana Lima\",\"usuario\":\"ana2\",\"papel\":\"profissional\"}", 201);
+        assertEquals("Ana 2", jdbc.queryForObject("select apelido from usuario where identificador = 'ana2' and loja_id = (select id from loja where slug = ?)", String.class, SLUG));
+        // usuário repetido (sem diferenciar maiúsculas), reservado, perfil e entrada inválidos
+        criarUsuarioNaLoja("{\"nome\":\"Outra\",\"usuario\":\"ANA\",\"papel\":\"atendente\"}", 409);
+        criarUsuarioNaLoja("{\"nome\":\"Suporte\",\"usuario\":\"bia\",\"papel\":\"atendente\"}", 400);
+        criarUsuarioNaLoja("{\"nome\":\"Bia\",\"usuario\":\"suporte\",\"papel\":\"atendente\"}", 400);
+        criarUsuarioNaLoja("{\"nome\":\"Bia\",\"usuario\":\"fumaca-x\",\"papel\":\"atendente\"}", 400);
+        criarUsuarioNaLoja("{\"nome\":\"Bia\",\"usuario\":\"bia\",\"papel\":\"gerente\"}", 400);
+        criarUsuarioNaLoja("{\"nome\":\"Bia\",\"usuario\":\"bia\"}", 400);
+        criarUsuarioNaLoja("{\"nome\":\"   \",\"usuario\":\"bia\",\"papel\":\"atendente\"}", 400);
+        criarUsuarioNaLoja("{\"nome\":\"Bia\",\"usuario\":\"b\",\"papel\":\"atendente\"}", 400);
+        criarUsuarioNaLoja("{\"nome\":\"Bia\",\"usuario\":\"b i a\",\"papel\":\"atendente\"}", 400);
+        assertEquals(0, jdbc.queryForObject("select count(*) from usuario where identificador = 'bia'", Integer.class));
+        // loja que não existe = 404
+        mvc.perform(post(BASE + "/nao-existe/usuarios").header("X-Interno-Chave", CHAVE).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"nome\":\"Bia\",\"usuario\":\"bia\",\"papel\":\"atendente\"}")).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void adminRespeitaOLimiteDeUsuariosDaLojaAoCriar() throws Exception {
+        criarLoja("barbearia");
+        // o dono já ocupa 1 vaga (o suporte não conta): limite 2 deixa entrar um e recusa o seguinte
+        mvc.perform(put(BASE + "/" + SLUG + "/regras").header("X-Interno-Chave", CHAVE).contentType(MediaType.APPLICATION_JSON).content("{\"limiteUsuarios\":2}")).andExpect(status().isOk());
+        criarUsuarioNaLoja("{\"nome\":\"Ana\",\"usuario\":\"ana\",\"papel\":\"profissional\"}", 201);
+        String recusa = criarUsuarioNaLoja("{\"nome\":\"Caio\",\"usuario\":\"caio\",\"papel\":\"profissional\"}", 409);
+        assertEquals(true, recusa.contains("limite"));
+        assertEquals(0, jdbc.queryForObject("select count(*) from usuario where identificador = 'caio'", Integer.class));
+        mvc.perform(put(BASE + "/" + SLUG + "/regras").header("X-Interno-Chave", CHAVE).contentType(MediaType.APPLICATION_JSON).content("{\"limiteUsuarios\":3}")).andExpect(status().isOk());
+        criarUsuarioNaLoja("{\"nome\":\"Caio\",\"usuario\":\"caio\",\"papel\":\"profissional\"}", 201);
+    }
+
+    @Test
+    void adminMudaOPerfilSemDeixarALojaSemDonoNemTocarEmOutraLoja() throws Exception {
+        criarLoja("barbearia");
+        String url = BASE + "/" + SLUG + "/usuarios/";
+        criarUsuarioNaLoja("{\"nome\":\"Bia Rocha\",\"usuario\":\"bia\",\"papel\":\"profissional\"}", 201);
+        String bia = idDe("bia");
+        String dona = idDe("dona");
+        String corpo = "{\"papel\":\"admin\"}";
+        // sem chave = 403, e nada muda
+        mvc.perform(put(url + bia + "/papel").contentType(MediaType.APPLICATION_JSON).content(corpo)).andExpect(status().isForbidden());
+        assertEquals("profissional", jdbc.queryForObject("select papel from usuario where id = ?::uuid", String.class, bia));
+        // muda: 200 e a lista reflete
+        mvc.perform(put(url + bia + "/papel").header("X-Interno-Chave", CHAVE).contentType(MediaType.APPLICATION_JSON).content(corpo))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.papel").value("admin")).andExpect(jsonPath("$.anterior").value("profissional"))
+                .andExpect(jsonPath("$.mudou").value(true)).andExpect(jsonPath("$.usuario").value("bia"));
+        mvc.perform(get(BASE + "/" + SLUG + "/usuarios").header("X-Interno-Chave", CHAVE)).andExpect(jsonPath("$[?(@.usuario=='bia')].papel").value(hasItem("admin")));
+        // mesmo perfil de novo = sem mudança, sem erro
+        mvc.perform(put(url + bia + "/papel").header("X-Interno-Chave", CHAVE).contentType(MediaType.APPLICATION_JSON).content(corpo))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.mudou").value(false));
+        // perfil inválido ou ausente = 400
+        for (String ruim : new String[] {"{\"papel\":\"gerente\"}", "{\"papel\":\"\"}", "{}", "{\"papel\":\"suporte\"}"}) {
+            mvc.perform(put(url + bia + "/papel").header("X-Interno-Chave", CHAVE).contentType(MediaType.APPLICATION_JSON).content(ruim)).andExpect(status().isBadRequest());
+        }
+        assertEquals("admin", jdbc.queryForObject("select papel from usuario where id = ?::uuid", String.class, bia));
+        // o proprietário não vira outro perfil por aqui (a loja nunca fica sem dono)
+        mvc.perform(put(url + dona + "/papel").header("X-Interno-Chave", CHAVE).contentType(MediaType.APPLICATION_JSON).content("{\"papel\":\"atendente\"}")).andExpect(status().isConflict());
+        assertEquals("dono", jdbc.queryForObject("select papel from usuario where id = ?::uuid", String.class, dona));
+        // usuário de outra loja, id que não existe e o suporte = 404
+        mvc.perform(put(BASE + "/offbox/usuarios/" + bia + "/papel").header("X-Interno-Chave", CHAVE).contentType(MediaType.APPLICATION_JSON).content("{\"papel\":\"atendente\"}")).andExpect(status().isNotFound());
+        mvc.perform(put(url + "00000000-0000-0000-0000-000000000000/papel").header("X-Interno-Chave", CHAVE).contentType(MediaType.APPLICATION_JSON).content(corpo)).andExpect(status().isNotFound());
+        String suporte = jdbc.queryForObject("select id::text from usuario where identificador = 'suporte' and loja_id = (select id from loja where slug = ?)", String.class, SLUG);
+        mvc.perform(put(url + suporte + "/papel").header("X-Interno-Chave", CHAVE).contentType(MediaType.APPLICATION_JSON).content("{\"papel\":\"atendente\"}")).andExpect(status().isNotFound());
+        assertEquals("admin", jdbc.queryForObject("select papel from usuario where id = ?::uuid", String.class, suporte));
+    }
 }
