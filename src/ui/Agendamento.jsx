@@ -390,7 +390,7 @@ export function GavetaAgendamento({ id, user, onClose, onRemarcar }) {
                 )}
               </dd></div>
             )}
-            {local && !a.clienteId ? <div><dt>Cliente</dt><dd>{a.nomeAvulso || 'Sem nome'} {a.telefoneAvulso && <span className="muted">{formatarTelefone(a.telefoneAvulso)} · </span>}<span className="muted">atendimento local, sem cadastro</span></dd></div> : (
+            {!a.clienteId ? <div><dt>Cliente</dt><dd>{a.nomeAvulso || 'Sem nome'} {a.telefoneAvulso && <span className="muted">{formatarTelefone(a.telefoneAvulso)} · </span>}<span className="muted">{local ? 'atendimento local, sem cadastro' : 'horário sem cadastro (confirmado, sem aviso ao cliente)'}</span></dd></div> : (
               <>
                 <div><dt>Cliente</dt><dd>{c?.nome} <span className="muted">{c?.telefone}</span></dd></div>
                 <div><dt>Histórico do cliente</dt><dd>{textoUltimo(st, a)}</dd></div>

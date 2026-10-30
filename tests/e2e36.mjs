@@ -89,7 +89,7 @@ async function abrir(viewport = { width: 1280, height: 800 }) {
   assert.match(await p.getByTestId('troca-esqueci').innerText(), /suporte/);
   assert.equal(await p.getByTestId('troca-usuario').inputValue(), '', 'o usuário é preenchido pela própria pessoa');
   assert.equal(await p.getByTestId('troca-atual').count(), 0, 'a senha enviada já foi digitada no login: não pede de novo');
-  assert.equal(await p.getByTestId('painel-real').count(), 0, 'com senha temporária não chega ao painel');
+  assert.equal(await p.getByTestId('agenda-real').count(), 0, 'com senha temporária não chega ao painel');
   ok('login errado recusado; senha temporária pede a troca');
 
   // 3. troca: confirmação diferente e senha curta ficam na tela; senha atual errada mostra o erro do servidor
@@ -118,10 +118,9 @@ async function abrir(viewport = { width: 1280, height: 800 }) {
   await p.getByTestId('troca-usuario').fill('Alan.Dalforno');
   await p.getByTestId('troca-salvar').click();
   await p.getByTestId('agenda-real').waitFor(); // depois de entrar cai na Agenda, não no Início
-  await p.getByTestId('nav-inicio').click();
-  await p.getByTestId('painel-real').waitFor();
-  assert.equal(await p.getByTestId('painel-nome').innerText(), 'Alan');
-  assert.equal(await p.getByTestId('painel-papel').innerText(), 'Proprietário');
+  assert.equal(await p.getByTestId('nav-inicio').count(), 0, 'não existe aba Início');
+  assert.equal(await p.locator('.nav button.on').getAttribute('data-testid'), 'nav-agenda', 'abre na Agenda');
+  assert.equal(await p.getByTestId('topo-nome').innerText(), 'Alan');
   const troca = chamadas.filter((c) => c.u === '/api/usuarios/me/senha');
   assert.ok(troca.length >= 2 && troca.every((c) => c.auth === 'Bearer tok-login'), 'a troca leva o token do login');
   assert.equal(troca.at(-1).corpo.usuario, 'alan.dalforno', 'o usuário escolhido vai em minúsculas');
@@ -135,7 +134,7 @@ async function abrir(viewport = { width: 1280, height: 800 }) {
   await p.getByTestId('login-id').fill('alan.dalforno');
   await p.getByTestId('login-senha').fill('Minha-senha-nova');
   await p.getByTestId('login-entrar').click();
-  await p.getByTestId('nav-inicio').click(); await p.getByTestId('painel-real').waitFor();
+  await p.getByTestId('nav-estabelecimento').click(); await p.getByTestId('tela-estabelecimento').waitFor();
   await p.reload();
   await p.getByTestId('login-id').waitFor();
   ok('token e senha fora de storage/cookie; sair e recarregar pedem o login');
@@ -155,7 +154,7 @@ async function abrir(viewport = { width: 1280, height: 800 }) {
   await p.getByTestId('login-id').fill('alan'); await p.getByTestId('login-senha').fill('Temporaria-123'); await p.getByTestId('login-entrar').click();
   await p.getByTestId('troca-nova').waitFor(); await semRolagem('troca');
   await p.getByTestId('troca-usuario').fill('alan'); await p.getByTestId('troca-nova').fill('Minha-senha-nova'); await p.getByTestId('troca-repetir').fill('Minha-senha-nova'); await p.getByTestId('troca-salvar').click();
-  await p.getByTestId('nav-inicio').click(); await p.getByTestId('painel-real').waitFor(); await semRolagem('painel');
+  await p.getByTestId('nav-estabelecimento').click(); await p.getByTestId('tela-estabelecimento').waitFor(); await semRolagem('painel');
   ok('estética: tipo certo e 390 px sem rolagem lateral (login, troca, painel)');
   await ctx.close();
 }

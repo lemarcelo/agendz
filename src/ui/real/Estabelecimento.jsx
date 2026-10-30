@@ -9,6 +9,8 @@ import React, { useEffect, useState } from 'react';
 import { comissaoGeral as apiComissao, local as api } from '../../services/api-real.js';
 import { caminhoHttps, coordenadasDeTexto, latitudeValida, longitudeValida } from '../../domain/localizacao.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
+import RegrasAtendimento from './RegrasAtendimento.jsx';
+import LinkAgendamento from './LinkAgendamento.jsx';
 
 const txt = (n) => (n === null || n === undefined ? '' : String(n).replace('.', ','));
 const numero = (s) => { const t = String(s ?? '').trim().replace(',', '.'); if (t === '') return null; const n = Number(t); return Number.isFinite(n) ? n : NaN; };
@@ -137,10 +139,17 @@ function ComissaoGeral() {
   );
 }
 
-export default function Estabelecimento({ ehDono }) {
+export default function Estabelecimento({ ehDono, aoReconfigurar }) {
   return (
     <section className="tela estabelecimento-real" data-testid="tela-estabelecimento">
       <header className="tela-topo"><h1>Estabelecimento</h1></header>
+      {ehDono && (
+        <>
+          {aoReconfigurar && <div className="acoes"><Btn onClick={aoReconfigurar} data-testid="reconfigurar-abrir">Reconfigurar estabelecimento</Btn></div>}
+          <RegrasAtendimento />
+          <LinkAgendamento />
+        </>
+      )}
       <h2 className="est-subtitulo-real">Endereço e localização</h2>
       <LocalDaLoja />
       {ehDono && (

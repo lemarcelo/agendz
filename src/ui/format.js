@@ -5,7 +5,7 @@ import { Rot } from '../domain/tipos.js';
 
 export const nomeServicos = (st, a) => servicosPorIds(st, a.servicoIds, a.porte).map((s) => s.nome).join(' + ') || ((a.produtos || []).length ? 'Venda de produtos' : '');
 export const clienteDe = (st, a) => st.clientes.find((c) => c.id === a.clienteId);
-export const nomeCliente = (st, a) => { if (a.local && !a.clienteId) return a.nomeAvulso || 'Atendimento local'; const c = clienteDe(st, a); return c ? (c.apelido || c.nome) : '—'; };
+export const nomeCliente = (st, a) => { if (!a.clienteId) return a.nomeAvulso || (a.local ? 'Atendimento local' : 'Sem cadastro'); const c = clienteDe(st, a); return c ? (c.apelido || c.nome) : '—'; };
 // "Civic · ABC-1234" (vazio em venda de produto)
 export const textoVeiculo = (a) => (a.veiculo ? [a.veiculo.modelo, a.veiculo.placa].filter(Boolean).join(' · ') : '');
 export const textoBox = (st, a) => (a.boxId ? nomeBox(st, a.boxId) : '');

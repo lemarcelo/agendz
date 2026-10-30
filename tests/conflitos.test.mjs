@@ -301,3 +301,17 @@ for (const seed of [1, 7, 42, 2026]) {
     }
   });
 }
+
+test('o cliente (link ou WhatsApp) nunca ocupa um horário que outro cliente já pediu (a confirmar) ou confirmou; a equipe ainda pode sobrepor um pedido a confirmar', () => {
+  const inicio = tsAt(dia(4), '10:00');
+  const a = cria({ inicio }); assert.ok(a.ok, JSON.stringify(a));
+  assert.equal(st().agendamentos.find((x) => x.id === a.agendamento.id).status, 'a_confirmar');
+  for (const origem of ['whatsapp', 'link']) {
+    const v = R.validarHorario(st(), { profissionalId: 'u-pablo', inicio, servicoIds: ['s-lav-simples'], agora: store.agora(), origem });
+    assert.ok(v.erros.some((e) => /reservado por outro cliente|já está confirmado/.test(e)), `${origem}: ${JSON.stringify(v.erros)}`);
+    assert.ok(!R.horariosLivres(st(), { profissionalId: 'u-pablo', dayTs: dia(4), servicoIds: ['s-lav-simples'], agora: store.agora(), origem }).includes(inicio), `${origem}: o horário pedido não é oferecido`);
+  }
+  const painel = R.validarHorario(st(), { profissionalId: 'u-pablo', inicio, servicoIds: ['s-lav-simples'], agora: store.agora(), origem: 'painel' });
+  assert.deepEqual(painel.erros, [], 'a equipe vê o aviso, mas pode sobrepor um pedido a confirmar');
+  assert.equal(painel.pendentes.length, 1);
+});

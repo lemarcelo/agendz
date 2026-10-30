@@ -66,7 +66,7 @@ export const clientePodeCancelar = (a, agora) => !!a && [STATUS.A_CONFIRMAR, STA
 const botoesDoModelo = (m, a, agora) => (m.botoes || []).filter((b) => b !== 'Cancelar' || clientePodeCancelar(a, agora));
 
 export function enviarAoCliente(s, a, chave, agora, extra = {}) {
-  if (a && a.local) return null; // atendimento local não tem cliente para avisar
+  if (a && (a.local || !a.clienteId)) return null; // atendimento local e horário sem cliente cadastrado não têm quem avisar
   const modelo = s.modelos.find((m) => m.chave === chave) || s.modelos.find((m) => m.id === chave);
   if (!modelo) return null;
   const msg = {
@@ -126,10 +126,12 @@ export function gravarVeiculo(s, cliente, rv) {
 
 export function criarAgendamento(s, dados, autor, agora) {
   const { clienteId, profissionalId, servicoIds, inicio, origem = 'painel', encaixe = false, boxId } = dados;
+  // Horário sem cliente cadastrado (Atender só com nome ou sem nada): fica com o nome avulso, nasce confirmado (ninguém para confirmar) e não manda mensagem.
+  const semCliente = !clienteId && dados.semCliente === true;
   if (dados.status !== undefined && !Object.values(STATUS).includes(dados.status)) return { ok: false, erros: ['Status inválido.'] };
   { const e = errosServicoIds(s, servicoIds, { ativos: true }); if (e) return { ok: false, erros: [e] }; }
-  const cliente = s.clientes.find((c) => c.id === clienteId);
-  if (!cliente) return { ok: false, erros: ['Escolha o cliente.'] };
+  const cliente = semCliente ? null : s.clientes.find((c) => c.id === clienteId);
+  if (!cliente && !semCliente) return { ok: false, erros: ['Escolha o cliente.'] };
   const rv = resolverVeiculo(s, cliente, dados);
   if (!rv.ok) return { ok: false, erros: rv.erros };
   const v = validarHorario(s, { profissionalId, inicio, servicoIds, porte: rv.veiculo?.porte, boxId, encaixe, origem, agora });
@@ -137,11 +139,11 @@ export function criarAgendamento(s, dados, autor, agora) {
   const plano = montarPlano({ inicio, servicos: v.servicos, estab: s.estabelecimento, agora });
   const semNotificacoes = notificacoesEfetivas(v.servicos, s.estabelecimento).lista.length === 0;
   const porLink = origem === 'link'; // pedido do cliente pelo link: nasce "Cliente agendou" (a confirmar pelo estabelecimento) e só recebe os lembretes de 24 h e 2 h
-  let status = porLink ? STATUS.A_CONFIRMAR : dados.status || STATUS.A_CONFIRMAR;
+  let status = porLink ? STATUS.A_CONFIRMAR : semCliente ? STATUS.CONFIRMADO : dados.status || STATUS.A_CONFIRMAR;
   // O cliente que agenda pelo WhatsApp nasce confirmado quando não há nenhuma notificação configurada.
   if (origem === 'whatsapp') status = semNotificacoes ? STATUS.CONFIRMADO : STATUS.A_CONFIRMAR;
   const a = {
-    id: nextId(s, 'a'), clienteId, profissionalId, servicoIds: [...servicoIds], inicio, status, encaixe, reagendado: false, origem,
+    id: nextId(s, 'a'), clienteId: cliente ? clienteId : null, ...(semCliente ? { nomeAvulso: limparTexto(String(dados.nomeAvulso || ''), 60).trim() } : {}), profissionalId, servicoIds: [...servicoIds], inicio, status, encaixe, reagendado: false, origem,
     veiculoId: gravarVeiculo(s, cliente, rv), veiculo: rv.veiculo, porte: rv.veiculo?.porte, boxId: v.boxId,
     criadoEm: agora, plano: porLink ? [] : status === STATUS.A_CONFIRMAR ? plano : plano.map((p) => ({ ...p, estado: 'pulada' })),
     ...(porLink ? { clienteAgendou: true, lembretes: montarLembretes({ inicio, agora }) } : {}),
@@ -453,7 +455,7 @@ export function registrarAtendimentoLocal(s, { profissionalId, servicoIds, nome,
 // Sem data (ou data de agora/passado): atendimento já feito (local, concluído nessa data). Data futura: agendamento (a confirmar ou confirmado).
 // O único requisito fixo é ≥1 serviço ou produto; o resto depende dos campos obrigatórios de cada tipo (Estabelecimento > Regras).
 export const CAMPOS_ATENDER = { nome: 'nome', telefone: 'telefone', profissional: 'profissional', vendedor: 'vendedor', formaPagamento: 'forma de pagamento' };
-export const CAMPOS_OBRIGATORIOS_PADRAO = { futuro: ['nome', 'telefone'], local: [] };
+export const CAMPOS_OBRIGATORIOS_PADRAO = { futuro: [], local: [] }; // de fábrica nada é obrigatório; o dono marca em Estabelecimento > Regras do atendimento
 export const camposObrigatorios = (s, tipo) => {
   const c = (s.estabelecimento.camposObrigatorios || CAMPOS_OBRIGATORIOS_PADRAO)[tipo];
   return Array.isArray(c) ? c : CAMPOS_OBRIGATORIOS_PADRAO[tipo];
@@ -485,11 +487,11 @@ export function atender(s, d, autor, agora) {
   if (!ids.length) return { ok: false, erros: ['Para agendar um horário futuro, escolha ao menos um serviço. Produto sozinho só no atendimento de agora.'] };
   const status = d.status === undefined || d.status === null || d.status === '' ? STATUS.A_CONFIRMAR : d.status;
   if (![STATUS.A_CONFIRMAR, STATUS.CONFIRMADO].includes(status)) return { ok: false, erros: ['Agendamento futuro nasce a confirmar ou confirmado.'] };
-  if (!cli && !telefoneNacional(d.telefone)) return { ok: false, erros: ['Para agendar, informe o telefone do cliente (é por ele que o aviso do horário é enviado).'] };
   if (produtos.length > 10) return { ok: false, erros: ['No máximo 10 produtos.'] };
   const rc = resolverClienteDoAtendimento(s, d, agora);
   if (!rc.ok) return rc;
-  const r = criarAgendamento(s, { clienteId: rc.cliente.id, profissionalId: d.profissionalId, servicoIds: ids, inicio: Number(d.inicio), status, encaixe: !!d.encaixe, origem: 'painel', boxId: d.boxId, veiculoId: d.veiculoId, veiculo: d.veiculo }, autor, agora);
+  // Sem telefone (e sem cliente escolhido) não há cadastro: o horário fica com o nome avulso, confirmado e sem aviso por WhatsApp. Só vira obrigatório se a loja marcar.
+  const r = criarAgendamento(s, { clienteId: rc.cliente ? rc.cliente.id : null, ...(rc.cliente ? {} : { semCliente: true, nomeAvulso: rc.nomeAvulso }), profissionalId: d.profissionalId, servicoIds: ids, inicio: Number(d.inicio), status, encaixe: !!d.encaixe, origem: 'painel', boxId: d.boxId, veiculoId: d.veiculoId, veiculo: d.veiculo }, autor, agora);
   if (!r.ok) return r;
   for (const p of produtos) {
     const x = adicionarProdutoAoAgendamento(s, r.agendamento.id, { materialId: p && p.materialId, qtd: p && p.qtd, vendedorId: d.vendedorId }, autor, agora);
@@ -612,6 +614,7 @@ export function enviarMensagemDoProfissional(s, id, modeloId, valores, autor, ag
   const a = s.agendamentos.find((x) => x.id === id);
   const m = s.modelos.find((x) => x.id === modeloId);
   if (!a || !m) return { ok: false, erros: ['Escolha um modelo de mensagem.'] };
+  if (!a.clienteId) return { ok: false, erros: ['Esse horário não tem cliente cadastrado (sem telefone): não há para quem enviar.'] };
   if (MODELOS_SO_AUTOMATICOS.includes(m.chave)) return { ok: false, erros: ['Esse modelo é enviado só pelo sistema.'] };
   const msg = {
     id: nextId(s, 'w'), em: agora, agendamentoId: a.id, clienteId: a.clienteId, telefone: clienteDe(s, a)?.telefone, modeloId: m.id,
@@ -784,7 +787,7 @@ export function tick(s, agora) {
         a.faltaConfirmacao = { em: a.inicio };
         if (!a.clienteAgendou) enviarAoCliente(s, a, 'falta_confirmacao', a.inicio); // quem pediu pelo link não deixou de confirmar nada: quem não confirmou foi o estabelecimento
         const c = clienteDe(s, a);
-        avisarPainel(s, a, `Sem confirmação: ${c.apelido || c.nome} não confirmou o agendamento de ${nomesServicos(s, a)} com ${profissionalDe(s, a)?.apelido || profissionalDe(s, a)?.nome}, marcado para ${fmtDate(a.inicio)} às ${fmtHM(a.inicio)}.`, a.inicio);
+        avisarPainel(s, a, `Sem confirmação: ${c ? c.apelido || c.nome : a.nomeAvulso || 'o cliente'} não confirmou o agendamento de ${nomesServicos(s, a)} com ${profissionalDe(s, a)?.apelido || profissionalDe(s, a)?.nome}, marcado para ${fmtDate(a.inicio)} às ${fmtHM(a.inicio)}.`, a.inicio);
         registrar(s, a, AUTOR_SISTEMA, 'aviso', null, 'Horário chegou sem confirmação do cliente', a.inicio);
       }
       if (agora >= fim && !manual) {

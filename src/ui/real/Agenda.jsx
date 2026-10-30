@@ -274,7 +274,7 @@ export default function Agenda({ ehProprio = false, ehDono = false, meuId = '', 
 
   const atendem = useMemo(() => profs.filter((p) => p.atende), [profs]);
   const nomeProf = (id) => (profs.find((p) => p.id === id) || {}).nome || Rot('profissional');
-  const nomeCliente = (a) => (a.clienteId && clientes.get(a.clienteId)) || 'Cliente';
+  const nomeCliente = (a) => (a.clienteId ? clientes.get(a.clienteId) : a.nomeAvulso) || (a.clienteId ? 'Cliente' : a.local || a.origem === 'atendimento' ? 'Atendimento local' : 'Sem cadastro');
   const visiveis = useMemo(() => (lista || []).filter((a) => selecionado === 'todos' || a.profissionalId === selecionado).sort((x, y) => x.inicio - y.inicio), [lista, selecionado]);
   const doDia = visiveis.filter((a) => a.inicio >= cursor && a.inicio < addDays(cursor, 1));
   const futuros = visiveis.filter((a) => a.inicio >= addDays(cursor, 1) && ATIVOS.includes(a.status));

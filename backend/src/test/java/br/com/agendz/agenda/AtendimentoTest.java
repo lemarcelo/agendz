@@ -157,7 +157,18 @@ class AtendimentoTest extends BaseApi {
     }
 
     @Test
-    void futuroPedeNomeETelefoneEViraAgendamentoAConfirmar() throws Exception {
+    void futuroSemRegraMarcadaAgendaSemCadastroConfirmadoEPedeNomeETelefoneQuandoMarcado() throws Exception {
+        Instant outro = futuro.plus(5, ChronoUnit.DAYS);
+        // de fábrica nada é obrigatório: sem nome nem telefone o horário fica confirmado, sem cadastro de cliente
+        atender(APEX, davi, corpo(pabloId, ",\"inicio\":\"" + outro + "\"")).andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("confirmado")).andExpect(jsonPath("$.clienteId").doesNotExist());
+        assertEquals(0, jdbc.queryForObject("select count(*) from cliente", Integer.class));
+        // o horário ocupado continua valendo
+        atender(APEX, davi, corpo(pabloId, ",\"inicio\":\"" + outro + "\"")).andExpect(status().isConflict());
+        // o dono marca nome e telefone: volta a exigir
+        regras(APEX, davi, "{\"camposObrigatorios\":{\"futuro\":[\"nome\",\"telefone\"],\"local\":[]}}").andExpect(status().isOk());
+        atender(APEX, davi, corpo(pabloId, ",\"inicio\":\"" + outro.plus(2, ChronoUnit.DAYS) + "\"")).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("Preencha os campos obrigatórios: nome, telefone."));
         atender(APEX, davi, corpo(pabloId, ",\"inicio\":\"" + futuro + "\"")).andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.mensagem").value("Preencha os campos obrigatórios: nome, telefone."));
         atender(APEX, davi, corpo(pabloId, ",\"inicio\":\"" + futuro + "\",\"nome\":\"Ana\"")).andExpect(status().isBadRequest())

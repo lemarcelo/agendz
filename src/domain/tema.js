@@ -135,6 +135,7 @@ function tokensDoModo(c1, c2, escuro) {
     '--tema-btn': `linear-gradient(135deg, ${btn.a}, ${btn.b})`,
     '--tema-btn-fg': btn.fg,
     '--tema-btn-borda': 'transparent',
+    '--tema-btn-aro': rgba(btn.b, escuro ? 0.55 : 0.4), // aro suave da cor do botão (link do cliente)
     '--acento': escuro ? comContraste(h, sb, Math.max(l, 0.58), fundoAtivo(true), 4.5, 0.01) : comContraste(h, sb, Math.min(l, 0.46), fundoAtivo(false), 3, -0.01),
   };
 }

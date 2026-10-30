@@ -207,7 +207,7 @@ let contexto;
 {
   const { ctx, p } = await abrir({ width: 1280, height: 860 }, '');
   await p.getByTestId('login-id').fill('alan'); await p.getByTestId('login-senha').fill('Minha-senha'); await p.getByTestId('login-entrar').click();
-  await p.getByTestId('nav-inicio').click(); await p.getByTestId('link-real').waitFor();
+  await p.getByTestId('nav-estabelecimento').click(); await p.getByTestId('tela-estabelecimento').waitFor();
   assert.equal(await p.getByTestId('link-endereco').inputValue(), `${url}#agendar`);
   assert.equal(await p.getByTestId('link-abrir').getAttribute('target'), '_blank'); assert.match(await p.getByTestId('link-abrir').getAttribute('rel'), /noopener/);
   assert.equal(await p.getByTestId('link-indisponivel').count(), 0);
@@ -227,7 +227,7 @@ let contexto;
   await p.getByTestId('pub-banner').waitFor();
   assert.ok(deHoje('GET', '/api/publico/agendar').at(-1).auth === '', 'mesmo logado, a página do cliente não manda o token do painel');
   await p.getByTestId('pub-voltar-painel').click();
-  await p.getByTestId('nav-inicio').click(); await p.getByTestId('painel-real').waitFor();
+  await p.getByTestId('nav-estabelecimento').click(); await p.getByTestId('tela-estabelecimento').waitFor();
   ok('logado, a página do cliente avisa, não manda o token do painel e volta ao painel');
   await ctx.close();
 }

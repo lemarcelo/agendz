@@ -125,3 +125,11 @@ test('logo cinza ou preta gera degradê neutro (sem tom avermelhado) e o anel de
     }
   }
 });
+
+test('o tema traz o aro do botão (link do cliente) nos dois modos, translúcido e da cor do degradê', async () => {
+  const { paletaDoTema } = await import('../src/domain/tema.js');
+  const p = paletaDoTema({ temaCor: 'logo', corTema: '#4ada54', corTema2: '#d9e652' });
+  assert.ok(p, 'tema pela logo gera paleta');
+  assert.equal(paletaDoTema({}), null, 'sem tema não há token (o CSS usa a cor de sempre)');
+  for (const modo of ['claro', 'escuro']) assert.match(p[modo]['--tema-btn-aro'], /^rgba\(/, modo);
+});

@@ -1000,3 +1000,16 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
 .sup-acoes { display: flex; gap: 8px; flex-wrap: wrap; }
 .sup-vazio { padding: 24px 0; text-align: center; }
 @media (max-width: 700px) { .sup-balao { max-width: 94%; } .sup-msgs { max-height: 46vh; } }
+
+/* link de agendamento do cliente: botões maiores, com o degradê e o aro da cor da loja (tema.js; sem tema, o preto de sempre) */
+.pub-cartao .btn { min-height: 52px; padding: 10px 22px; border-radius: 14px; font-size: 16px; font-weight: 650; letter-spacing: .01em; transition: transform .12s, box-shadow .12s, filter .12s; }
+.pub-cartao .btn-sm { min-height: 44px; padding: 8px 16px; font-size: 14.5px; }
+.pub-cartao .btn-primario { box-shadow: 0 0 0 3px var(--tema-btn-aro, transparent), 0 6px 14px -6px var(--tema-btn-aro, rgba(0,0,0,.35)); }
+.pub-cartao .btn-primario:hover:not(:disabled) { transform: translateY(-1px); }
+.pub-cartao .btn-primario:active:not(:disabled) { transform: translateY(0); box-shadow: 0 0 0 3px var(--tema-btn-aro, transparent); }
+.pub-cartao .btn:focus-visible { outline: 3px solid var(--tema-btn-aro, var(--ink)); outline-offset: 2px; }
+.pub-rodape { gap: 12px; } .pub-rodape .btn, .pub-cartao .acoes .btn { flex: 1 1 140px; }
+.pub-hora, .pub-barb, .pub-dia, .pub-porte { transition: box-shadow .12s, border-color .12s; }
+.pub-hora { min-height: 48px; border-radius: 12px; } .pub-barb { min-height: 48px; }
+.pub-hora.on, .pub-dia.on, .pub-barb.on, .pub-porte.on { box-shadow: 0 0 0 3px var(--tema-btn-aro, transparent); }
+.pub-item { min-height: 56px; border-radius: 14px; } .pub-item.on { border-color: var(--tema-btn-aro, var(--ink)); box-shadow: 0 0 0 2px var(--tema-btn-aro, var(--ink)); }

@@ -28,7 +28,7 @@ public class RegrasAtendimento {
     public static final String FORMA_DE_FABRICA = "pix";
     /** Campos que o Atender pode exigir. A forma de pagamento só existe no atendimento local (o futuro ainda não foi pago). */
     public static final List<String> CAMPOS = List.of("nome", "telefone", "profissional", "vendedor", "formaPagamento");
-    public static final List<String> FUTURO_DE_FABRICA = List.of("nome", "telefone");
+    public static final List<String> FUTURO_DE_FABRICA = List.of();
     public static final List<String> LOCAL_DE_FABRICA = List.of();
 
     public record Regras(String formaPagamentoPadrao, List<String> futuro, List<String> local) {

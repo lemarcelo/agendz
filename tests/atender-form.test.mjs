@@ -24,13 +24,15 @@ test('retroativo é só o que aconteceu antes de hoje 00:00; hoje, mesmo em hora
   assert.equal(ehRetroativo(null, AGORA), false);
 });
 
-test('agendamento pede nome e telefone; cadastro escolhido com nome e telefone dispensa; atendimento local não pede nada', () => {
+test('de fábrica nada é obrigatório; com nome e telefone marcados: cadastro escolhido com nome e telefone dispensa', () => {
+  const marcado = { formaPagamentoPadrao: 'pix', futuro: ['nome', 'telefone'], local: [] };
   assert.deepEqual(camposFaltando('local', { nome: '', telefone: '', cliente: null }), []);
-  assert.deepEqual(camposFaltando('futuro', { nome: '', telefone: '', cliente: null }), ['nome', 'telefone']);
-  assert.deepEqual(camposFaltando('futuro', { nome: ' ', telefone: '1199', cliente: null }), ['nome', 'telefone'], 'telefone curto não vale');
-  assert.deepEqual(camposFaltando('futuro', { nome: 'Ana', telefone: '(11) 97777-6666', cliente: null }), []);
-  assert.deepEqual(camposFaltando('futuro', { nome: '', telefone: '', cliente: { semNome: false } }), []);
-  assert.deepEqual(camposFaltando('futuro', { nome: '', telefone: '', cliente: { semNome: true } }), ['nome'], 'cadastro só com telefone ainda precisa de nome');
+  assert.deepEqual(camposFaltando('futuro', { nome: '', telefone: '', cliente: null }), [], 'agendar sem dados do cliente vale por padrão');
+  assert.deepEqual(camposFaltando('futuro', { nome: '', telefone: '', cliente: null }, marcado), ['nome', 'telefone']);
+  assert.deepEqual(camposFaltando('futuro', { nome: ' ', telefone: '1199', cliente: null }, marcado), ['nome', 'telefone'], 'telefone curto não vale');
+  assert.deepEqual(camposFaltando('futuro', { nome: 'Ana', telefone: '(11) 97777-6666', cliente: null }, marcado), []);
+  assert.deepEqual(camposFaltando('futuro', { nome: '', telefone: '', cliente: { semNome: false } }, marcado), []);
+  assert.deepEqual(camposFaltando('futuro', { nome: '', telefone: '', cliente: { semNome: true } }, marcado), ['nome'], 'cadastro só com telefone ainda precisa de nome');
 });
 
 test('resumo soma só os serviços marcados', () => {
@@ -91,11 +93,11 @@ test('campos obrigatórios seguem as regras, na ordem delas, com o rótulo da te
   assert.deepEqual(camposFaltando('local', { ...vazio, temProdutos: false }, { ...regras, local: ['vendedor'] }), [], 'sem produto o vendedor não é exigido');
   assert.deepEqual(camposFaltando('futuro', { ...vazio, telefone: '' }, regras), ['nome'], 'o futuro só exige o que a regra do futuro manda');
   assert.deepEqual(camposFaltando('futuro', { ...vazio, forma: '' }, { ...regras, futuro: ['formaPagamento'] }), [], 'forma de pagamento não existe no agendamento');
-  assert.deepEqual(camposFaltando('futuro', vazio), ['nome', 'telefone'], 'sem regras: padrão de fábrica');
+  assert.deepEqual(camposFaltando('futuro', vazio), [], 'sem regras: padrão de fábrica não exige nada');
   assert.deepEqual(camposFaltando('local', vazio), [], 'sem regras o atendimento feito não exige nada');
   assert.equal(exige(regras, 'local', 'telefone'), true);
   assert.equal(exige(regras, 'futuro', 'telefone'), false);
-  assert.equal(exige(undefined, 'futuro', 'telefone'), true);
+  assert.equal(exige(undefined, 'futuro', 'telefone'), false);
 });
 
 // ---------- estética: veículo, porte e box ----------

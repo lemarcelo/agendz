@@ -117,7 +117,7 @@ function Shell({ user, st, tema, setTema }) {
     pode(user, 'clientes') && ['clientes', 'Clientes', 'users'],
     pode(user, 'servicos') && ['servicos', 'Serviços', iconeServicosAtivo()],
     pode(user, 'relatorios') && ['relatorios', 'Relatórios', 'list'],
-    ehGestor(user) && ['ganhos', 'Meus ganhos', 'wallet'],
+    ehGestor(user) && ['ganhos', 'Meus ganhos', 'gauge'],
     pode(user, 'estoque') && ['estoque', 'Estoque', 'box'],
     pode(user, 'financeiro') && ['financeiro', 'Financeiro', 'wallet'],
     pode(user, 'estabelecimento') && ['estab', 'Estabelecimento', 'store'],

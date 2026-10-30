@@ -18,7 +18,7 @@ export const ehRetroativo = (inicio, agora) => Number.isFinite(inicio) && tipoDo
 // (o aviso do horário vai por telefone), atendimento local não pede nada e a forma padrão é Pix.
 export const FORMAS_PAGAMENTO = [['pix', 'Pix'], ['dinheiro', 'Dinheiro'], ['cartao', 'Cartão']];
 export const CAMPOS_DO_ATENDER = { nome: 'nome', telefone: 'telefone', profissional: 'profissional', vendedor: 'vendedor', formaPagamento: 'forma de pagamento' };
-export const REGRAS_DE_FABRICA = { formaPagamentoPadrao: 'pix', futuro: ['nome', 'telefone'], local: [] };
+export const REGRAS_DE_FABRICA = { formaPagamentoPadrao: 'pix', futuro: [], local: [] };
 export const formaValida = (f) => FORMAS_PAGAMENTO.some(([k]) => k === f);
 
 // Forma que vale para o atendimento local: a escolhida ou o padrão. '' = sem padrão e nada escolhido (precisa escolher).

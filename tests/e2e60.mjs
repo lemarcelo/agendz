@@ -120,7 +120,7 @@ const A1 = id(101), A4 = id(104);
   assert.ok(await p.locator('[data-testid="cartao"]').count() >= 1);
   banco.length = 0; banco.push(...lista);
   // aviso novo aparece em Início sem recarregar
-  await p.getByTestId('nav-inicio').click();
+  await p.getByTestId('nav-avisos').click();
   await p.getByTestId('avisos-vazio').waitFor();
   avisosServidor = [{ id: id(900), tipo: 'cancelou', texto: 'Bruno cancelou o horário de quinta.', em: '2026-10-28T12:00:00Z', lido: false }];
   await sinal(p);

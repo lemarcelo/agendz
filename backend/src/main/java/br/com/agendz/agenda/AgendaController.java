@@ -245,7 +245,7 @@ public class AgendaController {
         if (new HashSet<>(servicoIds).size() != servicoIds.size()) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "O mesmo serviço aparece duas vezes.");
         boolean encaixe = Boolean.TRUE.equals(d.encaixe());
         Agendamento criado = idempotencia.executar(chave, UUID.fromString(jwt.getSubject()), "POST /api/agendamentos", d, Agendamento.class, () -> banco.naLoja(jdbc -> {
-            return inserirAgendamento(jdbc, loja, jwt, d.clienteId(), d.profissionalId(), servicoIds, d.inicio(), status, encaixe, d.veiculoId(), d.veiculo(), d.boxId());
+            return inserirAgendamento(jdbc, loja, jwt, d.clienteId(), null, d.profissionalId(), servicoIds, d.inicio(), status, encaixe, d.veiculoId(), d.veiculo(), d.boxId());
         }));
         return ResponseEntity.status(HttpStatus.CREATED).body(criado);
     }
@@ -254,12 +254,18 @@ public class AgendaController {
      * Agendamento futuro (usado por criar e por atender). Dentro da transação da loja; a mesma ordem de validações do simulador:
      * serviços, cliente, veículo (estética), profissional/expediente, conflito do profissional, box.
      */
-    private Agendamento inserirAgendamento(JdbcTemplate jdbc, Loja loja, Jwt jwt, UUID clienteId, UUID profissionalId, List<UUID> servicoIds, Instant inicioBruto, String status, boolean encaixe,
+    private Agendamento inserirAgendamento(JdbcTemplate jdbc, Loja loja, Jwt jwt, UUID clienteId, String nomeAvulsoPedido, UUID profissionalId, List<UUID> servicoIds, Instant inicioBruto, String status, boolean encaixe,
                                            UUID veiculoId, ClienteService.EntradaVeiculo veiculoNovo, UUID boxPedido) {
         carregarServicos(jdbc, servicoIds, null); // só confere que existem e estão ativos; o preço do porte vem depois do veículo
-        if (clienteId == null) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha o cliente.");
-        Integer clientesAchados = jdbc.queryForObject("select count(*) from cliente where id = ?", Integer.class, clienteId);
-        if (clientesAchados == null || clientesAchados == 0) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, "Escolha o cliente.");
+        // Pelo botão Atender o horário futuro pode ficar sem cadastro (só o nome, ou nem isso): nasce confirmado e sem aviso ao cliente. Pela tela de agendar o cliente é obrigatório.
+        boolean semCadastro = clienteId == null && nomeAvulsoPedido != null;
+        if (clienteId == null && !semCadastro) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha o cliente.");
+        if (clienteId != null) {
+            Integer clientesAchados = jdbc.queryForObject("select count(*) from cliente where id = ?", Integer.class, clienteId);
+            if (clientesAchados == null || clientesAchados == 0) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, "Escolha o cliente.");
+        }
+        if (semCadastro) status = CONFIRMADO;
+        String avulso = semCadastro && !nomeAvulsoPedido.isEmpty() ? nomeAvulsoPedido : null;
         ClienteService.VeiculoDoAgendamento vei = clientes.resolverVeiculo(jdbc, loja, clienteId, veiculoId, veiculoNovo);
         List<ServicoLinha> servicos = carregarServicos(jdbc, servicoIds, vei == null ? null : vei.porte());
         travarProfissional(jdbc, profissionalId);
@@ -274,9 +280,9 @@ public class AgendaController {
         List<UUID> pendentes = conferirConflitos(ocupacao.conflitos(jdbc, profissionalId, new UUID(0, 0), plano), encaixe);
         UUID boxId = ocupacao.escolherBox(jdbc, loja, plano, boxPedido, null, new UUID(0, 0));
         UUID id = jdbc.queryForObject(
-                "insert into agendamento (loja_id, cliente_id, profissional_id, inicio, fim_servico, fim_ocupado, status, encaixe, total, box_id, veiculo_id, porte, veiculo_placa, veiculo_marca, veiculo_modelo, veiculo_cor) "
-                        + "values (?::uuid, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) returning id",
-                UUID.class, loja.id().toString(), clienteId, profissionalId, utc(inicio), utc(plano.fimServico()), utc(plano.fimOcupado()), status, encaixe, total, boxId,
+                "insert into agendamento (loja_id, cliente_id, nome_avulso, profissional_id, inicio, fim_servico, fim_ocupado, status, encaixe, total, box_id, veiculo_id, porte, veiculo_placa, veiculo_marca, veiculo_modelo, veiculo_cor) "
+                        + "values (?::uuid, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) returning id",
+                UUID.class, loja.id().toString(), clienteId, avulso, profissionalId, utc(inicio), utc(plano.fimServico()), utc(plano.fimOcupado()), status, encaixe, total, boxId,
                 vei == null ? null : vei.veiculoId(), vei == null ? null : vei.porte(), vei == null ? null : vei.placa(), vei == null ? null : vei.marca(), vei == null ? null : vei.modelo(), vei == null ? null : vei.cor());
         ocupacao.gravarBlocos(jdbc, loja.id(), id, plano);
         gravarServicos(jdbc, loja, id, servicos);
@@ -300,10 +306,10 @@ public class AgendaController {
 
     /**
      * Botão Atender (espelho de `atender`/`registrarAtendimentoLocal` em src/domain/engine.js):
-     * - data futura (mais de 1 min à frente) = agendamento a confirmar ou confirmado, com o cliente achado/criado por nome+telefone;
+     * - data futura (mais de 1 min à frente) = agendamento a confirmar ou confirmado, com o cliente achado/criado por nome+telefone (sem telefone nem cliente escolhido: só o nome, confirmado e sem aviso);
      * - sem data, agora ou passado = atendimento local, já CONCLUÍDO, sem conflito de horário (já aconteceu), sem mensagem ao cliente;
      * - dia anterior a hoje exige o motivo (5 a 300 letras) e é só da recepção/dono; o profissional atende e lança sempre como ele mesmo.
-     * Campos obrigatórios e forma de pagamento padrão: de Estabelecimento > Regras (`RegrasAtendimento`; de fábrica futuro = nome e telefone, local = nenhum, forma Pix). Produtos (5d-4a): venda com serviço ou só de produto (só no atendimento de agora), estoque sai ao concluir. A forma de pagamento do atendimento local é só registrada (5d-4c).
+     * Campos obrigatórios e forma de pagamento padrão: de Estabelecimento > Regras (`RegrasAtendimento`; de fábrica nada é obrigatório, nem no futuro nem no local, forma Pix). Produtos (5d-4a): venda com serviço ou só de produto (só no atendimento de agora), estoque sai ao concluir. A forma de pagamento do atendimento local é só registrada (5d-4c).
      */
     @PostMapping("/api/atendimentos")
     public ResponseEntity<Agendamento> atender(@Valid @RequestBody NovoAtendimento d, @RequestHeader(value = "Idempotency-Key", required = false) String chave, @AuthenticationPrincipal Jwt jwt) {
@@ -357,7 +363,7 @@ public class AgendaController {
                 UUID vendedor = produtos.isEmpty() ? null : vendedorPedido != null ? vendedorPedido : profissionalId;
                 if (vendedor != null) exigirVendedor(jdbc, vendedor);
                 ClienteService.DoAtendimento quem = clientes.resolverDoAtendimento(jdbc, d.nome(), d.telefone(), d.clienteId());
-                Agendamento criado = inserirAgendamento(jdbc, loja, jwt, quem.clienteId(), profissionalId, servicoIds, d.inicio(), status, Boolean.TRUE.equals(d.encaixe()), d.veiculoId(), d.veiculo(), d.boxId());
+                Agendamento criado = inserirAgendamento(jdbc, loja, jwt, quem.clienteId(), quem.clienteId() == null ? (quem.nomeAvulso() == null ? "" : quem.nomeAvulso()) : null, profissionalId, servicoIds, d.inicio(), status, Boolean.TRUE.equals(d.encaixe()), d.veiculoId(), d.veiculo(), d.boxId());
                 if (!produtos.isEmpty()) lancarProdutos(jdbc, loja, criado.id(), produtos, vendedor, jwt);
                 if (comCupom) {
                     // cupom recusado: o agendamento também não é criado (a transação volta atrás; só a tentativa errada fica gravada)

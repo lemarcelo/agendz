@@ -235,6 +235,8 @@ export function validarHorario(state, { profissionalId, inicio, servicoIds, port
   out.pendentes = conflitos.filter((c) => c.status === STATUS.A_CONFIRMAR);
   out.confirmados = conflitos.filter((c) => c.status !== STATUS.A_CONFIRMAR);
   if (!encaixe && out.confirmados.length) erros.push('Esse horário já está confirmado para outro cliente. Para forçar, marque como encaixe.');
+  // o próprio cliente (link ou WhatsApp) nunca ocupa um horário já pedido ou confirmado por outro: só a equipe pode sobrepor um pedido a confirmar (e o encaixe, um confirmado)
+  else if (cliente && out.pendentes.length) erros.push('Esse horário acabou de ser reservado por outro cliente. Escolha outro horário.');
   const box = escolherBox(state, ocup, { boxId, preferido: boxPreferido, ignoreId });
   if (box.erro) erros.push(box.erro); else out.boxId = box.id;
   return out;

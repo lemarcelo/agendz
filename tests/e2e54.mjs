@@ -112,7 +112,7 @@ async function entrar(viewport = { width: 1280, height: 860 }) {
   p.on('dialog', async (d) => { erros.push('DIALOG: ' + d.message()); await d.dismiss(); });
   await p.goto(url);
   await p.getByTestId('login-id').fill('alan'); await p.getByTestId('login-senha').fill('Minha-senha'); await p.getByTestId('login-entrar').click();
-  await p.getByTestId('nav-inicio').click(); await p.getByTestId('painel-real').waitFor();
+  await p.getByTestId('nav-estabelecimento').click(); await p.getByTestId('tela-estabelecimento').waitFor();
   return { ctx, p };
 }
 const abrirCartao = async (p) => { await p.getByTestId('nav-agenda').click(); await p.getByTestId('cartao').first().waitFor(); await p.getByTestId('cartao-abrir').first().click(); await p.getByTestId('agendamento-detalhe').waitFor(); };

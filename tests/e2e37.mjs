@@ -277,7 +277,7 @@ const url = `http://127.0.0.1:${servidor.address().port}/`;
   await p.getByTestId('pa-concluir').click();
   await p.getByTestId('agenda-real').waitFor(); // ao concluir o assistente cai na Agenda, não no Início
   assert.equal(await p.getByTestId('nav-agenda').getAttribute('aria-current'), 'page');
-  await p.getByTestId('nav-inicio').click(); await p.getByTestId('painel-real').waitFor();
+  await p.getByTestId('nav-estabelecimento').click(); await p.getByTestId('tela-estabelecimento').waitFor();
   assert.ok(chamadas.some((c) => c.u === '/api/onboarding/concluir'), 'concluir foi chamado'); // o Início também lê as regras do Atender, então a última chamada pode ser outra
   // as senhas não ficaram em nenhum storage
   const guardado = await p.evaluate(() => JSON.stringify([Object.entries(localStorage), Object.entries(sessionStorage)]));
@@ -289,7 +289,7 @@ const url = `http://127.0.0.1:${servidor.address().port}/`;
   const n = await novaPagina();
   await n.p.goto(url);
   await n.p.getByTestId('login-id').fill('alan'); await n.p.getByTestId('login-senha').fill('Minha-senha-nova'); await n.p.getByTestId('login-entrar').click();
-  await n.p.getByTestId('nav-inicio').click(); await n.p.getByTestId('painel-real').waitFor();
+  await n.p.getByTestId('nav-estabelecimento').click(); await n.p.getByTestId('tela-estabelecimento').waitFor();
   assert.equal(await n.p.getByTestId('pa').count(), 0);
   ok('B: assistente concluído não volta');
   // reconfigurar: o dono reabre o assistente pelo painel; começa nos serviços, os existentes ficam travados, nada é concluído de novo
@@ -322,7 +322,7 @@ const url = `http://127.0.0.1:${servidor.address().port}/`;
   assert.match(await n.p.getByTestId('pa').locator('h1').innerText(), /Reconfigurar Dalforno/);
   assert.equal(await n.p.getByTestId('pa-marcar-s-barba').isDisabled(), true); // já existe
   await n.p.getByTestId('pa-voltar').click();
-  await n.p.getByTestId('nav-inicio').click(); await n.p.getByTestId('painel-real').waitFor();
+  await n.p.getByTestId('nav-estabelecimento').click(); await n.p.getByTestId('tela-estabelecimento').waitFor();
   await n.p.getByTestId('reconfigurar-abrir').click();
   await n.p.getByTestId('pa-reconf-senha').fill('Minha-senha-nova');
   await n.p.getByTestId('pa-reconf-confirmar').click();
@@ -338,7 +338,7 @@ const url = `http://127.0.0.1:${servidor.address().port}/`;
   await n.p.getByTestId('pa-continuar-expediente').click();
   await n.p.getByTestId('pa-pronto').waitFor();
   await n.p.getByTestId('pa-concluir').click();
-  await n.p.getByTestId('nav-inicio').click(); await n.p.getByTestId('painel-real').waitFor();
+  await n.p.getByTestId('nav-estabelecimento').click(); await n.p.getByTestId('tela-estabelecimento').waitFor();
   assert.equal(chamadas.filter((c) => c.u === '/api/onboarding/concluir').length, antesConcluir, 'reconfigurar não chama concluir de novo');
   assert.deepEqual(chamadas.filter((c) => c.u === '/api/onboarding/servicos').at(-1).c.itens.map((i) => i.chave), ['s-corte']);
   assert.ok(banco.logins.has('zeca'));

@@ -137,8 +137,8 @@ function LogoPequena({ loja }) {
 
 // Área logada: menu com as telas que já existem no site real. Telas que ainda não chegaram não aparecem (nada de botão morto).
 function Painel({ loja, sessao, aoSair }) {
-  // Depois de entrar (e de concluir o assistente) a pessoa cai na Agenda, que é o que ela usa todo dia; quem não tem a agenda abre o Início.
-  const [aba, setAba] = useState(() => (sessao.papel === 'dono' || (sessao.secoes || []).includes('agenda') ? 'agenda' : 'inicio'));
+  // Depois de entrar (e de concluir o assistente) a pessoa cai na Agenda, que é o que ela usa todo dia; quem não tem a agenda abre a primeira tela do menu.
+  const [aba, setAba] = useState(() => (sessao.papel === 'dono' || (sessao.secoes || []).includes('agenda') ? 'agenda' : (sessao.secoes || []).includes('clientes') ? 'clientes' : 'servicos'));
   const [reconfigurando, setReconfigurando] = useState(false);
   // Meu perfil e aviso de agendamento novo: as escolhas de aviso ficam neste aparelho; o cartão novo pulsa na agenda por alguns segundos.
   const [meus, setMeus] = useState(null);
@@ -173,18 +173,20 @@ function Painel({ loja, sessao, aoSair }) {
   const papel = sessao.papel === 'dono' ? 'Proprietário' : rotulo({ tipo: loja.tipo }, 'profissional', { capitalizado: true });
   // O menu mostra só o que a pessoa pode usar (o servidor confere de novo em cada rota). Serviços todo perfil pode ler; Equipe é do proprietário.
   const dono = sessao.papel === 'dono';
-  const itens = [['inicio', 'Início', 'store']];
+  // Um ícone para cada aba (e o mesmo do Artifact): Estabelecimento = loja, Estoque = caixa, Cupons = etiqueta, Boxes = carro, Comissões = carteira.
+  const itens = [];
   if (dono || (sessao.secoes || []).includes('agenda')) itens.push(['agenda', 'Agenda', 'calendar']);
   if (dono || (sessao.secoes || []).includes('clientes')) itens.push(['clientes', 'Clientes', 'users']);
-  itens.push(['servicos', 'Serviços', 'scissors']);
+  itens.push(['servicos', 'Serviços', tipo.visual.iconeServicos || 'scissors']);
   if (dono) itens.push(['equipe', 'Equipe', 'team']);
-  if (dono && capAtiva('usaRecursoFisico')) itens.push(['boxes', 'Boxes', 'box']);
-  if (dono || (sessao.secoes || []).includes('estabelecimento')) itens.push(['cupons', 'Cupons', 'key']);
-  if (dono || (sessao.secoes || []).includes('estoque')) itens.push(['estoque', 'Estoque', 'tag']);
-  if (dono || (sessao.secoes || []).includes('estabelecimento')) itens.push(['estabelecimento', 'Estabelecimento', 'gauge']);
+  if (dono && capAtiva('usaRecursoFisico')) itens.push(['boxes', 'Boxes', 'car']);
+  if (dono || (sessao.secoes || []).includes('estabelecimento')) itens.push(['cupons', 'Cupons', 'tag']);
+  if (dono || (sessao.secoes || []).includes('estoque')) itens.push(['estoque', 'Estoque', 'box']);
+  if (dono || (sessao.secoes || []).includes('estabelecimento')) itens.push(['estabelecimento', 'Estabelecimento', 'store']);
   if (dono) itens.push(['relatorios', 'Relatórios', 'list']);
   if (dono) itens.push(['comissoes', 'Comissões', 'wallet']);
-  else itens.push(['ganhos', 'Meus ganhos', 'wallet']);
+  else itens.push(['ganhos', 'Meus ganhos', 'gauge']);
+  if (dono || (sessao.secoes || []).includes('agenda')) itens.push(['avisos', 'Avisos', 'bell']);
   itens.push(['suporte', 'Suporte', 'info']);
   return (
     <div className="app">
@@ -209,14 +211,10 @@ function Painel({ loja, sessao, aoSair }) {
       {perfilAberto && <MeuPerfil loja={loja} sessao={sessao} dados={meus} prefs={prefs} aoPrefs={setPrefs} aoMudou={(d) => setMeus((antes) => ({ ...(antes || {}), ...d }))} aoFechar={() => setPerfilAberto(false)} />}
       <div className="corpo">
         <main className="principal">
-          {aba === 'inicio' && (
-            <section className="tela" data-testid="painel-real">
-              <p><b data-testid="painel-nome">{sessao.nome}</b> · <span data-testid="painel-papel">{papel}</span></p>
-              <Aviso>Sua conta está pronta e o acesso é seguro. Clientes, serviços, equipe, a agenda (horários, calendário, status, remarcar e o botão Atender) e as comissões já estão aqui.</Aviso>
-              {(sessao.secoes || []).includes('agenda') && <Avisos />}
-              {sessao.papel === 'dono' && <Btn onClick={() => setReconfigurando(true)} data-testid="reconfigurar-abrir">Reconfigurar estabelecimento</Btn>}
-              {sessao.papel === 'dono' && <RegrasAtendimento />}
-              {sessao.papel === 'dono' && <LinkAgendamento />}
+          {aba === 'avisos' && (dono || (sessao.secoes || []).includes('agenda')) && (
+            <section className="tela" data-testid="tela-avisos">
+              <header className="tela-topo"><h1>Avisos</h1></header>
+              <Avisos />
             </section>
           )}
           {aba === 'agenda' && <Agenda destaqueIds={Object.keys(destaques)} foco={foco} recarregar={recarregar} nomeLoja={loja.nome} meuId={sessao.id} ehProprio={sessao.papel === 'profissional'} ehDono={dono || sessao.papel === 'admin' || sessao.papel === 'atendente'} />}
@@ -226,7 +224,7 @@ function Painel({ loja, sessao, aoSair }) {
           {aba === 'boxes' && dono && <Boxes />}
           {aba === 'cupons' && (dono || (sessao.secoes || []).includes('estabelecimento')) && <Cupons />}
           {aba === 'estoque' && (dono || (sessao.secoes || []).includes('estoque')) && <Estoque ehDono={dono} />}
-          {aba === 'estabelecimento' && (dono || (sessao.secoes || []).includes('estabelecimento')) && <Estabelecimento ehDono={dono} />}
+          {aba === 'estabelecimento' && (dono || (sessao.secoes || []).includes('estabelecimento')) && <Estabelecimento ehDono={dono} aoReconfigurar={() => setReconfigurando(true)} />}
           {aba === 'relatorios' && dono && <Relatorios />}
           {aba === 'comissoes' && dono && <Comissoes />}
           {aba === 'ganhos' && !dono && <Ganhos />}

@@ -16,7 +16,7 @@ export function criarEstadoBarbearia(agora) {
     ddds: [51, 53, 54, 55],
     visaoPadrao: 'semana',
     confirmacaoServico: false,
-    camposObrigatorios: { futuro: ['nome', 'telefone'], local: [] }, // campos que o botão Atender exige em cada tipo (nome, telefone, esteticista, vendedor, formaPagamento)
+    camposObrigatorios: { futuro: [], local: [] }, // campos que o botão Atender exige em cada tipo (nome, telefone, esteticista, vendedor, formaPagamento)
     temaCor: 'padrao', // cor do tema: 'padrao' | 'logo' | id de PALETAS (domain/tema.js)
     linkAgendamento: { ativo: true, diasMax: 30 }, // link público de autoagendamento (ligado, até 30 dias à frente)
     usaIntegracaoPix: true, // desligado: Pix vira só um registro manual (sem cobrança, QR, extrato nem sincronização)
