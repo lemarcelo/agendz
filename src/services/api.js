@@ -25,6 +25,7 @@ import { FERIADOS_NACIONAIS } from '../domain/feriados.js';
 import { LOJAS_DEMO, LOJA_PADRAO, lojaDemo, lojaDoEndereco } from './lojas-demo.js';
 import { lerHashAgendar } from '../domain/link-publico.js';
 import * as SU from '../domain/suporte.js';
+import * as AV from '../domain/avaliacoes.js';
 
 let offset = 0;
 // Qual loja este navegador atende. Ordem: tipo fixado no build (testes: `AGENDZ_TIPO`) > endereço da página (DNS/URL, `domain/tenant.js`) >
@@ -80,6 +81,13 @@ export const store = {
     lojaSlug = slug; gravarLojaSalva(slug);
     if (!estados.has(slug)) estados.set(slug, novoEstado(slug));
     state = estados.get(slug); sessao = null; apiLog = []; zerarLimites(); emit();
+  },
+  // Demonstração: simula o Admin da plataforma mudando a regra `avaliacaoMostraAnonimo` da loja (o painel da loja NUNCA muda; no servidor é a regra do Admin
+  // com motivo e linha do tempo). Sem sessão de loja e sem rota no mapa: não existe fora da simulação.
+  simularAdmin(regra, valor, motivo) {
+    if (!MODO_DEMO || regra !== 'avaliacaoMostraAnonimo' || typeof valor !== 'boolean') return erro('Regra inválida.');
+    const m = AV.validarMotivo(motivo); if (!m.ok) return erro(m.erro);
+    return mutate((st, agora) => { st.regrasPlataforma = { ...(st.regrasPlataforma || {}), [regra]: valor }; (st.eventosPlataforma ||= []).push({ em: agora, regra, valor, motivo: m.motivo }); return { ok: true }; }, { metodo: 'PUT', rota: '/admin/lojas/{slug}/regras', origem: 'sistema', silencioso: true });
   },
   // POST /licenca/alerta  (no Spring Boot: grava e avisa o proprietário; aqui só entra no log da aba "Chamadas à API")
   alertaLicenca(info) {
@@ -424,7 +432,8 @@ export const clientes = {
   // POST /clientes  |  PUT /clientes/{id}
   salvar(entrada) {
     if (!R.pode(usuario(), 'clientes')) return semPermissao();
-    const c = { ...pegar(entrada, permitidos(['id', 'nome', 'apelido', 'telefone', 'cpf', 'nascimento', 'veiculos'])) };
+    const c = { ...pegar(entrada, permitidos(['id', 'nome', 'apelido', 'telefone', 'cpf', 'nascimento', 'veiculos', 'semMensagens'])) };
+    if ('semMensagens' in c && typeof c.semMensagens !== 'boolean') return erro('Opção de receber mensagens inválida.');
     for (const k of ['nome', 'apelido', 'telefone', 'cpf', 'nascimento']) if (k in c && !texto(c[k], 100)) return erro('Texto inválido ou grande demais em ' + k + '.');
     if ('veiculos' in c && !(Array.isArray(c.veiculos) && c.veiculos.length <= LIMITE_VEICULOS && c.veiculos.every((v) => v && typeof v === 'object' && !Array.isArray(v)))) return erro(`Veículos inválidos: no máximo ${LIMITE_VEICULOS} por cliente.`);
     if (c.veiculos) c.veiculos = c.veiculos.map((v) => pegar(v, ['id', 'placa', 'marca', 'modelo', 'cor', 'porte']));
@@ -1339,6 +1348,170 @@ export const whatsapp = {
   },
 };
 
+// ---------- avaliações do atendimento (seção `avaliacoes`; spec: docs/F5-avaliacoes.md) ----------
+// Quem enxerga: dono/master e quem tem a seção veem tudo; o profissional, mesmo sem a seção, vê só as próprias e o próprio resumo.
+// Anônimo: sem a regra da loja (`regrasPlataforma.avaliacaoMostraAnonimo`, só o Admin muda) o DTO não carrega a identidade.
+const escopoAv = (u) => (!u ? null : R.pode(u, 'avaliacoes') ? { soDe: '' } : u.papel === 'profissional' ? { soDe: u.id } : null);
+const filtroAv = (f) => {
+  const d = pegar(f, ['de', 'ate', 'profissionalId', 'servicoId']);
+  for (const k of ['de', 'ate', 'profissionalId', 'servicoId']) if (d[k] !== undefined && d[k] !== null && !texto(d[k], 60)) return { erro: 'Filtro inválido.' };
+  return { d };
+};
+const aplicarFiltroAv = (esc, u, filtros) => {
+  const f = filtroAv(filtros); if (f.erro) return f;
+  if (esc.soDe) f.d.profissionalId = esc.soDe; // o profissional nunca escolhe outro
+  const dono = R.ehDono(u);
+  const r = AV.filtrarAvaliacoes((state.avaliacoes || []).filter((x) => dono || !x.oculta), f.d);
+  return r.erro ? { erro: r.erro } : { lista: r.lista, dono };
+};
+export const avaliacoes = {
+  // GET /api/avaliacoes?de=&ate=&profissionalId=&servicoId=  (mais recentes primeiro, até 500; oculta só aparece ao dono)
+  listar(filtros) {
+    const u = usuario(); const esc = escopoAv(u); if (!esc) return semPermissao();
+    const r = aplicarFiltroAv(esc, u, filtros); if (r.erro) return erro(r.erro);
+    const lista = [...r.lista].sort((a, b) => b.em - a.em).slice(0, 500).map((x) => AV.paraPainel(state, x, { verOculta: r.dono }));
+    return { ok: true, avaliacoes: lista, mostraAnonimo: AV.mostraAnonimo(state), soMinhas: !!esc.soDe };
+  },
+  // GET /api/avaliacoes/resumo?de=&ate=&profissionalId=&servicoId=  (média com 1 casa, total e distribuição 1 a 5; ocultas não contam)
+  resumo(filtros) {
+    const u = usuario(); const esc = escopoAv(u); if (!esc) return semPermissao();
+    const r = aplicarFiltroAv(esc, u, filtros); if (r.erro) return erro(r.erro);
+    return { ok: true, ...AV.resumir(r.lista.filter((x) => !x.oculta)) };
+  },
+  // GET /api/agendamentos/{id}/avaliacao  (a estrela do cartão: pode pedir? se não, por quê; só visível para quem enxerga o agendamento)
+  situacao(id) {
+    const u = usuario(); if (!u || !R.pode(u, 'agenda')) return semPermissao();
+    if (!idOk(id)) return erro('Atendimento inválido.');
+    const a = agendamentosVisiveis(state, u).find((x) => x.id === id); if (!a) return erro('Atendimento não encontrado.');
+    const motivo = AV.situacaoDoPedido(state, a);
+    return { ok: true, motivo, aviso: motivo === 'ok' ? '' : AV.MOTIVOS_SEM_PEDIDO[motivo], jaAvaliou: !!AV.avaliacaoDe(state, a.id), pedidaEm: a.avaliacaoPedida ? a.avaliacaoPedida.em : null };
+  },
+  // POST /api/agendamentos/{id}/avaliacao/pedido  (gera o token pessoal, devolvido UMA vez; marca `avaliacaoPedida`; pedir de novo troca o link anterior)
+  pedir(id) {
+    const u = usuario(); if (!u || !R.pode(u, 'agenda')) return semPermissao();
+    if (!idOk(id)) return erro('Atendimento inválido.');
+    if (!agendamentosVisiveis(state, u).some((x) => x.id === id)) return erro('Atendimento não encontrado.');
+    return mutate((s, agora) => {
+      const a = s.agendamentos.find((x) => x.id === id);
+      const motivo = AV.situacaoDoPedido(s, a);
+      if (motivo !== 'ok') return { ok: false, motivo, erros: [AV.MOTIVOS_SEM_PEDIDO[motivo]] };
+      if (AV.avaliacaoDe(s, a.id)) return { ok: false, motivo: 'ja_avaliou', erros: ['Este cliente já avaliou este atendimento.'] };
+      const cli = s.clientes.find((c) => c.id === a.clienteId);
+      const token = AV.emitirAcesso(s, a.id, agora);
+      a.avaliacaoPedida = { em: agora, por: u.id };
+      return { ok: true, token, telefone: cli.telefone, nome: cli.apelido || cli.nome, loja: s.estabelecimento.nome };
+    }, { metodo: 'POST', rota: `/agendamentos/${id}/avaliacao/pedido` });
+  },
+  // POST /api/avaliacoes/{id}/ocultar  { motivo }  (só dono/master; não apaga: o registro e o histórico ficam)
+  ocultar(id, entrada) { return mudarOculta(id, entrada, true); },
+  // POST /api/avaliacoes/{id}/reexibir  { motivo }
+  reexibir(id, entrada) { return mudarOculta(id, entrada, false); },
+};
+function mudarOculta(id, entrada, ocultar) {
+  const u = usuario(); if (!R.ehDono(u)) return semPermissao();
+  if (!idOk(id)) return erro('Avaliação inválida.');
+  const m = AV.validarMotivo(pegar(entrada, ['motivo']).motivo); if (!m.ok) return erro(m.erro);
+  return mutate((s, agora) => {
+    const av = (s.avaliacoes || []).find((x) => x.id === id);
+    if (!av) return erro('Avaliação não encontrada.');
+    if ((av.oculta === true) === ocultar) return erro(ocultar ? 'Esta avaliação já está oculta.' : 'Esta avaliação já está visível.');
+    av.oculta = ocultar; av.motivoOculta = ocultar ? m.motivo : ''; av.ocultaEm = ocultar ? agora : null;
+    (av.historico ||= []).push({ acao: ocultar ? 'ocultou' : 'reexibiu', em: agora, por: u.id, motivo: m.motivo });
+    return { ok: true };
+  }, { metodo: 'POST', rota: `/avaliacoes/${String(id).slice(0, 20)}/${ocultar ? 'ocultar' : 'reexibir'}` });
+}
+
+// ---------- mensagens em lote (fila de WhatsApp; seção `avaliacoes`) ----------
+// Sem a API da Meta não existe envio automático: a fila é uma lista e cada contato abre o wa.me com a mensagem pronta (um clique por pessoa).
+// O telefone inteiro nunca vai na lista (mascarado); só `abrirItem` o devolve, no clique de quem vai enviar.
+const MAX_FILAS = 20;
+const filaParaPainel = (f) => ({ id: f.id, tipo: f.tipo, criadaEm: f.criadaEm, filtros: { ...f.filtros }, modelo: f.modelo, encerrada: f.encerrada === true, contagem: structuredClone(f.contagem), itens: f.itens.map((i) => ({ id: i.id, agendamentoId: i.agendamentoId, nome: i.nome, telefoneMascarado: i.telefoneMascarado, servicos: [...i.servicos], inicio: i.inicio, status: i.status, em: i.em || null })) });
+const filaDoUsuario = (st, u, id) => (st.filasMensagem || []).find((f) => f.id === id && f.criadaPor === u.id);
+const filtrosFila = (entrada) => {
+  const d = pegar(entrada, ['tipo', 'de', 'ate', 'profissionalId', 'servicoId', 'modelo']);
+  for (const k of ['de', 'ate', 'profissionalId', 'servicoId', 'tipo']) if (d[k] !== undefined && d[k] !== null && !texto(d[k], 60)) return { erro: 'Filtro inválido.' };
+  return { d };
+};
+export const mensagens = {
+  // GET /api/mensagens/fila?tipo=&de=&ate=&profissionalId=&servicoId=  (prévia de quem entraria; não grava nada)
+  fila(filtros) {
+    const n = exigir('avaliacoes'); if (n) return n;
+    const f = filtrosFila(filtros); if (f.erro) return erro(f.erro);
+    const r = AV.montarFila(state, f.d); if (r.erro) return erro(r.erro);
+    return { ok: true, ...r, limite: AV.FILA_MAX };
+  },
+  // POST /api/mensagens/filas  { tipo, de, ate, profissionalId, servicoId, modelo }  (cria a fila; uma aberta por pessoa; até 200 contatos)
+  iniciarFila(entrada) {
+    const n = exigir('avaliacoes'); if (n) return n;
+    const u = usuario();
+    const f = filtrosFila(entrada); if (f.erro) return erro(f.erro);
+    const tipo = f.d.tipo === undefined ? 'avaliacao' : f.d.tipo;
+    const mod = AV.validarModelo(f.d.modelo, tipo); if (!mod.ok) return erro(mod.erro);
+    return mutate((s, agora) => {
+      if ((s.filasMensagem || []).some((x) => x.criadaPor === u.id && !x.encerrada)) return erro('Termine ou encerre a fila aberta antes de criar outra.');
+      const r = AV.montarFila(s, { ...f.d, tipo }); if (r.erro) return erro(r.erro);
+      if (!r.itens.length) return erro('Ninguém para receber a mensagem com esses filtros.');
+      const fila = { id: `fm${++s.seq}`, tipo, criadaEm: agora, criadaPor: u.id, filtros: { de: f.d.de || '', ate: f.d.ate || '', profissionalId: f.d.profissionalId || '', servicoId: f.d.servicoId || '' }, modelo: mod.modelo, encerrada: false, contagem: r.contagem, itens: r.itens.map((i, k) => ({ id: `i${k + 1}`, ...i, status: 'pendente', em: null })) };
+      s.filasMensagem = [...(s.filasMensagem || []), fila].slice(-MAX_FILAS);
+      return { ok: true, fila: filaParaPainel(fila) };
+    }, { metodo: 'POST', rota: '/mensagens/filas' });
+  },
+  // GET /api/mensagens/filas/atual  (a fila aberta de quem está logado, com o andamento; null se não houver)
+  filaAtual() {
+    const n = exigir('avaliacoes'); if (n) return n;
+    const f = [...(state.filasMensagem || [])].reverse().find((x) => x.criadaPor === usuario().id && !x.encerrada);
+    return { ok: true, fila: f ? filaParaPainel(f) : null };
+  },
+  // POST /api/mensagens/filas/{filaId}/itens/{itemId}/abrir  (devolve o telefone e, no pedido de avaliação, o token pessoal UMA vez; o item vira "aberto")
+  // Ficou impossível (sem telefone agora, já avaliou, pediu para não receber): o item é pulado e fica registrado (persistir).
+  abrirItem(filaId, itemId) {
+    const n = exigir('avaliacoes'); if (n) return n;
+    if (!idOk(filaId) || !idOk(itemId)) return erro('Item inválido.');
+    const u = usuario();
+    if (!filaDoUsuario(state, u, filaId)) return erro('Fila não encontrada.');
+    return mutate((s, agora) => {
+      const fila = filaDoUsuario(s, u, filaId);
+      const it = fila.itens.find((x) => x.id === itemId);
+      if (!it) return erro('Item não encontrado.');
+      if (fila.encerrada) return erro('Esta fila foi encerrada.');
+      if (!['pendente', 'aberto'].includes(it.status)) return erro('Este contato já foi tratado.');
+      const a = s.agendamentos.find((x) => x.id === it.agendamentoId);
+      const motivo = AV.situacaoDoPedido(s, a);
+      const cli = motivo === 'ok' ? s.clientes.find((c) => c.id === a.clienteId) : null;
+      if (!cli || (fila.tipo === 'avaliacao' && AV.avaliacaoDe(s, a.id))) { it.status = 'pulou'; it.em = agora; it.motivo = motivo === 'ok' ? 'ja_avaliou' : motivo; return { ok: false, persistir: true, motivo: it.motivo, erros: ['Este contato não pode mais receber a mensagem e foi pulado.'] }; }
+      let token = null;
+      if (fila.tipo === 'avaliacao') { token = AV.emitirAcesso(s, a.id, agora); a.avaliacaoPedida = { em: agora, por: u.id }; }
+      it.status = 'aberto'; it.em = agora;
+      return { ok: true, tipo: fila.tipo, modelo: fila.modelo, token, telefone: cli.telefone, nome: cli.apelido || cli.nome, loja: s.estabelecimento.nome };
+    }, { metodo: 'POST', rota: `/mensagens/filas/${String(filaId).slice(0, 20)}/itens/${String(itemId).slice(0, 20)}/abrir` });
+  },
+  // PUT /api/mensagens/filas/{filaId}/itens/{itemId}  { status: 'enviado' | 'pulou' }  (enviado só depois de aberto)
+  marcarItem(filaId, itemId, status) {
+    const n = exigir('avaliacoes'); if (n) return n;
+    if (!idOk(filaId) || !idOk(itemId) || !['enviado', 'pulou'].includes(status)) return erro('Item inválido.');
+    const u = usuario();
+    if (!filaDoUsuario(state, u, filaId)) return erro('Fila não encontrada.');
+    return mutate((s, agora) => {
+      const fila = filaDoUsuario(s, u, filaId);
+      const it = fila.itens.find((x) => x.id === itemId);
+      if (!it) return erro('Item não encontrado.');
+      if (fila.encerrada) return erro('Esta fila foi encerrada.');
+      if (status === 'enviado' && it.status !== 'aberto') return erro('Abra a conversa no WhatsApp antes de marcar como enviado.');
+      if (!['pendente', 'aberto'].includes(it.status)) return erro('Este contato já foi tratado.');
+      it.status = status; it.em = agora;
+      return { ok: true, fila: filaParaPainel(fila) };
+    }, { metodo: 'PUT', rota: `/mensagens/filas/${String(filaId).slice(0, 20)}/itens/${String(itemId).slice(0, 20)}` });
+  },
+  // POST /api/mensagens/filas/{filaId}/encerrar  (pausar não encerra; encerrar libera criar outra fila)
+  encerrarFila(filaId) {
+    const n = exigir('avaliacoes'); if (n) return n;
+    if (!idOk(filaId)) return erro('Fila inválida.');
+    const u = usuario();
+    if (!filaDoUsuario(state, u, filaId)) return erro('Fila não encontrada.');
+    return mutate((s) => { filaDoUsuario(s, u, filaId).encerrada = true; return { ok: true }; }, { metodo: 'POST', rota: `/mensagens/filas/${String(filaId).slice(0, 20)}/encerrar` });
+  },
+};
+
 // ---------- porta pública: autoagendamento pelo link (sem login) ----------
 // Não usa sessão: a identidade é um token pessoal (ou telefone + código de 6 dígitos). Nada aqui devolve dado de outro cliente nem horário ocupado.
 // Limites de uso por telefone e geral; no Spring Boot viram rate limit no gateway + contador no banco.
@@ -1354,6 +1527,7 @@ function estourou(chave, max, janelaMs) {
 const P = (rota, metodo = 'POST') => ({ metodo, rota, origem: 'link' });
 const MUITAS = 'Muitas tentativas. Aguarde um pouco e tente de novo.';
 const tokenOk = (t) => typeof t === 'string' && t.length === 48;
+const servicosPorIdsPublico = (a) => R.servicosPorIds(state, a.servicoIds || [], a.porte).map((x) => x.nome);
 export const publico = {
 
   // GET /publico/planos  (catálogo à venda: nome, descrição, valor, cortes e serviços; nada de cliente)
@@ -1373,6 +1547,24 @@ export const publico = {
     const tel = R.telefoneNacional(telefone);
     if (estourou(`ps:${tel}`, 5, 15 * 60000) || estourou('ps:*', 120, 60000)) return erro(MUITAS);
     return AS.saldoPorTelefone(state, telefone, now());
+  },
+  // GET /publico/avaliacoes/{token}  (token pessoal; só loja, serviços, profissional e data; nunca o nome do cliente; qualquer falha = a mesma resposta)
+  dadosAvaliacao(token) {
+    if (estourou('avd:*', 300, 60000)) return erro(MUITAS);
+    const achou = AV.acharAcesso(state, token, now());
+    if (!achou) return estourou('avf:*', 60, 60000) ? erro(MUITAS) : erro(AV.ERRO_AVALIACAO);
+    const a = achou.agendamento;
+    const b = state.usuarios.find((x) => x.id === a.profissionalId);
+    return { ok: true, loja: state.estabelecimento.nome, servicos: servicosPorIdsPublico(a), profissional: b ? b.apelido || b.nome : '', quando: a.inicio };
+  },
+  // POST /publico/avaliacoes  { token, nota 1-5, texto? (até 500), anonimo? }  (uso único; token errado/vencido/usado = resposta genérica; isca `site` preenchida = ignora)
+  avaliar(entrada) {
+    const d = pegar(entrada, ['token', 'nota', 'texto', 'anonimo', 'site']);
+    if (d.site !== undefined && !texto(String(d.site), 100)) return erro(AV.ERRO_AVALIACAO);
+    if (d.site) return { ok: true }; // robô: finge que deu certo e não grava
+    if (estourou('av:*', 120, 60000)) return erro(MUITAS);
+    if (!AV.tokenValido(d.token)) return estourou('avf:*', 60, 60000) ? erro(MUITAS) : erro(AV.ERRO_AVALIACAO);
+    return mutate((s, agora) => AV.registrarAvaliacao(s, d.token, d, agora), P('/publico/avaliacoes'));
   },
   // GET /publico/config  (só nome, serviços ativos e profissionais que atendem)
   config() { return PU.configPublica(state); },

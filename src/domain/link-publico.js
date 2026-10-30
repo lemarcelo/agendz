@@ -40,3 +40,15 @@ export function montarLinkPlanos({ base, busca = '', lojaNoLink = '' }) {
   const loja = /^[a-z0-9-]{1,40}$/.test(String(lojaNoLink)) ? `@${lojaNoLink}` : '';
   return `${base}${busca}#planos${loja}`;
 }
+
+// Página de avaliação do cliente (`#avaliar/<token>`, na demonstração `#avaliar@<loja>/<token>`). O token pessoal (48 hex, um por agendamento) vai no
+// FRAGMENTO, nunca na URL que o servidor vê nem em log. Sem token no formato certo não é link de avaliação.
+export const HASH_AVALIAR = /^#avaliar(@[a-z0-9-]{1,40})?\/([0-9a-f]{48})$/;
+export function lerHashAvaliar(hash) {
+  const m = HASH_AVALIAR.exec(String(hash ?? ''));
+  return m ? { loja: m[1] ? m[1].slice(1) : '', token: m[2] } : null;
+}
+export function montarLinkAvaliar({ base, busca = '', lojaNoLink = '', token }) {
+  const loja = /^[a-z0-9-]{1,40}$/.test(String(lojaNoLink)) ? `@${lojaNoLink}` : '';
+  return `${base}${busca}#avaliar${loja}/${token}`;
+}

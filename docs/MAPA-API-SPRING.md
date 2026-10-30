@@ -376,6 +376,27 @@ Mensalidade por mês; o pagamento é direto com o profissional (só se registra)
 
 **Servidor (v113):** migração V32 (`plano`, `plano_servico`, `assinatura`, `assinatura_pagamento`, `assinatura_evento`, `pedido_plano` com RLS; `agendamento.plano_*`). Código em `planos/` (`PlanoRegras`, `PlanoService`, `PlanoController`, `PlanoPublicoController`). Seção `planos` está em `Permissoes.LIBERAVEIS` (nenhum perfil tem por padrão). O servidor **só registra** a mensalidade (não lança receita: ainda não há financeiro no servidor). Cliente/plano/assinatura/pedido de outra loja = 404; regra = 409; validação = 400. Link desligado: página de planos vazia e pedido = 403. Cliente não remarca sozinho horário de plano pelo link (409). Serviço dentro de plano só desativa. Falta: uso de plano pelo link público, produto no plano, seletor de plano no Atender real e página pública real.
 
+## 10p. Avaliações do atendimento e mensagens em lote (v116, F5 fase 1; spec `docs/F5-avaliacoes.md`; `tests/avaliacoes.test.mjs`, `tests/e2e78.mjs`; servidor V35 = fase 2)
+Seção de permissão nova `avaliacoes` (dono libera por pessoa, padrão ninguém). O profissional vê **só as próprias** e o próprio resumo mesmo sem a seção; atendente/admin só com a seção. Ocultar/reexibir é só dono/master. **Anônimo:** a regra da loja `avaliacaoMostraAnonimo` (padrão falso; no Artifact `regrasPlataforma`, que o painel da loja NÃO edita) decide: falso = o DTO sai com `cliente: "Anônimo"` e **sem** `clienteId`, `agendamentoId` nem nome; verdadeiro = nome real + `revelado: true` (a tela escreve "(avaliado como anônimo)"). Token pessoal por agendamento: 48 hex gerados no servidor, **só o SHA-256 fica guardado** (`avaliacao_acesso.hash`), 90 dias, uso único, um vivo por agendamento (pedir de novo troca o anterior). Token errado, vencido, reusado ou de atendimento que deixou de ser avaliável = **a mesma resposta** (`ERRO_AVALIACAO`).
+
+| Método do `api.js` | Rota | Permissão | Regra e teste |
+|---|---|---|---|
+| `avaliacoes.listar` | `GET /api/avaliacoes?de=&ate=&profissionalId=&servicoId=` | seção `avaliacoes`, ou profissional (só as dele: o filtro de outro é ignorado) | até 500, mais recentes primeiro; período máx. 366 dias; oculta só aparece ao dono (com motivo) |
+| `avaliacoes.resumo` | `GET /api/avaliacoes/resumo?…` | idem | média com 1 casa, total e distribuição 1 a 5; ocultas não contam |
+| `avaliacoes.situacao` | `GET /api/agendamentos/{id}/avaliacao` | seção `agenda` e agendamento visível | `motivo`: `ok`, `nao_concluido`, `sem_servico`, `sem_cadastro`, `sem_telefone`, `sem_mensagens`; `jaAvaliou`; `pedidaEm` |
+| `avaliacoes.pedir` | `POST /api/agendamentos/{id}/avaliacao/pedido` | seção `agenda` e agendamento visível | só concluído com serviço, cliente com cadastro e WhatsApp válido, sem opt-out; grava `avaliacaoPedida {em, por}`; devolve o token UMA vez; recusa devolve `motivo` e texto |
+| `avaliacoes.ocultar` · `avaliacoes.reexibir` | `POST /api/avaliacoes/{id}/ocultar` · `/reexibir` `{ motivo }` | só dono/master | motivo 5–200; não apaga; histórico no registro |
+| `publico.dadosAvaliacao` | `GET /api/publico/avaliacoes` (token em `X-Acesso`, nunca na URL) | sem login | só loja, serviços, profissional e data; nunca nome nem dado de outro cliente; falha = resposta genérica; limite global |
+| `publico.avaliar` | `POST /api/publico/avaliacoes` `{ nota, texto?, anonimo? }` (token em `X-Acesso`) | sem login | nota inteira 1–5; texto até 500 (501 é recusado); `anonimo` booleano; isca `site`; token primeiro (sem token válido não se aprende nada sobre os campos); uso único |
+| `mensagens.fila` | `GET /api/mensagens/fila?tipo=&de=&ate=&profissionalId=&servicoId=` | seção `avaliacoes` | prévia sem gravar; período obrigatório (máx. 366 dias); só quem tem WhatsApp válido, uma linha por pessoa (a mais recente), fora opt-out `semMensagens` e, na avaliação, quem já avaliou; até 200 (`excedente`); telefone mascarado |
+| `mensagens.iniciarFila` | `POST /api/mensagens/filas` | seção `avaliacoes` | modelo 5–300 com `{nome}`, `{loja}`, `{link}` (avaliação exige `{link}`, aviso proíbe); uma fila aberta por pessoa; fila vazia não nasce |
+| `mensagens.filaAtual` | `GET /api/mensagens/filas/atual` | seção `avaliacoes` | só a fila de quem pediu |
+| `mensagens.abrirItem` | `POST /api/mensagens/filas/{id}/itens/{itemId}/abrir` | dono da fila | devolve telefone e (avaliação) token UMA vez; item que ficou impossível é **pulado e registrado** (`persistir`) |
+| `mensagens.marcarItem` | `PUT /api/mensagens/filas/{id}/itens/{itemId}` `{ status }` | dono da fila | `enviado` só depois de aberto; `pulou`; item já tratado não muda |
+| `mensagens.encerrarFila` | `POST /api/mensagens/filas/{id}/encerrar` | dono da fila | libera criar outra |
+
+Cliente ganha `semMensagens` (booleano, `clientes.salvar`; `POST|PUT /api/clientes`). **Servidor (fase 2):** V35 (`avaliacao`, `avaliacao_acesso`, `fila_mensagem`, `fila_mensagem_item`, `cliente.sem_mensagens`, `agendamento.avaliacao_pedida_em/por`, regra `avaliacao_mostra_anonimo` por loja), `avaliacoes/` com `Permissoes` seção `avaliacoes`, limite em `LimitePublico`, regra no `RegrasDaLoja` e no Admin.
+
 ## 10o. Estabelecimento no site real (v114; V33)
 | Rota | Permissão | Regra e teste |
 |---|---|---|
