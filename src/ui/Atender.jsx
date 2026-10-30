@@ -4,6 +4,7 @@ import PickerCliente from './PickerCliente.jsx';
 import { porUltimoUso } from '../domain/codigo.js';
 import React, { useMemo, useState } from 'react';
 import { agenda, agendamentosVisiveis, planos as apiPlanos } from '../services/api.js';
+import { rotuloMes as rotuloMesPlano } from '../domain/planos.js';
 import { acharClientePorTelefone, camposObrigatorios, nomeMaisCompleto } from '../domain/engine.js';
 import { FORMAS_PAGAMENTO, STATUS, boxesAtivos, duracaoMin, formaEfetiva, formatarTelefone, nomeBox, ocupadoMin, servicoNoPorte, servicosPorIds, telefoneNacional, totalPreco, usaIntegracaoPix } from '../domain/rules.js';
 import { EXEMPLO_PORTE, PORTES, PORTE_PADRAO, ROTULO_PORTE, placaValida, rotuloVeiculo } from '../domain/veiculos.js';
@@ -94,6 +95,7 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
   const cobertos = planoCli ? servicoIds.filter((id) => planoCli.servicoIds.includes(id)) : [];
   const podePlano = !!planoCli && cobertos.length > 0 && (planoCli.restantes > 0 || planoCli.maisPermitidos > 0);
   const usaPlano = podePlano && !semPlano;
+  const gratisPlano = usaPlano ? totalPreco(sel.filter((x) => cobertos.includes(x.id))) : 0; // o que o plano paga: o total mostrado já sem isso
   // Vendedor: por padrão quem está lançando (se tem "Pode vender produtos"); senão o profissional. O profissional vende como ele mesmo.
   const vendedores = st.usuarios.filter((u) => u.papel !== 'master' && u.ativo !== false && u.podeVender !== false);
   const euVendo = vendedores.some((u) => u.id === user.id);
@@ -170,7 +172,7 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
         {planoCli && (
           <div className="campo-largo subcartao" data-testid="atender-plano">
             <b><Icon n="ticket" size={15} /> Plano {planoCli.plano}</b>
-            <span className="muted" data-testid="atender-plano-saldo">Restam {planoCli.restantes} atendimento{planoCli.restantes === 1 ? '' : 's'} em {planoCli.mes}{planoCli.restantes <= 0 && planoCli.maisPermitidos > 0 ? ` · pode adiantar ${planoCli.maisPermitidos}` : ''}{planoCli.atrasado ? ' · mensalidade do mês ainda não registrada' : ''}.</span>
+            <span className="muted" data-testid="atender-plano-saldo">Restam {planoCli.restantes} atendimento{planoCli.restantes === 1 ? '' : 's'} em {rotuloMesPlano(planoCli.mes)}{planoCli.restantes <= 0 && planoCli.maisPermitidos > 0 ? ` · pode adiantar ${planoCli.maisPermitidos}` : ''}{planoCli.atrasado ? ' · mensalidade do mês ainda não registrada' : ''}.</span>
             {cobertos.length === 0 && <span className="muted">Escolha um serviço que o plano inclui para usar o plano.</span>}
             {cobertos.length > 0 && !podePlano && <span className="msg-conflito" data-testid="atender-plano-esgotado"><Icon n="alert" size={15} /> Os atendimentos do plano acabaram: este atendimento será cobrado pelo preço normal.</span>}
             {podePlano && <label className="interruptor"><input type="checkbox" checked={!semPlano} onChange={(e) => setSemPlano(!e.target.checked)} data-testid="atender-usar-plano" /><span className="trilho"><i className="bolinha" /></span><span className="interruptor-txt"><b>Usar o plano neste atendimento</b><small className="muted">Os serviços do plano saem de graça; o resto é cobrado normalmente.</small></span></label>}
@@ -269,7 +271,7 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
         )}
         {(temServico || vendeProduto) && !ehProfissional && (
           <p className="muted campo-largo" data-testid="atender-total">
-            Total: {fmtMoney(totalPreco(sel) + totalProdutos)}{temServico ? (sel.some((x) => x.multiDia) ? ' · serviço de vários dias' : ` · ${fmtDuration(duracaoMin(sel))} de atendimento (+ ${fmtDuration(ocupadoMin(sel) - duracaoMin(sel))} de intervalo)`) : ''}
+            Total: {fmtMoney(totalPreco(sel) + totalProdutos - gratisPlano)}{gratisPlano > 0 ? ` (o plano cobre ${fmtMoney(gratisPlano)})` : ''}{temServico ? (sel.some((x) => x.multiDia) ? ' · serviço de vários dias' : ` · ${fmtDuration(duracaoMin(sel))} de atendimento (+ ${fmtDuration(ocupadoMin(sel) - duracaoMin(sel))} de intervalo)`) : ''}
           </p>
         )}
       </div>

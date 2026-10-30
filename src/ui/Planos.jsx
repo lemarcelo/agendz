@@ -153,6 +153,7 @@ function FormAssinatura({ dados, clientes, onClose }) {
   const [diaCobranca, setDia] = useState(5);
   const [erro, setErro] = useState('');
   const salvar = () => {
+    if (!clienteId) { setErro('Escolha o cliente.'); rolarAoErro(); return; }
     const r = api.contratar({ clienteId, planoId, inicioMes, diaCobranca });
     if (!r.ok) { setErro(r.erros[0]); rolarAoErro(); return; }
     toast('Assinatura criada. Registre a mensalidade quando receber.');

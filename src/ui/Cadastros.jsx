@@ -196,7 +196,7 @@ function FormServico({ s, user, onClose }) {
   const num = (k) => (e) => setF({ ...f, [k]: e.target.value === '' ? '' : Number(e.target.value) });
   return (
     <Modal titulo={s.id ? 'Editar serviço' : 'Novo serviço'} onClose={onClose} largura={680}
-      rodape={<>{s.id && <Btn variante="perigo" icone="trash" onClick={() => { const r = apiSrv.remover(s.id); if (r.ok) { toast(r.desativado ? 'O serviço tem histórico e foi desativado.' : 'Serviço removido.'); onClose(); } }}>Remover</Btn>}<span className="espaco" /><Btn onClick={onClose}>Cancelar</Btn><Btn variante="primario" onClick={salvar} data-testid="salvar-servico">Salvar</Btn></>}>
+      rodape={<>{s.id && <Btn variante="perigo" icone="trash" onClick={() => { const r = apiSrv.remover(s.id); if (r.ok) { toast(r.desativado ? 'O serviço tem histórico e foi desativado.' : 'Serviço removido.'); onClose(); } else { setErro(r.erros[0]); rolarAoErro(); } }}>Remover</Btn>}<span className="espaco" /><Btn onClick={onClose}>Cancelar</Btn><Btn variante="primario" onClick={salvar} data-testid="salvar-servico">Salvar</Btn></>}>
       <div className="form-grade">
         <Campo rotulo="Nome do serviço" className="campo-largo"><input value={f.nome} onChange={(e) => setF({ ...f, nome: e.target.value })} data-testid="srv-nome" /></Campo>
         <Campo rotulo="Código" dica="Número automático; pode trocar. Não repete entre serviços."><input value={f.codigo ?? ''} maxLength={20} onChange={(e) => setF({ ...f, codigo: e.target.value })} data-testid="srv-codigo" /></Campo>
