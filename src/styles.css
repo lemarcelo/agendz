@@ -679,7 +679,7 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
 .barra-cal-acoes { gap: 8px; }
 .btn-link-agendar { margin-inline: 16px; min-height: 38px; }
 .btn-link-agendar.copiado { border-color: var(--verde); color: var(--verde); }
-.btn-link-agendar .rotulo-link-curto, [data-testid="agenda-link"] .rotulo-link-curto { display: none; } /* só no celular */
+.btn-link-agendar .rotulo-link-curto { display: none; } /* só no celular */
 .chip-rot { display: inline; }
 
 /* Página pública de agendamento (cliente) */
@@ -741,8 +741,8 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
   .filtro-ativo { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .btn-link-agendar { margin-inline: 8px; min-width: 44px; min-height: 44px; padding: 8px 6px; gap: 3px; font-size: 12px; white-space: nowrap; }
   .barra-cal-acoes .segmentado button { padding: 8px 5px; font-size: 12px; }
-  .btn-link-agendar .rotulo-link, [data-testid="agenda-link"] .rotulo-link { display: none; }
-  .btn-link-agendar .rotulo-link-curto, [data-testid="agenda-link"] .rotulo-link-curto { display: inline; } /* celular: ícone + "Link Agenda" */
+  .btn-link-agendar .rotulo-link { display: none; }
+  .btn-link-agendar .rotulo-link-curto { display: inline; } /* celular: ícone + "Link Agenda" */
   .barra-cal-acoes .btn-primario { min-height: 44px; padding-inline: 10px; font-size: 13px; }
   .barra-cal-acoes .btn-primario svg { display: none; } /* sem o "+": o espaço vai para o texto do Link Agenda */
   .barra-cal-acoes { gap: 0; flex-wrap: nowrap; }

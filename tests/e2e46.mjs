@@ -185,7 +185,7 @@ const textoDe = (p, t) => p.getByTestId(t).innerText();
   const { ctx, p } = await abrir();
   await p.waitForFunction(() => document.querySelectorAll('[data-testid="cartao"]').length === 1);
   assert.equal(await p.getByTestId('seletor-profissionais').count(), 0);
-  assert.equal((await p.getByTestId('agenda-link').innerText()).trim(), 'Link de agendamento', 'computador: o botão diz "Link de agendamento", não só "Link"');
+  assert.equal((await p.getByTestId('agenda-link').innerText()).trim(), 'Link Agenda', 'computador: o botão diz "Link Agenda", não só "Link"');
   const abaP = ctx.waitForEvent('page', { timeout: 6000 });
   await p.getByTestId('agenda-link').click();
   const pop = await abaP; assert.ok(pop.url().startsWith('https://wa.me/?text='), pop.url());
