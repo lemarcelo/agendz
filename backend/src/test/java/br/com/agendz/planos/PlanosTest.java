@@ -60,6 +60,8 @@ class PlanosTest extends BaseApi {
     DataSource ds;
     @Autowired
     LimitePublico limitePublico;
+    @Autowired
+    br.com.agendz.auth.LimiteDeLogin limiteLogin;
 
     String dono, colaborador, alan;
     UUID colaboradorId;
@@ -72,6 +74,8 @@ class PlanosTest extends BaseApi {
     void preparar() throws Exception {
         limpar();
         limitePublico.reiniciar();
+        // outro teste da mesma JVM pode ter deixado o login desses usuários bloqueado (429): zera antes de entrar
+        limiteLogin.limpar(LOJA_OFFBOX + "|proprietario"); limiteLogin.limpar(LOJA_OFFBOX + "|colaborador1"); limiteLogin.limpar(LOJA_DALFORNO + "|alan");
         dono = token(OFFBOX, "proprietario");
         colaborador = token(OFFBOX, "colaborador1");
         alan = token(DALFORNO, "alan");

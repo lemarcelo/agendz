@@ -679,6 +679,10 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
 .barra-cal-acoes { gap: 8px; }
 .btn-link-agendar { margin-inline: 16px; min-height: 38px; }
 .btn-link-agendar.copiado { border-color: var(--verde); color: var(--verde); }
+/* Botão "Link Agenda" (Artifact e site real): fundo na cor do tema da loja (a da logo), com texto de contraste já calculado em tema.js; sem tema, fica neutro como antes. */
+.btn.btn-link-agendar, .btn[data-testid="agenda-link"] { background: var(--tema-btn, var(--surface)); color: var(--tema-btn-fg, var(--fg)); border-color: var(--tema-btn-borda, var(--line-strong)); }
+.btn.btn-link-agendar:hover:not(:disabled), .btn[data-testid="agenda-link"]:hover:not(:disabled) { background: var(--tema-btn, var(--surface-2)); filter: brightness(1.12); }
+.btn.btn-link-agendar.copiado, .btn[data-testid="agenda-link"].copiado { border-color: var(--verde); color: var(--tema-btn-fg, var(--verde)); }
 .btn-link-agendar .rotulo-link-curto { display: none; } /* só no celular */
 .chip-rot { display: inline; }
 
