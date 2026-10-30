@@ -99,6 +99,8 @@ function Detalhe({ a, nomeProf, nomeDe, profissionais, boxes, ehDono, aoAlterar,
       }
       // horário mudou mas não dá para avisar: diz isso (cliente sem telefone, ou atendimento sem cadastro); quem não lê Clientes não sabe o telefone e fica como antes
       else if (r.ok && r.agendamento.inicio !== a.inicio && (!a.clienteId || cliente)) aoAvisar({ semTelefone: true, semCadastro: !a.clienteId });
+      // tem cadastro, mas a ficha não chegou (quem não lê Clientes, lista com erro, cadastro fora da lista): não fica em silêncio, diz que não deu para conferir o telefone
+      else if (r.ok && r.agendamento.inicio !== a.inicio) aoAvisar({ naoConferido: true });
       return r;
     }, 'Agendamento remarcado.');
   };
@@ -210,6 +212,14 @@ function Calendario({ cursor, lista, aoEscolherDia }) {
 // Aviso depois de remarcar o horário: pergunta se avisa pelo WhatsApp (cliente com telefone) ou diz que não dá (sem telefone / sem cadastro).
 function AvisoRemarcado({ avisar, aoFechar, aoErro }) {
   const avisarCliente = () => { const abriu = abrirWhatsapp(avisar.texto, avisar.tel); if (!abriu) aoErro('Não foi possível abrir o WhatsApp.'); aoFechar(); };
+  if (avisar.naoConferido) {
+    return (
+      <div className="confirmar-linha" data-testid="avisar-nao-conferido-bloco">
+        <span data-testid="avisar-nao-conferido">Horário remarcado. Não consegui conferir o telefone deste cliente (sem acesso a Clientes ou cadastro não encontrado): avise-o por onde costuma falar com ele.</span>
+        <Btn tamanho="sm" onClick={aoFechar} data-testid="avisar-nao-conferido-ok">Entendi</Btn>
+      </div>
+    );
+  }
   if (avisar.semTelefone) {
     return (
       <div className="confirmar-linha" data-testid="avisar-sem-telefone-bloco">
