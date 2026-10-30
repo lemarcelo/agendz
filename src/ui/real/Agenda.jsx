@@ -61,7 +61,8 @@ function Cartao({ a, nomeCliente, nomeProf, mostraProf, aberto, aoAbrir, testid,
 }
 
 // Detalhes e ações de um agendamento aberto: status, cancelar com confirmação na tela, remarcar e histórico.
-function Detalhe({ a, nomeProf, nomeDe, profissionais, boxes, ehDono, aoAlterar, cliente = null, loja = null }) {
+// `aoAvisar` sobe o aviso de remarcação para a Agenda: o cartão pode sair da lista (outro dia) e levaria o aviso junto.
+function Detalhe({ a, nomeProf, nomeDe, profissionais, boxes, ehDono, aoAlterar, aoAvisar, cliente = null, loja = null }) {
   const [hist, setHist] = useState(null);
   const [erro, setErro] = useState('');
   const [ocupado, setOcupado] = useState(false);
@@ -72,7 +73,6 @@ function Detalhe({ a, nomeProf, nomeDe, profissionais, boxes, ehDono, aoAlterar,
   const [boxEscolhido, setBoxEscolhido] = useState(''); // '' = manter o box atual (o servidor tenta o mesmo e, se ocupado, outro livre)
   const [cupomAberto, setCupomAberto] = useState(false);
   const [chave, setChave] = useState('');
-  const [avisar, setAvisar] = useState(null); // { tel, texto }: depois de remarcar o horário de um cliente com telefone, pergunta na tela se avisa pelo WhatsApp
   useEffect(() => { let vivo = true; api.obter(a.id).then((r) => { if (vivo && r.ok) setHist(r.agendamento.historico); }); return () => { vivo = false; }; }, [a.id, a.status, a.inicio]);
   const executar = async (fn, aviso) => {
     if (ocupado) return;
@@ -92,16 +92,17 @@ function Detalhe({ a, nomeProf, nomeDe, profissionais, boxes, ehDono, aoAlterar,
       const r = await api.remarcar(a.id, { inicio: ts, ...(ehDono && prof !== a.profissionalId ? { profissionalId: prof } : {}), ...(boxEscolhido ? { boxId: boxEscolhido } : {}) });
       // horário mudou e o cliente tem telefone de WhatsApp válido (a loja só entra com a localização se ligou o envio no WhatsApp)
       if (r.ok && r.agendamento.inicio !== a.inicio && cliente && numeroWhatsapp(cliente.telefone)) {
-        setAvisar({
+        aoAvisar({
           tel: cliente.telefone,
           texto: textoReagendamento({ nomeEstab: loja ? loja.nome : '', nomeCliente: cliente.nome, servicos: a.servicos.map((x) => x.nome).join(', '), dataHora: `${fmtDayLong(r.agendamento.inicio)}, às ${fmtHM(r.agendamento.inicio)}`, endereco: loja ? loja.endereco : '', mapaUrl: loja ? loja.mapaUrl : '' }),
         });
       }
+      // horário mudou mas não dá para avisar: diz isso (cliente sem telefone, ou atendimento sem cadastro); quem não lê Clientes não sabe o telefone e fica como antes
+      else if (r.ok && r.agendamento.inicio !== a.inicio && (!a.clienteId || cliente)) aoAvisar({ semTelefone: true, semCadastro: !a.clienteId });
       return r;
     }, 'Agendamento remarcado.');
   };
   // Chamado direto do clique (sem await antes): o navegador só deixa abrir a aba nova nesse momento.
-  const avisarCliente = () => { const abriu = abrirWhatsapp(avisar.texto, avisar.tel); if (!abriu) setErro('Não foi possível abrir o WhatsApp.'); setAvisar(null); };
   const ativoStatus = a.status;
   const podeCupom = (ativoStatus === 'a_confirmar' || ativoStatus === 'confirmado') && a.origem !== 'atendimento'; // atendimento local nunca usa cupom
   return (
@@ -126,14 +127,6 @@ function Detalhe({ a, nomeProf, nomeDe, profissionais, boxes, ehDono, aoAlterar,
             <Btn variante="primario" tamanho="sm" type="submit" disabled={ocupado} data-testid="cupom-aplicar">{ocupado ? 'Aplicando…' : 'Aplicar'}</Btn>
           </div>
         </form>
-      )}
-      {avisar && (
-        <div className="confirmar-linha" data-testid="avisar-whats">
-          <span data-testid="avisar-whats-pergunta">Horário remarcado. Avisar o cliente pelo WhatsApp? Abrimos a conversa com a mensagem pronta; você confere e envia.</span>
-          <p className="muted" data-testid="avisar-whats-texto" style={{ whiteSpace: 'pre-line' }}>{avisar.texto}</p>
-          <Btn tamanho="sm" variante="primario" onClick={avisarCliente} data-testid="avisar-whats-sim">Avisar no WhatsApp</Btn>
-          <Btn tamanho="sm" onClick={() => setAvisar(null)} data-testid="avisar-whats-nao">Agora não</Btn>
-        </div>
       )}
       {!cancelando && !remarcando && (
         <div className="acoes">
@@ -214,6 +207,27 @@ function Calendario({ cursor, lista, aoEscolherDia }) {
   );
 }
 
+// Aviso depois de remarcar o horário: pergunta se avisa pelo WhatsApp (cliente com telefone) ou diz que não dá (sem telefone / sem cadastro).
+function AvisoRemarcado({ avisar, aoFechar, aoErro }) {
+  const avisarCliente = () => { const abriu = abrirWhatsapp(avisar.texto, avisar.tel); if (!abriu) aoErro('Não foi possível abrir o WhatsApp.'); aoFechar(); };
+  if (avisar.semTelefone) {
+    return (
+      <div className="confirmar-linha" data-testid="avisar-sem-telefone-bloco">
+        <span data-testid="avisar-sem-telefone">{avisar.semCadastro ? 'Horário remarcado. Este atendimento é sem cadastro: não há telefone para avisar o cliente pelo WhatsApp.' : 'Horário remarcado. Cliente sem telefone: não dá para avisá-lo pelo WhatsApp. Cadastre o telefone na ficha do cliente.'}</span>
+        <Btn tamanho="sm" onClick={aoFechar} data-testid="avisar-sem-telefone-ok">Entendi</Btn>
+      </div>
+    );
+  }
+  return (
+    <div className="confirmar-linha" data-testid="avisar-whats">
+      <span data-testid="avisar-whats-pergunta">Horário remarcado. Avisar o cliente pelo WhatsApp? Abrimos a conversa com a mensagem pronta; você confere e envia.</span>
+      <p className="muted" data-testid="avisar-whats-texto" style={{ whiteSpace: 'pre-line' }}>{avisar.texto}</p>
+      <Btn tamanho="sm" variante="primario" onClick={avisarCliente} data-testid="avisar-whats-sim">Avisar no WhatsApp</Btn>
+      <Btn tamanho="sm" onClick={aoFechar} data-testid="avisar-whats-nao">Agora não</Btn>
+    </div>
+  );
+}
+
 export default function Agenda({ ehProprio = false, ehDono = false, meuId = '', nomeLoja = '', destaqueIds = [], foco = null, recarregar = 0 }) {
   const [modo, setModo] = useState('horarios');
   const [cursor, setCursor] = useState(() => startOfDay(Date.now()));
@@ -237,6 +251,7 @@ export default function Agenda({ ehProprio = false, ehDono = false, meuId = '', 
   const [clientes, setClientes] = useState(new Map());
   const [profs, setProfs] = useState([]);
   const [boxes, setBoxes] = useState([]);
+  const [avisoRemarcar, setAvisoRemarcar] = useState(null); // { tel, texto } | { semTelefone }: fica na Agenda porque o cartão pode sair da lista ao mudar de dia
   const [fichas, setFichas] = useState(new Map()); // id → { nome, telefone }: só para avisar o cliente pelo WhatsApp (quem não lê Clientes fica sem o aviso)
   const [lojaInfo, setLojaInfo] = useState({ endereco: '', mapaUrl: '' });
   const [localizacaoUrl, setLocalizacaoUrl] = useState(''); // link do mapa: o servidor só o devolve quando a loja ligou o envio da localização no WhatsApp
@@ -326,7 +341,7 @@ export default function Agenda({ ehProprio = false, ehDono = false, meuId = '', 
   const cartao = (a, testid) => (
     <Cartao key={a.id} a={a} testid={testid} nomeCliente={nomeCliente(a)} nomeProf={nomeProf(a.profissionalId)} mostraProf={!ehProprio && selecionado === 'todos' && atendem.length > 1}
       aberto={aberto === a.id} aoAbrir={() => setAberto(aberto === a.id ? null : a.id)} destaque={destaqueIds.includes(a.id)}>
-      <Detalhe a={a} nomeProf={nomeProf(a.profissionalId)} nomeDe={nomeProf} profissionais={atendem} boxes={boxes} ehDono={ehDono} aoAlterar={alterou} cliente={a.clienteId ? fichas.get(a.clienteId) || null : null} loja={{ nome: nomeLoja, ...lojaInfo }} />
+      <Detalhe a={a} nomeProf={nomeProf(a.profissionalId)} nomeDe={nomeProf} profissionais={atendem} boxes={boxes} ehDono={ehDono} aoAlterar={alterou} aoAvisar={setAvisoRemarcar} cliente={a.clienteId ? fichas.get(a.clienteId) || null : null} loja={{ nome: nomeLoja, ...lojaInfo }} />
     </Cartao>
   );
 
@@ -353,6 +368,7 @@ export default function Agenda({ ehProprio = false, ehDono = false, meuId = '', 
       )}
       {erro && <Aviso tipo="erro" data-testid="agenda-erro">{erro}</Aviso>}
       {aviso && <Aviso data-testid="agenda-aviso">{aviso}</Aviso>}
+      {avisoRemarcar && <AvisoRemarcado avisar={avisoRemarcar} aoFechar={() => setAvisoRemarcar(null)} aoErro={setErro} />}
       {lista === null && <p className="muted" role="status" data-testid="agenda-carregando">Carregando…</p>}
       {lista !== null && modo === 'calendario' && <Calendario cursor={cursor} lista={visiveis} aoEscolherDia={(d) => { setModo('horarios'); irPara(d); }} />}
       {lista !== null && modo === 'horarios' && (

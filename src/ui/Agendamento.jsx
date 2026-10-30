@@ -101,7 +101,7 @@ export function FormAgendamento({ user, inicial = {}, remarcarId, onClose, onSal
     if (!r.ok) { setErros(r.erros); return; }
     toast(remarcarId ? 'Agendamento remarcado.' : 'Agendamento criado.');
     onSalvo && onSalvo(r.agendamento);
-    // remarcou o horário de um cliente com telefone: pergunta (na própria tela) se quer avisar pelo WhatsApp; sem telefone ou sem cadastro, fecha direto
+    // remarcou o horário de um cliente com telefone: pergunta (na própria tela) se quer avisar pelo WhatsApp; sem telefone ou sem cadastro, avisa na tela que não dá para avisar
     if (remarcarId && alvo && inicio !== alvo.inicio) {
       const cli = st.clientes.find((c) => c.id === alvo.clienteId);
       const tel = cli && numeroWhatsapp(cli.telefone) ? cli.telefone : '';
@@ -111,12 +111,22 @@ export function FormAgendamento({ user, inicial = {}, remarcarId, onClose, onSal
         setAvisar({ tel, texto: textoReagendamento({ nomeEstab: e.nome, nomeCliente: cli.apelido || cli.nome, servicos: nomeServicos(st, alvo), dataHora: `${fmtDayLong(inicio)}, às ${fmtHM(inicio)}`, endereco: e.endereco || '', mapaUrl: mostra ? mapaDaLoja(e) : '' }) });
         return;
       }
+      setAvisar({ semTelefone: true }); // sem telefone (ou sem cadastro): diz isso em vez de fechar em silêncio
+      return;
     }
     onClose();
   };
   // Chamado direto do clique (sem await antes): o navegador só deixa abrir a aba nova nesse momento.
   const avisarCliente = () => { const abriu = abrirWhatsapp(avisar.texto, avisar.tel); if (!abriu) toast('Não foi possível abrir o WhatsApp.', 'erro'); onClose(); };
 
+  if (avisar && avisar.semTelefone) {
+    return (
+      <Modal titulo="Cliente sem telefone" sub={alvo ? nomeCliente(st, alvo) : undefined} onClose={onClose}
+        rodape={<Btn variante="primario" onClick={onClose} data-testid="avisar-sem-telefone-ok">Entendi</Btn>}>
+        <p data-testid="avisar-sem-telefone">O horário foi remarcado, mas este cliente está sem telefone: não dá para avisá-lo pelo WhatsApp. Cadastre o telefone na ficha do cliente para os próximos avisos.</p>
+      </Modal>
+    );
+  }
   if (avisar) {
     return (
       <Modal titulo="Avisar o cliente?" sub={alvo ? nomeCliente(st, alvo) : undefined} onClose={onClose}
