@@ -87,7 +87,7 @@ for (const slug of ['dalforno', 'offbox']) {
   assert.equal(await q2.evaluate(() => document.documentElement.getAttribute('data-tipo')), 'barbearia');
   await cli2.close();
   // v126: o link leva ?loja= além do #…@loja; sem o fragmento (redirecionamento ou quadro que o perde), a loja salva (apex) não manda
-  assert.ok(msg.includes(`?loja=${slug}#agendar@${slug}`), `${slug}: o link não leva ?loja= junto: ${msg}`);
+  assert.ok(msg.includes(`?loja=${slug}&ir=agendar#agendar@${slug}`), `${slug}: o link não leva ?loja= junto: ${msg}`);
   const cli3 = await b.newContext({ viewport: { width: 390, height: 780 }, locale: 'pt-BR' });
   await cli3.addInitScript(() => { try { localStorage.setItem('agendz-demo-loja', 'apex'); } catch { /* sem armazenamento */ } });
   const q3 = await cli3.newPage(); q3.setDefaultTimeout(8000);
@@ -95,6 +95,14 @@ for (const slug of ['dalforno', 'offbox']) {
   await q3.getByTestId('pub-aba-agendar').waitFor();
   assert.equal(await q3.locator('img').first().getAttribute('alt'), alt, `${slug}: sem o fragmento, o link caiu na loja salva`);
   await cli3.close();
+  // v129: o quadro do Artifact joga o fragmento fora e o link chegava no LOGIN da loja certa: a página vem de `?ir=`, sem nenhum #
+  const cli4 = await b.newContext({ viewport: { width: 390, height: 780 }, locale: 'pt-BR' });
+  const q4 = await cli4.newPage(); q4.setDefaultTimeout(8000);
+  await q4.goto(`${base}?loja=${slug}&ir=agendar-u-kiko`);
+  await q4.getByTestId('pub-aba-agendar').waitFor();
+  assert.equal(await q4.locator('img').first().getAttribute('alt'), alt, `${slug}: sem o fragmento, a página do cliente abriu na loja errada`);
+  assert.equal(await q4.getByTestId('login-entrar').count(), 0, `${slug}: sem o fragmento o link abriu o login`);
+  await cli4.close();
   const corpo = await q.locator('body').innerText();
   assert.ok(!/lavagem|polimento|veículo/i.test(corpo), `${slug}: página do cliente com serviços da Apex`);
   // o título da aba e o texto do convite trazem o nome da loja certa
