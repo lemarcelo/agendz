@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -182,8 +183,15 @@ class AparelhoConfiavelTest extends BaseApi {
         // trocar a senha apaga todos (o que PUT /api/usuarios/me/senha e a senha refeita pela equipe fazem)
         jdbc.update("update aparelho_confiavel set ultimo_uso = now()");
         eu(longo, OUTRA).andExpect(status().isOk());
-        aparelhos.removerTodos(UUID.fromString(idAlan()));
-        eu(longo, OUTRA).andExpect(status().isUnauthorized());
+        String hashAntigo = jdbc.queryForObject("select senha_hash from usuario where id = ?::uuid", String.class, idAlan());
+        try {
+            mvc.perform(put("/api/usuarios/me/senha").with(host(DALFORNO)).with(de(CASA)).header(HttpHeaders.AUTHORIZATION, bearer(tokenDe(entrar(CASA))))
+                    .contentType(MediaType.APPLICATION_JSON).content("{\"senhaAtual\":\"1234\",\"nova\":\"OutraSenha9876\"}")).andExpect(status().isOk());
+            eu(longo, OUTRA).andExpect(status().isUnauthorized());
+            assertEquals(0, jdbc.queryForObject("select count(*) from aparelho_confiavel where usuario_id = ?::uuid", Integer.class, idAlan()));
+        } finally {
+            jdbc.update("update usuario set senha_hash = ? where id = ?::uuid", hashAntigo, idAlan());
+        }
         // token inventado com o id de um aparelho que não existe
         eu(tokenAntigo(Duration.ofMinutes(1), UUID.randomUUID().toString()), OUTRA).andExpect(status().isUnauthorized());
         // e um token comum assinado como "ap" sem linha não passa de jeito nenhum
