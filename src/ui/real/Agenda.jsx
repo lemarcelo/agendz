@@ -4,9 +4,10 @@
 // devolve, com as mensagens dele. O profissional só recebe os próprios agendamentos (o servidor filtra). Atender (atendimento local e novo agendamento) é o `Atender.jsx` (5c);
 // nas lojas com veículo/porte e box (estética) o Atender pede o veículo e deixa escolher o box; o cartão e a ficha mostram veículo, porte e box.
 // Não importa `api.js`, `hooks.js` nem `common.jsx` (tests/estatico.test.mjs).
-import PedirAvaliacao, { EstrelaAvaliar } from './PedirAvaliacao.jsx';
+import PedirAvaliacao, { EstrelaAvaliar, NotaDoAtendimento } from './PedirAvaliacao.jsx';
+import { avaliacaoDoPainel } from '../../domain/avaliacoes.js';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { agenda as api, boxes as apiBoxes, clientes as apiClientes, linkAgendamento as apiLink, local as apiLocal, profissionais as apiProf } from '../../services/api-real.js';
+import { agenda as api, avaliacoes as apiAv, boxes as apiBoxes, clientes as apiClientes, linkAgendamento as apiLink, local as apiLocal, profissionais as apiProf } from '../../services/api-real.js';
 import { DIAS_CURTOS, addDays, addMonths, fmtDateTime, fmtDayLong, maiuscula1, fmtDiaMesSemana, fmtHM, fmtMoney, fmtMonthYear, monthStart, sameDay, startOfDay, weekStart, ymd } from '../../domain/time.js';
 import { ATIVOS, ROTULO_STATUS } from '../../domain/rules.js';
 import { agruparPorDia, rotuloCancelados, rotuloDoGrupo, separarCancelados } from '../../domain/agenda-grupos.js';
@@ -31,7 +32,7 @@ const aoLocal = (ts) => { const d = new Date(ts); const p = (n) => String(n).pad
 const doLocal = (v) => { const t = new Date(v).getTime(); return Number.isFinite(t) ? t : null; };
 
 
-function Cartao({ a, nomeCliente, nomeProf, mostraProf, aberto, aoAbrir, aoSegurar, testid, destaque = false, children }) {
+function Cartao({ a, nomeCliente, nomeProf, mostraProf, aberto, aoAbrir, aoSegurar, testid, destaque = false, avaliacao = null, children }) {
   const v = visual(a);
   const [pedindo, setPedindo] = useState(false); // painel "Pedir avaliação" (F5 fase 2): só atendimento concluído com serviço; o servidor diz se dá para pedir
   const podePedir = a.status === 'concluido' && a.servicos.length > 0;
@@ -63,9 +64,9 @@ function Cartao({ a, nomeCliente, nomeProf, mostraProf, aberto, aoAbrir, aoSegur
           {a.conflitosPendentes.length > 0 && <span className="chip chip-p chip-alerta" data-testid="cartao-conflito">{a.conflitosPendentes.length === 1 ? '1 a confirmar no mesmo horário' : `${a.conflitosPendentes.length} a confirmar no mesmo horário`}</span>}
         </div>
       </button>
-      {podePedir && <EstrelaAvaliar aberto={pedindo} aoAlternar={() => setPedindo((x) => !x)} />}
+      {podePedir && <EstrelaAvaliar aberto={pedindo} aoAlternar={() => setPedindo((x) => !x)} avaliacao={avaliacao} />}
       </div>
-      {pedindo && <PedirAvaliacao a={a} quem={nomeCliente} aoFechar={() => setPedindo(false)} />}
+      {pedindo && (avaliacao ? <NotaDoAtendimento avaliacao={avaliacao} quem={nomeCliente} aoFechar={() => setPedindo(false)} /> : <PedirAvaliacao a={a} quem={nomeCliente} aoFechar={() => setPedindo(false)} />)}
       {aberto && children}
     </div>
   );
@@ -283,6 +284,7 @@ export default function Agenda({ ehProprio = false, ehDono = false, ehProprietar
   const [lojaInfo, setLojaInfo] = useState({ endereco: '', mapaUrl: '' });
   const [localizacaoUrl, setLocalizacaoUrl] = useState(''); // link do mapa: o servidor só o devolve quando a loja ligou o envio da localização no WhatsApp
   const ultima = useRef(0);
+  const [notas, setNotas] = useState(new Map()); // agendamentoId → { nota, texto, em }: só avaliações que o servidor mostra a esta pessoa (anônima sem a regra do Admin não traz o agendamento)
 
   useEffect(() => {
     apiClientes.listar().then((r) => { if (r.ok) { setClientes(new Map(r.clientes.map((c) => [c.id, c.apelido || c.nome]))); setFichas(new Map(r.clientes.map((c) => [c.id, { nome: c.apelido || c.nome, telefone: c.telefone }]))); } });
@@ -306,6 +308,17 @@ export default function Agenda({ ehProprio = false, ehDono = false, ehProprietar
       setLista((antes) => (antes && JSON.stringify(antes) === JSON.stringify(r.agendamentos) ? antes : r.agendamentos)); // igual: não redesenha
     })();
   }, [de, ate, versao]);
+  // v131: notas para a estrela do cartão. Avaliação nasce depois do atendimento, então basta pedir "a partir do início da lista"; sem permissão (403) ou erro, a estrela fica como antes.
+  useEffect(() => {
+    let vivo = true;
+    apiAv.listar({ de: ymd(de) }).then((r) => {
+      if (!vivo || !r.ok) return;
+      const m = new Map();
+      for (const x of r.avaliacoes) { const info = x.agendamentoId ? avaliacaoDoPainel(x) : null; if (info) m.set(x.agendamentoId, info); }
+      setNotas((antes) => (JSON.stringify([...antes]) === JSON.stringify([...m]) ? antes : m));
+    });
+    return () => { vivo = false; };
+  }, [de, versao]);
   // O cliente pode pedir, remarcar ou cancelar pelo link a qualquer hora: a agenda se atualiza sozinha (aba visível), sem fechar o cartão aberto.
   useAtualizacaoAutomatica(() => { emFundo.current = true; setVersao((v) => v + 1); });
 
@@ -368,7 +381,7 @@ export default function Agenda({ ehProprio = false, ehDono = false, ehProprietar
 
   const cartao = (a, testid) => (
     <Cartao key={a.id} a={a} testid={testid} nomeCliente={nomeCliente(a)} nomeProf={nomeProf(a.profissionalId)} mostraProf={!ehProprio && selecionado === 'todos' && atendem.length > 1}
-      aberto={aberto === a.id} aoAbrir={() => setAberto(aberto === a.id ? null : a.id)} aoSegurar={setTrocaForma} destaque={destaqueIds.includes(a.id)}>
+      aberto={aberto === a.id} aoAbrir={() => setAberto(aberto === a.id ? null : a.id)} aoSegurar={setTrocaForma} destaque={destaqueIds.includes(a.id)} avaliacao={notas.get(a.id) || null}>
       <Detalhe a={a} nomeProf={nomeProf(a.profissionalId)} nomeDe={nomeProf} profissionais={atendem} boxes={boxes} ehDono={ehDono} aoAlterar={alterou} aoAvisar={setAvisoRemarcar} cliente={a.clienteId ? fichas.get(a.clienteId) || null : null} loja={{ nome: nomeLoja, ...lojaInfo }} />
     </Cartao>
   );

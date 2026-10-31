@@ -1,6 +1,7 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:be6aa6cbf4 */
 :root {
   /* Agendz: tema escuro por padrão (preto + verde→lima da logo). O claro é opcional e entra por data-theme="light"; não segue o sistema. */
+  --nota-1: #ff6b6b; --nota-2: #ff9a3c; --nota-3: #ffd23f; --nota-4: #a5d94a; --nota-5: #4ade80; --nota-fg: #141414; /* cor da estrela do cartão por nota (v131); texto do número com contraste ≥ 4,5 (tests/estrela-nota.test.mjs) */
   --bg: #0d0f12; --surface: #15181c; --surface-2: #1c2025; --surface-3: #262b32;
   --fg: #e9edf2; --muted: #9aa4b1; --line: #272c33; --line-strong: #3b424b;
   --ink: #4ada54; --ink-fg: #0b1209; --acento: #a6e452; --focus: #d9e652;
@@ -19,6 +20,7 @@
   color-scheme: dark;
 }
 :root[data-theme="light"] {
+  --nota-1: #c62828; --nota-2: #b8530a; --nota-3: #8a6500; --nota-4: #4a7a14; --nota-5: #1b7f3a; --nota-fg: #ffffff;
   --bg: #f1f4f8; --surface: #ffffff; --surface-2: #e8edf3; --surface-3: #dbe2ea;
   --fg: #12161b; --muted: #596372; --line: #d7dee7; --line-strong: #b9c3cf;
   --ink: #2b7d34; --ink-fg: #ffffff; --acento: #2b7d34; --focus: #3f9b49;
@@ -1085,6 +1087,21 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
 .cartao-estrela.pedida { color: var(--amarelo); border-color: var(--amarelo); }
 .cartao-estrela.avaliada { color: var(--amarelo); border-color: var(--amarelo); background: var(--amarelo-bg); }
 .cartao-estrela.avaliada .ico, .cartao-estrela.pedida .ico { fill: currentColor; }
+/* v131: avaliada com nota mostra o número dentro da estrela e a cor da nota (1 a 5); sem nota (anônima/oculta) fica como "avaliada" */
+.cartao-estrela.com-nota { position: absolute; }
+.cartao-estrela.com-nota .ico { fill: currentColor; width: 28px; height: 28px; }
+.cartao-estrela .estrela-num { position: absolute; inset: 0; display: grid; place-items: center; font-size: 11px; font-weight: 800; line-height: 1; color: var(--nota-fg); padding-top: 2px; pointer-events: none; }
+.cartao-estrela.nota-1 { color: var(--nota-1); border-color: var(--nota-1); background: color-mix(in srgb, var(--nota-1) 14%, var(--surface)); }
+.cartao-estrela.nota-2 { color: var(--nota-2); border-color: var(--nota-2); background: color-mix(in srgb, var(--nota-2) 14%, var(--surface)); }
+.cartao-estrela.nota-3 { color: var(--nota-3); border-color: var(--nota-3); background: color-mix(in srgb, var(--nota-3) 14%, var(--surface)); }
+.cartao-estrela.nota-4 { color: var(--nota-4); border-color: var(--nota-4); background: color-mix(in srgb, var(--nota-4) 14%, var(--surface)); }
+.cartao-estrela.nota-5 { color: var(--nota-5); border-color: var(--nota-5); background: color-mix(in srgb, var(--nota-5) 14%, var(--surface)); }
+.estrelas-nota { display: inline-flex; gap: 2px; vertical-align: middle; }
+.estrelas-nota .ico { width: 22px; height: 22px; color: var(--line-strong); }
+.estrelas-nota .ico.cheia { fill: currentColor; }
+.estrelas-nota.nota-1 .cheia { color: var(--nota-1); } .estrelas-nota.nota-2 .cheia { color: var(--nota-2); } .estrelas-nota.nota-3 .cheia { color: var(--nota-3); }
+.estrelas-nota.nota-4 .cheia { color: var(--nota-4); } .estrelas-nota.nota-5 .cheia { color: var(--nota-5); }
+.nota-comentario { margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .estrelas { display: inline-flex; gap: 1px; vertical-align: middle; }
 .estrelas .cheia { color: var(--amarelo); } .estrelas .cheia .ico { fill: currentColor; }
 .estrelas .vazia { color: var(--line-strong); }

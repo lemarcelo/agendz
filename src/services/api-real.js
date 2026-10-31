@@ -1442,7 +1442,7 @@ const lerAvaliacao = (d) => {
   d = d && typeof d === 'object' ? d : {};
   const nota = Number.isInteger(d.nota) && d.nota >= 1 && d.nota <= 5 ? d.nota : 0;
   return {
-    id: IDV(d.id), em: instante(d.em), nota, texto: texto(d.texto, 500), servicos: listaDe(d.servicos, 20).map((x) => texto(x, 120)), profissionalId: IDV(d.profissionalId), profissional: texto(d.profissional, 80),
+    id: IDV(d.id), agendamentoId: IDV(d.agendamentoId), em: instante(d.em), nota, texto: texto(d.texto, 500), servicos: listaDe(d.servicos, 20).map((x) => texto(x, 120)), profissionalId: IDV(d.profissionalId), profissional: texto(d.profissional, 80),
     anonimo: d.anonimo === true, oculta: d.oculta === true, motivoOculta: d.motivoOculta ? texto(d.motivoOculta, 200) : '', cliente: texto(d.cliente, 100), revelado: d.revelado === true,
   };
 };

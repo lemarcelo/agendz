@@ -153,6 +153,24 @@ export function paraPainel(s, av, { verOculta = false } = {}) {
   return { ...base, clienteId: av.clienteId || null, agendamentoId: av.agendamentoId, cliente: c ? c.apelido || c.nome : 'Cliente', revelado: av.anonimo === true };
 }
 
+// ---------- a estrela do cartão (v131): nota e comentário à vista ----------
+// O cartão mostra o número de estrelas (1 a 5; 0 = ainda sem avaliação) e, ao tocar, o comentário. Anônimo sem a regra do Admin e avaliação oculta (para quem não é o dono)
+// NUNCA mostram nota nem texto no cartão: o cartão tem o nome do cliente, então a nota o identificaria. Aí só se sabe que "foi avaliado" (nota 0, `escondida`).
+export function avaliacaoDoCartao(s, agendamentoId, { verOculta = false } = {}) {
+  const av = avaliacaoDe(s, agendamentoId);
+  if (!av) return null;
+  const nota = Number.isInteger(av.nota) && av.nota >= NOTA_MIN && av.nota <= NOTA_MAX ? av.nota : 0;
+  if (!nota || (av.anonimo === true && !mostraAnonimo(s)) || (av.oculta === true && !verOculta)) return { nota: 0, texto: '', em: null, escondida: true, anonima: av.anonimo === true && !mostraAnonimo(s) };
+  return { nota, texto: typeof av.texto === 'string' ? av.texto : '', em: av.em || null, escondida: false, anonima: false };
+}
+/** Mesmo formato, a partir de um item do painel já filtrado pelo servidor (site real). */
+export function avaliacaoDoPainel(p) {
+  const nota = p && Number.isInteger(p.nota) && p.nota >= NOTA_MIN && p.nota <= NOTA_MAX ? p.nota : 0;
+  if (!nota) return null;
+  return { nota, texto: typeof p.texto === 'string' ? p.texto : '', em: p.em || null, escondida: false, anonima: false };
+}
+export const rotuloDaNota = (n) => (n >= NOTA_MIN && n <= NOTA_MAX ? `${n} ${n === 1 ? 'estrela' : 'estrelas'}` : 'sem nota');
+
 // ---------- filtros e resumo ----------
 // `de`/`ate`: 'AAAA-MM-DD' (dias inclusive). Sem datas = tudo. Devolve { ini, fim } em ms (fim exclusivo) ou { erro }.
 export function lerPeriodo({ de, ate } = {}) {

@@ -3,30 +3,57 @@
 // Cliente sem telefone, sem cadastro ou que pediu para não receber: a tela diz isso (nunca silêncio). O token nasce no clique de confirmar e aparece uma vez.
 import React, { useMemo, useState } from 'react';
 import { avaliacoes } from '../services/api.js';
-import { textoPedidoAvaliacao, MODELO_AVALIACAO_PADRAO } from '../domain/avaliacoes.js';
+import { textoPedidoAvaliacao, MODELO_AVALIACAO_PADRAO, avaliacaoDoCartao, rotuloDaNota, NOTA_MAX } from '../domain/avaliacoes.js';
+import { ehDono } from '../domain/rules.js';
 import { fmtDateShort } from '../domain/time.js';
 import { Aviso, Btn, Icon, Modal } from './common.jsx';
 import { linkDaAvaliacao } from './avaliacao-link.js';
 import { copiarTexto } from './clipboard.js';
 import { nomeCliente } from './format.js';
-import { toast, useStore } from './hooks.js';
+import { toast, useStore, useUser } from './hooks.js';
 import { abrirWhatsapp } from './whatsapp.js';
 
 const TESTID_SEM = { sem_telefone: 'avaliar-sem-telefone', sem_cadastro: 'avaliar-sem-cadastro', sem_mensagens: 'avaliar-sem-mensagens' };
 const TITULO_SEM = { sem_telefone: 'Cliente sem telefone', sem_cadastro: 'Atendimento sem cadastro', sem_mensagens: 'Cliente não quer mensagens' };
 
+// Estrelas só de enfeite/leitura (nota 1 a 5): as cheias têm a cor da nota.
+export function EstrelasNota({ nota }) {
+  return (
+    <span className={`estrelas-nota nota-${nota}`} role="img" aria-label={`Nota: ${rotuloDaNota(nota)} de ${NOTA_MAX}`} data-testid="avaliacao-estrelas" data-nota={nota}>
+      {Array.from({ length: NOTA_MAX }, (_, i) => <Icon key={i} n="star" size={22} className={i < nota ? 'cheia' : ''} />)}
+    </span>
+  );
+}
+
+// Avaliado com nota visível: o toque mostra a nota e o comentário (em vez de "pedir avaliação"). Anônima/oculta ou sem nota: continua como antes.
 export function EstrelaAvaliar({ a, st }) {
+  const user = useUser();
   const [aberto, setAberto] = useState(false);
-  const avaliada = (st.avaliacoes || []).some((x) => x.agendamentoId === a.id);
+  const info = avaliacaoDoCartao(st, a.id, { verOculta: ehDono(user) });
+  const avaliada = !!info;
+  const nota = info && !info.escondida ? info.nota : 0;
   const pedida = a.avaliacaoPedida && a.avaliacaoPedida.em;
-  const rotulo = avaliada ? 'Cliente já avaliou' : pedida ? `Avaliação pedida em ${fmtDateShort(pedida)}. Pedir de novo` : 'Pedir avaliação ao cliente';
+  const rotulo = nota ? `Avaliado: ${rotuloDaNota(nota)}. Ver comentário` : avaliada ? 'Cliente já avaliou' : pedida ? `Avaliação pedida em ${fmtDateShort(pedida)}. Pedir de novo` : 'Pedir avaliação ao cliente';
   return (
     <>
-      <button type="button" className={`cartao-estrela ${avaliada ? 'avaliada' : pedida ? 'pedida' : ''}`} onClick={() => setAberto(true)} aria-label={rotulo} title={rotulo} data-testid="cartao-avaliar">
-        <Icon n="star" size={18} />
+      <button type="button" className={`cartao-estrela ${nota ? `com-nota nota-${nota}` : avaliada ? 'avaliada' : pedida ? 'pedida' : ''}`} onClick={() => setAberto(true)} aria-label={rotulo} title={rotulo} data-testid="cartao-avaliar" data-nota={nota}>
+        <Icon n="star" size={nota ? 28 : 18} />
+        {nota > 0 && <span className="estrela-num" data-testid="cartao-avaliar-nota">{nota}</span>}
       </button>
-      {aberto && <ModalPedirAvaliacao a={a} st={st} onClose={() => setAberto(false)} />}
+      {aberto && (nota
+        ? <ModalNota a={a} st={st} info={info} onClose={() => setAberto(false)} />
+        : <ModalPedirAvaliacao a={a} st={st} onClose={() => setAberto(false)} />)}
     </>
+  );
+}
+
+function ModalNota({ a, st, info, onClose }) {
+  return (
+    <Modal titulo="Avaliação do atendimento" sub={nomeCliente(st, a)} onClose={onClose} rodape={<Btn variante="primario" onClick={onClose} data-testid="avaliar-ok">Fechar</Btn>}>
+      <p><EstrelasNota nota={info.nota} /> <b data-testid="avaliacao-nota-texto">{rotuloDaNota(info.nota)}</b></p>
+      {info.em && <p className="muted">Avaliado em {fmtDateShort(info.em)}</p>}
+      {info.texto ? <p className="nota-comentario" data-testid="avaliacao-comentario">{info.texto}</p> : <p className="muted" data-testid="avaliacao-sem-comentario">Sem comentário.</p>}
+    </Modal>
   );
 }
 

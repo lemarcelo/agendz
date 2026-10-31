@@ -5,7 +5,7 @@
 // Preparar (chama o servidor) e Abrir no WhatsApp (sem await antes). Não importa `api.js`, `hooks.js` nem `common.jsx` (tests/estatico.test.mjs). Classes próprias terminam em `-real`.
 import React, { useEffect, useRef, useState } from 'react';
 import { avaliacoes as api } from '../../services/api-real.js';
-import { MODELO_AVALIACAO_PADRAO, aplicarModelo } from '../../domain/avaliacoes.js';
+import { MODELO_AVALIACAO_PADRAO, NOTA_MAX, aplicarModelo, rotuloDaNota } from '../../domain/avaliacoes.js';
 import { montarLinkAvaliar } from '../../domain/link-publico.js';
 import { fmtDateShort } from '../../domain/time.js';
 import { copiarTexto } from '../clipboard.js';
@@ -16,12 +16,33 @@ const linkDe = (token) => montarLinkAvaliar({ base: `${globalThis.location.origi
 const TITULO_SEM = { sem_telefone: 'Cliente sem telefone', sem_cadastro: 'Atendimento sem cadastro', sem_mensagens: 'Cliente não quer mensagens', sem_servico: 'Atendimento sem serviço', nao_concluido: 'Atendimento não concluído' };
 
 // Botão de estrela do cartão (o painel abre logo abaixo do cartão). `avaliada` e `pedidaEm` vêm da lista da agenda quando o servidor os informa.
-export function EstrelaAvaliar({ aberto, aoAlternar, pedidaEm = null, avaliada = false }) {
-  const rotulo = avaliada ? 'Cliente já avaliou' : pedidaEm ? `Avaliação pedida em ${fmtDateShort(pedidaEm)}. Pedir de novo` : 'Pedir avaliação ao cliente';
+// v131: com `avaliacao` ({ nota 1..5, texto }) o botão mostra o número dentro da estrela, na cor da nota, e o toque abre a nota e o comentário (não o pedido).
+export function EstrelaAvaliar({ aberto, aoAlternar, pedidaEm = null, avaliada = false, avaliacao = null }) {
+  const nota = avaliacao && avaliacao.nota >= 1 && avaliacao.nota <= NOTA_MAX ? avaliacao.nota : 0;
+  const rotulo = nota ? `Avaliado: ${rotuloDaNota(nota)}. Ver comentário` : avaliada ? 'Cliente já avaliou' : pedidaEm ? `Avaliação pedida em ${fmtDateShort(pedidaEm)}. Pedir de novo` : 'Pedir avaliação ao cliente';
   return (
-    <button type="button" className={`cartao-estrela ${avaliada ? 'avaliada' : pedidaEm ? 'pedida' : ''}`} onClick={aoAlternar} aria-label={rotulo} title={rotulo} aria-expanded={aberto} data-testid="cartao-avaliar">
-      <Icone n="star" size={18} />
+    <button type="button" className={`cartao-estrela ${nota ? `com-nota nota-${nota}` : avaliada ? 'avaliada' : pedidaEm ? 'pedida' : ''}`} onClick={aoAlternar} aria-label={rotulo} title={rotulo} aria-expanded={aberto} data-testid="cartao-avaliar" data-nota={nota}>
+      <Icone n="star" size={nota ? 28 : 18} />
+      {nota > 0 && <span className="estrela-num" data-testid="cartao-avaliar-nota">{nota}</span>}
     </button>
+  );
+}
+
+// Nota e comentário do atendimento já avaliado (painel logo abaixo do cartão).
+export function NotaDoAtendimento({ avaliacao, quem, aoFechar }) {
+  const nota = avaliacao.nota;
+  return (
+    <div className="subcartao pedir-av-real" data-testid="nota-av-real">
+      <b>Avaliação do atendimento{quem ? ` · ${quem}` : ''}</b>
+      <p>
+        <span className={`estrelas-nota nota-${nota}`} role="img" aria-label={`Nota: ${rotuloDaNota(nota)} de ${NOTA_MAX}`} data-testid="avaliacao-estrelas" data-nota={nota}>
+          {Array.from({ length: NOTA_MAX }, (_, i) => <Icone key={i} n="star" size={22} className={i < nota ? 'cheia' : ''} />)}
+        </span>{' '}<b data-testid="avaliacao-nota-texto">{rotuloDaNota(nota)}</b>
+      </p>
+      {avaliacao.em ? <p className="muted">Avaliado em {fmtDateShort(avaliacao.em)}</p> : null}
+      {avaliacao.texto ? <p className="nota-comentario" data-testid="avaliacao-comentario">{avaliacao.texto}</p> : <p className="muted" data-testid="avaliacao-sem-comentario">Sem comentário.</p>}
+      <div className="acoes"><Btn tamanho="sm" onClick={aoFechar} data-testid="nota-av-fechar">Fechar</Btn></div>
+    </div>
   );
 }
 
