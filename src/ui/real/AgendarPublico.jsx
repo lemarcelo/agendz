@@ -8,9 +8,9 @@
 import { caminhoHttps } from '../../domain/localizacao.js';
 import { adicionarReserva, lerReservas, limparReservas, removerReserva, sincronizarReservas } from '../../domain/reservas-local.js';
 import React, { useEffect, useMemo, useState } from 'react';
-import { publico } from '../../services/api-real.js';
+import { planosPublico, publico } from '../../services/api-real.js';
 import { fmtMoney, maiuscula1 } from '../../domain/time.js';
-import { formatarTelefone } from '../../domain/rules.js';
+import { formatarTelefone, telefoneBrasileiro } from '../../domain/rules.js';
 import { Rot, capAtiva, rot } from '../../domain/tipos.js';
 import { PORTE_PADRAO, formatarPlaca, limparVeiculoComRegras, placaValida, tipoPlaca } from '../../domain/veiculos.js';
 import { logoValida } from '../../domain/tema.js';
@@ -137,6 +137,7 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [feito, setFeito] = useState(null);
+  const [usaPlano, setUsaPlano] = useState(false); // o telefone é de quem tem plano com corte para este horário (só sim ou não)
   const servicos = pagina.servicos.filter((x) => srv.includes(x.id));
   const preco = (x) => (usaVeiculo ? x.precos[porte || PORTE_PADRAO] ?? x.preco : x.preco); // sem porte (dono tirou a obrigatoriedade) vale o médio
   const minutos = (x) => (usaVeiculo ? x.duracoes[porte || PORTE_PADRAO] ?? x.duracao : x.duracao);
@@ -152,6 +153,18 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
   const nomeBarb = (id) => pagina.profissionais.find((b) => b.id === id)?.nome || `Qualquer ${rot('profissional')}`;
   const alternar = (id) => { setSrv((l) => (l.includes(id) ? l.filter((x) => x !== id) : l.length >= 5 ? l : [...l, id])); setEscolha(null); };
 
+  // Avisa antes de pedir: "este horário usa um atendimento do seu plano". Só consulta com o telefone completo; o servidor responde apenas sim ou não.
+  useEffect(() => {
+    setUsaPlano(false);
+    if (etapa !== 3 || !escolha || !telefoneBrasileiro(tel)) return undefined;
+    let vivo = true;
+    const t = setTimeout(async () => {
+      const r = await planosPublico.uso({ telefone: tel, servicoIds: srv, inicio: escolha.inicio });
+      if (vivo && r.ok && r.usaPlano) setUsaPlano(true);
+    }, 400);
+    return () => { vivo = false; clearTimeout(t); };
+  }, [etapa, tel, srv, escolha]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const enviar = async () => {
     if (enviando) return;
     setErro(''); setEnviando(true);
@@ -163,7 +176,7 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
       return;
     }
     if (r.token) aoCriar({ id: r.agendamento.id, token: r.token }, { id: r.agendamento.id, inicio: r.agendamento.inicio, fim: r.agendamento.fim, servicos: r.agendamento.servicos, profissional: r.agendamento.profissional }, { nome, telefone: tel });
-    setFeito(r.agendamento);
+    setFeito({ ...r.agendamento, usouPlano: r.usouPlano === true });
     setEtapa(4);
   };
   const recomecar = () => { setEtapa(desl); setSrv([]); setEscolha(null); setFeito(null); setCupom(''); setErro(''); };
@@ -174,6 +187,7 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
         <div className="pub-ok"><Icone n="check" size={26} /></div>
         <h2>Pedido enviado</h2>
         <p>{feito.servicos.join(', ')}{feito.veiculo ? ` · ${feito.veiculo.modelo} ${formatarPlaca(feito.veiculo.placa)}` : ''} com <b>{feito.profissional}</b><br /><b>{diaLongo(feito.inicio)}, {horaDe(feito.inicio)}</b></p>
+        {feito.usouPlano && <p data-testid="pub-feito-plano"><Icone n="ticket" size={14} /> Este horário usa um atendimento do seu plano.</p>}
         {feito.desconto > 0 && <p data-testid="pub-feito-cupom"><Icone n="key" size={14} /> Cupom {feito.cupom}: −{fmtMoney(feito.desconto)} · a pagar {fmtMoney(feito.total - feito.desconto)}</p>}
         <p className="muted">{loja.nome} vai confirmar o seu horário. Você acompanha em “Meus agendamentos” neste aparelho.</p>
         <div className="pub-linha">
@@ -275,6 +289,7 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
           <form className="pub-form" onSubmit={(e) => { e.preventDefault(); enviar(); }} noValidate>
             <Campo rotulo={pagina.exigeNome === false ? 'Nome, se quiser' : 'Nome'}><input value={nome} onChange={(e) => setNome(e.target.value)} maxLength={60} autoComplete="name" data-testid="pub-nome" /></Campo>
             <Campo rotulo={pagina.exigeTelefone ? 'Telefone (WhatsApp, com DDD)' : 'Telefone (WhatsApp), se quiser'} dica={pagina.exigeTelefone ? undefined : 'Opcional. Com telefone a loja avisa do seu horário; sem ele, só vê o seu pedido.'}><input type="tel" inputMode="tel" value={tel} onChange={(e) => setTel(formatarTelefone(e.target.value))} maxLength={16} autoComplete="tel" placeholder="(51) 99999-9999" data-testid="pub-tel" /></Campo>
+            {usaPlano && <p className="pub-aviso-plano" role="status" data-testid="pub-usa-plano"><Icone n="ticket" size={14} /> Este horário usa um atendimento do seu plano.</p>}
             <Campo rotulo="Cupom (opcional)"><input value={cupom} onChange={(e) => setCupom(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 14))} maxLength={14} autoComplete="off" autoCapitalize="characters" placeholder="XXXX-XXXX-XXXX" data-testid="pub-cupom" /></Campo>
             <input className="pub-isca" tabIndex={-1} aria-hidden="true" autoComplete="off" name="site" value={isca} onChange={(e) => setIsca(e.target.value)} data-testid="pub-isca" />
             {erro && <Aviso tipo="erro"><span data-testid="pub-erro">{erro}</span></Aviso>}

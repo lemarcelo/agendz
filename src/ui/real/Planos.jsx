@@ -8,7 +8,8 @@ import { planos as api, clientes as apiClientes, profissionais as apiProfissiona
 import { ADIANTA_MAX, ACUMULO_MAX, INTERVALO_MAX, CORTES_MAX, SITUACAO, rotuloMes, somaMeses } from '../../domain/planos.js';
 import { fmtMoney, DIAS_SEMANA, DIAS_CURTOS } from '../../domain/time.js';
 import { DIAS_FIXOS_A_FRENTE, MAX_FIXOS } from '../../domain/planos.js';
-import { Rot, capAtiva } from '../../domain/tipos.js';
+import { Rot, capAtiva, tipoAtivo } from '../../domain/tipos.js';
+import { formularioDoModelo, modelosDePlanoDoTipo } from '../../domain/catalogo.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
 
 const FORMAS = { pix: 'Pix', dinheiro: 'Dinheiro', cartao: 'Cartão' };
@@ -235,7 +236,7 @@ function Extrato({ a, aoFechar, aoFeito }) {
   );
 }
 
-function FormPlano({ p, servicos, aoCancelar, aoFeito }) {
+function FormPlano({ p, dica, servicos, aoCancelar, aoFeito }) {
   const [f, setF] = useState(() => ({ id: p.id || '', nome: p.nome || '', descricao: p.descricao || '', preco: p.preco ? String(p.preco) : '', cortes: String(p.cortes || 2), servicoIds: p.servicoIds || [],
     adianta: String(p.adianta ?? 1), acumuloMeses: String(p.acumuloMeses || 2), intervaloDias: String(p.intervaloDias ?? 3), ativo: p.ativo !== false }));
   const { erro, enviando, enviar } = usarEnvio(() => api.salvar(f), () => aoFeito(f.id ? 'Plano salvo. Quem já assinou continua com as condições de quando contratou.' : 'Plano criado.'));
@@ -245,6 +246,7 @@ function FormPlano({ p, servicos, aoCancelar, aoFeito }) {
   return (
     <section className="tela" data-testid="plano-form">
       <header className="tela-topo"><h1>{f.id ? 'Editar plano' : 'Novo plano'}</h1></header>
+      {dica && <Aviso data-testid="plano-modelo-dica"><span role="status">{dica}</span></Aviso>}
       <form onSubmit={enviar} className="form-grade">
         <Campo rotulo="Nome do plano"><input value={f.nome} maxLength={60} onChange={mudar('nome')} data-testid="plano-nome" /></Campo>
         <Campo rotulo="Descrição (opcional)"><input value={f.descricao} maxLength={200} onChange={mudar('descricao')} data-testid="plano-descricao" /></Campo>
@@ -310,11 +312,29 @@ function Assinaturas({ dados, aoAbrir, aoQuitar }) {
   );
 }
 
-function Catalogo({ dados, servicos, aoAbrir, aoRemover }) {
+function Catalogo({ dados, servicos, aoAbrir, aoRemover, aoUsarModelo }) {
   const nomes = (p) => p.servicoIds.map((id) => (servicos.find((s) => s.id === id) || {}).nome).filter(Boolean).join(', ');
+  const modelos = modelosDePlanoDoTipo(tipoAtivo()); // por tipo; sem modelo (estética), o botão nem aparece
+  const [verModelos, setVerModelos] = useState(false);
   return (
     <div data-testid="aba-catalogo">
-      <div className="acoes"><Btn variante="primario" onClick={() => aoAbrir({ tipo: 'plano', p: {} })} data-testid="novo-plano"><Icone n="plus" size={16} /> Novo plano</Btn></div>
+      <div className="acoes">
+        {modelos.length > 0 && <Btn onClick={() => setVerModelos((v) => !v)} data-testid="plano-usar-modelo"><Icone n="copy" size={16} /> Usar modelo</Btn>}
+        <Btn variante="primario" onClick={() => aoAbrir({ tipo: 'plano', p: {} })} data-testid="novo-plano"><Icone n="plus" size={16} /> Novo plano</Btn>
+      </div>
+      {verModelos && (
+        <div className="atender-real-bloco" data-testid="modelos-lista-real">
+          <p className="muted">Escolha um modelo para preencher o formulário. Nada é salvo até você salvar o plano.</p>
+          <ul className="clientes-lista" data-testid="modelos-lista">
+            {modelos.map((m) => (
+              <li key={m.chave} className="cliente-cartao" data-testid={`modelo-${m.chave}`}>
+                <div className="cliente-dados"><b>{m.nome}</b> · {fmtMoney(m.preco)}/mês<span className="cliente-linha muted">{m.cortes} {plural(m.cortes, 'atendimento', 'atendimentos')} por mês. {m.descricao}</span></div>
+                <div className="acoes"><Btn tamanho="sm" variante="primario" onClick={() => { setVerModelos(false); aoUsarModelo(m); }} data-testid={`modelo-usar-${m.chave}`}>Usar</Btn></div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {dados.planos.length === 0 ? <p className="muted" data-testid="planos-vazio">Nenhum plano. Crie um plano mensal: nome, valor, quantos atendimentos por mês e quais serviços ele inclui.</p> : (
         <ul className="clientes-lista" data-testid="planos-lista">
           {dados.planos.map((p) => (
@@ -379,6 +399,12 @@ export default function Planos() {
   }, [versao]);
 
   const recarregar = () => setVersao((v) => v + 1);
+  // Modelo do tipo da loja: só preenche o formulário (nada é salvo); se a loja não tem os serviços do modelo, avisa e o dono escolhe à mão.
+  const usarModelo = (m) => {
+    const r = formularioDoModelo(m, servicos, []);
+    setErro(''); setAviso('');
+    setModo({ tipo: 'plano', dica: r.faltou ? 'Sua loja ainda não tem os serviços desse modelo: escolha os serviços do plano. Nada foi salvo.' : '', p: { nome: r.form.nome, descricao: r.form.descricao, preco: r.form.preco, cortes: r.form.cortes, servicoIds: r.form.servicoIds, adianta: r.form.adianta, acumuloMeses: r.form.acumuloMeses, intervaloDias: r.form.intervaloDias } });
+  };
   const feito = (msg) => { setModo(null); setAviso(msg); setErro(''); recarregar(); };
   const agir = async (fazer, ok) => {
     setErro(''); setAviso('');
@@ -397,7 +423,7 @@ export default function Planos() {
     const atual = dados.assinaturas.find((x) => x.id === modo.a.id) || modo.a;
     return <Extrato a={atual} aoFechar={() => setModo(null)} aoFeito={(m) => { setAviso(m); recarregar(); }} />;
   }
-  if (modo && modo.tipo === 'plano') return <FormPlano p={modo.p} servicos={servicos} aoCancelar={() => setModo(null)} aoFeito={feito} />;
+  if (modo && modo.tipo === 'plano') return <FormPlano p={modo.p} dica={modo.dica} servicos={servicos} aoCancelar={() => setModo(null)} aoFeito={feito} />;
   const novos = dados.pedidos.length;
   return (
     <section className="tela" data-testid="tela-planos">
@@ -418,7 +444,7 @@ export default function Planos() {
         ))}
       </div>
       {aba === 'assinaturas' && <Assinaturas dados={dados} aoAbrir={(m) => { setAviso(''); setModo(m); }} aoQuitar={(a) => agir(() => api.quitar(a.id), 'Dívida quitada.')} />}
-      {aba === 'catalogo' && <Catalogo dados={dados} servicos={servicos} aoAbrir={(m) => { setAviso(''); setModo(m); }} aoRemover={setConfirmar} />}
+      {aba === 'catalogo' && <Catalogo aoUsarModelo={usarModelo} dados={dados} servicos={servicos} aoAbrir={(m) => { setAviso(''); setModo(m); }} aoRemover={setConfirmar} />}
       {aba === 'pedidos' && <Pedidos dados={dados} aoAgir={agir} />}
     </section>
   );

@@ -116,6 +116,23 @@ test('planosPublico: nunca leva o token do painel, o pedido leva a isca e o sald
   assert.equal(s.planos[0].restantes, 1);
 });
 
+test('planosPublico.uso: POST com o telefone no corpo (nunca na URL), só sim ou não, e falha da prévia nunca atrapalha o pedido', async () => {
+  servidor({ usaPlano: true });
+  const inicio = Date.parse('2026-11-02T12:00:00Z');
+  const r = await planosPublico.uso({ telefone: '(53) 99900-0001', servicoIds: [SRV, 'lixo'], inicio });
+  assert.deepEqual([chamadas[0].metodo, chamadas[0].url], ['POST', 'https://loja.teste/api/publico/planos/uso']);
+  assert.deepEqual(chamadas[0].corpo, { telefone: '(53) 99900-0001', servicoIds: [SRV], inicio: '2026-11-02T12:00:00.000Z' });
+  assert.ok(!chamadas[0].cab.Authorization, 'rota do cliente nunca leva o token do painel'); assert.ok(!chamadas[0].url.includes('99900'));
+  assert.deepEqual(r, { ok: true, usaPlano: true });
+  servidor({ usaPlano: 'sim', plano: 'Mensal', saldo: 3 }); assert.deepEqual(await planosPublico.uso({ telefone: '(53) 99900-0001', servicoIds: [SRV], inicio }), { ok: true, usaPlano: false }, 'só true de verdade vale; nada a mais sai');
+  servidor({ mensagem: 'Muitos pedidos' }, 429); assert.deepEqual(await planosPublico.uso({ telefone: '(53) 99900-0001', servicoIds: [SRV], inicio }), { ok: true, usaPlano: false });
+  servidor({ usaPlano: true });
+  assert.deepEqual(await planosPublico.uso({ telefone: '', servicoIds: [SRV], inicio }), { ok: true, usaPlano: false });
+  assert.deepEqual(await planosPublico.uso({ telefone: '53999000001', servicoIds: ['lixo'], inicio }), { ok: true, usaPlano: false });
+  assert.deepEqual(await planosPublico.uso({ telefone: '53999000001', servicoIds: [SRV], inicio: NaN }), { ok: true, usaPlano: false });
+  assert.equal(chamadas.length, 0, 'entrada ruim nem sai');
+});
+
 test('horários fixos (v128): POST /api/assinaturas/{id}/fixos com a lista inteira; lê fixos e apagados; id ou lista ruins nem saem', async () => {
   const VEI = '00000000-0000-4000-8000-000000000090';
   const fixo = { id: ID, dia: 1, hm: '18:00', profissionalId: CLI, servicoIds: [SRV, 'lixo'], veiculoId: VEI };

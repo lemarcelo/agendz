@@ -69,10 +69,14 @@ test('agendar: corpo só com os campos aceitos; o token vem uma vez; mensagem do
   servidor({ agendamento: resumo, token: TOKEN }, 201);
   const inicio = Date.parse('2026-11-02T12:00:00Z');
   const r = await publico.agendar({ nome: 'Maria', telefone: '(53) 99900-0001', servicoIds: [SRV, 'lixo'], inicio, profissionalId: PROF, cupomChave: ' abcd-efgh-jklm ', site: '', clienteId: 'x', status: 'confirmado', total: 1 });
-  assert.equal(r.ok, true); assert.equal(r.token, TOKEN); assert.equal(r.agendamento.desconto, 10); assert.equal(r.agendamento.inicio, inicio);
+  assert.equal(r.ok, true); assert.equal(r.token, TOKEN); assert.equal(r.usouPlano, false, 'sem a chave do servidor nunca diz que usou plano'); assert.equal(r.agendamento.desconto, 10); assert.equal(r.agendamento.inicio, inicio);
   assert.deepEqual([chamadas[0].metodo, chamadas[0].url], ['POST', 'https://loja.teste/api/publico/agendamentos']);
   assert.deepEqual(chamadas[0].corpo, { nome: 'Maria', telefone: '(53) 99900-0001', servicoIds: [SRV], inicio: '2026-11-02T12:00:00.000Z', profissionalId: PROF, cupomChave: 'abcd-efgh-jklm' });
   assert.ok(!('Authorization' in chamadas[0].cab) && !('Idempotency-Key' in chamadas[0].cab), 'sem chave de repetição: um pedido que falhou nunca é reenviado sozinho');
+  servidor({ agendamento: resumo, token: TOKEN, usouPlano: true }, 201);
+  assert.equal((await publico.agendar({ nome: 'Maria', telefone: '(53) 99900-0001', servicoIds: [SRV], inicio })).usouPlano, true);
+  servidor({ agendamento: resumo, token: TOKEN, usouPlano: 'true' }, 201);
+  assert.equal((await publico.agendar({ nome: 'Maria', telefone: '(53) 99900-0001', servicoIds: [SRV], inicio })).usouPlano, false);
   // isca preenchida vai (o servidor recusa); sem profissional e sem cupom, os campos não vão
   servidor({ agendamento: resumo, token: 'curto' }, 201);
   const r2 = await publico.agendar({ nome: 'M', telefone: '1', servicoIds: [SRV], inicio, site: 'http://spam' });

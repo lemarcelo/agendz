@@ -477,6 +477,67 @@ class PlanosTest extends BaseApi {
         mvc.perform(get("/api/publico/planos/saldo?telefone=" + a[2]).with(host(OFFBOX)).header("X-Forwarded-For", "10.44.1.9")).andExpect(status().isTooManyRequests());
     }
 
+    // ---------------------------------------------------------------- agendar pelo link com plano (B0)
+
+    private int ipLink;
+
+    private ResultActions pedirPeloLink(String tel, String servicos, int dia, int hora) throws Exception {
+        ipLink += 1;
+        return mvc.perform(post("/api/publico/agendamentos").with(host(OFFBOX)).header("X-Forwarded-For", "10.60.0." + ipLink).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"nome\":\"Cliente Plano\",\"telefone\":\"" + tel + "\",\"servicoIds\":[" + servicos + "],\"inicio\":\"" + as(m1.withDayOfMonth(dia), hora) + "\"}"));
+    }
+
+    private ResultActions previa(String ip, String tel, String servicos, int dia, int hora) throws Exception {
+        return mvc.perform(post("/api/publico/planos/uso").with(host(OFFBOX)).header("X-Forwarded-For", ip).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"telefone\":\"" + tel + "\",\"servicoIds\":[" + servicos + "],\"inicio\":\"" + as(m1.withDayOfMonth(dia), hora) + "\"}"));
+    }
+
+    @Test
+    void clienteComPlanoQueAgendaPeloLinkGastaOCorteENuncaEhRecusadoPorCausaDoPlano() throws Exception {
+        ipLink = 0;
+        escrever(put("/api/estabelecimento/link-agendamento"), dono, "{\"ativo\":true,\"diasMax\":60}").andExpect(status().isOk());
+        planoId = criarPlano("Plano Um", 60, 1, corte);
+        String tel = novoTelefone();
+        String cliente = criarCliente("Cliente Plano", tel);
+        String assinatura = id(contratar(dono, cliente, planoId, mes1).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
+        pagar(assinatura, mes1).andExpect(status().isCreated());
+
+        // 1º corte pelo link: gasta o plano, sai de graça (desconto = preço) e deixa o evento no histórico
+        pedirPeloLink(tel, "\"" + corte + "\"", 2, 9).andExpect(status().isCreated()).andExpect(jsonPath("$.usouPlano").value(true)).andExpect(jsonPath("$.agendamento.status").value("a_confirmar"));
+        assertEquals(assinatura, jdbc.queryForObject("select plano_assinatura_id::text from agendamento", String.class));
+        assertEquals(0, new BigDecimal("40.00").compareTo(jdbc.queryForObject("select desconto from agendamento_servico where servico_id = ?::uuid", BigDecimal.class, corte)));
+        assertEquals(1, contar("select count(*) from agendamento_evento where campo = 'plano'"));
+        // 2º corte: a cota (1 + adiantar 1) deixa; o 3º já não cabe e o pedido NÃO é recusado por causa do plano: segue pelo preço normal
+        pedirPeloLink(tel, "\"" + corte + "\"", 8, 9).andExpect(status().isCreated()).andExpect(jsonPath("$.usouPlano").value(true));
+        pedirPeloLink(tel, "\"" + corte + "\"", 14, 9).andExpect(status().isCreated()).andExpect(jsonPath("$.usouPlano").value(false));
+        assertEquals(2, contar("select count(*) from agendamento where plano_assinatura_id = ?::uuid", assinatura));
+        assertEquals(0, new BigDecimal("0").compareTo(jdbc.queryForObject("select coalesce(sum(desconto), 0) from agendamento_servico a join agendamento g on g.id = a.agendamento_id where g.plano_assinatura_id is null", BigDecimal.class)));
+        // quem não tem plano agenda normalmente
+        pedirPeloLink(novoTelefone(), "\"" + corte + "\"", 20, 9).andExpect(status().isCreated()).andExpect(jsonPath("$.usouPlano").value(false));
+        assertEquals(2, contar("select count(*) from agendamento where plano_assinatura_id is not null"));
+        // o saldo é derivado dos agendamentos: 1 concedido, 2 gastos
+        saldoDoMes(assinatura, mes1, -1);
+    }
+
+    @Test
+    void previaDoLinkDizSoSimOuNaoELimitaPorTelefone() throws Exception {
+        ipLink = 0;
+        String[] a = assinaturaAtiva(true);
+        String c = "\"" + corte + "\"";
+        // com plano e corte livre: sim, e a resposta é só isso (nunca nome do plano, saldo, valor ou nome do cliente)
+        previa("10.61.0.1", a[2], c, 2, 9).andExpect(status().isOk()).andExpect(content().json("{\"usaPlano\":true}", true))
+                .andExpect(content().string(not(containsString("Plano Mensal")))).andExpect(content().string(not(containsString("Cliente Plano"))));
+        // serviço fora do plano, telefone sem plano e telefone inválido: a mesma resposta "não"
+        previa("10.61.0.2", a[2], "\"" + barba + "\"", 2, 9).andExpect(content().json("{\"usaPlano\":false}", true));
+        previa("10.61.0.3", novoTelefone(), c, 2, 9).andExpect(content().json("{\"usaPlano\":false}", true));
+        previa("10.61.0.4", "12", c, 2, 9).andExpect(status().isOk()).andExpect(content().json("{\"usaPlano\":false}", true));
+        // a prévia não grava nem trava nada
+        assertEquals(0, contar("select count(*) from agendamento"));
+        // 10 consultas por telefone a cada 15 minutos (4 acima: 2 com este telefone): a 11ª é barrada
+        for (int i = 0; i < 8; i++) previa("10.62.0." + i, a[2], c, 2, 9).andExpect(status().isOk());
+        previa("10.62.1.1", a[2], c, 2, 9).andExpect(status().isTooManyRequests());
+    }
+
     // ---------------------------------------------------------------- isolamento entre lojas
 
     @Test

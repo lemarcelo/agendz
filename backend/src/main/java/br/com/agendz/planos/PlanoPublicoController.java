@@ -4,9 +4,14 @@ import br.com.agendz.planos.PlanoService.PaginaPlanos;
 import br.com.agendz.planos.PlanoService.PedidoPublico;
 import br.com.agendz.planos.PlanoService.Recebido;
 import br.com.agendz.planos.PlanoService.SaldoPublico;
+import br.com.agendz.planos.PlanoService.UsoPublico;
+import jakarta.validation.constraints.Size;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.time.Clock;
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -50,5 +55,15 @@ public class PlanoPublicoController {
     @GetMapping("/api/publico/planos/saldo")
     public SaldoPublico saldo(@RequestParam String telefone, HttpServletRequest req) {
         return planos.saldoPorTelefone(ip(req), relogio.instant(), telefone);
+    }
+
+    /** Corpo da prévia: telefone no corpo (POST), nunca na URL. */
+    public record ConsultaUso(@Size(max = 30) String telefone, @Size(max = 10) List<UUID> servicoIds, Instant inicio) {
+    }
+
+    /** POST /api/publico/planos/uso: "este horário usa um atendimento do seu plano?" Só sim ou não. */
+    @PostMapping("/api/publico/planos/uso")
+    public UsoPublico uso(@Valid @RequestBody ConsultaUso d, HttpServletRequest req) {
+        return planos.usoPorTelefone(ip(req), relogio.instant(), d.telefone(), d.servicoIds(), d.inicio());
     }
 }

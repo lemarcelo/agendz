@@ -222,3 +222,7 @@ Lista simples. Cada item está no histórico do `prompt-agendz-regras.md` (v84 a
 - Decisão sem confirmação: remover um proprietário exige rebaixá-lo antes (a mensagem diz isso); rebaixar o último continua recusado.
 - Decisão sem confirmação: o token de proprietário passa a ser conferido no banco a cada chamada (uma consulta pequena), para o rebaixamento valer na hora; os demais perfis seguem sem consulta.
 - Dúvida para o Marcelo: um proprietário pode rebaixar o outro sem aviso a ele. Se quiser, o rebaixado recebe um aviso no painel; hoje só vale na hora.
+- v136 (B0) — Decisão sem confirmação: a prévia "usa seu plano" é **POST** com o telefone no corpo (o saldo antigo é GET com o telefone na URL; a prévia não repete esse jeito).
+- v136 (B0) — Decisão sem confirmação: pelo link o plano nunca recusa o pedido; se a cota, o intervalo ou o serviço não deixam, o horário sai pelo preço normal (igual ao simulador e ao WhatsApp).
+- v136 (B0) — Decisão sem confirmação: o cliente não remarca sozinho um horário que gastou o plano (já era assim); cancelar devolve o corte porque o saldo é derivado.
+- v136 (B0) — Decisão sem confirmação: no site real o "Usar modelo" preenche nome, descrição, valor, cortes, limites e serviços; **produto incluso e validade** do modelo ficam fora até o servidor guardar isso (dúvida: quer que eu faça?).

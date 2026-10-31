@@ -1053,6 +1053,13 @@ export const planosPublico = {
     const r = await chamar('POST', '/api/publico/planos/pedidos', corpo, undefined, PUB);
     return r.ok ? { ok: true } : r;
   },
+  // POST /api/publico/planos/uso  { telefone, servicoIds, inicio }  → { usaPlano }  (a tela avisa "este horário usa um atendimento do seu plano" antes de pedir; só sim ou não, telefone no corpo)
+  async uso({ telefone, servicoIds, inicio }) {
+    const ids = Array.isArray(servicoIds) ? servicoIds.filter((x) => ID.test(String(x))).slice(0, 10) : [];
+    if (!texto(telefone, 30) || !ids.length || !Number.isFinite(inicio)) return { ok: true, usaPlano: false };
+    const r = await chamar('POST', '/api/publico/planos/uso', { telefone: texto(telefone, 30), servicoIds: ids, inicio: new Date(inicio).toISOString() }, undefined, PUB);
+    return r.ok ? { ok: true, usaPlano: !!(r.dados && r.dados.usaPlano === true) } : { ok: true, usaPlano: false }; // falha na prévia nunca atrapalha o pedido
+  },
   // GET /api/publico/planos/saldo?telefone=  → { planos: [{ plano, mes, restantes, cortesPorMes, pagoMes }], aviso }  (só cortes; sem plano = resposta genérica)
   async saldo(telefone) {
     const r = await chamar('GET', `/api/publico/planos/saldo?telefone=${encodeURIComponent(texto(telefone, 30))}`, undefined, undefined, PUB);
@@ -1390,7 +1397,7 @@ export const publico = {
     const r = await chamar('GET', `/api/publico/horarios?${q}`, undefined, undefined, PUB);
     return r.ok ? { ok: true, horarios: listaDe(r.dados, 100).filter((x) => x && instante(x.inicio) !== null && IDV(x.profissionalId)).map((x) => ({ inicio: instante(x.inicio), profissionalId: x.profissionalId })) } : r;
   },
-  // POST /api/publico/agendamentos  { nome, telefone, servicoIds, inicio, profissionalId?, cupomChave?, veiculo?, site }  → { agendamento, token }
+  // POST /api/publico/agendamentos  { nome, telefone, servicoIds, inicio, profissionalId?, cupomChave?, veiculo?, site }  → { agendamento, token, usouPlano }
   async agendar({ nome, telefone, servicoIds, inicio, profissionalId, cupomChave, veiculo, site }) {
     if (!Number.isFinite(inicio)) return { ok: false, status: 0, erro: 'Escolha um dia e um horário.' };
     const corpo = { nome: texto(nome, 100), telefone: texto(telefone, 30), servicoIds: Array.isArray(servicoIds) ? servicoIds.filter((x) => ID.test(String(x))).slice(0, 10) : [], inicio: new Date(inicio).toISOString() };
@@ -1405,7 +1412,7 @@ export const publico = {
     const r = await chamar('POST', '/api/publico/agendamentos', corpo, undefined, PUB);
     if (!r.ok) return r;
     const token = r.dados && typeof r.dados.token === 'string' && /^[0-9a-f]{48}$/.test(r.dados.token) ? r.dados.token : '';
-    return { ok: true, agendamento: lerResumoPublico(r.dados && r.dados.agendamento), token };
+    return { ok: true, agendamento: lerResumoPublico(r.dados && r.dados.agendamento), token, usouPlano: !!(r.dados && r.dados.usouPlano === true) };
   },
   // POST /api/publico/meus  { tokens }  → [resumo]   (o token vai no corpo, nunca na URL)
   async meus(tokens) {

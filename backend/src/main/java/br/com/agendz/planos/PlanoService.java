@@ -416,7 +416,11 @@ public class PlanoService {
 
     /** Trava a assinatura até o fim da transação: usos e pagamentos dela passam um por vez (sem corrida na cota). */
     private Trava travar(JdbcTemplate jdbc, UUID assinaturaId) {
-        List<Trava> l = jdbc.query("select status, inicio_mes, plano_foto::text from assinatura where id = ? for update",
+        return ler(jdbc, assinaturaId, true);
+    }
+
+    private Trava ler(JdbcTemplate jdbc, UUID assinaturaId, boolean travar) {
+        List<Trava> l = jdbc.query("select status, inicio_mes, plano_foto::text from assinatura where id = ?" + (travar ? " for update" : ""),
                 (rs, i) -> new Trava(rs.getString(1), rs.getString(2), foto(rs.getString(3))), assinaturaId);
         if (l.isEmpty()) throw naoAchou("Assinatura não encontrada.");
         return l.get(0);
@@ -560,6 +564,49 @@ public class PlanoService {
             jdbc.update("update agendamento_servico set desconto = ?, plano = true where agendamento_id = ? and servico_id = ?", e.getValue(), agendamentoId, e.getKey());
         }
         return new Uso(assinaturaId, t.foto().nome(), pode.aviso(), pode.adiantado());
+    }
+
+    /**
+     * O próprio cliente agenda (link): se tem plano ativo que cobre algum serviço e as travas deixam (saldo, intervalo, adiantar), o horário gasta 1 corte.
+     * Nunca recusa por causa do plano: sem plano, sem corte ou serviço fora do plano devolve null e o agendamento segue pelo preço normal (mesma regra do simulador).
+     */
+    public Uso usarSeCouber(JdbcTemplate jdbc, UUID agendamentoId, UUID clienteId, List<UUID> servicoIds, Instant inicio, Instant agora) {
+        UUID assinatura = assinaturaQueCabe(jdbc, clienteId, servicoIds, inicio, agora, true);
+        return assinatura == null ? null : usar(jdbc, agendamentoId, assinatura, clienteId, servicoIds, inicio, agora);
+    }
+
+    private UUID assinaturaQueCabe(JdbcTemplate jdbc, UUID clienteId, List<UUID> servicoIds, Instant inicio, Instant agora, boolean travar) {
+        if (clienteId == null) return null;
+        List<UUID> ids = jdbc.queryForList("select id from assinatura where cliente_id = ? and status = 'ativa' order by criado_em, id", UUID.class, clienteId);
+        for (UUID id : ids) {
+            Trava t = ler(jdbc, id, travar);
+            if (!PlanoRegras.cobreAlgum(t.foto(), servicoIds)) continue;
+            if (PlanoRegras.podeUsar(t.foto(), t.status(), t.inicioMes(), pagos(jdbc, id), usos(jdbc, id, null), inicio, agora).ok()) return id;
+        }
+        return null;
+    }
+
+    public record UsoPublico(boolean usaPlano) {
+    }
+
+    /**
+     * Prévia para a tela do cliente: "este horário usa um atendimento do seu plano?". Só sim ou não: nunca nome do plano, saldo ou dado de outra pessoa; telefone inválido,
+     * sem plano, sem saldo e serviço fora do plano dão a mesma resposta. 10 consultas por telefone a cada 15 minutos.
+     */
+    public UsoPublico usoPorTelefone(String ip, Instant agora, String telefone, List<UUID> servicoIds, Instant inicio) {
+        Loja loja = LojaContext.exigir();
+        consultaLiberada(loja, "planos-uso-ip:" + ip, 60, Duration.ofMinutes(15));
+        consultaLiberada(loja, "planos-uso-loja", 240, Duration.ofMinutes(1));
+        String tel = Documentos.telefone(telefone);
+        if (tel == null || inicio == null || servicoIds == null || servicoIds.isEmpty() || servicoIds.size() > 10) return new UsoPublico(false);
+        consultaLiberada(loja, "planos-uso-tel:" + tel, 10, Duration.ofMinutes(15));
+        String hash = cifra.hash(loja.id(), "tel", tel);
+        return banco.naLoja(jdbc -> {
+            for (UUID cliente : jdbc.queryForList("select id from cliente where telefone_hash = ?", UUID.class, hash)) {
+                if (assinaturaQueCabe(jdbc, cliente, servicoIds, inicio, agora, false) != null) return new UsoPublico(true);
+            }
+            return new UsoPublico(false);
+        });
     }
 
     /** Remarcar ou reativar um agendamento que usa plano também precisa caber na cota do mês novo. Sem plano no agendamento: não faz nada. */

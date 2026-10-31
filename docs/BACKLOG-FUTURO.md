@@ -2,7 +2,8 @@
 
 Regra de uso: toda funcionalidade nova pedida "para outro momento" entra aqui com **o que é**, **onde mexe** (só Admin, só Agendz, ou os dois) e **dúvidas**. Não implementar antes de a fila principal (`docs/PROMPT-CONTINUACAO.md`) chegar nela, salvo se o Marcelo pedir.
 
-## B0. Planos de serviços (pedido de 29/10 — topo da fila)
+## B0. Planos de serviços (pedido de 29/10 — **FEITO em 31/10, v136**; ficou só o que está em "Em aberto" abaixo)
+**v136 fechou o B0:** "Usar modelo" no site real, cliente com plano que agenda pelo link gasta o corte no servidor (nunca é recusado por causa do plano) e a página real do link avisa "usa um atendimento do seu plano" antes e depois do pedido (`POST /api/publico/planos/uso`, só sim ou não). **Em aberto (precisa do Marcelo ou de backlog próprio):** produto incluso e validade em meses do modelo (o plano do servidor ainda não guarda), cobrança da mensalidade por Pix/financeiro (aguarda confirmação por escrito).
 **Para que serve:** vender um plano recorrente a um cliente (ex.: lavagem mensal, corte quinzenal): menu **Planos**, onde o proprietário escolhe o **cliente**, o **serviço**, a **recorrência** e o **valor** do plano. **Decisões do Marcelo (29/10, 09:56):** a **cobrança é por mês**; cada mês gera um **valor a receber** pelo pacote (cliente + plano + mês, em aberto até pagar); o pagamento fica informado como **"plano"** (nova forma de pagamento, ao lado de Pix/dinheiro/cartão), e os atendimentos do plano não geram cobrança avulsa.
 **Já existe algo parecido?** Não. Existe cupom (desconto por agendamento) e serviço com preço fixo/por porte; nada que repita agendamento nem cobre valor combinado por período.
 **Como seria (rascunho):**

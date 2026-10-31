@@ -9,6 +9,7 @@ import br.com.agendz.agenda.Folga;
 import br.com.agendz.servicos.OrdemDosServicos;
 import br.com.agendz.configuracao.LocalDaLoja;
 import br.com.agendz.cupom.CupomService;
+import br.com.agendz.planos.PlanoService;
 import br.com.agendz.agenda.Ocupacao;
 import br.com.agendz.aviso.AvisosPainel;
 import br.com.agendz.erro.ErroDeNegocio;
@@ -119,7 +120,7 @@ public class LinkPublicoService {
                          String cupom, String profissional, boolean ativo, boolean podeCancelar, VeiculoResumo veiculo) {
     }
 
-    public record Criado(Resumo agendamento, String token) {
+    public record Criado(Resumo agendamento, String token, boolean usouPlano) {
     }
 
     private record Svc(UUID id, String nome, BigDecimal preco, int duracaoMin, int intervaloMin, int antecedenciaH) {
@@ -146,9 +147,10 @@ public class LinkPublicoService {
     private final ComissaoService comissoes;
     private final LimitePublico limite;
     private final Ocupacao ocupacao;
+    private final PlanoService planos;
     private static final ObjectMapper JSON = new ObjectMapper();
 
-    public LinkPublicoService(LojaJdbc banco, Clock relogio, EscalaService escalas, ClienteService clientes, CupomService cupons, ComissaoService comissoes, LimitePublico limite, Ocupacao ocupacao) {
+    public LinkPublicoService(LojaJdbc banco, Clock relogio, EscalaService escalas, ClienteService clientes, CupomService cupons, ComissaoService comissoes, LimitePublico limite, Ocupacao ocupacao, PlanoService planos) {
         this.banco = banco;
         this.relogio = relogio;
         this.escalas = escalas;
@@ -157,6 +159,7 @@ public class LinkPublicoService {
         this.comissoes = comissoes;
         this.limite = limite;
         this.ocupacao = ocupacao;
+        this.planos = planos;
     }
 
     // ---------------------------------------------------------------- página (o que o cliente vê antes de escolher)
@@ -395,16 +398,20 @@ public class LinkPublicoService {
             comissoes.congelar(jdbc, id);
             evento(jdbc, loja.id(), id, "criação", null, servicos.stream().map(Svc::nome).collect(java.util.stream.Collectors.joining(" + "))
                     + (vei == null ? "" : " (" + vei.modelo() + " " + vei.placa() + ")") + " em " + dataHora(inicio));
+            // cliente com plano ativo: o horário gasta 1 corte quando algum serviço é coberto e a cota deixa; senão segue pelo preço normal (nunca recusa por causa do plano)
+            PlanoService.Uso usoPlano = planos.usarSeCouber(jdbc, id, clienteId, servicoIds, inicio, agora);
+            boolean usouPlano = usoPlano != null;
+            if (usouPlano) evento(jdbc, loja.id(), id, "plano", null, "Usa 1 corte do plano " + usoPlano.planoNome() + (usoPlano.aviso().isEmpty() ? "" : " (" + usoPlano.aviso() + ")"));
             if (comCupom) {
                 CupomService.Aplicado ap = cupons.aplicar(jdbc, loja.id(), id, null, "link:" + ip, p.cupomChave(), agora);
                 evento(jdbc, loja.id(), id, "cupom", null, ap.nome() + ": desconto de " + CupomService.reais(ap.desconto()));
             }
-            avisar(jdbc, loja.id(), id, "pedido", nomeNaAgenda + (clienteId == null ? " (sem telefone)" : "") + " pediu horário pelo link" + (vei == null ? "" : " para o " + vei.modelo() + " " + vei.placa()) + ": " + dataHora(inicio) + " (aguardando a sua confirmação).");
+            avisar(jdbc, loja.id(), id, "pedido", nomeNaAgenda + (clienteId == null ? " (sem telefone)" : "") + " pediu horário pelo link" + (vei == null ? "" : " para o " + vei.modelo() + " " + vei.placa()) + ": " + dataHora(inicio) + (usouPlano ? " · usa 1 corte do plano " + usoPlano.planoNome() : "") + " (aguardando a sua confirmação).");
             String token = novoToken();
             jdbc.update("delete from acesso_publico where expira_em < ?", utc(agora));
             jdbc.update("insert into acesso_publico (loja_id, agendamento_id, token_hash, expira_em) values (?::uuid, ?, ?, ?)",
                     loja.id().toString(), id, hash(token), utc(agora.plus(TOKEN_DIAS, ChronoUnit.DAYS)));
-            return new Criado(resumo(jdbc, id, agora), token);
+            return new Criado(resumo(jdbc, id, agora), token, usouPlano);
         });
     }
 
