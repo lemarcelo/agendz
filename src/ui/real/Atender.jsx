@@ -115,24 +115,6 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
         <Btn tamanho="sm" onClick={aoFechar} data-testid="atender-fechar" aria-label="Fechar"><Icone n="x" size={15} /></Btn>
       </div>
 
-      <fieldset className="atender-real-bloco">
-        <legend>Cliente</legend>
-        {cliente ? (
-          <p className="msg-ok" data-testid="atender-vinculo">Cadastro escolhido: {cliente.apelido || cliente.nome}. <button type="button" className="link" onClick={() => { setCliente(null); setVeiculoId(''); }} data-testid="atender-trocar-cliente">Trocar</button></p>
-        ) : (
-          <Campo rotulo="Buscar cliente cadastrado (opcional)"><input value={busca} onChange={(e) => setBusca(e.target.value)} maxLength={60} placeholder="Nome ou telefone" autoComplete="off" data-testid="atender-busca" /></Campo>
-        )}
-        {achados.length > 0 && (
-          <ul className="atender-real-achados" data-testid="atender-achados">
-            {achados.map((c) => <li key={c.id}><button type="button" className="atender-real-achado" onClick={() => escolher(c)} data-testid={`atender-cli-${c.id}`}>{c.apelido || c.nome}<span className="muted"> · {c.telefone ? formatarTelefone(telNacional(c.telefone)) : ''}</span></button></li>)}
-          </ul>
-        )}
-        <div className="form-grade">
-          <Campo rotulo={`Nome${marca('nome')}`}><input value={nome} onChange={(e) => setNome(e.target.value)} maxLength={60} placeholder="Nome ou apelido" data-testid="atender-nome" /></Campo>
-          <Campo rotulo={`Telefone${marca('telefone')}`}><input value={telefone} inputMode="tel" autoComplete="off" onChange={(e) => setTelefone(e.target.value)} placeholder="(55) 99999-9999" data-testid="atender-telefone" /></Campo>
-        </div>
-        <p className="muted">Com telefone, o cadastro é achado ou criado. Só com o nome, nada é cadastrado.</p>
-      </fieldset>
 
       {usaVeiculo && (
         <fieldset className="atender-real-bloco" data-testid="atender-veiculo-bloco">
@@ -177,7 +159,7 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
         <legend>Quando</legend>
         <div className="acoes">
           <button type="button" className={`btn btn-quando${!personalizar ? ' btn-on' : ''}`} aria-pressed={!personalizar} onClick={() => { setPersonalizar(false); setErro(''); }} data-testid="atender-agora"><Icone n="clock" size={15} />Agora</button>
-          <button type="button" className={`btn btn-quando${personalizar ? ' btn-on' : ''}`} aria-pressed={personalizar} onClick={() => { setPersonalizar(true); setErro(''); }} data-testid="atender-quando"><Icone n="calendar" size={15} />Escolher data e hora</button>
+          <button type="button" className={`btn btn-quando${personalizar ? ' btn-on' : ''}`} aria-pressed={personalizar} onClick={() => { setPersonalizar(true); setErro(''); }} data-testid="atender-quando"><Icone n="calendar" size={15} />Escolher horário</button>
         </div>
         {personalizar && <Campo rotulo="Data e hora"><input type="datetime-local" step={300} value={quando} onChange={(e) => { setQuando(e.target.value); setErro(''); }} data-testid="atender-data" /></Campo>}
         {retro && !bloqueado && (
@@ -187,6 +169,25 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
         )}
         {bloqueado && <Aviso tipo="erro" data-testid="atender-retro-bloqueado">Lançar um dia anterior é com o proprietário ou a recepção. Peça a eles para registrar.</Aviso>}
         <p className="muted" data-testid="atender-tipo">{tipo === 'futuro' ? 'Agendamento: o horário fica reservado para o cliente.' : 'Atendimento já feito: entra como concluído.'}</p>
+      </fieldset>
+
+      <fieldset className="atender-real-bloco">
+        <legend>Dados do cliente</legend>
+        {cliente ? (
+          <p className="msg-ok" data-testid="atender-vinculo">Cadastro escolhido: {cliente.apelido || cliente.nome}. <button type="button" className="link" onClick={() => { setCliente(null); setVeiculoId(''); }} data-testid="atender-trocar-cliente">Trocar</button></p>
+        ) : (
+          <Campo rotulo="Buscar cliente cadastrado (opcional)"><input value={busca} onChange={(e) => setBusca(e.target.value)} maxLength={60} placeholder="Nome ou telefone" autoComplete="off" data-testid="atender-busca" /></Campo>
+        )}
+        {achados.length > 0 && (
+          <ul className="atender-real-achados" data-testid="atender-achados">
+            {achados.map((c) => <li key={c.id}><button type="button" className="atender-real-achado" onClick={() => escolher(c)} data-testid={`atender-cli-${c.id}`}>{c.apelido || c.nome}<span className="muted"> · {c.telefone ? formatarTelefone(telNacional(c.telefone)) : ''}</span></button></li>)}
+          </ul>
+        )}
+        <div className="form-grade">
+          <Campo rotulo={`Nome${marca('nome')}`}><input value={nome} onChange={(e) => setNome(e.target.value)} maxLength={60} placeholder="Nome ou apelido" data-testid="atender-nome" /></Campo>
+          <Campo rotulo={`Telefone${marca('telefone')}`}><input value={telefone} inputMode="tel" autoComplete="off" onChange={(e) => setTelefone(e.target.value)} placeholder="(55) 99999-9999" data-testid="atender-telefone" /></Campo>
+        </div>
+        <p className="muted">Com telefone, o cadastro é achado ou criado. Só com o nome, nada é cadastrado.</p>
       </fieldset>
 
       {produtos !== null && produtos.length > 0 && (

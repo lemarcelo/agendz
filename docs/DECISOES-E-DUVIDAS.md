@@ -197,3 +197,8 @@ Lista simples. Cada item está no histórico do `prompt-agendz-regras.md` (v84 a
 - Atendimento de agora ou passado: o primeiro da ordem (não disputa horário). Futuro: o primeiro da ordem que cabe (expediente dele e sem conflito); ninguém livre = erro "Nenhum profissional está livre neste horário".
 - Decisão sem confirmação: no servidor a checagem de "cabe" usa a duração do porte médio; a conferência final (porte, box) continua em `inserirAgendamento`. Campo "profissional" obrigatório nas regras conta como preenchido quando a escolha é automática.
 - Em aberto: Java só roda no CI (`AtendimentoTest`, `FolgaEquivalenciaTest`). Falta B9b (Atender igual à tela do link).
+
+## v133 (31/10): B9b Atender na mesma ordem da página do cliente
+- Ordem do Atender (Artifact e site real): Veículo (só tipo com veículo) → Serviços → Quando (Agora | Escolher horário) → Dados do cliente (buscar cadastrado, nome, telefone) → Produtos → Forma de pagamento. É a mesma ordem da página do cliente (veículo, serviço, horário, dados), com "Agora" ao lado de "Escolher horário".
+- Decisão sem confirmação: **mantive uma tela só** (não virou passo a passo como o link) para não quebrar os testes e o fluxo rápido do balcão; todos os campos, regras e `data-testid` ficam iguais. Vale também para a barbearia (sem a parte do veículo). Veículo do cliente cadastrado continua aparecendo como atalho dentro do bloco Veículo depois de escolher o cliente. No Artifact, o bloco Veículo agora aparece sempre (antes só depois de marcar um serviço), como no site real.
+- Em aberto: se o Marcelo quiser o passo a passo com "Continuar" como no link, é uma segunda fatia (reescrita maior).
