@@ -7,6 +7,7 @@ const erros = [];
 const url = new URL('../dist/index-barbearia.html', import.meta.url).href;
 async function abrir(viewport, touch = false) {
   const ctx = await b.newContext({ viewport, hasTouch: touch, isMobile: touch, locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' });
+  await ctx.clock.setFixedTime(new Date('2026-10-14T10:00:00-03:00')); // sem relógio fixo o teste quebrava no último dia do mês (calendário sem confirmados)
   const p = await ctx.newPage(); p.setDefaultTimeout(8000);
   p.on('pageerror', (e) => erros.push('PAGE: ' + e.message));
   p.on('console', (m) => { if (m.type() === 'error' && !/ERR_TUNNEL|Failed to load resource/.test(m.text())) erros.push(m.text()); });
