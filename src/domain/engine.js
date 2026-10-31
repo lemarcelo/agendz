@@ -12,6 +12,7 @@ import { consumoDoAgendamento, r2, r3, totalAgendamento } from './reports.js';
 import { renderizar } from './templates.js';
 import { diasDaExcecao } from './schedule.js';
 import { cap, rot, voc } from './tipos.js';
+import { limitesDoDia, ordemPorFolga, profissionalAutomatico } from './profissional-auto.js';
 
 export const AUTOR_SISTEMA = { tipo: 'sistema', nome: 'Sistema' };
 export const autorUsuario = (u) => ({ tipo: 'profissional', nome: u.apelido || u.nome, id: u.id });
@@ -500,6 +501,23 @@ export const camposObrigatorios = (s, tipo) => {
   const c = (s.estabelecimento.camposObrigatorios || CAMPOS_OBRIGATORIOS_PADRAO)[tipo];
   return Array.isArray(c) ? c : CAMPOS_OBRIGATORIOS_PADRAO[tipo];
 };
+/**
+ * B9c: a loja tirou o campo "quem vai fazer o serviço" → escolhe quem está com a agenda mais livre (domain/profissional-auto.js). Atendimento de agora ou passado: o primeiro da ordem
+ * (atendimento local não disputa horário). Agendamento futuro: o primeiro da ordem que cabe no horário (expediente, serviços, sem conflito com a agenda de ninguém).
+ * Devolve { ok, profissionalId } ou { ok:false, erros }.
+ */
+export function escolherProfissionalAuto(s, { inicio, servicoIds, porte, futuro, agora }) {
+  const lista = s.usuarios.filter((u) => u.atende);
+  if (!lista.length) return { ok: false, erros: ['Nenhum profissional da equipe atende. Marque quem atende em Equipe.'] };
+  const ordem = ordemPorFolga(s.agendamentos, lista.map((u) => u.id), limitesDoDia(inicio));
+  if (!futuro) return { ok: true, profissionalId: ordem[0] };
+  for (const id of ordem) {
+    const v = validarHorario(s, { profissionalId: id, inicio, servicoIds, porte, agora });
+    if (!v.erros.length && !v.confirmados.length && !v.pendentes.length) return { ok: true, profissionalId: id };
+  }
+  return { ok: false, erros: ['Nenhum profissional está livre neste horário. Escolha outro horário.'] };
+}
+
 export function atender(s, d, autor, agora) {
   if (semBoxAtivo(s)) return { ok: false, erros: [ERRO_SEM_BOX] }; // estética sem box ativo: nem atendimento local nem agendamento (v120)
   const ids = Array.isArray(d.servicoIds) ? d.servicoIds : [];
@@ -507,6 +525,12 @@ export function atender(s, d, autor, agora) {
   if (!ids.length && !produtos.length) return { ok: false, erros: ['Escolha ao menos um serviço ou um produto.'] };
   const futuro = d.inicio !== undefined && d.inicio !== null && Number(d.inicio) > agora + 60000;
   const tipo = futuro ? 'futuro' : 'local';
+  if (!d.profissionalId && profissionalAutomatico(s)) {
+    const veic = d.veiculo || (d.veiculoId ? (s.clientes.flatMap((c) => c.veiculos || []).find((v) => v.id === d.veiculoId)) : null);
+    const esc = escolherProfissionalAuto(s, { inicio: futuro ? Number(d.inicio) : agora, servicoIds: ids, porte: veic && veic.porte, futuro, agora });
+    if (!esc.ok) return esc;
+    d = { ...d, profissionalId: esc.profissionalId };
+  }
   // Campos obrigatórios do tipo: o que o formulário já preencheu por padrão (profissional da agenda, vendedor = quem lança, forma padrão) conta como preenchido.
   const cli = d.clienteId ? s.clientes.find((c) => c.id === d.clienteId) : null;
   if (d.clienteId && !cli) return { ok: false, erros: ['Cliente não encontrado.'] };

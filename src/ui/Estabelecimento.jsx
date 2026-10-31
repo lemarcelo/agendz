@@ -251,6 +251,8 @@ export default function Estabelecimento({ user }) {
                 <option value="uso">Mais usados primeiro</option><option value="manual">Minha ordem</option>
               </select>
             </Campo>
+            <Interruptor checked={e.profissionalAutomatico === true} onChange={(v) => { const r = apiEst.salvar({ profissionalAutomatico: v }); if (r.ok) toast(v ? 'O app escolhe quem faz o serviço.' : 'Quem faz o serviço volta a ser escolhido na tela.'); else toast(r.erros[0], 'erro'); }}
+              rotulo={`Não perguntar quem vai fazer o serviço`} descricao={`Ligado, o campo do ${rot('profissional')} some do Atender e do link do cliente, e o app escolhe quem está com a agenda mais livre naquele dia (empate: quem tem menos horários na semana, depois a ordem da equipe). Respeita expediente, conflito${capAtiva('usaRecursoFisico') ? ', box' : ''} e horário fixo reservado. Desligado (padrão), a pessoa escolhe.`} testid="regras-profissional-auto" />
             <PagamentoRegras st={st} e={e} />
             {ehDono(user) && <Campo rotulo={`Comissão padrão do ${rot('profissional')} (%)`} dica={`Parte de cada ${rot('atendimento')} que fica com o ${rot('profissional')}. O restante é do estabelecimento. Pode ser mudada por serviço ou por ${rot('profissional')}. Só o proprietário altera e vê.`}>
               <ComissaoPadrao valor={e.comissaoPadrao ?? 50} />

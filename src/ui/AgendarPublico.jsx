@@ -212,11 +212,13 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
               </div>
             </div>
           ))}
+          {!(cfg.profissionalAutomatico && !barb) && <>
           <h3>Com quem?</h3>
           <div className="pub-barbs" role="group" aria-label={Rot('profissional')}>
             <button type="button" className={`pub-barb ${barb === '' ? 'on' : ''}`} aria-pressed={barb === ''} onClick={() => { setBarb(''); setEscolha(null); }} data-testid="pub-barb-qualquer">Qualquer um</button>
             {cfg.profissionais.map((b) => <button type="button" key={b.id} className={`pub-barb ${barb === b.id ? 'on' : ''}`} aria-pressed={barb === b.id} onClick={() => { setBarb(b.id); setEscolha(null); }} data-testid={`pub-barb-${b.id}`}>{b.nome}</button>)}
           </div>
+          </>}
           <div className="pub-rodape">
             {servicos.length > 0 && <span className="muted">{multiDia ? 'Vários dias' : dur(duracao)} · {fmtMoney(total)}</span>}
             {usaVeiculo && <Btn variante="fantasma" onClick={() => setEtapa(0)} data-testid="pub-voltar-0">Voltar</Btn>}

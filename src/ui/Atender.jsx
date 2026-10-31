@@ -15,6 +15,7 @@ import { SeletorHora } from './Agendamento.jsx';
 import { nomeCliente } from './format.js';
 import { toast, useStore } from './hooks.js';
 import { capAtiva, Rot, rot } from '../domain/tipos.js';
+import { profissionalAutomatico } from '../domain/profissional-auto.js';
 
 // Botão único "Atender": atendimento de agora, registro do que já aconteceu (data passada) ou agendamento (data futura).
 // O tipo vem da data: sem data = agora; data passada = concluído nessa data; data futura = agendamento (a confirmar ou confirmado).
@@ -32,6 +33,7 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
   const [clienteId, setClienteId] = useState('');
   const [nome, setNome] = useState('');
   const [telefone, setTelefone] = useState('');
+  const auto = profissionalAutomatico(st) && !ehProfissional; // B9c: a loja tirou o campo; o app escolhe o mais livre ao salvar
   const [profissionalId, setProfissionalId] = useState(ehProfissional ? user.id : (profissionais.some((b) => b.id === inicial.profissionalId) ? inicial.profissionalId : profissionais[0]?.id) || '');
   const [vendedorId, setVendedorId] = useState('');
   const [forma, setForma] = useState('');
@@ -105,13 +107,13 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
   const formaEscolhida = forma || formaPadrao;
 
   // Horário livre (só agendamento futuro)
-  const v = useMemo(() => (futuro && profissionalId && temServico ? agenda.validar({ profissionalId, inicio, servicoIds, porte: porteAtual, boxId: boxId || undefined, encaixe }) : null), [futuro, profissionalId, inicio, servicoIds, porteAtual, boxId, encaixe, temServico, st]);
+  const v = useMemo(() => (futuro && profissionalId && temServico && !auto ? agenda.validar({ profissionalId, inicio, servicoIds, porte: porteAtual, boxId: boxId || undefined, encaixe }) : null), [futuro, profissionalId, inicio, servicoIds, porteAtual, boxId, encaixe, temServico, st]);
   const nomeDe = (a) => `${nomeCliente(st, a)} às ${fmtHM(a.inicio)}`;
 
   const salvar = () => {
     const r = agenda.atender({
       servicoIds, produtos: itensProduto, nome: nome.trim() || undefined, telefone: telefone.trim() || undefined, clienteId: clienteId || undefined,
-      profissionalId: profissionalId || undefined, vendedorId: vendeProduto && !ehProfissional && vendedorEscolhido ? vendedorEscolhido : undefined,
+      profissionalId: auto ? undefined : profissionalId || undefined, vendedorId: vendeProduto && !ehProfissional && vendedorEscolhido ? vendedorEscolhido : undefined,
       formaPagamento: futuro ? undefined : formaEscolhida || undefined, inicio: inicio != null ? inicio : undefined, motivoRetroativo: retro ? motivoRetro.trim() || undefined : undefined,
       ...(usaPlano ? { assinaturaId: planoCli.assinaturaId } : {}),
       ...(temServico && usaVeiculo ? (veicSel === 'novo' ? { veiculo: vNovo } : veicSel ? { veiculoId: veicSel } : {}) : {}),
@@ -223,11 +225,13 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
             {porteDefinido && <p className="muted" data-testid="atender-porte-info">Preços e tempos do porte {ROTULO_PORTE[porteAtual].toLowerCase()}.</p>}
           </fieldset>
         )}
+        {!auto && (
         <Campo rotulo={`${Rot('profissional')}${marca('profissional')}`}>
           <select value={profissionalId} onChange={(e) => setProfissionalId(e.target.value)} disabled={ehProfissional} data-testid="atender-profissional">
             {profissionais.map((b) => <option key={b.id} value={b.id}>{b.apelido || b.nome}</option>)}
           </select>
         </Campo>
+        )}
         {futuro && temServico && boxes.length > 0 && (
           <Campo rotulo="Box" dica={v && v.boxId ? `Vai para o ${nomeBox(st, v.boxId)}.` : 'Automático: o app escolhe um box livre.'}>
             <select value={boxId} onChange={(e) => setBoxId(e.target.value)} data-testid="atender-box">
