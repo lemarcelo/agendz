@@ -62,7 +62,7 @@ class AtendimentoTest extends BaseApi {
         jdbc.update("delete from servico_componente");
         jdbc.update("delete from servico");
         jdbc.update("delete from cliente");
-        jdbc.update("update configuracao_loja set forma_pagamento_padrao = null, campos_futuro = null, campos_local = null");
+        jdbc.update("update configuracao_loja set forma_pagamento_padrao = null, campos_futuro = null, campos_local = null, profissional_automatico = false");
     }
 
     private static String id(String json) {
@@ -493,5 +493,30 @@ class AtendimentoTest extends BaseApi {
         assertEquals("pix", jdbc.queryForObject("select forma_pagamento from agendamento where id = ?::uuid", String.class, doMarcelo));
         trocarForma(pablo, doPablo, "{\"formaPagamento\":\"cartao\"}").andExpect(status().isOk());
         mvc.perform(put("/api/agendamentos/" + doPablo + "/forma-pagamento").with(host(APEX)).contentType(MediaType.APPLICATION_JSON).content("{\"formaPagamento\":\"pix\"}")).andExpect(status().isUnauthorized());
+    }
+
+    // ---------------------------------------------------------------- B9c: escolha automática do profissional
+
+    private UUID quemAtendeu(String corpoResposta) {
+        return jdbc.queryForObject("select profissional_id from agendamento where id = ?::uuid", UUID.class, id(corpoResposta));
+    }
+
+    @Test
+    void semAEscolhaAutomaticaSemProfissionalContinuaSendoErro() throws Exception {
+        atender(APEX, davi, corpo(null, "")).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void comAEscolhaAutomaticaOAtenderVaiParaQuemEstaMaisLivre() throws Exception {
+        mvc.perform(get("/api/estabelecimento/regras-atendimento").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi))).andExpect(jsonPath("$.profissionalAutomatico").value(false));
+        regras(APEX, davi, "{\"profissionalAutomatico\":true}").andExpect(status().isOk()).andExpect(jsonPath("$.profissionalAutomatico").value(true));
+        String r1 = atender(APEX, davi, corpo(null, "")).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        String r2 = atender(APEX, davi, corpo(null, "")).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        org.junit.jupiter.api.Assertions.assertNotEquals(quemAtendeu(r1), quemAtendeu(r2), "o segundo atendimento vai para quem ficou com menos");
+        // quem lança escolhendo o profissional continua mandando
+        String r3 = atender(APEX, davi, corpo(marceloId, "")).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        assertEquals(marceloId, quemAtendeu(r3));
+        // só o proprietário muda a regra
+        regras(APEX, pablo, "{\"profissionalAutomatico\":false}").andExpect(status().isForbidden());
     }
 }

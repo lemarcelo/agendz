@@ -92,3 +92,14 @@ test('link do cliente: com a regra ligada a página não pergunta quem e o pedid
   const quem = (r) => st().agendamentos.find((a) => a.id === r.agendamentoId).profissionalId;
   assert.notEqual(quem(r1), quem(r2));
 });
+
+// Casos compartilhados com o servidor (FolgaEquivalenciaTest): mesma ordem nos dois lados.
+import { readFileSync } from 'node:fs';
+const folga = JSON.parse(readFileSync(new URL('../backend/src/test/resources/equivalencia/folga.json', import.meta.url), 'utf8'));
+test('há casos suficientes para valer como contrato', () => assert.ok(folga.casos.length >= 8));
+for (const c of folga.casos) {
+  test(`folga (equivalência) · ${c.nome}`, () => {
+    const ags = c.agendamentos.map((x) => ({ profissionalId: x.p, inicio: D0 + x.h * H, status: x.cancelado ? 'cancelado' : 'confirmado' }));
+    assert.deepEqual(ordemPorFolga(ags, c.ids, L), c.esperado);
+  });
+}

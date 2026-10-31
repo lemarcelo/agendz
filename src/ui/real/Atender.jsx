@@ -82,6 +82,7 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
   const falta = faltaItem(tipo, ids, itens) || faltaVeiculo(usaVeiculo, ids, veiculoEscolhido, digitando ? novoVeic : null, exigenciasDoVeiculo(regras, tipo));
   const forma = formaEfetiva(regras, formaEscolhida);
   const faltam = camposFaltando(tipo, { nome, telefone, cliente, profissionalId: profId, vendedorId: itens.length ? vendedor : '', temProdutos: itens.length > 0, forma }, regras);
+  const auto = regras.profissionalAutomatico === true && !ehProprio; // B9c: o campo some e o servidor escolhe quem está mais livre
   const marca = (campo) => (exige(regras, tipo, campo) ? ' *' : '');
 
   const escolher = (c) => { setCliente(c); setVeiculoId(c.veiculos && c.veiculos.length === 1 ? c.veiculos[0].id : ''); setNome(c.apelido || c.nome); setTelefone(c.telefone ? formatarTelefone(telNacional(c.telefone)) : ''); setBusca(''); setAchados([]); setErro(''); };
@@ -96,7 +97,7 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
     if (tipo === 'local' && !forma) { setErro('Escolha a forma de pagamento.'); return; }
     setEnviando(true); setErro('');
     const r = await api.atender({
-      servicoIds: ids, ...(itens.length ? { produtos: itens, vendedorId: vendedor } : {}), nome, telefone, ...(cliente ? { clienteId: cliente.id } : {}), profissionalId: profId,
+      servicoIds: ids, ...(itens.length ? { produtos: itens, vendedorId: vendedor } : {}), nome, telefone, ...(cliente ? { clienteId: cliente.id } : {}), ...(auto ? {} : { profissionalId: profId }),
       ...(usaVeiculo && ids.length ? (veiculoEscolhido ? { veiculoId: veiculoEscolhido.id } : { veiculo: novoVeic }) : {}),
       ...(usaBox && tipo === 'futuro' && boxId ? { boxId } : {}),
       ...(personalizar ? { inicio } : {}), ...(retro ? { motivoRetroativo: motivo } : {}),
@@ -218,11 +219,13 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
       )}
 
       <div className="form-grade">
-        <Campo rotulo={`${Rot('profissional')}${marca('profissional')}`}>
-          <select value={profId} onChange={(e) => setProfId(e.target.value)} disabled={ehProprio} data-testid="atender-profissional">
-            {profissionais.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
-          </select>
-        </Campo>
+        {!auto && (
+          <Campo rotulo={`${Rot('profissional')}${marca('profissional')}`}>
+            <select value={profId} onChange={(e) => setProfId(e.target.value)} disabled={ehProprio} data-testid="atender-profissional">
+              {profissionais.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+            </select>
+          </Campo>
+        )}
         {tipo === 'futuro' && (
           <div className="campo">
             <span className="campo-rotulo">Situação</span>

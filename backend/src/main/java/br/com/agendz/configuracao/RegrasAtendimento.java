@@ -32,10 +32,10 @@ public class RegrasAtendimento {
     public static final List<String> FUTURO_DE_FABRICA = List.of();
     public static final List<String> LOCAL_DE_FABRICA = List.of();
 
-    public record Regras(String formaPagamentoPadrao, List<String> futuro, List<String> local, String ordemServicos) {
+    public record Regras(String formaPagamentoPadrao, List<String> futuro, List<String> local, String ordemServicos, boolean profissionalAutomatico) {
     }
 
-    public record Corpo(String formaPagamentoPadrao, Campos camposObrigatorios, String ordemServicos) {
+    public record Corpo(String formaPagamentoPadrao, Campos camposObrigatorios, String ordemServicos, Boolean profissionalAutomatico) {
     }
 
     public record Campos(List<String> futuro, List<String> local) {
@@ -49,11 +49,11 @@ public class RegrasAtendimento {
 
     /** Regras efetivas da loja atual (dentro de uma transação já aberta). */
     public static Regras ler(JdbcTemplate jdbc) {
-        List<String[]> linhas = jdbc.query("select forma_pagamento_padrao, campos_futuro, campos_local, ordem_servicos from configuracao_loja",
-                (rs, i) -> new String[]{rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4)});
-        if (linhas.isEmpty()) return new Regras(FORMA_DE_FABRICA, FUTURO_DE_FABRICA, LOCAL_DE_FABRICA, "uso");
+        List<String[]> linhas = jdbc.query("select forma_pagamento_padrao, campos_futuro, campos_local, ordem_servicos, profissional_automatico::text from configuracao_loja",
+                (rs, i) -> new String[]{rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5)});
+        if (linhas.isEmpty()) return new Regras(FORMA_DE_FABRICA, FUTURO_DE_FABRICA, LOCAL_DE_FABRICA, "uso", false);
         String[] l = linhas.get(0);
-        return new Regras(l[0] == null ? FORMA_DE_FABRICA : l[0], l[1] == null ? FUTURO_DE_FABRICA : lista(l[1]), l[2] == null ? LOCAL_DE_FABRICA : lista(l[2]), OrdemDosServicos.MODOS.contains(l[3]) ? l[3] : "uso");
+        return new Regras(l[0] == null ? FORMA_DE_FABRICA : l[0], l[1] == null ? FUTURO_DE_FABRICA : lista(l[1]), l[2] == null ? LOCAL_DE_FABRICA : lista(l[2]), OrdemDosServicos.MODOS.contains(l[3]) ? l[3] : "uso", "true".equals(l[4]));
     }
 
     private static List<String> lista(String s) {
@@ -86,6 +86,7 @@ public class RegrasAtendimento {
         return banco.naLoja(jdbc -> {
             Regras atual = ler(jdbc);
             String novaOrdem = ordem == null ? atual.ordemServicos() : ordem;
+            boolean novoAuto = c.profissionalAutomatico() == null ? atual.profissionalAutomatico() : c.profissionalAutomatico();
             String novaForma = forma == null ? atual.formaPagamentoPadrao() : forma;
             List<String> futuro = atual.futuro();
             List<String> local = atual.local();
@@ -93,11 +94,11 @@ public class RegrasAtendimento {
                 futuro = conferir(c.camposObrigatorios().futuro(), true);
                 local = conferir(c.camposObrigatorios().local(), false);
             }
-            jdbc.update("insert into configuracao_loja (loja_id, forma_pagamento_padrao, campos_futuro, campos_local, ordem_servicos) values (?::uuid, ?, ?, ?, ?) "
+            jdbc.update("insert into configuracao_loja (loja_id, forma_pagamento_padrao, campos_futuro, campos_local, ordem_servicos, profissional_automatico) values (?::uuid, ?, ?, ?, ?, ?) "
                             + "on conflict (loja_id) do update set forma_pagamento_padrao = excluded.forma_pagamento_padrao, campos_futuro = excluded.campos_futuro, "
-                            + "campos_local = excluded.campos_local, ordem_servicos = excluded.ordem_servicos, atualizado_em = now()",
-                    loja.id().toString(), novaForma, String.join(",", futuro), String.join(",", local), novaOrdem);
-            return new Regras(novaForma, futuro, local, novaOrdem);
+                            + "campos_local = excluded.campos_local, ordem_servicos = excluded.ordem_servicos, profissional_automatico = excluded.profissional_automatico, atualizado_em = now()",
+                    loja.id().toString(), novaForma, String.join(",", futuro), String.join(",", local), novaOrdem, novoAuto);
+            return new Regras(novaForma, futuro, local, novaOrdem, novoAuto);
         });
     }
 

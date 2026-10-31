@@ -184,3 +184,11 @@ Lista simples. Cada item está no histórico do `prompt-agendz-regras.md` (v84 a
 ## v129 (31/10): link da demonstração com `?ir=`
 - Causa provável do "abre o login": o quadro do Artifact joga o fragmento fora. Reforço: a página também na busca; volta sozinho do `#` se ele existir (o `#` manda).
 - Dúvida aberta: se o quadro também descartar a busca, nada no app resolve; peço ao Marcelo para testar com um link de outra loja (Dalforno) para separar "loja perdida" de "página perdida".
+
+## v132 (31/10): B9a campos do link no Reconfigurar e B9c escolha automática do profissional
+- B9c, regra: `estabelecimento.profissionalAutomatico` (simulada) e `configuracao_loja.profissional_automatico` (servidor, V43), padrão desligado = continua perguntando. Quem muda: proprietário (Estabelecimento > Regras; no site real, cartão Regras do atendimento).
+- Ordem do "mais livre": menos agendamentos não cancelados no dia; empate, menos nos 7 dias a partir do dia; empate, ordem da equipe (cadastro). Mesmos casos nos dois lados (`equivalencia/folga.json`).
+- Quem preencheu o profissional continua mandando; o profissional (papel) sempre atende como ele mesmo. O link com `profissionalInicial` (link de um profissional) continua indo para aquele profissional.
+- Atendimento de agora ou passado: o primeiro da ordem (não disputa horário). Futuro: o primeiro da ordem que cabe (expediente dele e sem conflito); ninguém livre = erro "Nenhum profissional está livre neste horário".
+- Decisão sem confirmação: no servidor a checagem de "cabe" usa a duração do porte médio; a conferência final (porte, box) continua em `inserirAgendamento`. Campo "profissional" obrigatório nas regras conta como preenchido quando a escolha é automática.
+- Em aberto: Java só roda no CI (`AtendimentoTest`, `FolgaEquivalenciaTest`). Falta B9b (Atender igual à tela do link).

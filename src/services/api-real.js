@@ -1121,7 +1121,7 @@ const CAMPOS_ATENDER = ['nome', 'telefone', 'profissional', 'vendedor', 'formaPa
 const lerRegras = (d) => {
   d = d && typeof d === 'object' ? d : {};
   const campos = (l, futuro) => listaDe(l, 9).map((x) => texto(x, 20)).filter((x) => CAMPOS_ATENDER.includes(x) && !(futuro && x === 'formaPagamento'));
-  return { formaPagamentoPadrao: ['', 'pix', 'dinheiro', 'cartao'].includes(d.formaPagamentoPadrao) ? d.formaPagamentoPadrao : 'pix', futuro: campos(d.futuro, true), local: campos(d.local, false), ordemServicos: d.ordemServicos === 'manual' ? 'manual' : 'uso' };
+  return { formaPagamentoPadrao: ['', 'pix', 'dinheiro', 'cartao'].includes(d.formaPagamentoPadrao) ? d.formaPagamentoPadrao : 'pix', futuro: campos(d.futuro, true), local: campos(d.local, false), ordemServicos: d.ordemServicos === 'manual' ? 'manual' : 'uso', profissionalAutomatico: d.profissionalAutomatico === true };
 };
 export const regras = {
   // GET /api/estabelecimento/regras-atendimento  (quem usa a agenda; o formulário Atender precisa da forma padrão e dos campos obrigatórios)
@@ -1130,8 +1130,12 @@ export const regras = {
     return r.ok ? { ok: true, regras: lerRegras(r.dados) } : r;
   },
   // PUT /api/estabelecimento/regras-atendimento  { formaPagamentoPadrao?, camposObrigatorios?: { futuro, local } }  (só o proprietário)
-  async gravar({ formaPagamentoPadrao, camposObrigatorios, ordemServicos } = {}) {
+  async gravar({ formaPagamentoPadrao, camposObrigatorios, ordemServicos, profissionalAutomatico } = {}) {
     const corpo = {};
+    if (profissionalAutomatico !== undefined) {
+      if (typeof profissionalAutomatico !== 'boolean') return { ok: false, status: 0, erro: 'Escolha automática do profissional: sim ou não.' };
+      corpo.profissionalAutomatico = profissionalAutomatico; // B9c
+    }
     if (ordemServicos !== undefined) {
       if (!['uso', 'manual'].includes(ordemServicos)) return { ok: false, status: 0, erro: 'Ordem dos serviços inválida.' };
       corpo.ordemServicos = ordemServicos;
@@ -1291,6 +1295,7 @@ function lerPaginaPublica(d) {
   return {
     endereco: opcional(d.endereco, 300), mapaUrl: httpsOuVazio(d.mapaUrl),
     ativo: d.ativo === true, aviso: texto(d.aviso, 200), diasMax: Number.isInteger(d.diasMax) ? Math.min(60, Math.max(1, d.diasMax)) : 30,
+    profissionalAutomatico: d.profissionalAutomatico === true, // B9c: a página não pergunta "com quem?"; o servidor escolhe o mais livre
     tipo: texto(d.tipo, 40), exigeTelefone: d.exigeTelefone !== false, exigeNome: d.exigeNome !== false, // tudo obrigatório de fábrica; o dono tira em Estabelecimento
     exigeVeiculo: Array.isArray(d.exigeVeiculo) ? d.exigeVeiculo.filter((x) => ['placa', 'modelo', 'porte'].includes(x)) : ['placa', 'modelo', 'porte'],
     portes: listaDe(d.portes, 12).filter((x) => x && porteDoPublico(x.id)).map((x) => ({ id: x.id, nome: texto(x.nome, 20), exemplo: texto(x.exemplo || '', 60) })),

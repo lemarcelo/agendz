@@ -261,8 +261,8 @@ O catálogo (`backend/src/main/resources/catalogo/<tipo>.json`) é gerado dos se
 ## 10h. Forma de pagamento e regras do Atender (v95, 5d-4c-1; `AtendimentoTest`)
 | Rota | Quem | O que faz | Regras |
 |---|---|---|---|
-| `GET /api/estabelecimento/regras-atendimento` | dono, admin, atendente, profissional (seção agenda) | `{formaPagamentoPadrao, futuro[], local[], ordemServicos}` (v123: `uso` padrão ou `manual`) | sem linha gravada: Pix, futuro = nome e telefone, local = nada |
-| `PUT /api/estabelecimento/regras-atendimento` `{formaPagamentoPadrao?, camposObrigatorios?: {futuro, local}, ordemServicos?}` | dono | grava; o que não vem fica como estava | forma: pix, dinheiro, cartao ou vazio (sem padrão); campos: nome, telefone, profissional, vendedor, formaPagamento (esta só no local) e, na estética, veiculo, placa, modelo, porte (v121), sem repetir, até 9; vazio = nada obrigatório |
+| `GET /api/estabelecimento/regras-atendimento` | dono, admin, atendente, profissional (seção agenda) | `{formaPagamentoPadrao, futuro[], local[], ordemServicos, profissionalAutomatico}` (v123: `uso` padrão ou `manual`) | sem linha gravada: Pix, futuro = nome e telefone, local = nada |
+| `PUT /api/estabelecimento/regras-atendimento` `{formaPagamentoPadrao?, camposObrigatorios?: {futuro, local}, ordemServicos?, profissionalAutomatico?}` (v132, B9c: boolean; ligado, `POST /api/atendimentos` sem `profissionalId` e o link sem profissional escolhem o mais livre — `Folga`) | dono | grava; o que não vem fica como estava | forma: pix, dinheiro, cartao ou vazio (sem padrão); campos: nome, telefone, profissional, vendedor, formaPagamento (esta só no local) e, na estética, veiculo, placa, modelo, porte (v121), sem repetir, até 9; vazio = nada obrigatório |
 | `POST /api/atendimentos` `formaPagamento?` | quem já tinha | atendimento feito guarda a forma (escolhida ou padrão); campos obrigatórios das regras valem nos dois tipos | sem padrão e nada escolhido = 400 "Escolha a forma de pagamento."; futuro ignora a forma |
 
 ## 10i. Cupons e vales (v96, 5d-4c-2; `CupomTest`, `CupomEquivalenciaTest`, `equivalencia/cupons.json`)

@@ -336,7 +336,7 @@ public class AgendaController {
         Instant agora = relogio.instant();
         Instant agoraMinuto = agora.truncatedTo(ChronoUnit.MINUTES);
         // profissional atende e lança sempre como ele mesmo; dia anterior é com o dono ou a recepção (senão poderia inventar comissão)
-        UUID profissionalId = veTudo ? d.profissionalId() : UUID.fromString(jwt.getSubject());
+        UUID profissionalPedido = veTudo ? d.profissionalId() : UUID.fromString(jwt.getSubject());
         if (!veTudo && d.inicio() != null && d.inicio().isBefore(inicioDoDia(agora))) {
             throw new ErroDeNegocio(HttpStatus.FORBIDDEN, "Lançar um dia anterior é com o proprietário ou a recepção. Peça a eles para registrar.");
         }
@@ -364,6 +364,9 @@ public class AgendaController {
             }
             // campos obrigatórios do tipo (Estabelecimento > Regras): o que o formulário já traz por padrão (profissional, vendedor, forma padrão) conta como preenchido
             RegrasAtendimento.Regras regras = RegrasAtendimento.ler(jdbc);
+            // B9c: a loja tirou o campo "quem faz o serviço" e ninguém escolheu → o servidor escolhe quem está com a agenda mais livre (quem tem o campo preenchido manda)
+            UUID profissionalId = profissionalPedido;
+            if (profissionalId == null && regras.profissionalAutomatico() && veTudo) profissionalId = escolherAutomatico(jdbc, servicoIds, futuro, d.inicio(), agora);
             Map<String, Boolean> tem = new LinkedHashMap<>();
             tem.put("nome", !nomeInf.isEmpty() || (semNome != null && !semNome));
             tem.put("telefone", br.com.agendz.validacao.Documentos.telefone(d.telefone()) != null || semNome != null);
@@ -398,6 +401,33 @@ public class AgendaController {
             return inserirLocal(jdbc, loja, jwt, d, profissionalId, servicoIds, produtos, vendedorPedido, agoraMinuto, regras);
         }));
         return ResponseEntity.status(HttpStatus.CREATED).body(feito);
+    }
+
+    /**
+     * B9c (espelho de `escolherProfissionalAuto` em engine.js): quem está com a agenda mais livre (`Folga`). Atendimento de agora ou passado: o primeiro da ordem (já aconteceu, não disputa
+     * horário). Agendamento futuro: o primeiro da ordem que cabe no horário (expediente dele e sem conflito); ninguém livre = 409. A duração usa o porte médio; a conferência final
+     * (porte, box) continua em `inserirAgendamento`.
+     */
+    private UUID escolherAutomatico(JdbcTemplate jdbc, List<UUID> servicoIds, boolean futuro, Instant inicio, Instant agora) {
+        List<UUID> equipe = jdbc.queryForList("select id from usuario where ativo and atende order by criado_em, id", UUID.class);
+        if (equipe.isEmpty()) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Nenhum profissional da equipe atende. Marque quem atende em Equipe.");
+        Instant quando = futuro ? inicio : agora;
+        List<UUID> ordem = Folga.ordem(jdbc, equipe, quando.atZone(br.com.agendz.escala.Fuso.BRASIL).toLocalDate());
+        if (!futuro) return ordem.get(0);
+        List<ServicoLinha> servicos = carregarServicos(jdbc, servicoIds, null);
+        int minutos = servicos.stream().mapToInt(ServicoLinha::duracaoMin).sum();
+        int intervalo = servicos.get(servicos.size() - 1).intervaloMin();
+        boolean multiDia = servicos.stream().anyMatch(ServicoLinha::multiDia);
+        Instant ini = conferirInicio(inicio);
+        for (UUID id : ordem) {
+            try {
+                Ocupacao.Plano plano = ocupacao.planejar(jdbc, id, ini, minutos, intervalo, multiDia);
+                if (ocupacao.conflitos(jdbc, id, new UUID(0, 0), plano).isEmpty()) return id;
+            } catch (ErroDeNegocio e) {
+                // fora do expediente dele: tenta o próximo
+            }
+        }
+        throw new ErroDeNegocio(HttpStatus.CONFLICT, "Nenhum profissional está livre neste horário. Escolha outro horário.");
     }
 
     /** Só os campos de veículo da lista de campos obrigatórios (Estabelecimento > Regras). */
