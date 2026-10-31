@@ -1,6 +1,7 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:2eec2c22af */
 // API simulada. Cada função equivale a um endpoint REST que o Spring Boot vai expor (a rota vem no comentário).
 // O armazenamento é um estado em memória, clonado a cada alteração. A UI só conversa com este módulo.
+import { PADRAO_ARTIFACT, ordemAtenderValida, sanearOrdemAtender } from '../domain/ordem-atender.js';
 import * as E from '../domain/engine.js';
 import * as R from '../domain/rules.js';
 import * as CD from '../domain/codigo.js';
@@ -1068,7 +1069,7 @@ export const estabelecimento = {
   salvar(entrada) {
     const n = exigir('estabelecimento'); if (n) return n;
     if (entrada && typeof entrada === 'object' && 'tipo' in entrada && entrada.tipo !== tipoDe(state.estabelecimento)) return erro('O tipo do estabelecimento não pode ser alterado depois de criado.');
-    const patch = pegar(entrada, permitidos(['nome', 'telefone', 'endereco', 'enderecoNoLink', 'latitude', 'longitude', 'localizacaoNoWhatsapp', 'email', 'ddds', 'visaoPadrao', 'confirmacaoServico', 'grupoMovimentacaoId', 'notificacoes', 'escala', 'calendario', 'pixCancelamento', 'logo', 'corTema', 'corTema2', 'temaCor', 'linkAgendamento', 'comissaoPadrao', 'usaIntegracaoPix', 'formaPagamentoPadrao', 'contaPorForma', 'camposObrigatorios', 'boxes', 'portes', 'ordemServicos']));
+    const patch = pegar(entrada, permitidos(['nome', 'telefone', 'endereco', 'enderecoNoLink', 'latitude', 'longitude', 'localizacaoNoWhatsapp', 'email', 'ddds', 'visaoPadrao', 'confirmacaoServico', 'grupoMovimentacaoId', 'notificacoes', 'escala', 'calendario', 'pixCancelamento', 'logo', 'corTema', 'corTema2', 'temaCor', 'linkAgendamento', 'comissaoPadrao', 'usaIntegracaoPix', 'formaPagamentoPadrao', 'contaPorForma', 'camposObrigatorios', 'boxes', 'portes', 'ordemServicos', 'profissionalAutomatico', 'ordemAtender']));
     if ('comissaoPadrao' in patch && !R.ehDono(usuario())) delete patch.comissaoPadrao;
     if ('comissaoPadrao' in patch) { const c = lerPct(patch.comissaoPadrao); if (!c.ok || c.v === null) return erro('A comissão padrão vai de 0 a 100%.'); patch.comissaoPadrao = c.v; }
     for (const k of ['nome', 'telefone', 'endereco', 'email']) if (k in patch && !texto(patch[k], 200)) return erro('Texto grande demais em ' + k + '.');
@@ -1121,6 +1122,8 @@ export const estabelecimento = {
       if (!ok) return erro('Campos obrigatórios inválidos.');
       patch.camposObrigatorios = { futuro: [...c.futuro], local: [...c.local] };
     }
+    if ('ordemAtender' in patch) { if (!ordemAtenderValida(patch.ordemAtender)) return erro('Ordem do Atender inválida.'); patch.ordemAtender = sanearOrdemAtender(patch.ordemAtender, PADRAO_ARTIFACT); } // v133
+    if ('profissionalAutomatico' in patch && typeof patch.profissionalAutomatico !== 'boolean') return erro('Escolha automática do profissional: sim ou não.');
     if ('ordemServicos' in patch && !modoOrdemValido(patch.ordemServicos)) return erro('Ordem dos serviços inválida: mais usados primeiro ou a ordem que você definiu.');
     if ('visaoPadrao' in patch && !['dia', 'semana', 'mes'].includes(patch.visaoPadrao)) return erro('Visão padrão inválida.');
     if ('confirmacaoServico' in patch && typeof patch.confirmacaoServico !== 'boolean') return erro(`${Voc('confirmacao')} inválida.`);

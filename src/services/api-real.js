@@ -6,6 +6,7 @@
 // página pede o login de novo); nenhuma função lança erro: devolve { ok, ... } com mensagem em português; erro técnico nunca vira texto cru na tela.
 // Docs: docs/F2-front-na-api-real.md. Rotas: POST /api/auth/login, PUT /api/usuarios/me/senha, GET /api/publico/loja, /api/onboarding/*, /api/clientes, /api/servicos, /api/usuarios.
 
+import { PADRAO_PAINEL, ordemAtenderValida, sanearOrdemAtender } from '../domain/ordem-atender.js';
 import { MAX_BYTES, conferirImagens, lerResumoAnexo, tipoPorConteudo } from '../domain/imagem-chamado.js';
 import { corpoDaSemana, erroDaSemana } from '../domain/expediente.js';
 import { corValida, erroDaMarca, logoValida } from '../domain/tema.js';
@@ -189,6 +190,39 @@ export const aparelhos = {
   },
 };
 
+// ---------- aviso com o app fechado (v130; regras no servidor: br.com.agendz.push): cada pessoa cuida só dos próprios aparelhos ----------
+export const push = {
+  // GET /api/push/chave → { chave } pública (VAPID). 503 = recurso desligado neste servidor.
+  async chave() {
+    const r = await chamar('GET', '/api/push/chave');
+    return r.ok ? { ok: true, chave: texto(r.dados && r.dados.chave, 100) } : r;
+  },
+  // GET /api/push/inscricoes → aparelhos da pessoa (sem endpoint nem chaves)
+  async listar() {
+    const r = await chamar('GET', '/api/push/inscricoes');
+    return r.ok ? { ok: true, itens: listaDe(r.dados, 5).map((d) => ({ id: ID_REDE.test(String(d && d.id)) ? d.id : '', aparelho: texto(d && d.aparelho, 60), criadoEm: texto(d && d.criadoEm, 40), ultimoEnvio: texto(d && d.ultimoEnvio, 40) })).filter((x) => x.id) } : r;
+  },
+  // POST /api/push/inscricoes  { endpoint, keys: { p256dh, auth }, aparelho? }
+  async inscrever(corpo) {
+    const c = corpo || {};
+    const k = c.keys || {};
+    if (typeof c.endpoint !== 'string' || !/^https:\/\//.test(c.endpoint) || c.endpoint.length > 600) return { ok: false, status: 0, erro: 'Aparelho inválido.' };
+    const r = await chamar('POST', '/api/push/inscricoes', { endpoint: c.endpoint, keys: { p256dh: texto(k.p256dh, 120), auth: texto(k.auth, 60) }, aparelho: texto(c.aparelho, 60).trim() || undefined });
+    return r.ok ? { ok: true, id: ID_REDE.test(String(r.dados && r.dados.id)) ? r.dados.id : '' } : r;
+  },
+  // DELETE /api/push/inscricoes/{id}
+  async remover(id) {
+    if (!ID_REDE.test(String(id))) return { ok: false, status: 0, erro: 'Aparelho inválido.' };
+    const r = await chamar('DELETE', `/api/push/inscricoes/${id}`);
+    return r.ok ? { ok: true } : r;
+  },
+  // POST /api/push/teste → { enviados, falhas } (manda uma mensagem de teste aos aparelhos da própria pessoa)
+  async testar() {
+    const r = await chamar('POST', '/api/push/teste', {});
+    return r.ok ? { ok: true, enviados: Number(r.dados && r.dados.enviados) || 0, falhas: Number(r.dados && r.dados.falhas) || 0 } : r;
+  },
+};
+
 // ---------- login por digital / rosto / PIN do aparelho (passkey, WebAuthn; regras no servidor: PasskeyService) ----------
 // A passkey NUNCA substitui a senha: é uma segunda porta de entrada, que o aparelho assina. Cadastrar pede a senha de novo (recusa = 403, nunca 401).
 const paraB64u = (buf) => {
@@ -364,6 +398,22 @@ export const onboarding = {
     const r = await chamar('POST', '/api/onboarding/expediente', { semana: semana && typeof semana === 'object' ? semana : {} });
     return r.ok ? { ok: true } : r;
   },
+  // GET /api/estabelecimento/link-agendamento  (B9a: o passo "Link do cliente" mostra o que já vale)
+  async linkObter() { return linkAgendamento.obter(); },
+  // POST /api/onboarding/link  { nomeObrigatorio?, telefoneObrigatorio?, veiculoObrigatorio?: ['placa','modelo','porte'] }  (B9a; depois de concluído só dentro de uma reconfiguração)
+  async link(d) {
+    d = d && typeof d === 'object' ? d : {};
+    const corpo = {};
+    if (d.nomeObrigatorio !== undefined) { if (typeof d.nomeObrigatorio !== 'boolean') return { ok: false, status: 0, erro: 'Valor inválido.' }; corpo.nomeObrigatorio = d.nomeObrigatorio; }
+    if (d.telefoneObrigatorio !== undefined) { if (typeof d.telefoneObrigatorio !== 'boolean') return { ok: false, status: 0, erro: 'Valor inválido.' }; corpo.telefoneObrigatorio = d.telefoneObrigatorio; }
+    if (d.veiculoObrigatorio !== undefined) {
+      const v = d.veiculoObrigatorio;
+      if (!Array.isArray(v) || v.length > 3 || new Set(v).size !== v.length || !v.every((x) => ['placa', 'modelo', 'porte'].includes(x))) return { ok: false, status: 0, erro: 'Dados do veículo inválidos.' };
+      corpo.veiculoObrigatorio = [...v];
+    }
+    const r = await chamar('POST', '/api/onboarding/link', corpo);
+    return r.ok ? { ok: true } : r;
+  },
   // POST /api/onboarding/concluir
   async concluir() { const r = await chamar('POST', '/api/onboarding/concluir', {}); return r.ok ? { ok: true } : r; },
   // Reconfigurar com senha e desfazer (só o dono; o servidor confere tudo). Senha errada é 403 "Senha incorreta"; 5 erros bloqueiam (429).
@@ -378,7 +428,7 @@ export const onboarding = {
 };
 const lerHistorico = (d) => listaDe(d && d.itens, 20).map((i) => ({
   id: texto(i && i.id, 40), criadaEm: texto(i && i.criadaEm, 40), por: texto(i && i.por, 120), servicosCriados: Number(i && i.servicosCriados) || 0, pessoasCriadas: Number(i && i.pessoasCriadas) || 0, produtosCriados: Number(i && i.produtosCriados) || 0,
-  expedienteTrocado: !!(i && i.expedienteTrocado === true), comissaoTrocada: !!(i && i.comissaoTrocada === true), desfeitaEm: i && i.desfeitaEm ? texto(i.desfeitaEm, 40) : '', podeDesfazer: !!(i && i.podeDesfazer === true), podeRefazer: !!(i && i.podeRefazer === true),
+  expedienteTrocado: !!(i && i.expedienteTrocado === true), linkTrocado: !!(i && i.linkTrocado === true), comissaoTrocada: !!(i && i.comissaoTrocada === true), desfeitaEm: i && i.desfeitaEm ? texto(i.desfeitaEm, 40) : '', podeDesfazer: !!(i && i.podeDesfazer === true), podeRefazer: !!(i && i.podeRefazer === true),
 }));
 async function trocarReconfiguracao(id, acao, senha) {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id))) return { ok: false, erro: 'Reconfiguração inválida' };
@@ -848,6 +898,8 @@ function lerPlano(d) {
   return { id: texto(d.id, 40), nome: texto(d.nome, 60), descricao: texto(d.descricao, 200), preco: dinheiroOuZero(d.preco), cortes: inteiroPlano(d.cortes), servicoIds: idsDe(d.servicoIds, 10),
     adianta: inteiroPlano(d.adianta), acumuloMeses: inteiroPlano(d.acumuloMeses), intervaloDias: inteiroPlano(d.intervaloDias), ativo: d.ativo !== false };
 }
+const lerFixo = (f) => ({ id: texto(f && f.id, 40), dia: Number.isInteger(f && f.dia) && f.dia >= 0 && f.dia <= 6 ? f.dia : 0, hm: /^([01]\d|2[0-3]):[0-5]\d$/.test(f && f.hm) ? f.hm : '00:00',
+  profissionalId: texto(f && f.profissionalId, 40), servicoIds: idsDe(f && f.servicoIds, 10), ...(f && ID.test(String(f.veiculoId)) ? { veiculoId: f.veiculoId } : {}) });
 function lerAssinatura(d) {
   d = d && typeof d === 'object' ? d : {};
   const f = d.plano && typeof d.plano === 'object' ? d.plano : {};
@@ -859,7 +911,7 @@ function lerAssinatura(d) {
     status: STATUS_ASSINATURA.includes(d.status) ? d.status : 'pendente', inicioMes: mesPlano(d.inicioMes), diaCobranca: inteiroPlano(d.diaCobranca),
     pagamentos: listaDe(d.pagamentos, 120).map((p) => ({ id: texto(p && p.id, 40), mes: mesPlano(p && p.mes), valor: dinheiroOuZero(p && p.valor), forma: FORMAS_PLANO.includes(p && p.forma) ? p.forma : 'pix', em: instante(p && p.em),
       autor: { nome: texto(p && p.autor && p.autor.nome, 150) }, estornado: !!(p && p.estornado === true), estornoMotivo: p && p.estornoMotivo ? texto(p.estornoMotivo, 200) : '' })).filter((p) => ID.test(p.id)),
-    divida: inteiroPlano(d.divida), dividaQuitada: d.dividaQuitada === true, criadoEm: instante(d.criadoEm), encerradoEm: instante(d.encerradoEm),
+    fixos: listaDe(d.fixos, 3).map(lerFixo), divida: inteiroPlano(d.divida), dividaQuitada: d.dividaQuitada === true, criadoEm: instante(d.criadoEm), encerradoEm: instante(d.encerradoEm),
     log: listaDe(d.log, 30).map((x) => ({ em: instante(x && x.em), autor: { nome: texto(x && x.autor && x.autor.nome, 150) }, acao: texto(x && x.acao, 30), detalhe: texto(x && x.detalhe, 300) })),
     saldo: { planoNome: texto(sd.planoNome, 60), situacao: texto(sd.situacao, 20), cortesPorMes: inteiroPlano(sd.cortesPorMes), mes: mesPlano(sd.mes), pagoMes: sd.pagoMes === true, restantes: inteiroPlano(sd.restantes),
       usadosNoMes: inteiroPlano(sd.usadosNoMes), maisPermitidos: inteiroPlano(sd.maisPermitidos), pagoAte: mesPlano(sd.pagoAte) || null, atrasado: sd.atrasado === true },
@@ -940,6 +992,19 @@ export const planos = {
     if (!r.ok) return r;
     const a = lerAssinatura(r.dados);
     return { ok: true, assinatura: a, divida: a.divida };
+  },
+  // POST /api/assinaturas/{id}/fixos  { fixos: [{ dia 0-6 (0 = domingo), hm, profissionalId, servicoIds, veiculoId? }] }  (troca a lista inteira, até 3; o servidor cria cada horário
+  // 14 dias antes, gastando 1 atendimento do plano, e o deixa reservado; o que saiu da lista e ainda não aconteceu sai da agenda → { apagados })
+  async definirFixos(id, d) {
+    if (!ID.test(String(id ?? ''))) return semAssinatura;
+    const lista = d && Array.isArray(d.fixos) ? d.fixos : null;
+    if (!lista || lista.length > 3) return { ok: false, status: 0, erro: 'No máximo 3 horários fixos por semana.' };
+    const fixos = lista.map((f) => ({ dia: f && f.dia, hm: texto(f && f.hm, 5), profissionalId: texto(f && f.profissionalId, 40), servicoIds: idsDe(f && f.servicoIds, 10),
+      ...(f && ID.test(String(f.veiculoId)) ? { veiculoId: f.veiculoId } : {}) }));
+    const r = await chamar('POST', `/api/assinaturas/${id}/fixos`, { fixos });
+    if (!r.ok) return r;
+    const x = r.dados && typeof r.dados === 'object' ? r.dados : {};
+    return { ok: true, assinatura: lerAssinatura(x.assinatura), apagados: Number.isInteger(x.apagados) && x.apagados > 0 ? x.apagados : 0 };
   },
   // POST /api/assinaturas/{id}/quitar  (o dono recebeu por fora o que ficou devendo)
   async quitar(id) {
@@ -1105,7 +1170,7 @@ const CAMPOS_ATENDER = ['nome', 'telefone', 'profissional', 'vendedor', 'formaPa
 const lerRegras = (d) => {
   d = d && typeof d === 'object' ? d : {};
   const campos = (l, futuro) => listaDe(l, 9).map((x) => texto(x, 20)).filter((x) => CAMPOS_ATENDER.includes(x) && !(futuro && x === 'formaPagamento'));
-  return { formaPagamentoPadrao: ['', 'pix', 'dinheiro', 'cartao'].includes(d.formaPagamentoPadrao) ? d.formaPagamentoPadrao : 'pix', futuro: campos(d.futuro, true), local: campos(d.local, false), ordemServicos: d.ordemServicos === 'manual' ? 'manual' : 'uso' };
+  return { formaPagamentoPadrao: ['', 'pix', 'dinheiro', 'cartao'].includes(d.formaPagamentoPadrao) ? d.formaPagamentoPadrao : 'pix', futuro: campos(d.futuro, true), local: campos(d.local, false), ordemServicos: d.ordemServicos === 'manual' ? 'manual' : 'uso', profissionalAutomatico: d.profissionalAutomatico === true, ordemAtender: sanearOrdemAtender(d.ordemAtender, PADRAO_PAINEL) };
 };
 export const regras = {
   // GET /api/estabelecimento/regras-atendimento  (quem usa a agenda; o formulário Atender precisa da forma padrão e dos campos obrigatórios)
@@ -1114,8 +1179,16 @@ export const regras = {
     return r.ok ? { ok: true, regras: lerRegras(r.dados) } : r;
   },
   // PUT /api/estabelecimento/regras-atendimento  { formaPagamentoPadrao?, camposObrigatorios?: { futuro, local } }  (só o proprietário)
-  async gravar({ formaPagamentoPadrao, camposObrigatorios, ordemServicos } = {}) {
+  async gravar({ formaPagamentoPadrao, camposObrigatorios, ordemServicos, profissionalAutomatico, ordemAtender } = {}) {
     const corpo = {};
+    if (ordemAtender !== undefined) {
+      if (!ordemAtenderValida(ordemAtender)) return { ok: false, status: 0, erro: 'Ordem do Atender inválida.' };
+      corpo.ordemAtender = sanearOrdemAtender(ordemAtender, PADRAO_PAINEL); // v133
+    }
+    if (profissionalAutomatico !== undefined) {
+      if (typeof profissionalAutomatico !== 'boolean') return { ok: false, status: 0, erro: 'Escolha automática do profissional: sim ou não.' };
+      corpo.profissionalAutomatico = profissionalAutomatico; // B9c
+    }
     if (ordemServicos !== undefined) {
       if (!['uso', 'manual'].includes(ordemServicos)) return { ok: false, status: 0, erro: 'Ordem dos serviços inválida.' };
       corpo.ordemServicos = ordemServicos;
@@ -1275,6 +1348,7 @@ function lerPaginaPublica(d) {
   return {
     endereco: opcional(d.endereco, 300), mapaUrl: httpsOuVazio(d.mapaUrl),
     ativo: d.ativo === true, aviso: texto(d.aviso, 200), diasMax: Number.isInteger(d.diasMax) ? Math.min(60, Math.max(1, d.diasMax)) : 30,
+    profissionalAutomatico: d.profissionalAutomatico === true, // B9c: a página não pergunta "com quem?"; o servidor escolhe o mais livre
     tipo: texto(d.tipo, 40), exigeTelefone: d.exigeTelefone !== false, exigeNome: d.exigeNome !== false, // tudo obrigatório de fábrica; o dono tira em Estabelecimento
     exigeVeiculo: Array.isArray(d.exigeVeiculo) ? d.exigeVeiculo.filter((x) => ['placa', 'modelo', 'porte'].includes(x)) : ['placa', 'modelo', 'porte'],
     portes: listaDe(d.portes, 12).filter((x) => x && porteDoPublico(x.id)).map((x) => ({ id: x.id, nome: texto(x.nome, 20), exemplo: texto(x.exemplo || '', 60) })),
@@ -1416,7 +1490,7 @@ export const perfil = {
   },
 };
 
-const TIPOS_AVISO = ['pedido', 'remarcou', 'cancelou'];
+const TIPOS_AVISO = ['pedido', 'remarcou', 'cancelou', 'fixo']; // 'fixo' (v128): horário fixo de assinante que não coube; sem agendamento
 const lerAviso = (d) => {
   d = d && typeof d === 'object' ? d : {};
   return { id: IDV(d.id), em: instante(d.em), agendamentoId: IDV(d.agendamentoId), tipo: TIPOS_AVISO.includes(d.tipo) ? d.tipo : 'pedido', texto: texto(d.texto, 300), lido: d.lido === true };

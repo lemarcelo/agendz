@@ -8,7 +8,7 @@ import { Aviso, Btn, Icone } from '../leve/mini.jsx';
 import { useAtualizacaoAutomatica } from './atualizar.js';
 
 const quando = (ts) => (ts === null ? '' : new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(ts)));
-const ICONE = { pedido: 'plus', remarcou: 'calendar', cancelou: 'x' };
+const ICONE = { pedido: 'plus', remarcou: 'calendar', cancelou: 'x', fixo: 'calendar' };
 
 export default function Avisos() {
   const [lista, setLista] = useState(null);

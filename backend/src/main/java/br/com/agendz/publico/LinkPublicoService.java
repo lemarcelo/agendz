@@ -4,6 +4,8 @@ import br.com.agendz.clientes.ClienteService;
 import br.com.agendz.comissao.ComissaoService;
 import br.com.agendz.configuracao.LinkAgendamento;
 import br.com.agendz.configuracao.PorteController;
+import br.com.agendz.configuracao.RegrasAtendimento;
+import br.com.agendz.agenda.Folga;
 import br.com.agendz.servicos.OrdemDosServicos;
 import br.com.agendz.configuracao.LocalDaLoja;
 import br.com.agendz.cupom.CupomService;
@@ -89,7 +91,7 @@ public class LinkPublicoService {
 
     /** `endereco` e `mapaUrl` só vêm quando o proprietário ligou "mostrar o endereço no link" e há endereço gravado. */
     public record Pagina(boolean ativo, String aviso, int diasMax, boolean exigeTelefone, boolean exigeNome, List<String> exigeVeiculo, List<ServicoPublico> servicos, List<ProfissionalPublico> profissionais, String endereco, String mapaUrl,
-                         String tipo, List<PortePublico> portes) {
+                         String tipo, List<PortePublico> portes, boolean profissionalAutomatico) {
     }
 
     public record Horario(Instant inicio, UUID profissionalId) {
@@ -165,9 +167,9 @@ public class LinkPublicoService {
         return banco.naLoja(jdbc -> {
             LinkAgendamento.Config cfg = LinkAgendamento.ler(jdbc);
             boolean ativo = cfg.ativo() && LinkAgendamento.tipoSuportado(loja);
-            if (!ativo) return new Pagina(false, ERRO_DESLIGADO, cfg.diasMax(), cfg.telefoneObrigatorio(), cfg.nomeObrigatorio(), cfg.veiculoObrigatorio(), List.of(), List.of(), null, null, loja.tipo(), List.of());
+            if (!ativo) return new Pagina(false, ERRO_DESLIGADO, cfg.diasMax(), cfg.telefoneObrigatorio(), cfg.nomeObrigatorio(), cfg.veiculoObrigatorio(), List.of(), List.of(), null, null, loja.tipo(), List.of(), false);
             if (Capacidades.usaRecursoFisico(loja) && Integer.valueOf(0).equals(jdbc.queryForObject("select count(*) from box where ativo", Integer.class))) {
-                return new Pagina(false, ERRO_SEM_BOX, cfg.diasMax(), cfg.telefoneObrigatorio(), cfg.nomeObrigatorio(), cfg.veiculoObrigatorio(), List.of(), List.of(), null, null, loja.tipo(), List.of()); // estética sem box: a agenda do cliente não abre (v120)
+                return new Pagina(false, ERRO_SEM_BOX, cfg.diasMax(), cfg.telefoneObrigatorio(), cfg.nomeObrigatorio(), cfg.veiculoObrigatorio(), List.of(), List.of(), null, null, loja.tipo(), List.of(), false); // estética sem box: a agenda do cliente não abre (v120)
             }
             boolean porPorte = Capacidades.precoPorPorte(loja);
             List<PorteController.Porte> listaPortes = porPorte ? PorteController.ler(jdbc) : List.of();
@@ -181,7 +183,7 @@ public class LinkPublicoService {
             LocalDaLoja.Local local = LocalDaLoja.ler(jdbc);
             boolean mostra = local.enderecoNoLink() && local.temEndereco();
             List<PortePublico> portes = listaPortes.stream().filter(PorteController.Porte::ativo).map(x -> new PortePublico(x.id(), x.nome(), x.exemplo())).toList();
-            return new Pagina(true, null, cfg.diasMax(), cfg.telefoneObrigatorio(), cfg.nomeObrigatorio(), cfg.veiculoObrigatorio(), servicos, profissionais, mostra ? local.enderecoTexto() : null, mostra ? local.mapaUrl() : null, loja.tipo(), portes);
+            return new Pagina(true, null, cfg.diasMax(), cfg.telefoneObrigatorio(), cfg.nomeObrigatorio(), cfg.veiculoObrigatorio(), servicos, profissionais, mostra ? local.enderecoTexto() : null, mostra ? local.mapaUrl() : null, loja.tipo(), portes, RegrasAtendimento.ler(jdbc).profissionalAutomatico());
         });
     }
 
@@ -242,6 +244,18 @@ public class LinkPublicoService {
     }
 
     /**
+     * B9c: com a escolha automática ligada e o cliente sem escolher quem, o horário vai para quem está com a agenda mais livre no dia (`Folga`); do contrário
+     * a ordem é a de sempre (por nome). Com um profissional só (o cliente escolheu) não há o que ordenar.
+     */
+    private List<Prof> ordemDoDia(JdbcTemplate jdbc, List<Prof> profs, LocalDate dia) {
+        if (profs.size() < 2 || !RegrasAtendimento.ler(jdbc).profissionalAutomatico()) return profs;
+        List<UUID> ordem = Folga.ordem(jdbc, profs.stream().map(Prof::id).toList(), dia);
+        List<Prof> saida = new ArrayList<>();
+        for (UUID id : ordem) profs.stream().filter(x -> x.id().equals(id)).findFirst().ifPresent(saida::add);
+        return saida;
+    }
+
+    /**
      * Os horários livres de um dia. Livre = dentro do expediente da loja e do profissional, depois da antecedência do serviço e sem NENHUM agendamento ativo na janela
      * (pendente também ocupa: o cliente nunca disputa horário). Loja sem expediente cadastrado não oferece horário. `soUm`: para ao achar o primeiro.
      */
@@ -264,7 +278,7 @@ public class LinkPublicoService {
                         (rs, i) -> new BoxOcupado(rs.getObject(1, UUID.class), rs.getObject(2, OffsetDateTime.class).toInstant(), rs.getObject(3, OffsetDateTime.class).toInstant()),
                         ignorar == null ? NINGUEM : ignorar, utc(diaFim.plus(1, ChronoUnit.DAYS)), utc(diaIni))
                 : List.of();
-        for (Prof p : base.profissionais()) {
+        for (Prof p : ordemDoDia(jdbc, base.profissionais(), dia)) {
             Map<Integer, List<Faixa>> deleEscala = base.escalas().get(p.id());
             List<Ocupado> ocupados = jdbc.query("select inicio, fim_ocupado from agendamento where profissional_id = ? and id <> ? and status <> 'cancelado' and inicio < ? and fim_ocupado > ?",
                     (rs, i) -> new Ocupado(rs.getObject("inicio", OffsetDateTime.class).toInstant(), rs.getObject("fim_ocupado", OffsetDateTime.class).toInstant()),
@@ -349,7 +363,7 @@ public class LinkPublicoService {
             int dow = local.getDayOfWeek().getValue() % 7;
             int ini = local.getHour() * 60 + local.getMinute();
             UUID profissional = null;
-            for (Prof c : base.profissionais()) {
+            for (Prof c : ordemDoDia(jdbc, base.profissionais(), local.toLocalDate())) {
                 if (!EscalaService.cabeNoDia(lojaEscala, base.escalas().get(c.id()), dow, ini, ini + duracao)) continue;
                 Integer ocupados = jdbc.queryForObject("select count(*) from agendamento where profissional_id = ? and status <> 'cancelado' and inicio < ? and fim_ocupado > ?",
                         Integer.class, c.id(), utc(fimOcupado), utc(inicio));

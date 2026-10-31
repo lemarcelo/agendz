@@ -6,7 +6,7 @@ DOMINIO=${1:?informe o domínio, ex.: seudominio.com.br}
 cd "$(dirname "$0")/.."
 if [ "${2:-}" = "--real" ]; then  # site com login real (API Spring); sem o 2º argumento, a demonstração
   AGENDZ_DOMINIO="$DOMINIO" node build.mjs --real
-  mkdir -p deploy/site && cp dist/index-real.html deploy/site/index.html
+  mkdir -p deploy/site && cp dist/index-real.html deploy/site/index.html && cp dist/sw.js dist/manifest.webmanifest dist/icone.svg deploy/site/
 else
   AGENDZ_DOMINIO="$DOMINIO" node build.mjs
   mkdir -p deploy/site && cp dist/index.html deploy/site/index.html

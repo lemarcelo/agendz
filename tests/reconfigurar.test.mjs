@@ -112,3 +112,17 @@ test('sugestões de produtos por tipo: nomes únicos, preços válidos, sem comi
   }
   assert.deepEqual(produtosDoTipo('tipo-inexistente'), []);
 });
+
+test('link do cliente (B9a) na pré-visualização: padrão exige tudo; grava só nesta página; reconfigurar anota linkTrocado e nada vai à API', async () => {
+  reiniciar();
+  assert.ok(auth.login({ identificador: 'davi', senha: '1234' }).ok);
+  const antes = JSON.stringify(st().estabelecimento);
+  const a = criarAdaptadorDemo({ reconfigurar: true });
+  assert.deepEqual((await a.linkObter()).link, { telefoneObrigatorio: true, nomeObrigatorio: true, veiculoObrigatorio: ['placa', 'modelo', 'porte'] });
+  assert.equal((await a.confirmarSenha('qualquer')).ok, true);
+  assert.equal((await a.link({ nomeObrigatorio: false, veiculoObrigatorio: ['placa', 'cor', 'x'] })).ok, true);
+  assert.deepEqual((await a.linkObter()).link, { telefoneObrigatorio: true, nomeObrigatorio: false, veiculoObrigatorio: ['placa'] }, 'campos desconhecidos são descartados');
+  const { itens } = await a.historico();
+  assert.equal(itens[0].linkTrocado, true);
+  assert.equal(JSON.stringify(st().estabelecimento), antes, 'a pré-visualização não grava nada');
+});

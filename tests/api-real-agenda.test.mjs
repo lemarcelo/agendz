@@ -4,6 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { agenda, comissoes, configurar, consultaDoPeriodo, portes, produtos, profissionais, regras, servicos } from '../src/services/api-real.js';
 import { agruparPorDia } from '../src/domain/agenda-grupos.js';
+import { PADRAO_PAINEL } from '../src/domain/ordem-atender.js';
 
 const ID = '00000000-0000-4000-8000-000000000101';
 const PROF = '00000000-0000-4000-8000-000000000001';
@@ -212,13 +213,13 @@ test('regras do Atender: rota, corpo certo, leitura defensiva e validação ante
   servidor({ formaPagamentoPadrao: 'dinheiro', futuro: ['nome', 'formaPagamento', 'cpf'], local: ['telefone', 'x'.repeat(50)], lixo: 1 });
   const lida = await regras.obter();
   assert.deepEqual(chamadas[0], { url: 'https://loja.teste/api/estabelecimento/regras-atendimento', metodo: 'GET', corpo: undefined });
-  assert.deepEqual(lida, { ok: true, regras: { formaPagamentoPadrao: 'dinheiro', futuro: ['nome'], local: ['telefone'], ordemServicos: 'uso' } }, 'o futuro nunca exige forma; campo desconhecido some; sem ordem gravada vale "uso"');
+  assert.deepEqual(lida, { ok: true, regras: { formaPagamentoPadrao: 'dinheiro', futuro: ['nome'], local: ['telefone'], ordemServicos: 'uso', profissionalAutomatico: false, ordemAtender: PADRAO_PAINEL } }, 'o futuro nunca exige forma; campo desconhecido some; sem ordem gravada vale "uso"');
   servidor({ formaPagamentoPadrao: 'xx', futuro: [], local: [] });
   assert.equal((await regras.obter()).regras.formaPagamentoPadrao, 'pix', 'forma desconhecida volta ao padrão de fábrica');
   servidor({ formaPagamentoPadrao: '', futuro: ['nome'], local: ['formaPagamento'] });
   const g = await regras.gravar({ formaPagamentoPadrao: '', camposObrigatorios: { futuro: ['nome'], local: ['formaPagamento'], lixo: 1 } });
   assert.deepEqual(chamadas[0], { url: 'https://loja.teste/api/estabelecimento/regras-atendimento', metodo: 'PUT', corpo: { formaPagamentoPadrao: '', camposObrigatorios: { futuro: ['nome'], local: ['formaPagamento'] } } });
-  assert.deepEqual(g.regras, { formaPagamentoPadrao: '', futuro: ['nome'], local: ['formaPagamento'], ordemServicos: 'uso' });
+  assert.deepEqual(g.regras, { formaPagamentoPadrao: '', futuro: ['nome'], local: ['formaPagamento'], ordemServicos: 'uso', profissionalAutomatico: false, ordemAtender: PADRAO_PAINEL });
   // v123: ordem dos serviços — só 'uso' ou 'manual'; inválida nem chega à rede
   servidor({ formaPagamentoPadrao: 'pix', futuro: [], local: [], ordemServicos: 'manual' });
   const o = await regras.gravar({ ordemServicos: 'manual' });
@@ -227,6 +228,23 @@ test('regras do Atender: rota, corpo certo, leitura defensiva e validação ante
   const antesOrdem = chamadas.length;
   assert.equal((await regras.gravar({ ordemServicos: 'aleatorio' })).ok, false);
   assert.equal(chamadas.length, antesOrdem, 'ordem inválida não vai à rede');
+  // B9c: escolha automática do profissional — só sim/não; inválida nem chega à rede
+  servidor({ formaPagamentoPadrao: 'pix', futuro: [], local: [], profissionalAutomatico: true });
+  const pa = await regras.gravar({ profissionalAutomatico: true });
+  assert.deepEqual(chamadas[0].corpo, { profissionalAutomatico: true });
+  assert.equal(pa.regras.profissionalAutomatico, true);
+  const antesPa = chamadas.length;
+  assert.equal((await regras.gravar({ profissionalAutomatico: 'sim' })).ok, false);
+  assert.equal(chamadas.length, antesPa, 'valor inválido não vai à rede');
+  // B9b: ordem da tela Atender — vai saneada (completa) e a leitura defensiva completa o que faltar; forma errada nem chega à rede
+  const nova = { ...PADRAO_PAINEL, futuro: { ...PADRAO_PAINEL.futuro, veiculo: ['porte', 'placa', 'modelo', 'marca', 'cor'] } };
+  servidor({ formaPagamentoPadrao: 'pix', futuro: [], local: [], ordemAtender: { futuro: { veiculo: ['porte'] } } });
+  const oa = await regras.gravar({ ordemAtender: { futuro: { veiculo: ['porte'] } } });
+  assert.deepEqual(chamadas[0].corpo, { ordemAtender: nova });
+  assert.deepEqual(oa.regras.ordemAtender, nova, 'a resposta parcial do servidor é completada');
+  const antesOa = chamadas.length;
+  for (const ruimOa of [{ futuro: { etapas: 'x' } }, { outro: {} }, 'texto', []]) assert.equal((await regras.gravar({ ordemAtender: ruimOa })).ok, false);
+  assert.equal(chamadas.length, antesOa, 'ordem inválida não vai à rede');
   const antes = chamadas.length;
   for (const ruim of [{ formaPagamentoPadrao: 'boleto' }, { camposObrigatorios: { futuro: ['formaPagamento'], local: [] } }, { camposObrigatorios: { futuro: ['nome', 'nome'], local: [] } }, { camposObrigatorios: { futuro: ['cpf'], local: [] } }, { camposObrigatorios: { futuro: [] } }]) {
     assert.equal((await regras.gravar(ruim)).ok, false);

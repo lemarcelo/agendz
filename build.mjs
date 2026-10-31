@@ -32,7 +32,12 @@ const html = `<title>Agendz</title>
 fs.mkdirSync('dist', { recursive: true });
 const pagina = (h) => '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"></head><body>' + h + '</body></html>';
 if (real) {
-  fs.writeFileSync(`dist/index-real${sufixo}.html`, pagina(html));
+  // Aviso com o app fechado (v130): service worker + manifesto + ícone, na raiz do site (o Caddy serve o arquivo se existir). O service worker só mostra aviso e abre o site.
+  const sw = await build({ entryPoints: ['src/sw-real.js'], bundle: true, minify: true, format: 'iife', write: false });
+  fs.writeFileSync('dist/sw.js', sw.outputFiles[0].text);
+  fs.writeFileSync('dist/icone.svg', '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96"><rect width="96" height="96" rx="20" fill="#14532d"/><rect x="20" y="26" width="56" height="52" rx="8" fill="none" stroke="#fff" stroke-width="6"/><path d="M20 42h56" stroke="#fff" stroke-width="6"/><path d="M34 18v14M62 18v14" stroke="#fff" stroke-width="6" stroke-linecap="round"/></svg>');
+  fs.writeFileSync('dist/manifest.webmanifest', JSON.stringify({ name: 'Agendz', short_name: 'Agendz', start_url: '/', scope: '/', display: 'standalone', background_color: '#ffffff', theme_color: '#14532d', lang: 'pt-BR', icons: [{ src: '/icone.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }] }));
+  fs.writeFileSync(`dist/index-real${sufixo}.html`, pagina(html).replace('</head>', '<link rel="manifest" href="/manifest.webmanifest"><meta name="theme-color" content="#14532d"></head>'));
   console.log('ok (site real)', (html.length / 1024).toFixed(0), 'KB');
   process.exit(0);
 }

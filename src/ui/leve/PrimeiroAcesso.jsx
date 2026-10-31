@@ -1,5 +1,5 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
-// Assistente de primeiro acesso do dono (docs/F3-primeiro-acesso.md): Serviços → Produtos → Equipe (com a comissão de cada pessoa) → Expediente → Pronto. Cada passo é opcional (Pular).
+// Assistente de primeiro acesso do dono (docs/F3-primeiro-acesso.md): Serviços → Produtos → Equipe (com a comissão de cada pessoa) → Expediente → Link do cliente (B9a) → Pronto. Cada passo é opcional (Pular).
 // Fala com um `adaptador` (async, { ok, erro, ... }): no site real é o de api-real.js (/api/onboarding); no Artifact, a pré-visualização
 // de services/onboarding-demo.js (nada é gravado). Não importa a API simulada: textos do tipo vêm de `rotulo`.
 import React, { useEffect, useMemo, useState } from 'react';
@@ -12,6 +12,7 @@ const lerNumero = (t) => { const n = Number(String(t).replace(/\./g, '').replace
 const faixa = (mapa) => { const v = Object.values(mapa || {}); return v.length ? [Math.min(...v), Math.max(...v)] : null; };
 const ETAPAS = [['servicos', 'Serviços'], ['produtos', 'Produtos'], ['equipe', 'Equipe'], ['expediente', 'Expediente'], ['pronto', 'Pronto']];
 const ETAPAS_BOX = [['servicos', 'Serviços'], ['produtos', 'Produtos'], ['equipe', 'Equipe'], ['boxes', 'Boxes'], ['expediente', 'Expediente'], ['pronto', 'Pronto']]; // tipo com box (estética): sem box a agenda não aceita carro
+const ETAPA_LINK = ['link', 'Link do cliente']; // B9a: o que o cliente precisa informar ao pedir horário pelo link; só aparece se o adaptador tem `link`
 const pctTxt = (n) => String(n).replace('.', ',');
 // Comissão de cada pessoa (pedido do Marcelo, v102): sobre serviços (modo 'geral' = usa a geral da loja, 'propria' = percentual da pessoa) e sobre produtos
 // (modoProd 'sem' = nenhuma, a menos que o próprio produto tenha a sua; 'propria' = percentual da pessoa).
@@ -51,6 +52,7 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
   const [enviando, setEnviando] = useState(false);
   const [copiado, setCopiado] = useState(false);
   const [exp, setExp] = useState(() => camposDoExpediente(null));
+  const [linkCfg, setLinkCfg] = useState({ nome: true, telefone: true, placa: true, modelo: true, porte: true }); // B9a: padrão de fábrica do link = exige tudo
   const [boxLinhas, setBoxLinhas] = useState(['Box 1']); // nomes dos boxes (textos); os que já existem vêm do servidor e não são recriados
   // Reconfigurar com senha e desfazer: depois de concluído, a primeira tela pede a senha do dono; o histórico mostra o que cada reconfiguração mudou.
   const [confirmada, setConfirmada] = useState(false);
@@ -59,6 +61,18 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
   const precisaSenha = reconf && !!adaptador.confirmarSenha && !confirmada;
   const falha = (r) => { setErro(r.erro); if (reconf && /Confirme sua senha/.test(r.erro || '')) { setConfirmada(false); setSenhaTxt(''); } };
   const profissionais = rotulo({ tipo }, 'profissional', { plural: true });
+
+  // B9a: ao chegar no passo "Link do cliente", mostra o que já vale na loja (padrão de fábrica: exige tudo).
+  useEffect(() => {
+    if (etapa !== 'link' || !adaptador.linkObter) return undefined;
+    let vivo = true;
+    adaptador.linkObter().then((l) => {
+      if (!vivo || !l.ok) return;
+      const v = l.link.veiculoObrigatorio || [];
+      setLinkCfg({ nome: l.link.nomeObrigatorio !== false, telefone: l.link.telefoneObrigatorio !== false, placa: v.includes('placa'), modelo: v.includes('modelo'), porte: v.includes('porte') });
+    });
+    return () => { vivo = false; };
+  }, [etapa, adaptador]);
 
   const carregar = async () => {
     setFase('carregando'); setErroCarga('');
@@ -241,12 +255,25 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
     const r = await adaptador.expediente(semana);
     setEnviando(false);
     if (!r.ok) { falha(r); return; }
-    setEtapa('pronto');
+    setEtapa(adaptador.link ? 'link' : 'pronto');
   };
   const pularExpediente = async () => {
     if (enviando) return;
     setEnviando(true); setErro('');
     const r = await adaptador.expediente({});
+    setEnviando(false);
+    if (!r.ok) { falha(r); return; }
+    setEtapa(adaptador.link ? 'link' : 'pronto');
+  };
+
+  // B9a: Link do cliente. Os campos que o cliente precisa preencher ao pedir horário pelo link (nome, telefone e, nos tipos com veículo, placa/modelo/porte).
+  const usaVeiculo = cap({ tipo }, 'usaVeiculo');
+  const alternarLink = (campo) => { setLinkCfg((c) => ({ ...c, [campo]: !c[campo] })); setErro(''); };
+  const enviarLink = async () => {
+    if (enviando) return;
+    setEnviando(true); setErro('');
+    const veiculoObrigatorio = usaVeiculo ? ['placa', 'modelo', 'porte'].filter((k) => linkCfg[k]) : undefined;
+    const r = await adaptador.link({ nomeObrigatorio: linkCfg.nome, telefoneObrigatorio: linkCfg.telefone, ...(veiculoObrigatorio ? { veiculoObrigatorio } : {}) });
     setEnviando(false);
     if (!r.ok) { falha(r); return; }
     setEtapa('pronto');
@@ -267,7 +294,8 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
     aoConcluir();
   };
 
-  const etapas = usaBox ? ETAPAS_BOX : ETAPAS;
+  const base = usaBox ? ETAPAS_BOX : ETAPAS;
+  const etapas = adaptador.link ? [...base.slice(0, -1), ETAPA_LINK, base[base.length - 1]] : base;
   const indice = etapas.findIndex((e) => e[0] === etapa);
   const Raiz = reconf ? 'div' : 'main';
   return (
@@ -299,7 +327,7 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
               {hist.map((h) => (
                 <li key={h.id} className="pa-item" data-testid={`pa-reconf-item-${h.id}`}>
                   <b>{new Date(h.criadaEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</b>{h.por ? ` · ${h.por}` : ''}{h.desfeitaEm ? <span className="muted"> · desfeita</span> : null}
-                  <span className="muted"> · {h.servicosCriados} {h.servicosCriados === 1 ? 'serviço' : 'serviços'}, {h.produtosCriados} {h.produtosCriados === 1 ? 'produto' : 'produtos'}, {h.pessoasCriadas} {h.pessoasCriadas === 1 ? 'pessoa' : 'pessoas'}{h.comissaoTrocada ? ', comissão geral' : ''}{h.expedienteTrocado ? ', horário de funcionamento' : ''}</span>
+                  <span className="muted"> · {h.servicosCriados} {h.servicosCriados === 1 ? 'serviço' : 'serviços'}, {h.produtosCriados} {h.produtosCriados === 1 ? 'produto' : 'produtos'}, {h.pessoasCriadas} {h.pessoasCriadas === 1 ? 'pessoa' : 'pessoas'}{h.comissaoTrocada ? ', comissão geral' : ''}{h.linkTrocado ? ', campos do link' : ''}{h.expedienteTrocado ? ', horário de funcionamento' : ''}</span>
                   <div className="acoes">
                     {h.podeDesfazer && <Btn tamanho="sm" disabled={enviando} onClick={() => trocarReconf(h, true)} data-testid={`pa-reconf-desfazer-${h.id}`}>Desfazer</Btn>}
                     {h.podeRefazer && <Btn tamanho="sm" disabled={enviando} onClick={() => trocarReconf(h, false)} data-testid={`pa-reconf-refazer-${h.id}`}>Refazer</Btn>}
@@ -509,6 +537,25 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
             <div className="acoes pa-acoes">
               <Btn onClick={pularExpediente} disabled={enviando} data-testid="pa-pular-expediente">Pular</Btn>
               <Btn variante="primario" disabled={enviando} onClick={enviarExpediente} data-testid="pa-continuar-expediente">{enviando ? 'Salvando…' : 'Continuar'}</Btn>
+            </div>
+          </section>
+        )}
+
+        {fase === 'ok' && !precisaSenha && etapa === 'link' && (
+          <section data-testid="pa-link">
+            <p>O que o cliente precisa informar ao pedir um horário pelo seu link? Marque só o que for obrigatório; o resto fica opcional. Dá para mudar depois em Estabelecimento.</p>
+            <fieldset className="pa-dias"><legend>Obrigatório no link</legend>
+              <label className="pa-check"><input type="checkbox" checked={linkCfg.nome} onChange={() => alternarLink('nome')} data-testid="pa-link-nome" /> Nome</label>
+              <label className="pa-check"><input type="checkbox" checked={linkCfg.telefone} onChange={() => alternarLink('telefone')} data-testid="pa-link-telefone" /> Telefone</label>
+              {usaVeiculo && ['placa', 'modelo', 'porte'].map((k) => (
+                <label key={k} className="pa-check"><input type="checkbox" checked={linkCfg[k]} onChange={() => alternarLink(k)} data-testid={`pa-link-${k}`} /> {{ placa: 'Placa do veículo', modelo: 'Modelo do veículo', porte: 'Porte do veículo' }[k]}</label>
+              ))}
+            </fieldset>
+            {!linkCfg.nome && !linkCfg.telefone && <p className="muted" data-testid="pa-link-aviso">Sem nome e sem telefone o pedido fica anônimo na agenda.</p>}
+            {erro && <Aviso tipo="erro" data-testid="pa-erro">{erro}</Aviso>}
+            <div className="acoes pa-acoes">
+              <Btn onClick={() => setEtapa('pronto')} disabled={enviando} data-testid="pa-pular-link">Pular</Btn>
+              <Btn variante="primario" disabled={enviando} onClick={enviarLink} data-testid="pa-continuar-link">{enviando ? 'Salvando…' : 'Continuar'}</Btn>
             </div>
           </section>
         )}

@@ -117,6 +117,10 @@ public class OnboardingController {
     public record Expediente(Map<Integer, @Valid Dia> semana) {
     }
 
+    /** B9a: o que o cliente precisa informar no link (campo ausente = não muda). */
+    public record Link(Boolean telefoneObrigatorio, Boolean nomeObrigatorio, @Size(max = 3) List<@Size(max = 10) String> veiculoObrigatorio) {
+    }
+
     private record Linha(String passo, boolean concluido) {
     }
 
@@ -356,6 +360,27 @@ public class OnboardingController {
             return null;
         });
         return new Resultado(grava ? 1 : 0, 0);
+    }
+
+    /** B9a: campos obrigatórios do link do cliente (nome, telefone e, nos tipos com veículo, placa/modelo/porte). Depois de concluído, só dentro de uma reconfiguração autorizada. */
+    @PostMapping("/api/onboarding/link")
+    public Resultado link(@Valid @RequestBody Link corpo, @AuthenticationPrincipal Jwt jwt) {
+        Loja loja = LojaContext.exigir();
+        linha(); // 404 se a loja não tem o assistente
+        br.com.agendz.configuracao.LinkAgendamento.conferirVeiculo(corpo.veiculoObrigatorio());
+        UUID quem = UUID.fromString(jwt.getSubject());
+        banco.naLoja((jdbc) -> {
+            UUID reconf = reconfiguracoes.autorizada(jdbc, quem);
+            br.com.agendz.configuracao.LinkAgendamento.Config atual = br.com.agendz.configuracao.LinkAgendamento.ler(jdbc);
+            br.com.agendz.configuracao.LinkAgendamento.Config n = new br.com.agendz.configuracao.LinkAgendamento.Config(atual.ativo(), atual.diasMax(),
+                    corpo.telefoneObrigatorio() == null ? atual.telefoneObrigatorio() : corpo.telefoneObrigatorio(),
+                    corpo.nomeObrigatorio() == null ? atual.nomeObrigatorio() : corpo.nomeObrigatorio(),
+                    corpo.veiculoObrigatorio() == null ? atual.veiculoObrigatorio() : List.copyOf(corpo.veiculoObrigatorio()));
+            br.com.agendz.configuracao.LinkAgendamento.gravarConfig(jdbc, loja.id(), n);
+            reconfiguracoes.anotarLink(jdbc, reconf, atual, n);
+            return null;
+        });
+        return new Resultado(1, 0);
     }
 
     @PostMapping("/api/onboarding/concluir")

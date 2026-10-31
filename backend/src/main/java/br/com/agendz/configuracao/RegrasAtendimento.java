@@ -8,6 +8,7 @@ import br.com.agendz.tenant.LojaJdbc;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -32,10 +33,12 @@ public class RegrasAtendimento {
     public static final List<String> FUTURO_DE_FABRICA = List.of();
     public static final List<String> LOCAL_DE_FABRICA = List.of();
 
-    public record Regras(String formaPagamentoPadrao, List<String> futuro, List<String> local, String ordemServicos) {
+    public record Regras(String formaPagamentoPadrao, List<String> futuro, List<String> local, String ordemServicos, boolean profissionalAutomatico,
+                         Map<String, Map<String, List<String>>> ordemAtender) {
     }
 
-    public record Corpo(String formaPagamentoPadrao, Campos camposObrigatorios, String ordemServicos) {
+    public record Corpo(String formaPagamentoPadrao, Campos camposObrigatorios, String ordemServicos, Boolean profissionalAutomatico,
+                       Map<String, Object> ordemAtender) {
     }
 
     public record Campos(List<String> futuro, List<String> local) {
@@ -49,11 +52,11 @@ public class RegrasAtendimento {
 
     /** Regras efetivas da loja atual (dentro de uma transação já aberta). */
     public static Regras ler(JdbcTemplate jdbc) {
-        List<String[]> linhas = jdbc.query("select forma_pagamento_padrao, campos_futuro, campos_local, ordem_servicos from configuracao_loja",
-                (rs, i) -> new String[]{rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4)});
-        if (linhas.isEmpty()) return new Regras(FORMA_DE_FABRICA, FUTURO_DE_FABRICA, LOCAL_DE_FABRICA, "uso");
+        List<String[]> linhas = jdbc.query("select forma_pagamento_padrao, campos_futuro, campos_local, ordem_servicos, profissional_automatico::text, ordem_atender from configuracao_loja",
+                (rs, i) -> new String[]{rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5), rs.getString(6)});
+        if (linhas.isEmpty()) return new Regras(FORMA_DE_FABRICA, FUTURO_DE_FABRICA, LOCAL_DE_FABRICA, "uso", false, OrdemDoAtender.padrao());
         String[] l = linhas.get(0);
-        return new Regras(l[0] == null ? FORMA_DE_FABRICA : l[0], l[1] == null ? FUTURO_DE_FABRICA : lista(l[1]), l[2] == null ? LOCAL_DE_FABRICA : lista(l[2]), OrdemDosServicos.MODOS.contains(l[3]) ? l[3] : "uso");
+        return new Regras(l[0] == null ? FORMA_DE_FABRICA : l[0], l[1] == null ? FUTURO_DE_FABRICA : lista(l[1]), l[2] == null ? LOCAL_DE_FABRICA : lista(l[2]), OrdemDosServicos.MODOS.contains(l[3]) ? l[3] : "uso", "true".equals(l[4]), OrdemDoAtender.deJson(l[5]));
     }
 
     private static List<String> lista(String s) {
@@ -83,9 +86,12 @@ public class RegrasAtendimento {
         if (forma != null && !forma.isEmpty() && !FORMAS.contains(forma)) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Forma de pagamento padrão inválida.");
         String ordem = c.ordemServicos();
         if (ordem != null && !OrdemDosServicos.MODOS.contains(ordem)) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Ordem dos serviços inválida.");
+        if (c.ordemAtender() != null && !OrdemDoAtender.valida(c.ordemAtender())) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Ordem do Atender inválida.");
         return banco.naLoja(jdbc -> {
             Regras atual = ler(jdbc);
+            Map<String, Map<String, List<String>>> novaOrdemAtender = c.ordemAtender() == null ? atual.ordemAtender() : OrdemDoAtender.sanear(c.ordemAtender());
             String novaOrdem = ordem == null ? atual.ordemServicos() : ordem;
+            boolean novoAuto = c.profissionalAutomatico() == null ? atual.profissionalAutomatico() : c.profissionalAutomatico();
             String novaForma = forma == null ? atual.formaPagamentoPadrao() : forma;
             List<String> futuro = atual.futuro();
             List<String> local = atual.local();
@@ -93,11 +99,11 @@ public class RegrasAtendimento {
                 futuro = conferir(c.camposObrigatorios().futuro(), true);
                 local = conferir(c.camposObrigatorios().local(), false);
             }
-            jdbc.update("insert into configuracao_loja (loja_id, forma_pagamento_padrao, campos_futuro, campos_local, ordem_servicos) values (?::uuid, ?, ?, ?, ?) "
+            jdbc.update("insert into configuracao_loja (loja_id, forma_pagamento_padrao, campos_futuro, campos_local, ordem_servicos, profissional_automatico, ordem_atender) values (?::uuid, ?, ?, ?, ?, ?, ?) "
                             + "on conflict (loja_id) do update set forma_pagamento_padrao = excluded.forma_pagamento_padrao, campos_futuro = excluded.campos_futuro, "
-                            + "campos_local = excluded.campos_local, ordem_servicos = excluded.ordem_servicos, atualizado_em = now()",
-                    loja.id().toString(), novaForma, String.join(",", futuro), String.join(",", local), novaOrdem);
-            return new Regras(novaForma, futuro, local, novaOrdem);
+                            + "campos_local = excluded.campos_local, ordem_servicos = excluded.ordem_servicos, profissional_automatico = excluded.profissional_automatico, ordem_atender = excluded.ordem_atender, atualizado_em = now()",
+                    loja.id().toString(), novaForma, String.join(",", futuro), String.join(",", local), novaOrdem, novoAuto, OrdemDoAtender.paraJson(novaOrdemAtender));
+            return new Regras(novaForma, futuro, local, novaOrdem, novoAuto, novaOrdemAtender);
         });
     }
 

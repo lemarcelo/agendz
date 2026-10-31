@@ -27,6 +27,12 @@ agendz:
   dominios-base: ${AGENDZ_DOMINIOS_BASE:agendz.io,localhost}
   # ?loja=slug: só demonstração e desenvolvimento. Em produção fica false.
   permitir-query: ${AGENDZ_PERMITIR_QUERY:false}
+  push:
+    # Aviso com o app fechado (v130). Chaves VAPID geradas uma vez na VPS por deploy/preparar-api.sh (VAPID_PUBLICA e VAPID_PRIVADA, base64url). Sem as duas, o recurso fica
+    # desligado (a tela avisa). Trocar a chave depois invalida as inscrições (as pessoas ativam de novo).
+    publica: ${VAPID_PUBLICA:}
+    privada: ${VAPID_PRIVADA:}
+    contato: ${VAPID_CONTATO:mailto:suporte@agendz.io}
   admin:
     # Admin API (chamados do Suporte; rede interna do Docker). Vazio = o Suporte responde 503. Usa a mesma INTERNO_CHAVE de agendz.interno.chave.
     url: ${ADMIN_INTERNO_URL:}

@@ -7,6 +7,7 @@ import { agenda as api, boxes as apiBoxes, clientes as apiClientes, produtos as 
 import { fmtMoney, startOfDay } from '../../domain/time.js';
 import { formatarTelefone, somenteDigitos } from '../../domain/rules.js';
 import { Rot, capAtiva } from '../../domain/tipos.js';
+import { PADRAO_PAINEL, sanearOrdemAtender } from '../../domain/ordem-atender.js';
 import { PORTE_PADRAO, ROTULO_PORTE, portesParaEscolher, rotuloVeiculo } from '../../domain/veiculos.js';
 import { REGRAS_DE_FABRICA, FORMAS_PAGAMENTO, boxesAtivos, camposFaltando, ehRetroativo, exige, faltaItem, exigenciasDoVeiculo, faltaVeiculo, porteDoAtendimento, formaEfetiva, filtrarProdutos, filtrarServicos, qtdValida, resumoDosProdutos, resumoDosServicos, servicoNoPorte, tipoDoAtendimento, vendedorPadrao } from '../../domain/atender-form.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
@@ -82,6 +83,7 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
   const falta = faltaItem(tipo, ids, itens) || faltaVeiculo(usaVeiculo, ids, veiculoEscolhido, digitando ? novoVeic : null, exigenciasDoVeiculo(regras, tipo));
   const forma = formaEfetiva(regras, formaEscolhida);
   const faltam = camposFaltando(tipo, { nome, telefone, cliente, profissionalId: profId, vendedorId: itens.length ? vendedor : '', temProdutos: itens.length > 0, forma }, regras);
+  const auto = regras.profissionalAutomatico === true && !ehProprio; // B9c: o campo some e o servidor escolhe quem está mais livre
   const marca = (campo) => (exige(regras, tipo, campo) ? ' *' : '');
 
   const escolher = (c) => { setCliente(c); setVeiculoId(c.veiculos && c.veiculos.length === 1 ? c.veiculos[0].id : ''); setNome(c.apelido || c.nome); setTelefone(c.telefone ? formatarTelefone(telNacional(c.telefone)) : ''); setBusca(''); setAchados([]); setErro(''); };
@@ -96,7 +98,7 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
     if (tipo === 'local' && !forma) { setErro('Escolha a forma de pagamento.'); return; }
     setEnviando(true); setErro('');
     const r = await api.atender({
-      servicoIds: ids, ...(itens.length ? { produtos: itens, vendedorId: vendedor } : {}), nome, telefone, ...(cliente ? { clienteId: cliente.id } : {}), profissionalId: profId,
+      servicoIds: ids, ...(itens.length ? { produtos: itens, vendedorId: vendedor } : {}), nome, telefone, ...(cliente ? { clienteId: cliente.id } : {}), ...(auto ? {} : { profissionalId: profId }),
       ...(usaVeiculo && ids.length ? (veiculoEscolhido ? { veiculoId: veiculoEscolhido.id } : { veiculo: novoVeic }) : {}),
       ...(usaBox && tipo === 'futuro' && boxId ? { boxId } : {}),
       ...(personalizar ? { inicio } : {}), ...(retro ? { motivoRetroativo: motivo } : {}),
@@ -107,33 +109,20 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
     aoSalvar(tipo === 'futuro' ? 'Agendamento criado.' : 'Atendimento registrado.', r.agendamento);
   };
 
-  return (
-    <form className="atender-real" onSubmit={enviar} data-testid="atender-form" aria-label="Atender">
-      <div className="atender-real-topo">
-        <h3 className="atender-real-titulo">Atender</h3>
-        <Btn tamanho="sm" onClick={aoFechar} data-testid="atender-fechar" aria-label="Fechar"><Icone n="x" size={15} /></Btn>
-      </div>
-
-      <fieldset className="atender-real-bloco">
-        <legend>Cliente</legend>
-        {cliente ? (
-          <p className="msg-ok" data-testid="atender-vinculo">Cadastro escolhido: {cliente.apelido || cliente.nome}. <button type="button" className="link" onClick={() => { setCliente(null); setVeiculoId(''); }} data-testid="atender-trocar-cliente">Trocar</button></p>
-        ) : (
-          <Campo rotulo="Buscar cliente cadastrado (opcional)"><input value={busca} onChange={(e) => setBusca(e.target.value)} maxLength={60} placeholder="Nome ou telefone" autoComplete="off" data-testid="atender-busca" /></Campo>
-        )}
-        {achados.length > 0 && (
-          <ul className="atender-real-achados" data-testid="atender-achados">
-            {achados.map((c) => <li key={c.id}><button type="button" className="atender-real-achado" onClick={() => escolher(c)} data-testid={`atender-cli-${c.id}`}>{c.apelido || c.nome}<span className="muted"> · {c.telefone ? formatarTelefone(telNacional(c.telefone)) : ''}</span></button></li>)}
-          </ul>
-        )}
-        <div className="form-grade">
-          <Campo rotulo={`Nome${marca('nome')}`}><input value={nome} onChange={(e) => setNome(e.target.value)} maxLength={60} placeholder="Nome ou apelido" data-testid="atender-nome" /></Campo>
-          <Campo rotulo={`Telefone${marca('telefone')}`}><input value={telefone} inputMode="tel" autoComplete="off" onChange={(e) => setTelefone(e.target.value)} placeholder="(55) 99999-9999" data-testid="atender-telefone" /></Campo>
-        </div>
-        <p className="muted">Com telefone, o cadastro é achado ou criado. Só com o nome, nada é cadastrado.</p>
-      </fieldset>
-
-      {usaVeiculo && (
+  const ordem = sanearOrdemAtender(regras.ordemAtender, PADRAO_PAINEL)[tipo]; // v133: ordem das etapas e dos campos escolhida pelo proprietário (Estabelecimento > Regras)
+  const camposVeic = {
+    placa: <Campo rotulo={`Placa${exige(regras, tipo, 'placa') ? ' *' : ''}`}><input value={novoVeic.placa} onChange={(e) => { setNovoVeic({ ...novoVeic, placa: e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 8) }); setErro(''); }} maxLength={8} autoComplete="off" placeholder="ABC1D23" data-testid="atender-v-placa" /></Campo>,
+    modelo: <Campo rotulo={`Modelo${exige(regras, tipo, 'modelo') ? ' *' : ''}`}><input value={novoVeic.modelo} onChange={(e) => setNovoVeic({ ...novoVeic, modelo: e.target.value })} maxLength={40} autoComplete="off" data-testid="atender-v-modelo" /></Campo>,
+    marca: <Campo rotulo="Marca"><input value={novoVeic.marca} onChange={(e) => setNovoVeic({ ...novoVeic, marca: e.target.value })} maxLength={30} autoComplete="off" data-testid="atender-v-marca" /></Campo>,
+    cor: <Campo rotulo="Cor"><input value={novoVeic.cor} onChange={(e) => setNovoVeic({ ...novoVeic, cor: e.target.value })} maxLength={20} autoComplete="off" data-testid="atender-v-cor" /></Campo>,
+    porte: <Campo rotulo={`Porte${exige(regras, tipo, 'porte') ? ' *' : ''}`}><select value={novoVeic.porte} onChange={(e) => { setNovoVeic({ ...novoVeic, porte: e.target.value }); setErro(''); }} data-testid="atender-v-porte"><option value="">{exige(regras, tipo, 'porte') ? 'Escolha…' : `${ROTULO_PORTE[PORTE_PADRAO]} (padrão)`}</option>{portesParaEscolher(novoVeic.porte).map(({ id: k }) => <option key={k} value={k}>{ROTULO_PORTE[k]}</option>)}</select></Campo>,
+  };
+  const camposCli = {
+    nome: <Campo rotulo={`Nome${marca('nome')}`}><input value={nome} onChange={(e) => setNome(e.target.value)} maxLength={60} placeholder="Nome ou apelido" data-testid="atender-nome" /></Campo>,
+    telefone: <Campo rotulo={`Telefone${marca('telefone')}`}><input value={telefone} inputMode="tel" autoComplete="off" onChange={(e) => setTelefone(e.target.value)} placeholder="(55) 99999-9999" data-testid="atender-telefone" /></Campo>,
+  };
+  const blocos = {
+    veiculo: usaVeiculo ? (
         <fieldset className="atender-real-bloco" data-testid="atender-veiculo-bloco">
           <legend>Veículo{exigenciasDoVeiculo(regras, tipo).length ? ' *' : ''}</legend>
           {doCliente.length > 0 && (
@@ -146,17 +135,13 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
           )}
           {digitando && (
             <div className="form-grade" data-testid="atender-veiculo-novo">
-              <Campo rotulo={`Placa${exige(regras, tipo, 'placa') ? ' *' : ''}`}><input value={novoVeic.placa} onChange={(e) => { setNovoVeic({ ...novoVeic, placa: e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 8) }); setErro(''); }} maxLength={8} autoComplete="off" placeholder="ABC1D23" data-testid="atender-v-placa" /></Campo>
-              <Campo rotulo={`Modelo${exige(regras, tipo, 'modelo') ? ' *' : ''}`}><input value={novoVeic.modelo} onChange={(e) => setNovoVeic({ ...novoVeic, modelo: e.target.value })} maxLength={40} autoComplete="off" data-testid="atender-v-modelo" /></Campo>
-              <Campo rotulo="Marca"><input value={novoVeic.marca} onChange={(e) => setNovoVeic({ ...novoVeic, marca: e.target.value })} maxLength={30} autoComplete="off" data-testid="atender-v-marca" /></Campo>
-              <Campo rotulo="Cor"><input value={novoVeic.cor} onChange={(e) => setNovoVeic({ ...novoVeic, cor: e.target.value })} maxLength={20} autoComplete="off" data-testid="atender-v-cor" /></Campo>
-              <Campo rotulo={`Porte${exige(regras, tipo, 'porte') ? ' *' : ''}`}><select value={novoVeic.porte} onChange={(e) => { setNovoVeic({ ...novoVeic, porte: e.target.value }); setErro(''); }} data-testid="atender-v-porte"><option value="">{exige(regras, tipo, 'porte') ? 'Escolha…' : `${ROTULO_PORTE[PORTE_PADRAO]} (padrão)`}</option>{portesParaEscolher(novoVeic.porte).map(({ id: k }) => <option key={k} value={k}>{ROTULO_PORTE[k]}</option>)}</select></Campo>
+              {ordem.veiculo.map((k) => <React.Fragment key={k}>{camposVeic[k]}</React.Fragment>)}
             </div>
           )}
           <p className="muted">{veiculoEscolhido ? `Porte ${ROTULO_PORTE[veiculoEscolhido.porte] || ROTULO_PORTE[porte]}: define o preço e o tempo dos serviços.` : 'O veículo novo fica salvo no cadastro do cliente (quando há telefone). O porte define o preço e o tempo dos serviços.'}</p>
         </fieldset>
-      )}
-
+    ) : null,
+    servicos: (
       <fieldset className="atender-real-bloco">
         <legend>Serviços</legend>
         <Campo rotulo="Buscar serviço"><input value={buscaSrv} onChange={(e) => setBuscaSrv(e.target.value)} maxLength={40} placeholder="Nome ou código" data-testid="atender-busca-servico" /></Campo>
@@ -171,12 +156,13 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
         </ul>
         <p className="muted" data-testid="atender-total">{resumo.qtd ? `${resumo.qtd} serviço${resumo.qtd === 1 ? '' : 's'} · ${resumo.minutos} min · ${fmtMoney(resumo.total)}` : itens.length ? 'Só produtos: registra a venda de agora.' : 'Escolha ao menos um serviço ou um produto.'}</p>
       </fieldset>
-
+    ),
+    quando: (
       <fieldset className="atender-real-bloco" data-testid="atender-quando-bloco">
         <legend>Quando</legend>
         <div className="acoes">
           <button type="button" className={`btn btn-quando${!personalizar ? ' btn-on' : ''}`} aria-pressed={!personalizar} onClick={() => { setPersonalizar(false); setErro(''); }} data-testid="atender-agora"><Icone n="clock" size={15} />Agora</button>
-          <button type="button" className={`btn btn-quando${personalizar ? ' btn-on' : ''}`} aria-pressed={personalizar} onClick={() => { setPersonalizar(true); setErro(''); }} data-testid="atender-quando"><Icone n="calendar" size={15} />Escolher data e hora</button>
+          <button type="button" className={`btn btn-quando${personalizar ? ' btn-on' : ''}`} aria-pressed={personalizar} onClick={() => { setPersonalizar(true); setErro(''); }} data-testid="atender-quando"><Icone n="calendar" size={15} />Escolher data</button>
         </div>
         {personalizar && <Campo rotulo="Data e hora"><input type="datetime-local" step={300} value={quando} onChange={(e) => { setQuando(e.target.value); setErro(''); }} data-testid="atender-data" /></Campo>}
         {retro && !bloqueado && (
@@ -187,8 +173,27 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
         {bloqueado && <Aviso tipo="erro" data-testid="atender-retro-bloqueado">Lançar um dia anterior é com o proprietário ou a recepção. Peça a eles para registrar.</Aviso>}
         <p className="muted" data-testid="atender-tipo">{tipo === 'futuro' ? 'Agendamento: o horário fica reservado para o cliente.' : 'Atendimento já feito: entra como concluído.'}</p>
       </fieldset>
-
-      {produtos !== null && produtos.length > 0 && (
+    ),
+    cliente: (
+      <fieldset className="atender-real-bloco">
+        <legend>Cliente</legend>
+        {cliente ? (
+          <p className="msg-ok" data-testid="atender-vinculo">Cadastro escolhido: {cliente.apelido || cliente.nome}. <button type="button" className="link" onClick={() => { setCliente(null); setVeiculoId(''); }} data-testid="atender-trocar-cliente">Trocar</button></p>
+        ) : (
+          <Campo rotulo="Buscar cliente cadastrado (opcional)"><input value={busca} onChange={(e) => setBusca(e.target.value)} maxLength={60} placeholder="Nome ou telefone" autoComplete="off" data-testid="atender-busca" /></Campo>
+        )}
+        {achados.length > 0 && (
+          <ul className="atender-real-achados" data-testid="atender-achados">
+            {achados.map((c) => <li key={c.id}><button type="button" className="atender-real-achado" onClick={() => escolher(c)} data-testid={`atender-cli-${c.id}`}>{c.apelido || c.nome}<span className="muted"> · {c.telefone ? formatarTelefone(telNacional(c.telefone)) : ''}</span></button></li>)}
+          </ul>
+        )}
+        <div className="form-grade">
+          {ordem.cliente.map((k) => <React.Fragment key={k}>{camposCli[k]}</React.Fragment>)}
+        </div>
+        <p className="muted">Com telefone, o cadastro é achado ou criado. Só com o nome, nada é cadastrado.</p>
+      </fieldset>
+    ),
+    produtos: produtos !== null && produtos.length > 0 ? (
         <fieldset className="atender-real-bloco" data-testid="atender-produtos-bloco">
           <legend>Produtos (opcional)</legend>
           <Campo rotulo="Buscar produto"><input value={buscaProd} onChange={(e) => setBuscaProd(e.target.value)} maxLength={40} placeholder="Nome ou código" data-testid="atender-busca-produto" /></Campo>
@@ -215,14 +220,27 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
             </>
           )}
         </fieldset>
-      )}
+    ) : null,
+  };
+
+  return (
+    <form className="atender-real" onSubmit={enviar} data-testid="atender-form" aria-label="Atender">
+      <div className="atender-real-topo">
+        <h3 className="atender-real-titulo">Atender</h3>
+        <Btn tamanho="sm" onClick={aoFechar} data-testid="atender-fechar" aria-label="Fechar"><Icone n="x" size={15} /></Btn>
+      </div>
+
+
+      {ordem.etapas.map((k) => <React.Fragment key={k}>{blocos[k]}</React.Fragment>)}
 
       <div className="form-grade">
-        <Campo rotulo={`${Rot('profissional')}${marca('profissional')}`}>
-          <select value={profId} onChange={(e) => setProfId(e.target.value)} disabled={ehProprio} data-testid="atender-profissional">
-            {profissionais.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
-          </select>
-        </Campo>
+        {!auto && (
+          <Campo rotulo={`${Rot('profissional')}${marca('profissional')}`}>
+            <select value={profId} onChange={(e) => setProfId(e.target.value)} disabled={ehProprio} data-testid="atender-profissional">
+              {profissionais.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+            </select>
+          </Campo>
+        )}
         {tipo === 'futuro' && (
           <div className="campo">
             <span className="campo-rotulo">Situação</span>

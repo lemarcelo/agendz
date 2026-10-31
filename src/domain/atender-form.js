@@ -35,7 +35,7 @@ export function camposFaltando(tipo, { nome, telefone, cliente, profissionalId, 
   const tem = {
     nome: !!(String(nome || '').trim() || (cliente && !cliente.semNome)),
     telefone: String(telefone || '').replace(/\D/g, '').length >= 10 || !!cliente,
-    profissional: !!profissionalId,
+    profissional: !!profissionalId || !!(regras && regras.profissionalAutomatico), // B9c: a loja tirou o campo; o servidor escolhe o mais livre
     vendedor: !temProdutos || !!vendedorId,
     formaPagamento: tipo === 'futuro' || !!forma,
   };

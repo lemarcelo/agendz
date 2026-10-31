@@ -77,6 +77,21 @@ public class LinkAgendamento {
         return l.isEmpty() ? new Config(true, DIAS_PADRAO, true, true, VEICULO_DO_LINK) : l.get(0);
     }
 
+    /** Grava a configuração do link da loja (cria a linha se não existir). Usado pelo PUT e pelo assistente/Reconfigurar (B9a). */
+    public static void gravarConfig(JdbcTemplate jdbc, java.util.UUID lojaId, Config n) {
+        jdbc.update("insert into configuracao_loja (loja_id, link_ativo, link_dias_max, link_telefone_obrigatorio, link_nome_obrigatorio, link_veiculo_obrigatorio) values (?::uuid, ?, ?, ?, ?, ?) "
+                        + "on conflict (loja_id) do update set link_ativo = excluded.link_ativo, link_dias_max = excluded.link_dias_max, link_telefone_obrigatorio = excluded.link_telefone_obrigatorio, "
+                        + "link_nome_obrigatorio = excluded.link_nome_obrigatorio, link_veiculo_obrigatorio = excluded.link_veiculo_obrigatorio, atualizado_em = now()",
+                lojaId.toString(), n.ativo(), n.diasMax(), n.telefoneObrigatorio(), n.nomeObrigatorio(), String.join(",", n.veiculoObrigatorio()));
+    }
+
+    /** Mesma conferência do PUT: lista de campos do veículo sem repetição e só com os campos conhecidos. */
+    public static void conferirVeiculo(List<String> v) {
+        if (v != null && (v.size() > VEICULO_DO_LINK.size() || new java.util.HashSet<>(v).size() != v.size() || !VEICULO_DO_LINK.containsAll(v))) {
+            throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Dados do veículo obrigatórios inválidos.");
+        }
+    }
+
     @GetMapping("/api/estabelecimento/link-agendamento")
     @PreAuthorize("hasRole('DONO')")
     public Resposta obter() {
@@ -103,10 +118,7 @@ public class LinkAgendamento {
                     c.telefoneObrigatorio() == null ? atual.telefoneObrigatorio() : c.telefoneObrigatorio(),
                     c.nomeObrigatorio() == null ? atual.nomeObrigatorio() : c.nomeObrigatorio(),
                     c.veiculoObrigatorio() == null ? atual.veiculoObrigatorio() : List.copyOf(c.veiculoObrigatorio()));
-            jdbc.update("insert into configuracao_loja (loja_id, link_ativo, link_dias_max, link_telefone_obrigatorio, link_nome_obrigatorio, link_veiculo_obrigatorio) values (?::uuid, ?, ?, ?, ?, ?) "
-                            + "on conflict (loja_id) do update set link_ativo = excluded.link_ativo, link_dias_max = excluded.link_dias_max, link_telefone_obrigatorio = excluded.link_telefone_obrigatorio, "
-                            + "link_nome_obrigatorio = excluded.link_nome_obrigatorio, link_veiculo_obrigatorio = excluded.link_veiculo_obrigatorio, atualizado_em = now()",
-                    loja.id().toString(), n.ativo(), n.diasMax(), n.telefoneObrigatorio(), n.nomeObrigatorio(), String.join(",", n.veiculoObrigatorio()));
+            gravarConfig(jdbc, loja.id(), n);
             return new Resposta(n.ativo(), n.diasMax(), tipoSuportado(loja), n.telefoneObrigatorio(), n.nomeObrigatorio(), n.veiculoObrigatorio(), pendencias(jdbc, loja));
         });
     }
