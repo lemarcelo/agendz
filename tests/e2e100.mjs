@@ -48,6 +48,7 @@ const servidor = http.createServer((req, res) => {
     m = /^\/api\/agendamentos\/([^/]+)\/avaliacao\/pedido$/.exec(u.pathname);
     if (m) return json(200, { token: TOKEN, numero: '5511999990001', nome: 'Bruno', loja: 'Dalforno' });
     if (u.pathname === '/api/avaliacoes') {
+      { const de = u.searchParams.get('de'), ate = u.searchParams.get('ate'); if (!!de !== !!ate || (de && ate && (ate < de || (Date.parse(ate) - Date.parse(de)) / 864e5 > 366))) return json(400, { mensagem: 'Informe o período com data inicial e final válidas.' }); } // igual ao servidor (AvaliacaoRegras.periodo)
       let l = avs.filter((x) => papel === 'dono' || !x.oculta);
       if (papel === 'profissional' && !secoes.includes('avaliacoes')) l = l.filter((x) => x.profissionalId === KIKO);
       const prof = u.searchParams.get('profissionalId'); if (prof) l = l.filter((x) => x.profissionalId === prof);

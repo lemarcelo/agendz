@@ -311,7 +311,13 @@ export default function Agenda({ ehProprio = false, ehDono = false, ehProprietar
   // v134: notas para a estrela do cartão. Avaliação nasce depois do atendimento, então basta pedir "a partir do início da lista"; sem permissão (403) ou erro, a estrela fica como antes.
   useEffect(() => {
     let vivo = true;
-    apiAv.listar({ de: ymd(de) }).then((r) => {
+    // o servidor exige data inicial E final (até 366 dias): de ontem+1 até amanhã, no máximo 365 dias para trás; intervalo todo no futuro não tem avaliação
+    const hoje = startOfDay(new Date());
+    const ateAv = addDays(hoje, 1);
+    const limite = addDays(ateAv, -365);
+    const deAv = de < limite ? limite : de;
+    if (deAv > ateAv) { setNotas((antes) => (antes.size ? new Map() : antes)); return undefined; }
+    apiAv.listar({ de: ymd(deAv), ate: ymd(ateAv) }).then((r) => {
       if (!vivo || !r.ok) return;
       const m = new Map();
       for (const x of r.avaliacoes) { const info = x.agendamentoId ? avaliacaoDoPainel(x) : null; if (info) m.set(x.agendamentoId, info); }
