@@ -182,7 +182,7 @@ class ServicosTest extends BaseApi {
     }
 
     @Test
-    void precoEDuracaoPorPorteSaoGuardadosEATabelaIncompletaEhRecusada() throws Exception {
+    void precoEDuracaoPorPorteSaoGuardadosETabelaParcialVale() throws Exception {
         String t = token(APEX, "davi");
         String id = criar(APEX, t, "{\"nome\":\"Vitrificacao\",\"preco\":900,\"duracaoMin\":2880,\"multiDia\":true,"
                 + "\"precos\":{\"pequeno\":900,\"medio\":1000,\"grande\":1200,\"suv\":1400.5,\"pickup\":1500},"
@@ -190,8 +190,13 @@ class ServicosTest extends BaseApi {
         mvc.perform(get("/api/servicos/" + id).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(t)))
                 .andExpect(jsonPath("$.multiDia").value(true)).andExpect(jsonPath("$.precos.suv").value(1400.5))
                 .andExpect(jsonPath("$.duracoes.suv").value(4320)).andExpect(jsonPath("$.preco").value(1000)).andExpect(jsonPath("$.duracaoMin").value(2880));
+        // v124: só o Médio (o preço base) é obrigatório; tabela parcial vale, e o Médio vem do preço base.
+        String parcial = criar(APEX, t, "{\"nome\":\"Parcial\",\"preco\":900,\"duracaoMin\":60,\"precos\":{\"pequeno\":850}}");
+        mvc.perform(get("/api/servicos/" + parcial).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(t)))
+                .andExpect(jsonPath("$.preco").value(900)).andExpect(jsonPath("$.precos.pequeno").value(850)).andExpect(jsonPath("$.precos.medio").value(900));
+        // preço específico negativo continua recusado
         mvc.perform(post("/api/servicos").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(t)).contentType(MediaType.APPLICATION_JSON)
-                .content("{\"nome\":\"Parcial\",\"preco\":900,\"duracaoMin\":60,\"precos\":{\"pequeno\":900}}")).andExpect(status().isBadRequest());
+                .content("{\"nome\":\"Negativo\",\"preco\":900,\"duracaoMin\":60,\"precos\":{\"pequeno\":-1}}")).andExpect(status().isBadRequest());
     }
 
     @Test
