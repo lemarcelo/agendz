@@ -218,7 +218,7 @@ class UsuariosTest extends BaseApi {
         mvc.perform(put(url).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON).content("{\"papel\":\"dono\",\"confirmaSenha\":\"1234\"}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.papel").value("dono"));
         // cadastrar já como proprietário também pede a senha
-        String novoDono = "{\"nome\":\"Sócia Teste\",\"apelido\":\"Socia\",\"papel\":\"dono\"";
+        String novoDono = "{\"nome\":\"Sócia Teste\",\"apelido\":\"UtSocia\",\"papel\":\"dono\"";
         mvc.perform(post("/api/usuarios").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON).content(novoDono + "}"))
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.mensagem").value("Senha incorreta"));
         mvc.perform(post("/api/usuarios").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON).content(novoDono + ",\"confirmaSenha\":\"1234\"}"))

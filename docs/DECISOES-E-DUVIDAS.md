@@ -215,3 +215,10 @@ Lista simples. Cada item está no histórico do `prompt-agendz-regras.md` (v84 a
 - Decisão sem confirmação (privacidade): **anônima sem a regra do Admin e oculta (para quem não é o proprietário) não mostram nota nem texto no cartão**, só "Cliente já avaliou", porque o cartão traz o nome do cliente e a nota o identificaria. No site real o servidor já não envia o agendamento dessas avaliações.
 - Decisão sem confirmação: sem permissão para ver avaliações (403) ou erro de rede, a estrela fica como antes (pedir avaliação); avaliado nunca oferece "pedir de novo" quando a nota está à vista.
 
+## v135 (31/10): proprietário, vários proprietários e senha de novo (B6)
+- Pedido: trocar "dono" por "proprietário" em tudo que se vê; permitir mais de um proprietário; sem "Transferir propriedade"; pedir a senha de novo em ação sensível (sobra do B8).
+- Decisão sem confirmação: o valor interno `dono` fica (mudar mexe em banco, JWT e testes). Só o texto visível mudou.
+- Decisão sem confirmação: pedem a senha de quem faz **cadastrar, promover e rebaixar** proprietário e **refazer a senha de outro proprietário**. Não pedem: mudar entre perfis que não são proprietário, parar de atender, remover quem não é proprietário.
+- Decisão sem confirmação: remover um proprietário exige rebaixá-lo antes (a mensagem diz isso); rebaixar o último continua recusado.
+- Decisão sem confirmação: o token de proprietário passa a ser conferido no banco a cada chamada (uma consulta pequena), para o rebaixamento valer na hora; os demais perfis seguem sem consulta.
+- Dúvida para o Marcelo: um proprietário pode rebaixar o outro sem aviso a ele. Se quiser, o rebaixado recebe um aviso no painel; hoje só vale na hora.
