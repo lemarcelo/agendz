@@ -243,7 +243,7 @@ public class UsuarioService {
     /** PUT /api/usuarios/me: só nome, apelido, e-mail, telefone e nascimento. Passa pela mesma validação e pelas mesmas travas de duplicidade da ficha da equipe. */
     public MeusDados alterarMeusDados(UUID eu, MeusDadosEntrada e) {
         if (contaOculta(meusDados(eu).usuario())) throw new ErroDeNegocio(HttpStatus.FORBIDDEN, "Sem acesso."); // 404/403 antes de gravar
-        alterar(eu, new Dados(e.nome(), e.apelido(), null, null, e.nascimento(), e.email(), e.telefone(), null, null, null, null, null, null, null, null));
+        alterar(eu, new Dados(e.nome(), e.apelido(), null, null, e.nascimento(), e.email(), e.telefone(), null, null, null, null, null, null, null, null, null));
         return meusDados(eu);
     }
 
