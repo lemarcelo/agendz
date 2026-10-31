@@ -156,7 +156,8 @@
       "apelido": "Eq0",
       "cpf": "52998224725",
       "email": "eq0@teste.com",
-      "papel": "dono"
+      "papel": "dono",
+      "confirmaSenha": "1234"
      }
     }
    ],

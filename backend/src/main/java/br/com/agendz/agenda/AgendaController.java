@@ -670,7 +670,7 @@ public class AgendaController {
     public Agendamento remarcar(@PathVariable UUID id, @Valid @RequestBody Remarcacao d, @AuthenticationPrincipal Jwt jwt) {
         UUID so = somenteDe(jwt);
         if (so != null && d.profissionalId() != null && !d.profissionalId().equals(so)) {
-            throw new ErroDeNegocio(HttpStatus.FORBIDDEN, "Só o dono repassa o atendimento a outro profissional.");
+            throw new ErroDeNegocio(HttpStatus.FORBIDDEN, "Só o proprietário repassa o atendimento a outro profissional.");
         }
         Instant novoInicio = conferirInicio(d.inicio());
         if (d.status() != null && !ROTULOS.containsKey(d.status())) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Status inválido.");

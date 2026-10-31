@@ -232,14 +232,14 @@ public class PlataformaService {
         Reservados.exigirLivre(login, nome, d.apelido());
         String apelido = d.apelido() == null || Texto.limpar(d.apelido()).isEmpty() ? apelidoLivre(loja, nome) : Texto.limpar(d.apelido());
         if (apelido.length() > 60) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "O apelido pode ter até 60 caracteres.");
-        UsuarioService.ComSenha novo = equipe.criar(loja, new UsuarioService.Dados(nome, apelido, login, null, null, null, null, papel, null, null, null, null, null, null, null));
+        UsuarioService.ComSenha novo = equipe.criar(loja, new UsuarioService.Dados(nome, apelido, login, null, null, null, null, papel, null, null, null, null, null, null, null, null));
         UsuarioService.Usuario u = novo.usuario();
         return new UsuarioCriado(u.id(), u.usuario(), u.nome(), u.papel(), u.atende(), true, novo.senhaTemporaria());
     }
 
     /**
      * Muda o perfil (papel) de um usuário da equipe. Perfil fora dos quatro = 400; usuário de outra loja, inexistente, `suporte` ou fumaça = 404; o proprietário
-     * nunca passa para outro perfil por aqui (409), então a loja não fica sem dono. Mesmo perfil = sem mudança (200). As permissões escolhidas pelo dono para a
+     * só passa para outro perfil se restar outro proprietário ativo (409), então a loja não fica sem proprietário. Mesmo perfil = sem mudança (200). As permissões escolhidas pelo dono para a
      * pessoa continuam; Atenção: o token já emitido leva o perfil antigo até vencer (8 h) ou até a pessoa entrar de novo; para efeito imediato, desativar e reativar derruba o acesso na hora.
      */
     public PerfilMudado mudarPerfil(Loja loja, UUID usuarioId, String papelNovo) {
@@ -251,7 +251,10 @@ public class PlataformaService {
             String login = (String) atual.get(0)[0];
             String antes = (String) atual.get(0)[1];
             if (antes.equals(papel)) return new PerfilMudado(login, papel, antes, false);
-            if ("dono".equals(antes)) throw new ErroDeNegocio(HttpStatus.CONFLICT, "O proprietário não muda de perfil por aqui: a loja precisa ter um proprietário.");
+            if ("dono".equals(antes)) { // pode haver mais de um proprietário (B6); a loja nunca fica sem proprietário ativo
+                Integer outros = j.queryForObject("select count(*) from usuario where papel = 'dono' and ativo and id <> ?", Integer.class, usuarioId);
+                if (outros == null || outros == 0) throw new ErroDeNegocio(HttpStatus.CONFLICT, "A loja precisa ter ao menos um proprietário ativo: promova outra pessoa antes.");
+            }
             j.update("update usuario set papel = ? where id = ?", papel, usuarioId);
             return new PerfilMudado(login, papel, antes, true);
         });
@@ -261,7 +264,7 @@ public class PlataformaService {
 
     private static String papelValido(String bruto) {
         String p = bruto == null ? "" : bruto.trim().toLowerCase(Locale.ROOT);
-        if (!PAPEIS.contains(p)) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Perfil inválido: use dono, admin, atendente ou profissional.");
+        if (!PAPEIS.contains(p)) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Perfil inválido: use dono (proprietário), admin, atendente ou profissional.");
         return p;
     }
 

@@ -37,16 +37,20 @@ function FormPessoa({ ficha, aoSalvar, aoCancelar }) {
     nome: ficha.nome || '', apelido: ficha.apelido || '', usuario: '', senha: '', cpf: ficha.cpf ? formatarCpf(ficha.cpf) : '', nascimento: ficha.nascimento || '',
     email: ficha.email || '', telefone: ficha.telefone ? formatarTelefone(telNacional(ficha.telefone)) : '', papel: ficha.papel || 'profissional',
     atende: novo ? true : !!ficha.atende, podeVender: ficha.podeVender !== false, comissao: txt(ficha.comissaoPct), comissaoProduto: txt(ficha.comissaoProdutoPct),
+    confirma: '',
     permissoes: Object.fromEntries(SECOES_LIBERAVEIS.map((k) => [k, typeof (ficha.permissoes || {})[k] === 'boolean' ? (ficha.permissoes[k] ? ESCOLHA.liberar : ESCOLHA.bloquear) : ESCOLHA.padrao])),
   }));
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
   const mudar = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  // B6: promover, rebaixar ou cadastrar um proprietário pede a senha de quem faz (o servidor confere; senha errada = 403)
+  const mudaProprietario = novo ? f.papel === 'dono' : (ficha.papel === 'dono') !== (f.papel === 'dono');
   const salvar = async (e) => {
     e.preventDefault();
     if (enviando) return;
     setEnviando(true); setErro('');
     const corpo = { nome: f.nome, apelido: f.apelido, cpf: f.cpf, nascimento: f.nascimento, email: f.email, telefone: f.telefone, papel: f.papel, atende: f.atende, podeVender: f.podeVender };
+    if (mudaProprietario) corpo.confirmaSenha = f.confirma;
     if (novo && f.usuario.trim()) corpo.usuario = f.usuario.trim().toLowerCase();
     if (novo && f.senha) {
       if (f.senha.length < 8 || f.senha.length > 100) { setEnviando(false); setErro('A senha temporária precisa ter de 8 a 100 caracteres.'); return; }
@@ -74,6 +78,11 @@ function FormPessoa({ ficha, aoSalvar, aoCancelar }) {
             {['profissional', 'atendente', 'admin', 'dono'].map((p) => <option key={p} value={p}>{rotuloPapel(p)}</option>)}
           </select>
         </Campo>
+        {mudaProprietario && (
+          <Campo rotulo="Sua senha (para confirmar a mudança de proprietário)">
+            <input type="password" value={f.confirma} autoComplete="current-password" onChange={mudar('confirma')} data-testid="eq-confirma-senha" />
+          </Campo>
+        )}
         <Campo rotulo="CPF (opcional)"><input value={f.cpf} inputMode="numeric" maxLength={14} onChange={(e) => setF({ ...f, cpf: formatarCpf(e.target.value) })} data-testid="eq-cpf" /></Campo>
         <Campo rotulo="Nascimento (opcional)"><input type="date" value={f.nascimento} onChange={mudar('nascimento')} data-testid="eq-nasc" /></Campo>
         <Campo rotulo="E-mail (opcional)"><input type="email" value={f.email} maxLength={150} autoComplete="off" onChange={mudar('email')} data-testid="eq-email" /></Campo>
@@ -113,6 +122,7 @@ export default function Equipe({ meuId }) {
   const [ficha, setFicha] = useState(null);
   const [senha, setSenha] = useState(null); // { pessoa, valor }
   const [removendo, setRemovendo] = useState(null);
+  const [refazendo, setRefazendo] = useState(null); // { id, senha }: proprietário pede a sua senha antes de refazer a de outro proprietário
   const [versao, setVersao] = useState(0);
 
   useEffect(() => {
@@ -140,10 +150,12 @@ export default function Equipe({ meuId }) {
     setAviso(r.usuario.atende ? `${p.apelido || p.nome} voltou a atender.` : `${p.apelido || p.nome} parou de atender (o histórico continua).`);
     recarregar();
   };
-  const refazer = async (p) => {
+  const refazer = async (p, confirma) => {
     setErro(''); setAviso('');
-    const r = await api.refazerSenha(p.id);
+    if (p.papel === 'dono' && confirma === undefined) { setRefazendo({ id: p.id, senha: '' }); return; }
+    const r = await api.refazerSenha(p.id, confirma);
     if (!r.ok) { setErro(r.erro); return; }
+    setRefazendo(null);
     setSenha({ pessoa: r.usuario, valor: r.senhaTemporaria });
     recarregar();
   };
@@ -177,6 +189,15 @@ export default function Equipe({ meuId }) {
                   <span className="cliente-linha">{rotuloPapel(p.papel)} · {p.atende ? 'atende' : 'não atende'} · usuário {p.usuario}</span>
                   {p.deveTrocarSenha && <span className="cliente-linha muted">Ainda não fez o primeiro acesso</span>}
                   {p.cpfMascarado ? <span className="cliente-linha muted">CPF {p.cpfMascarado}</span> : null}
+                  {refazendo && refazendo.id === p.id && (
+                    <form className="acoes" data-testid={`eq-refazer-${p.id}`} onSubmit={(e) => { e.preventDefault(); refazer(p, refazendo.senha); }}>
+                      <Campo rotulo="Sua senha (para refazer a senha de outro proprietário)">
+                        <input type="password" value={refazendo.senha} autoComplete="current-password" onChange={(e) => setRefazendo({ ...refazendo, senha: e.target.value })} data-testid={`eq-refazer-senha-${p.id}`} />
+                      </Campo>
+                      <Btn tamanho="sm" variante="primario" type="submit" data-testid={`eq-refazer-sim-${p.id}`}>Refazer senha</Btn>
+                      <Btn tamanho="sm" onClick={() => setRefazendo(null)} data-testid={`eq-refazer-nao-${p.id}`}>Cancelar</Btn>
+                    </form>
+                  )}
                   {removendo === p.id && (
                     <div className="acoes" data-testid={`eq-confirmar-${p.id}`}>
                       <span>Remover {p.apelido || p.nome}?</span>

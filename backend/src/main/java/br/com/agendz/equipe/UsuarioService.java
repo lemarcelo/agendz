@@ -62,7 +62,8 @@ public class UsuarioService {
     public record Dados(@Size(max = 300) String nome, @Size(max = 300) String apelido, @Size(max = 100) String usuario, @Size(max = 100) String cpf,
                         @Size(max = 100) String nascimento, @Size(max = 300) String email, @Size(max = 100) String telefone, @Size(max = 40) String papel,
                         @Size(max = 20) Map<String, Boolean> permissoes, Boolean atende, Boolean podeVender, BigDecimal comissaoPct,
-                        @Size(max = 40000) String foto, BigDecimal comissaoProdutoPct, @Size(max = 200) String senhaTemporaria) {
+                        @Size(max = 40000) String foto, BigDecimal comissaoProdutoPct, @Size(max = 200) String senhaTemporaria,
+                        @Size(max = 200) String confirmaSenha) {
     }
 
     /** Os dados que a própria pessoa vê e muda em "Meu perfil". Sem CPF, perfil, permissões nem comissão (isso é do proprietário). */
@@ -162,7 +163,7 @@ public class UsuarioService {
                 conferirDuplicados(jdbc, loja.id(), v, id);
                 String papel = v.papel != null ? v.papel : atual.papel();
                 if ("dono".equals(atual.papel()) && !"dono".equals(papel) && outrosDonos(jdbc, id) == 0) {
-                    throw new ErroDeNegocio(HttpStatus.CONFLICT, "É preciso ter pelo menos um dono.");
+                    throw new ErroDeNegocio(HttpStatus.CONFLICT, "É preciso ter pelo menos um proprietário.");
                 }
                 boolean atende = d.atende() != null ? d.atende() : atual.atende();
                 if (atual.atende() && !atende) bloqueioDesativar(jdbc, atual);
@@ -255,12 +256,28 @@ public class UsuarioService {
         });
     }
 
+    /** Muda para ou de proprietário? (ação sensível: pede a senha de quem faz). Perfil igual, ausente ou pessoa inexistente = não (o 404 vem do alterar). */
+    public boolean mudaProprietario(UUID id, String papelNovo) {
+        if (papelNovo == null || papelNovo.isBlank()) return false;
+        String novo = papelNovo.trim().toLowerCase(Locale.ROOT);
+        List<String> atual = banco.naLoja(jdbc -> jdbc.queryForList("select papel from usuario where id = ?", String.class, id));
+        return !atual.isEmpty() && !atual.get(0).equals(novo) && ("dono".equals(atual.get(0)) || "dono".equals(novo));
+    }
+
+    /** A pessoa é proprietária? (refazer a senha de outro proprietário pede a senha de quem faz) */
+    public boolean ehProprietario(UUID id) {
+        return !banco.naLoja(jdbc -> jdbc.queryForList("select 1 from usuario where id = ? and papel = 'dono'", Integer.class, id)).isEmpty();
+    }
+
     public void remover(UUID id, UUID eu) {
         banco.naLoja(jdbc -> {
             Linha alvo = buscar(jdbc, id);
             if (alvo == null) throw naoEncontrado();
             if (id.equals(eu)) throw new ErroDeNegocio(HttpStatus.CONFLICT, "Você não pode remover o seu próprio usuário.");
-            if ("dono".equals(alvo.papel()) && outrosDonos(jdbc, id) == 0) throw new ErroDeNegocio(HttpStatus.CONFLICT, "É preciso ter pelo menos um dono.");
+            if ("dono".equals(alvo.papel())) {
+                if (outrosDonos(jdbc, id) == 0) throw new ErroDeNegocio(HttpStatus.CONFLICT, "É preciso ter pelo menos um proprietário.");
+                throw new ErroDeNegocio(HttpStatus.CONFLICT, "Mude o perfil deste proprietário antes de removê-lo.");
+            }
             Integer historico = jdbc.queryForObject("select count(*) from agendamento where profissional_id = ?", Integer.class, id);
             if (historico != null && historico > 0) {
                 throw new ErroDeNegocio(HttpStatus.CONFLICT, "Esse usuário tem histórico de agendamentos e não pode ser removido. Desative-o: o histórico fica e ele deixa de receber novos agendamentos.");

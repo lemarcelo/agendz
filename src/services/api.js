@@ -984,7 +984,7 @@ function bloqueioDesativar(s, u, ts) {
 export const equipe = {
   // PUT /usuarios/{id}/atendimento
   definirAtendimento(id, atende) {
-    if (!R.ehDono(usuario())) return erro('Somente o dono ativa ou desativa a equipe.');
+    if (!R.ehDono(usuario())) return erro('Somente o proprietário ativa ou desativa a equipe.');
     return mutate((s, ts) => {
       const u = s.usuarios.find((x) => x.id === id);
       if (!u) return erro('Usuário não encontrado.');
@@ -995,19 +995,26 @@ export const equipe = {
   },
   // POST /usuarios  |  PUT /usuarios/{id}
   salvar(entrada) {
-    if (!R.ehDono(usuario())) return erro('Somente o dono cadastra e altera a equipe.');
-    const u = pegar(entrada, ['id', 'nome', 'apelido', 'cpf', 'nascimento', 'email', 'telefone', 'senha', 'papel', 'permissoes', 'atende', 'foto', 'comissaoPct', 'comissaoProdutoPct', 'podeVender']);
+    if (!R.ehDono(usuario())) return erro('Somente o proprietário cadastra e altera a equipe.');
+    const u = pegar(entrada, ['id', 'nome', 'apelido', 'cpf', 'nascimento', 'email', 'telefone', 'senha', 'papel', 'permissoes', 'atende', 'foto', 'comissaoPct', 'comissaoProdutoPct', 'podeVender', 'confirmaSenha']);
     if ('comissaoPct' in u && !R.ehDono(usuario())) delete u.comissaoPct;
     if ('comissaoProdutoPct' in u && !R.ehDono(usuario())) delete u.comissaoProdutoPct;
     if ('podeVender' in u && typeof u.podeVender !== 'boolean') return erro('Escolha se a pessoa pode vender produtos.');
     if ('comissaoPct' in u) { const c = lerPct(u.comissaoPct); if (!c.ok) return erro('A comissão vai de 0 a 100%.'); u.comissaoPct = c.v; }
     if ('comissaoProdutoPct' in u) { const c = lerPct(u.comissaoProdutoPct); if (!c.ok) return erro('A comissão vai de 0 a 100%.'); u.comissaoProdutoPct = c.v; } // sobre produtos: vale quando o produto não tem a sua
     if ('foto' in u && u.foto !== null && !fotoValida(u.foto)) return erro('Foto inválida: use uma imagem PNG, JPEG ou WebP pequena.');
-    for (const k of ['nome', 'apelido', 'cpf', 'nascimento', 'email', 'telefone', 'senha']) if (k in u && !texto(u[k], 150)) return erro('Texto inválido ou grande demais em ' + k + '.');
+    for (const k of ['nome', 'apelido', 'cpf', 'nascimento', 'email', 'telefone', 'senha', 'confirmaSenha']) if (k in u && !texto(u[k], 150)) return erro('Texto inválido ou grande demais em ' + k + '.');
     if (('papel' in u || !u.id) && !['dono', 'admin', 'atendente', 'profissional'].includes(u.papel)) return erro('Escolha o perfil da pessoa.');
     if ('permissoes' in u) u.permissoes = R.limparPermissoes(u.permissoes);
     if (R.nomeReservado(u.nome) || R.nomeReservado(u.apelido)) return erro(R.NOME_RESERVADO); // `suporte` é do Admin da plataforma
+    const confirmaSenha = u.confirmaSenha; delete u.confirmaSenha; // nunca vai para o estado
     return mutate((s) => {
+      // B6: promover, rebaixar ou cadastrar um proprietário pede a senha de quem faz (senha errada = erro, a sessão continua)
+      const antes = u.id ? s.usuarios.find((x) => x.id === u.id) : null;
+      if (u.id && !antes) return erro('Usuário não encontrado.');
+      const mudaProprietario = antes ? 'papel' in u && (antes.papel === 'dono') !== (u.papel === 'dono') : u.papel === 'dono';
+      const quemFaz = s.usuarios.find((x) => x.id === sessao);
+      if (mudaProprietario && (!confirmaSenha || !quemFaz || quemFaz.senha !== confirmaSenha)) return erro('Senha incorreta');
       if (!String(u.nome || '').trim() || !String(u.apelido || '').trim()) return erro('Informe o nome e o apelido.');
       if (R.somenteDigitos(u.cpf).length !== 11) return erro('Informe o CPF completo.');
       if (!String(u.email || '').includes('@')) return erro('Informe um e-mail válido.');
@@ -1021,7 +1028,7 @@ export const equipe = {
         const atual = s.usuarios[i];
         if (atual.atende && !u.atende) { const bloqueio = bloqueioDesativar(s, atual, agora()); if (bloqueio) return erro(bloqueio); }
         const sobramDonos = s.usuarios.filter((x) => x.id !== u.id && x.papel === 'dono').length;
-        if (atual.papel === 'dono' && u.papel !== 'dono' && !sobramDonos) return erro('É preciso ter pelo menos um dono.');
+        if (atual.papel === 'dono' && u.papel !== 'dono' && !sobramDonos) return erro('É preciso ter pelo menos um proprietário.');
         s.usuarios[i] = { ...atual, ...u, senha: u.senha ? u.senha : atual.senha };
         return { ok: true, usuario: semUsuarioSenha(s.usuarios[i]) };
       }
@@ -1045,7 +1052,7 @@ export const equipe = {
       const alvo = s.usuarios.find((x) => x.id === id);
       if (!alvo) return erro('Usuário não encontrado.');
       if (id === sessao) return erro('Você não pode remover o seu próprio usuário.');
-      if (alvo.papel === 'dono' && s.usuarios.filter((x) => x.papel === 'dono').length === 1) return erro('É preciso ter pelo menos um dono.');
+      if (alvo.papel === 'dono') return erro(s.usuarios.filter((x) => x.papel === 'dono').length === 1 ? 'É preciso ter pelo menos um proprietário.' : 'Mude o perfil deste proprietário antes de removê-lo.');
       if (s.agendamentos.some((a) => a.profissionalId === id)) return erro('Esse usuário tem histórico de agendamentos e não pode ser removido. Desative-o: o histórico fica e ele deixa de receber novos agendamentos.');
       s.usuarios = s.usuarios.filter((x) => x.id !== id);
       return { ok: true };

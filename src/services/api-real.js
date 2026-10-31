@@ -563,7 +563,7 @@ export const equipe = {
   async salvar(d) {
     d = d && typeof d === 'object' ? d : {};
     const corpo = {};
-    for (const [k, max] of [['nome', 150], ['apelido', 60], ['usuario', 60], ['cpf', 20], ['nascimento', 10], ['email', 150], ['telefone', 30], ['papel', 20]]) if (typeof d[k] === 'string') corpo[k] = d[k].slice(0, max);
+    for (const [k, max] of [['nome', 150], ['apelido', 60], ['usuario', 60], ['cpf', 20], ['nascimento', 10], ['email', 150], ['telefone', 30], ['papel', 20], ['confirmaSenha', 200]]) if (typeof d[k] === 'string') corpo[k] = d[k].slice(0, max);
     if (typeof d.senhaTemporaria === 'string' && d.senhaTemporaria !== '' && !(d.id !== undefined && d.id !== null && d.id !== '')) corpo.senhaTemporaria = d.senhaTemporaria.slice(0, 100); // só ao criar; vazia = o servidor gera
     if (typeof d.atende === 'boolean') corpo.atende = d.atende;
     if (typeof d.podeVender === 'boolean') corpo.podeVender = d.podeVender;
@@ -582,10 +582,11 @@ export const equipe = {
     const r = await chamar('PUT', `/api/usuarios/${id}/atendimento`, { atende: atende === true });
     return r.ok ? { ok: true, usuario: lerUsuario(r.dados) } : r;
   },
-  // POST /api/usuarios/{id}/senha-temporaria  (nova senha temporária, uma vez; a pessoa troca no próximo acesso)
-  async refazerSenha(id) {
+  // POST /api/usuarios/{id}/senha-temporaria  (nova senha temporária, uma vez; a pessoa troca no próximo acesso; de outro proprietário pede `confirmaSenha`)
+  async refazerSenha(id, confirmaSenha) {
     if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Usuário não encontrado.' };
-    const r = await chamar('POST', `/api/usuarios/${id}/senha-temporaria`, {});
+    // refazer a senha de outro proprietário pede a senha de quem faz (B6); para os demais o campo nem vai
+    const r = await chamar('POST', `/api/usuarios/${id}/senha-temporaria`, typeof confirmaSenha === 'string' && confirmaSenha ? { confirmaSenha: confirmaSenha.slice(0, 200) } : {});
     return r.ok ? comSenha(r) : r;
   },
   // DELETE /api/usuarios/{id}  (só quem nunca teve agendamento; a tela oferece "parar de atender" no lugar)

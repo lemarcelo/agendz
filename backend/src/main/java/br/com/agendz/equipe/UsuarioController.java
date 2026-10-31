@@ -37,10 +37,15 @@ public class UsuarioController {
     public record Foto(@Size(max = 40000) String foto) {
     }
 
-    private final UsuarioService usuarios;
+    public record Confirma(@Size(max = 200) String confirmaSenha) {
+    }
 
-    public UsuarioController(UsuarioService usuarios) {
+    private final UsuarioService usuarios;
+    private final ConfirmarSenha senhas;
+
+    public UsuarioController(UsuarioService usuarios, ConfirmarSenha senhas) {
         this.usuarios = usuarios;
+        this.senhas = senhas;
     }
 
     @GetMapping("/api/usuarios")
@@ -58,13 +63,17 @@ public class UsuarioController {
     /** Devolve a senha temporária UMA vez; nada de cache no navegador nem em proxy. */
     @PostMapping("/api/usuarios")
     @PreAuthorize("hasRole('DONO')")
-    public ResponseEntity<ComSenha> criar(@Valid @RequestBody Dados d) {
+    public ResponseEntity<ComSenha> criar(@Valid @RequestBody Dados d, @AuthenticationPrincipal Jwt jwt) {
+        // cadastrar alguém já como proprietário também pede a senha de quem faz (B6)
+        if (d.papel() != null && "dono".equals(d.papel().trim().toLowerCase(java.util.Locale.ROOT))) senhas.confirmar(UUID.fromString(jwt.getSubject()), d.confirmaSenha());
         return ResponseEntity.status(HttpStatus.CREATED).cacheControl(CacheControl.noStore()).body(usuarios.criar(d));
     }
 
     @PutMapping("/api/usuarios/{id}")
     @PreAuthorize("hasRole('DONO')")
-    public Usuario alterar(@PathVariable UUID id, @Valid @RequestBody Dados d) {
+    public Usuario alterar(@PathVariable UUID id, @Valid @RequestBody Dados d, @AuthenticationPrincipal Jwt jwt) {
+        // promover ou rebaixar um proprietário é ação sensível: pede a senha de quem faz (B6)
+        if (usuarios.mudaProprietario(id, d.papel())) senhas.confirmar(UUID.fromString(jwt.getSubject()), d.confirmaSenha());
         return usuarios.alterar(id, d);
     }
 
@@ -76,7 +85,10 @@ public class UsuarioController {
 
     @PostMapping("/api/usuarios/{id}/senha-temporaria")
     @PreAuthorize("hasRole('DONO')")
-    public ResponseEntity<ComSenha> refazerSenha(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
+    public ResponseEntity<ComSenha> refazerSenha(@PathVariable UUID id, @RequestBody(required = false) @Valid Confirma c, @AuthenticationPrincipal Jwt jwt) {
+        UUID eu = UUID.fromString(jwt.getSubject());
+        // refazer a senha de OUTRO proprietário pede a senha de quem faz (B6); a própria senha tem outro caminho e o service recusa
+        if (!id.equals(eu) && usuarios.ehProprietario(id)) senhas.confirmar(eu, c == null ? null : c.confirmaSenha());
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(usuarios.refazerSenha(id, UUID.fromString(jwt.getSubject())));
     }
 

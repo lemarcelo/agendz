@@ -390,6 +390,11 @@ function FormUsuario({ u, user, onClose }) {
             {ehMaster && <option value="master">Master: acesso total, só de IP reservado</option>}
           </select>
         </Campo>
+        {(u.id ? (u.papel === 'dono') !== (f.papel === 'dono') : f.papel === 'dono') && (
+          <Campo rotulo="Sua senha (para confirmar a mudança de proprietário)" className="campo-largo" dica="Promover, rebaixar ou cadastrar um proprietário pede a sua senha. Pode haver mais de um; sempre sobra pelo menos um.">
+            <input type="password" value={f.confirmaSenha || ''} onChange={(e) => setF({ ...f, confirmaSenha: e.target.value })} autoComplete="current-password" data-testid="usr-confirma-senha" />
+          </Campo>
+        )}
         {f.papel !== 'dono' && f.papel !== 'master' && (
           <fieldset className="campo-largo conj" data-testid="usr-acessos"><legend>Menus que esta pessoa acessa</legend>
             <div className="servicos-lista">{SECOES_LIBERAVEIS.map((k) => {

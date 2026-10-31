@@ -98,7 +98,7 @@ public class ProfissionalController {
     public ResponseEntity<Void> remover(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
         Pessoa p = obter(id);
         if (!"profissional".equals(p.papel()) || id.toString().equals(jwt.getSubject())) {
-            throw new ErroDeNegocio(HttpStatus.CONFLICT, "O dono não pode ser removido por aqui.");
+            throw new ErroDeNegocio(HttpStatus.CONFLICT, "O proprietário não pode ser removido por aqui.");
         }
         banco.naLoja(jdbc -> jdbc.update("update usuario set ativo = false, atende = false where id = ?", id));
         return ResponseEntity.noContent().build();

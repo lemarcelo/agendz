@@ -297,5 +297,14 @@ class PlataformaTest extends BaseApi {
         String suporte = jdbc.queryForObject("select id::text from usuario where identificador = 'suporte' and loja_id = (select id from loja where slug = ?)", String.class, SLUG);
         mvc.perform(put(url + suporte + "/papel").header("X-Interno-Chave", CHAVE).contentType(MediaType.APPLICATION_JSON).content("{\"papel\":\"atendente\"}")).andExpect(status().isNotFound());
         assertEquals("admin", jdbc.queryForObject("select papel from usuario where id = ?::uuid", String.class, suporte));
+        // B6: pode haver mais de um proprietário. Promove a Bia; agora a dona pode ser rebaixada, mas a última proprietária ativa nunca
+        mvc.perform(put(url + bia + "/papel").header("X-Interno-Chave", CHAVE).contentType(MediaType.APPLICATION_JSON).content("{\"papel\":\"dono\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.papel").value("dono")).andExpect(jsonPath("$.mudou").value(true));
+        mvc.perform(put(url + dona + "/papel").header("X-Interno-Chave", CHAVE).contentType(MediaType.APPLICATION_JSON).content("{\"papel\":\"atendente\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.anterior").value("dono"));
+        assertEquals("atendente", jdbc.queryForObject("select papel from usuario where id = ?::uuid", String.class, dona));
+        mvc.perform(put(url + bia + "/papel").header("X-Interno-Chave", CHAVE).contentType(MediaType.APPLICATION_JSON).content("{\"papel\":\"profissional\"}"))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.mensagem").value("A loja precisa ter ao menos um proprietário ativo: promova outra pessoa antes."));
+        assertEquals("dono", jdbc.queryForObject("select papel from usuario where id = ?::uuid", String.class, bia));
     }
 }
