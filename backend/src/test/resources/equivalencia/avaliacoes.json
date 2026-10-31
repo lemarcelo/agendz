@@ -1,0 +1,809 @@
+{
+ "descricao": "Casos das regras puras de avaliação executados em tests/avaliacoes-equivalencia.test.mjs (domain/avaliacoes.js) e AvaliacoesEquivalenciaTest (AvaliacaoRegras.java). repetirTexto/repetir trocam o texto por 'a' repetido N vezes.",
+ "validar": [
+  {
+   "nome": "só a nota",
+   "entrada": {
+    "nota": 5
+   },
+   "esperado": {
+    "ok": true,
+    "dados": {
+     "nota": 5,
+     "texto": "",
+     "anonimo": false
+    }
+   }
+  },
+  {
+   "nome": "nota 1",
+   "entrada": {
+    "nota": 1
+   },
+   "esperado": {
+    "ok": true,
+    "dados": {
+     "nota": 1,
+     "texto": "",
+     "anonimo": false
+    }
+   }
+  },
+  {
+   "nome": "nota zero",
+   "entrada": {
+    "nota": 0
+   },
+   "esperado": {
+    "ok": false,
+    "erro": "Escolha uma nota de 1 a 5 estrelas."
+   }
+  },
+  {
+   "nome": "nota seis",
+   "entrada": {
+    "nota": 6
+   },
+   "esperado": {
+    "ok": false,
+    "erro": "Escolha uma nota de 1 a 5 estrelas."
+   }
+  },
+  {
+   "nome": "nota quebrada",
+   "entrada": {
+    "nota": 4.5
+   },
+   "esperado": {
+    "ok": false,
+    "erro": "Escolha uma nota de 1 a 5 estrelas."
+   }
+  },
+  {
+   "nome": "nota negativa",
+   "entrada": {
+    "nota": -1
+   },
+   "esperado": {
+    "ok": false,
+    "erro": "Escolha uma nota de 1 a 5 estrelas."
+   }
+  },
+  {
+   "nome": "nota em texto numérico",
+   "entrada": {
+    "nota": "3"
+   },
+   "esperado": {
+    "ok": true,
+    "dados": {
+     "nota": 3,
+     "texto": "",
+     "anonimo": false
+    }
+   }
+  },
+  {
+   "nome": "nota em texto com zero à esquerda e espaços",
+   "entrada": {
+    "nota": " 05 "
+   },
+   "esperado": {
+    "ok": true,
+    "dados": {
+     "nota": 5,
+     "texto": "",
+     "anonimo": false
+    }
+   }
+  },
+  {
+   "nome": "nota em texto que não é número",
+   "entrada": {
+    "nota": "abc"
+   },
+   "esperado": {
+    "ok": false,
+    "erro": "Escolha uma nota de 1 a 5 estrelas."
+   }
+  },
+  {
+   "nome": "nota booleana",
+   "entrada": {
+    "nota": true
+   },
+   "esperado": {
+    "ok": false,
+    "erro": "Escolha uma nota de 1 a 5 estrelas."
+   }
+  },
+  {
+   "nome": "nota nula",
+   "entrada": {
+    "nota": null
+   },
+   "esperado": {
+    "ok": false,
+    "erro": "Escolha uma nota de 1 a 5 estrelas."
+   }
+  },
+  {
+   "nome": "sem nota",
+   "entrada": {},
+   "esperado": {
+    "ok": false,
+    "erro": "Escolha uma nota de 1 a 5 estrelas."
+   }
+  },
+  {
+   "nome": "corpo nulo",
+   "entrada": null,
+   "esperado": {
+    "ok": false,
+    "erro": "Escolha uma nota de 1 a 5 estrelas."
+   }
+  },
+  {
+   "nome": "corpo é lista",
+   "entrada": [
+    5
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Escolha uma nota de 1 a 5 estrelas."
+   }
+  },
+  {
+   "nome": "texto limpo nas pontas",
+   "entrada": {
+    "nota": 4,
+    "texto": "  Ótimo atendimento!  "
+   },
+   "esperado": {
+    "ok": true,
+    "dados": {
+     "nota": 4,
+     "texto": "Ótimo atendimento!",
+     "anonimo": false
+    }
+   }
+  },
+  {
+   "nome": "texto com marcação fica como texto",
+   "entrada": {
+    "nota": 4,
+    "texto": "<b>oi</b> <script>x</script>"
+   },
+   "esperado": {
+    "ok": true,
+    "dados": {
+     "nota": 4,
+     "texto": "<b>oi</b> <script>x</script>",
+     "anonimo": false
+    }
+   }
+  },
+  {
+   "nome": "texto nulo",
+   "entrada": {
+    "nota": 4,
+    "texto": null
+   },
+   "esperado": {
+    "ok": true,
+    "dados": {
+     "nota": 4,
+     "texto": "",
+     "anonimo": false
+    }
+   }
+  },
+  {
+   "nome": "texto não é texto",
+   "entrada": {
+    "nota": 4,
+    "texto": 123
+   },
+   "esperado": {
+    "ok": false,
+    "erro": "Comentário inválido."
+   }
+  },
+  {
+   "nome": "texto de 500 caracteres",
+   "entrada": {
+    "nota": 4
+   },
+   "esperado": {
+    "ok": true,
+    "dados": {
+     "nota": 4,
+     "texto": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "anonimo": false
+    }
+   },
+   "repetirTexto": 500
+  },
+  {
+   "nome": "texto de 501 caracteres",
+   "entrada": {
+    "nota": 4
+   },
+   "esperado": {
+    "ok": false,
+    "erro": "O comentário pode ter até 500 caracteres."
+   },
+   "repetirTexto": 501
+  },
+  {
+   "nome": "anônimo ligado",
+   "entrada": {
+    "nota": 3,
+    "anonimo": true
+   },
+   "esperado": {
+    "ok": true,
+    "dados": {
+     "nota": 3,
+     "texto": "",
+     "anonimo": true
+    }
+   }
+  },
+  {
+   "nome": "anônimo desligado",
+   "entrada": {
+    "nota": 3,
+    "anonimo": false
+   },
+   "esperado": {
+    "ok": true,
+    "dados": {
+     "nota": 3,
+     "texto": "",
+     "anonimo": false
+    }
+   }
+  },
+  {
+   "nome": "anônimo nulo",
+   "entrada": {
+    "nota": 3,
+    "anonimo": null
+   },
+   "esperado": {
+    "ok": true,
+    "dados": {
+     "nota": 3,
+     "texto": "",
+     "anonimo": false
+    }
+   }
+  },
+  {
+   "nome": "anônimo em texto",
+   "entrada": {
+    "nota": 3,
+    "anonimo": "sim"
+   },
+   "esperado": {
+    "ok": false,
+    "erro": "Opção de anonimato inválida."
+   }
+  },
+  {
+   "nome": "anônimo numérico",
+   "entrada": {
+    "nota": 3,
+    "anonimo": 1
+   },
+   "esperado": {
+    "ok": false,
+    "erro": "Opção de anonimato inválida."
+   }
+  }
+ ],
+ "motivo": [
+  {
+   "nome": "curto",
+   "entrada": "abcd",
+   "esperado": {
+    "ok": false
+   }
+  },
+  {
+   "nome": "mínimo",
+   "entrada": "abcde",
+   "esperado": {
+    "ok": true,
+    "motivo": "abcde"
+   }
+  },
+  {
+   "nome": "com espaços nas pontas",
+   "entrada": "  abcde  ",
+   "esperado": {
+    "ok": true,
+    "motivo": "abcde"
+   }
+  },
+  {
+   "nome": "só espaços",
+   "entrada": "        ",
+   "esperado": {
+    "ok": false
+   }
+  },
+  {
+   "nome": "200",
+   "repetir": 200,
+   "esperado": {
+    "ok": true,
+    "motivo": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+   }
+  },
+  {
+   "nome": "201",
+   "repetir": 201,
+   "esperado": {
+    "ok": false
+   }
+  },
+  {
+   "nome": "não é texto",
+   "entrada": 123,
+   "esperado": {
+    "ok": false
+   }
+  },
+  {
+   "nome": "nulo",
+   "entrada": null,
+   "esperado": {
+    "ok": false
+   }
+  }
+ ],
+ "modelo": [
+  {
+   "nome": "avaliação com link",
+   "modelo": "Olá, {nome}! Avalie: {link}",
+   "tipo": "avaliacao",
+   "esperado": {
+    "ok": true,
+    "modelo": "Olá, {nome}! Avalie: {link}"
+   }
+  },
+  {
+   "nome": "avaliação com as três variáveis",
+   "modelo": "{nome} da {loja}: {link}",
+   "tipo": "avaliacao",
+   "esperado": {
+    "ok": true,
+    "modelo": "{nome} da {loja}: {link}"
+   }
+  },
+  {
+   "nome": "avaliação sem link",
+   "modelo": "Olá, {nome}! Como foi?",
+   "tipo": "avaliacao",
+   "esperado": {
+    "ok": false,
+    "erro": "O pedido de avaliação precisa de {link} no texto."
+   }
+  },
+  {
+   "nome": "aviso sem link",
+   "modelo": "Olá {nome}, aqui é da {loja}.",
+   "tipo": "aviso",
+   "esperado": {
+    "ok": true,
+    "modelo": "Olá {nome}, aqui é da {loja}."
+   }
+  },
+  {
+   "nome": "aviso com link",
+   "modelo": "Veja {link}",
+   "tipo": "aviso",
+   "esperado": {
+    "ok": false,
+    "erro": "O {link} só vale no pedido de avaliação."
+   }
+  },
+  {
+   "nome": "variável desconhecida",
+   "modelo": "Oi {cpf} {link}",
+   "tipo": "avaliacao",
+   "esperado": {
+    "ok": false,
+    "erro": "Variável {cpf} não existe. Use {nome}, {loja} e {link}."
+   }
+  },
+  {
+   "nome": "variável de nome longo",
+   "modelo": "{abcdefghijklmnopqrstuvwxyz}",
+   "tipo": "aviso",
+   "esperado": {
+    "ok": false,
+    "erro": "Variável {abcdefghijklmnopqrst} não existe. Use {nome}, {loja} e {link}."
+   }
+  },
+  {
+   "nome": "curto demais",
+   "modelo": "abcd",
+   "tipo": "aviso",
+   "esperado": {
+    "ok": false,
+    "erro": "A mensagem deve ter de 5 a 300 caracteres."
+   }
+  },
+  {
+   "nome": "longo demais",
+   "modelo": null,
+   "tipo": "aviso",
+   "esperado": {
+    "ok": false,
+    "erro": "A mensagem deve ter de 5 a 300 caracteres."
+   },
+   "repetir": 301
+  },
+  {
+   "nome": "trezentos",
+   "modelo": "x",
+   "tipo": "aviso",
+   "esperado": {
+    "ok": true,
+    "modelo": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+   },
+   "repetir": 300
+  },
+  {
+   "nome": "nulo",
+   "modelo": null,
+   "tipo": "aviso",
+   "esperado": {
+    "ok": false,
+    "erro": "Escreva o texto da mensagem."
+   }
+  },
+  {
+   "nome": "com espaços nas pontas",
+   "modelo": "   Olá {nome}!   ",
+   "tipo": "aviso",
+   "esperado": {
+    "ok": true,
+    "modelo": "Olá {nome}!"
+   }
+  }
+ ],
+ "aplicar": [
+  {
+   "nome": "completo",
+   "modelo": "Olá, {nome}! Da {loja}: {link}",
+   "dados": {
+    "nome": "  Maria   Silva",
+    "loja": "Barbearia   X",
+    "link": "https://x.com/#avaliar/abc"
+   },
+   "esperado": "Olá, Maria! Da Barbearia X: https://x.com/#avaliar/abc"
+  },
+  {
+   "nome": "sem nome",
+   "modelo": "Olá, {nome}!",
+   "dados": {
+    "nome": "",
+    "loja": "X",
+    "link": ""
+   },
+   "esperado": "Olá, tudo bem!"
+  },
+  {
+   "nome": "nome nulo",
+   "modelo": "Olá, {nome}!",
+   "dados": {
+    "nome": null,
+    "loja": "X",
+    "link": ""
+   },
+   "esperado": "Olá, tudo bem!"
+  },
+  {
+   "nome": "repete variável",
+   "modelo": "{nome} {nome}",
+   "dados": {
+    "nome": "Zé",
+    "loja": "",
+    "link": ""
+   },
+   "esperado": "Zé Zé"
+  },
+  {
+   "nome": "nome gigante corta em 40",
+   "modelo": "{nome}",
+   "dados": {
+    "nome": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "loja": "",
+    "link": ""
+   },
+   "esperado": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  {
+   "nome": "loja gigante corta em 60",
+   "modelo": "{loja}",
+   "dados": {
+    "nome": "x",
+    "loja": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "link": ""
+   },
+   "esperado": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  }
+ ],
+ "resumo": [
+  {
+   "notas": [],
+   "esperado": {
+    "total": 0,
+    "media": null,
+    "distribuicao": [
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   }
+  },
+  {
+   "notas": [
+    5
+   ],
+   "esperado": {
+    "total": 1,
+    "media": 5,
+    "distribuicao": [
+     0,
+     0,
+     0,
+     0,
+     1
+    ]
+   }
+  },
+  {
+   "notas": [
+    5,
+    4
+   ],
+   "esperado": {
+    "total": 2,
+    "media": 4.5,
+    "distribuicao": [
+     0,
+     0,
+     0,
+     1,
+     1
+    ]
+   }
+  },
+  {
+   "notas": [
+    5,
+    5,
+    4
+   ],
+   "esperado": {
+    "total": 3,
+    "media": 4.7,
+    "distribuicao": [
+     0,
+     0,
+     0,
+     1,
+     2
+    ]
+   }
+  },
+  {
+   "notas": [
+    1,
+    2
+   ],
+   "esperado": {
+    "total": 2,
+    "media": 1.5,
+    "distribuicao": [
+     1,
+     1,
+     0,
+     0,
+     0
+    ]
+   }
+  },
+  {
+   "notas": [
+    5,
+    4,
+    4,
+    4
+   ],
+   "esperado": {
+    "total": 4,
+    "media": 4.3,
+    "distribuicao": [
+     0,
+     0,
+     0,
+     3,
+     1
+    ]
+   }
+  },
+  {
+   "notas": [
+    3,
+    3,
+    3,
+    3,
+    3
+   ],
+   "esperado": {
+    "total": 5,
+    "media": 3,
+    "distribuicao": [
+     0,
+     0,
+     5,
+     0,
+     0
+    ]
+   }
+  }
+ ],
+ "periodo": [
+  {
+   "nome": "sem datas",
+   "de": null,
+   "ate": null,
+   "esperado": {
+    "ok": true,
+    "semLimite": true
+   }
+  },
+  {
+   "nome": "vazias",
+   "de": "",
+   "ate": "",
+   "esperado": {
+    "ok": true,
+    "semLimite": true
+   }
+  },
+  {
+   "nome": "um mês",
+   "de": "2026-10-01",
+   "ate": "2026-10-31",
+   "esperado": {
+    "ok": true,
+    "semLimite": false
+   }
+  },
+  {
+   "nome": "um dia",
+   "de": "2026-10-05",
+   "ate": "2026-10-05",
+   "esperado": {
+    "ok": true,
+    "semLimite": false
+   }
+  },
+  {
+   "nome": "só a inicial",
+   "de": "2026-10-01",
+   "ate": null,
+   "esperado": {
+    "erro": "Informe o período com data inicial e final válidas."
+   }
+  },
+  {
+   "nome": "só a final",
+   "de": null,
+   "ate": "2026-10-01",
+   "esperado": {
+    "erro": "Informe o período com data inicial e final válidas."
+   }
+  },
+  {
+   "nome": "dia que não existe",
+   "de": "2026-02-30",
+   "ate": "2026-03-01",
+   "esperado": {
+    "erro": "Informe o período com data inicial e final válidas."
+   }
+  },
+  {
+   "nome": "formato errado",
+   "de": "01/10/2026",
+   "ate": "31/10/2026",
+   "esperado": {
+    "erro": "Informe o período com data inicial e final válidas."
+   }
+  },
+  {
+   "nome": "final antes da inicial",
+   "de": "2026-10-31",
+   "ate": "2026-10-01",
+   "esperado": {
+    "erro": "A data final não pode ser antes da inicial."
+   }
+  },
+  {
+   "nome": "366 dias",
+   "de": "2025-01-01",
+   "ate": "2026-01-01",
+   "esperado": {
+    "ok": true,
+    "semLimite": false
+   }
+  },
+  {
+   "nome": "367 dias",
+   "de": "2025-01-01",
+   "ate": "2026-01-02",
+   "esperado": {
+    "erro": "O período pode ter no máximo 366 dias."
+   }
+  }
+ ],
+ "whatsapp": [
+  {
+   "nome": "celular com máscara",
+   "telefone": "(53) 99900-0001",
+   "numero": "5553999000001",
+   "mascarado": "(53) •••••-0001"
+  },
+  {
+   "nome": "celular com 55",
+   "telefone": "5553999000001",
+   "numero": "5553999000001",
+   "mascarado": "(53) •••••-0001"
+  },
+  {
+   "nome": "fixo",
+   "telefone": "(53) 3222-1234",
+   "numero": "555332221234",
+   "mascarado": "(53) •••••-1234"
+  },
+  {
+   "nome": "curto",
+   "telefone": "12345",
+   "numero": "",
+   "mascarado": ""
+  },
+  {
+   "nome": "11 dígitos sem o 9",
+   "telefone": "53899990001",
+   "numero": "",
+   "mascarado": "(53) •••••-0001"
+  },
+  {
+   "nome": "vazio",
+   "telefone": "",
+   "numero": "",
+   "mascarado": ""
+  },
+  {
+   "nome": "nulo",
+   "telefone": null,
+   "numero": "",
+   "mascarado": ""
+  },
+  {
+   "nome": "DDD zero",
+   "telefone": "(03) 99900-0001",
+   "numero": "",
+   "mascarado": "(03) •••••-0001"
+  }
+ ]
+}

@@ -43,18 +43,18 @@ public class ClienteService {
     }
 
     /** Linha da lista: CPF só mascarado, sem nascimento. */
-    public record Resumo(UUID id, String nome, String apelido, String telefone, String cpfMascarado, List<Veiculo> veiculos) {
+    public record Resumo(UUID id, String nome, String apelido, String telefone, String cpfMascarado, List<Veiculo> veiculos, boolean semMensagens) {
     }
 
     /** Ficha: CPF completo e nascimento só quando `dadosCompletos` (dono, quem atende o cliente ou cadastro sem horários). */
     public record Ficha(UUID id, String nome, String apelido, String telefone, String telefoneAnterior, String cpf, String cpfMascarado,
-                        String nascimento, boolean dadosCompletos, List<Veiculo> veiculos) {
+                        String nascimento, boolean dadosCompletos, List<Veiculo> veiculos, boolean semMensagens) {
     }
 
     public record EntradaVeiculo(String id, String placa, String marca, String modelo, String cor, String porte) {
     }
 
-    public record Entrada(String nome, String apelido, String telefone, String cpf, String nascimento, List<EntradaVeiculo> veiculos) {
+    public record Entrada(String nome, String apelido, String telefone, String cpf, String nascimento, List<EntradaVeiculo> veiculos, Boolean semMensagens) {
     }
 
     private record Linha(UUID id, String nome, String apelido, String telefoneCif, String telefoneHash, String cpfCif, String cpfHash, String nascimentoCif) {
@@ -93,13 +93,14 @@ public class ClienteService {
             List<Linha> linhas = jdbc.query("select id, nome, apelido, telefone_cif, telefone_hash, cpf_cif, cpf_hash, nascimento_cif from cliente order by lower(nome), id limit 2000",
                     (rs, i) -> lerLinha(rs));
             Map<UUID, List<Veiculo>> veiculos = veiculosDaLoja(jdbc);
+            Set<UUID> optOut = new HashSet<>(jdbc.query("select id from cliente where sem_mensagens", (rs, i) -> rs.getObject(1, UUID.class)));
             List<Resumo> saida = new ArrayList<>();
             for (Linha l : linhas) {
                 String tel = cifra.decifrar(l.telefoneCif());
                 String cpf = l.cpfCif() == null ? null : cifra.decifrar(l.cpfCif());
                 List<Veiculo> vs = veiculos.getOrDefault(l.id(), List.of());
                 if (!consulta.isEmpty() && !confere(consulta, soDigitos, l, tel, cpf, vs)) continue;
-                saida.add(new Resumo(l.id(), l.nome(), l.apelido(), tel, cpf == null ? null : Documentos.cpfMascarado(cpf), vs));
+                saida.add(new Resumo(l.id(), l.nome(), l.apelido(), tel, cpf == null ? null : Documentos.cpfMascarado(cpf), vs, optOut.contains(l.id())));
                 if (saida.size() >= 500) break;
             }
             return saida;
@@ -139,6 +140,7 @@ public class ClienteService {
                         UUID.class, loja.id().toString(), nome, apelido, cifra.cifrar(tel), cifra.hash(loja.id(), "tel", tel),
                         cpf == null ? null : cifra.cifrar(cpf), cpf == null ? null : cifra.hash(loja.id(), "cpf", cpf), nasc == null ? null : cifra.cifrar(nasc));
                 for (int i = 0; i < veiculos.size(); i++) inserirVeiculo(jdbc, loja, id, veiculos.get(i), i);
+                if (e.semMensagens() != null) jdbc.update("update cliente set sem_mensagens = ? where id = ?", e.semMensagens(), id);
                 return ficha(jdbc, ator, lerPorId(jdbc, id, false));
             });
         } catch (DuplicateKeyException ex) {
@@ -192,6 +194,7 @@ public class ClienteService {
                         cpfFinal == null ? null : cifra.hash(loja.id(), "cpf", cpfFinal),
                         nascFinal == null ? null : (nascFinal.equals(nascAtual) ? atual.nascimentoCif() : cifra.cifrar(nascFinal)), id);
                 if (veiculos != null) sincronizarVeiculos(jdbc, loja, id, veiculos);
+                if (e.semMensagens() != null) jdbc.update("update cliente set sem_mensagens = ? where id = ?", e.semMensagens(), id); // pedir para não receber mensagens: qualquer um que edita o cadastro
                 return ficha(jdbc, ator, lerPorId(jdbc, id, false));
             });
         } catch (DuplicateKeyException ex) {
@@ -238,7 +241,8 @@ public class ClienteService {
                 (rs, i) -> rs.getString(1), l.id());
         return new Ficha(l.id(), l.nome(), l.apelido(), cifra.decifrar(l.telefoneCif()), anteriores.isEmpty() ? null : cifra.decifrar(anteriores.get(0)),
                 forte ? cpf : null, cpf == null ? null : Documentos.cpfMascarado(cpf),
-                forte && l.nascimentoCif() != null ? cifra.decifrar(l.nascimentoCif()) : null, forte, veiculosDe(jdbc, l.id()));
+                forte && l.nascimentoCif() != null ? cifra.decifrar(l.nascimentoCif()) : null, forte, veiculosDe(jdbc, l.id()),
+                Boolean.TRUE.equals(jdbc.queryForObject("select sem_mensagens from cliente where id = ?", Boolean.class, l.id())));
     }
 
     // ---------- veículos ----------

@@ -164,6 +164,23 @@ class PlataformaTest extends BaseApi {
     }
 
     @Test
+    void regraDoAnonimoComecaDesligadaSoOAdminLigaEUmaGravacaoSemACaveNaoADesliga() throws Exception {
+        criarLoja("barbearia");
+        mvc.perform(get(BASE + "/" + SLUG + "/regras").header("X-Interno-Chave", CHAVE)).andExpect(status().isOk()).andExpect(jsonPath("$.avaliacaoMostraAnonimo").value(false));
+        // sem a chave interna nada muda
+        mvc.perform(put(BASE + "/" + SLUG + "/regras").contentType(MediaType.APPLICATION_JSON).content("{\"avaliacaoMostraAnonimo\":true}")).andExpect(status().isForbidden());
+        mvc.perform(put(BASE + "/" + SLUG + "/regras").header("X-Interno-Chave", CHAVE).contentType(MediaType.APPLICATION_JSON).content("{\"avaliacaoMostraAnonimo\":\"sim\"}")).andExpect(status().isBadRequest());
+        mvc.perform(put(BASE + "/" + SLUG + "/regras").header("X-Interno-Chave", CHAVE).contentType(MediaType.APPLICATION_JSON).content("{\"avaliacaoMostraAnonimo\":true,\"limiteUsuarios\":4}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.avaliacaoMostraAnonimo").value(true)).andExpect(jsonPath("$.limiteUsuarios").value(4));
+        // um Admin que ainda não conhece a chave grava os limites sem desligar a regra
+        mvc.perform(put(BASE + "/" + SLUG + "/regras").header("X-Interno-Chave", CHAVE).contentType(MediaType.APPLICATION_JSON).content("{\"limiteUsuarios\":5}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.avaliacaoMostraAnonimo").value(true)).andExpect(jsonPath("$.limiteUsuarios").value(5));
+        mvc.perform(get(BASE + "/" + SLUG + "/regras").header("X-Interno-Chave", CHAVE)).andExpect(jsonPath("$.avaliacaoMostraAnonimo").value(true));
+        mvc.perform(put(BASE + "/" + SLUG + "/regras").header("X-Interno-Chave", CHAVE).contentType(MediaType.APPLICATION_JSON).content("{\"avaliacaoMostraAnonimo\":false}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.avaliacaoMostraAnonimo").value(false));
+    }
+
+    @Test
     void lojaSuspensaDa402MasDeixaEntrarEAbrirAPaginaDaLoja() throws Exception {
         String senha = campo(criarLoja("barbearia"), "senhaTemporaria");
         String dono = tokenDaDona(senha);

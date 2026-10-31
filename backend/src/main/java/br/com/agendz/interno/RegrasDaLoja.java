@@ -13,17 +13,18 @@ import org.springframework.stereotype.Service;
 /**
  * Regras que o Admin da plataforma define para cada cliente (tabela `loja_regra_plataforma`, só o Admin escreve, pela rota interna). A loja LÊ e aplica
  * no servidor: limite de usuários, limite de agendas (box na estética) e campos obrigatórios do cadastro de cliente (telefone sempre; CPF e nascimento
- * ligáveis). Sem linha gravada = sem limite e nada obrigatório além do telefone. Nunca derruba em silêncio: a recusa diz o motivo.
+ * ligáveis) e `avaliacaoMostraAnonimo` (v118: padrão falso; ligado, o painel da loja vê o nome de quem avaliou como anônimo). Sem linha gravada = sem limite e nada obrigatório além do telefone. Nunca derruba em silêncio: a recusa diz o motivo.
  */
 @Service
 public class RegrasDaLoja {
 
     public static final Set<String> CAMPOS = Set.of("cpf", "nascimento");
 
-    public record Regras(Integer limiteAgendas, Integer limiteUsuarios, boolean mensagensAtivas, Integer limiteMensagensMes, List<String> cadastroObrigatorios) {
+    public record Regras(Integer limiteAgendas, Integer limiteUsuarios, boolean mensagensAtivas, Integer limiteMensagensMes, List<String> cadastroObrigatorios,
+                         boolean avaliacaoMostraAnonimo) {
     }
 
-    public static final Regras PADRAO = new Regras(null, null, true, null, List.of());
+    public static final Regras PADRAO = new Regras(null, null, true, null, List.of(), false);
 
     private final JdbcTemplate jdbc;
 
@@ -32,9 +33,9 @@ public class RegrasDaLoja {
     }
 
     public Regras ler(UUID lojaId) {
-        return jdbc.query("select limite_agendas, limite_usuarios, mensagens_ativas, limite_mensagens_mes, cadastro_obrigatorios from loja_regra_plataforma where loja_id = ?",
+        return jdbc.query("select limite_agendas, limite_usuarios, mensagens_ativas, limite_mensagens_mes, cadastro_obrigatorios, avaliacao_mostra_anonimo from loja_regra_plataforma where loja_id = ?",
                 (rs, i) -> new Regras((Integer) rs.getObject("limite_agendas"), (Integer) rs.getObject("limite_usuarios"), rs.getBoolean("mensagens_ativas"),
-                        (Integer) rs.getObject("limite_mensagens_mes"), lista(rs.getString("cadastro_obrigatorios"))), lojaId).stream().findFirst().orElse(PADRAO);
+                        (Integer) rs.getObject("limite_mensagens_mes"), lista(rs.getString("cadastro_obrigatorios")), rs.getBoolean("avaliacao_mostra_anonimo")), lojaId).stream().findFirst().orElse(PADRAO);
     }
 
     /** Grava a regra inteira (o Admin manda o conjunto). Valida faixa e campos; entrada ruim = 400. */
@@ -49,10 +50,11 @@ public class RegrasDaLoja {
             campos.add(k);
         }
         String csv = String.join(",", campos.stream().sorted().toList());
-        jdbc.update("insert into loja_regra_plataforma (loja_id, limite_agendas, limite_usuarios, mensagens_ativas, limite_mensagens_mes, cadastro_obrigatorios, atualizado_em) "
-                + "values (?, ?, ?, ?, ?, ?, now()) on conflict (loja_id) do update set limite_agendas = excluded.limite_agendas, limite_usuarios = excluded.limite_usuarios, "
-                + "mensagens_ativas = excluded.mensagens_ativas, limite_mensagens_mes = excluded.limite_mensagens_mes, cadastro_obrigatorios = excluded.cadastro_obrigatorios, atualizado_em = now()",
-                lojaId, agendas, usuarios, r.mensagensAtivas(), mensagens, csv);
+        jdbc.update("insert into loja_regra_plataforma (loja_id, limite_agendas, limite_usuarios, mensagens_ativas, limite_mensagens_mes, cadastro_obrigatorios, avaliacao_mostra_anonimo, atualizado_em) "
+                + "values (?, ?, ?, ?, ?, ?, ?, now()) on conflict (loja_id) do update set limite_agendas = excluded.limite_agendas, limite_usuarios = excluded.limite_usuarios, "
+                + "mensagens_ativas = excluded.mensagens_ativas, limite_mensagens_mes = excluded.limite_mensagens_mes, cadastro_obrigatorios = excluded.cadastro_obrigatorios, "
+                + "avaliacao_mostra_anonimo = excluded.avaliacao_mostra_anonimo, atualizado_em = now()",
+                lojaId, agendas, usuarios, r.mensagensAtivas(), mensagens, csv, r.avaliacaoMostraAnonimo());
         return ler(lojaId);
     }
 

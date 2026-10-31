@@ -31,10 +31,11 @@ public class ClienteController {
 
     public record NovoCliente(@Size(max = 100) String nome, @Size(max = 100) String apelido, @Size(max = 30) String telefone,
                               @Size(max = 20) String cpf, @Size(max = 10) String nascimento,
-                              @Size(max = 50) List<@Valid VeiculoEntrada> veiculos) {
+                              @Size(max = 50) List<@Valid VeiculoEntrada> veiculos, Boolean semMensagens) {
         Entrada paraEntrada() {
             return new Entrada(nome, apelido, telefone, cpf, nascimento,
-                    veiculos == null ? null : veiculos.stream().map(v -> v == null ? null : new ClienteService.EntradaVeiculo(v.id(), v.placa(), v.marca(), v.modelo(), v.cor(), v.porte())).toList());
+                    veiculos == null ? null : veiculos.stream().map(v -> v == null ? null : new ClienteService.EntradaVeiculo(v.id(), v.placa(), v.marca(), v.modelo(), v.cor(), v.porte())).toList(),
+                    semMensagens);
         }
     }
 

@@ -321,7 +321,7 @@ function lerCliente(d) {
   return {
     id: texto(d.id, 40), nome: texto(d.nome, 100), apelido: texto(d.apelido, 100), telefone: texto(d.telefone, 20), telefoneAnterior: d.telefoneAnterior ? texto(d.telefoneAnterior, 20) : '',
     cpf: d.cpf ? texto(d.cpf, 14) : '', cpfMascarado: d.cpfMascarado ? texto(d.cpfMascarado, 14) : '', nascimento: d.nascimento ? texto(d.nascimento, 10) : '',
-    dadosCompletos: d.dadosCompletos === true, veiculos: listaDe(d.veiculos, 10).map(lerVeiculo),
+    dadosCompletos: d.dadosCompletos === true, semMensagens: d.semMensagens === true, veiculos: listaDe(d.veiculos, 10).map(lerVeiculo),
   };
 }
 export const clientes = {
@@ -342,6 +342,7 @@ export const clientes = {
     d = d && typeof d === 'object' ? d : {};
     const corpo = {};
     for (const [k, max] of [['nome', 100], ['apelido', 100], ['telefone', 30], ['cpf', 20], ['nascimento', 10]]) if (typeof d[k] === 'string') corpo[k] = d[k].slice(0, max);
+    if (typeof d.semMensagens === 'boolean') corpo.semMensagens = d.semMensagens; // pediu para não receber mensagens (fora da estrela e da fila em lote)
     if (Array.isArray(d.veiculos)) corpo.veiculos = d.veiculos.slice(0, 50).map((v) => ({ ...(ID.test(String(v && v.id)) ? { id: v.id } : {}), placa: texto(v && v.placa, 16), marca: texto(v && v.marca, 30), modelo: texto(v && v.modelo, 40), cor: texto(v && v.cor, 20), porte: texto(v && v.porte, 16) }));
     const edicao = d.id !== undefined && d.id !== null && d.id !== '';
     if (edicao && !ID.test(String(d.id))) return { ok: false, status: 0, erro: 'Cliente não encontrado' };
@@ -1240,7 +1241,26 @@ export const publico = {
     const r = await chamar('POST', `/api/publico/agendamentos/${id}/remarcar`, { inicio: new Date(inicio).toISOString() }, undefined, { publico: true, cabecalhos: { 'X-Acesso': token } });
     return r.ok ? { ok: true, agendamento: lerResumoPublico(r.dados) } : r;
   },
+  // GET /api/publico/avaliacoes  (cabeçalho X-Acesso: o token pessoal do atendimento, que vem do FRAGMENTO da página, nunca da URL)
+  // → { loja, servicos: [nome], profissional, quando }. Nunca o nome do cliente. Qualquer erro de token é a mesma mensagem genérica do servidor.
+  async dadosAvaliacao(token) {
+    if (!TOKEN_AVALIACAO.test(String(token))) return { ok: false, status: 404, erro: ERRO_AVALIACAO };
+    const r = await chamar('GET', '/api/publico/avaliacoes', undefined, undefined, { publico: true, cabecalhos: { 'X-Acesso': token } });
+    if (!r.ok) return r.status === 0 || r.status === 429 || r.status >= 500 ? r : { ok: false, status: r.status, erro: ERRO_AVALIACAO };
+    const d = r.dados && typeof r.dados === 'object' ? r.dados : {};
+    return { ok: true, dados: { loja: texto(d.loja, 120), servicos: listaDe(d.servicos, 20).map((x) => texto(x, 120)), profissional: texto(d.profissional, 80), quando: instante(d.quando) } };
+  },
+  // POST /api/publico/avaliacoes  { nota, texto?, anonimo?, site? }  (cabeçalho X-Acesso)  → { ok }. `site` é a isca para robôs: tem de ir vazio.
+  async avaliar({ token, nota, texto: comentario, anonimo, site }) {
+    if (!TOKEN_AVALIACAO.test(String(token))) return { ok: false, status: 404, erro: ERRO_AVALIACAO };
+    const corpo = { nota: Number.isInteger(nota) ? nota : 0, texto: texto(comentario, 500), anonimo: anonimo === true, site: texto(site, 100) };
+    const r = await chamar('POST', '/api/publico/avaliacoes', corpo, undefined, { publico: true, cabecalhos: { 'X-Acesso': token } });
+    if (r.ok) return { ok: true };
+    return r.status === 404 || r.status === 410 ? { ok: false, status: r.status, erro: ERRO_AVALIACAO } : r;
+  },
 };
+const TOKEN_AVALIACAO = /^[0-9a-f]{48}$/;
+const ERRO_AVALIACAO = 'Este link de avaliação não é válido ou já foi usado.';
 
 
 // ---- Avisos do painel (5e-2): o que o cliente fez pelo link (pediu horário, remarcou, cancelou) ----
@@ -1289,6 +1309,122 @@ export const avisos = {
     if (!ID.test(String(id))) return { ok: false, status: 0, erro: 'Aviso não encontrado.' };
     const r = await chamar('PUT', `/api/avisos/${id}/lido`);
     return r.ok ? { ok: true, aviso: lerAviso(r.dados) } : r;
+  },
+};
+
+// ---------- Avaliações e mensagens em lote (F5 fase 2; regras no servidor: AvaliacaoService, FilaMensagemService) ----------
+// Quem avaliou como anônimo chega SEM nome nem cadastro enquanto a regra da plataforma estiver desligada: aqui nada é inventado (campo ausente = não existe).
+const NOTAS = [1, 2, 3, 4, 5];
+const lerAvaliacao = (d) => {
+  d = d && typeof d === 'object' ? d : {};
+  const nota = Number.isInteger(d.nota) && d.nota >= 1 && d.nota <= 5 ? d.nota : 0;
+  return {
+    id: IDV(d.id), em: instante(d.em), nota, texto: texto(d.texto, 500), servicos: listaDe(d.servicos, 20).map((x) => texto(x, 120)), profissionalId: IDV(d.profissionalId), profissional: texto(d.profissional, 80),
+    anonimo: d.anonimo === true, oculta: d.oculta === true, motivoOculta: d.motivoOculta ? texto(d.motivoOculta, 200) : '', cliente: texto(d.cliente, 100), revelado: d.revelado === true,
+  };
+};
+const lerDistribuicao = (m) => { const o = {}; for (const n of NOTAS) o[n] = Number.isInteger(m && m[n]) && m[n] >= 0 ? Math.min(m[n], 1e6) : 0; return o; };
+const consultaAvaliacoes = (f) => {
+  f = f && typeof f === 'object' ? f : {};
+  const q = [];
+  for (const k of ['de', 'ate']) if (typeof f[k] === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(f[k])) q.push(`${k}=${f[k]}`);
+  for (const k of ['profissionalId', 'servicoId']) if (ID.test(String(f[k] ?? ''))) q.push(`${k}=${f[k]}`);
+  return q.length ? `?${q.join('&')}` : '';
+};
+export const avaliacoes = {
+  // GET /api/agendamentos/{id}/avaliacao  → { motivo: ok|nao_concluido|sem_servico|sem_cadastro|sem_telefone|sem_mensagens, aviso, jaAvaliou, pedidaEm }
+  async situacao(agendamentoId) {
+    if (!ID.test(String(agendamentoId))) return { ok: false, status: 0, erro: 'Atendimento não encontrado.' };
+    const r = await chamar('GET', `/api/agendamentos/${agendamentoId}/avaliacao`);
+    if (!r.ok) return r;
+    const d = r.dados && typeof r.dados === 'object' ? r.dados : {};
+    return { ok: true, situacao: { motivo: /^[a-z_]{2,20}$/.test(String(d.motivo)) ? d.motivo : 'nao_concluido', aviso: texto(d.aviso, 300), jaAvaliou: d.jaAvaliou === true, pedidaEm: instante(d.pedidaEm) } };
+  },
+  // POST /api/agendamentos/{id}/avaliacao/pedido  → { token, numero, nome, loja }: o token pessoal aparece UMA vez (só o hash fica no servidor)
+  async pedir(agendamentoId) {
+    if (!ID.test(String(agendamentoId))) return { ok: false, status: 0, erro: 'Atendimento não encontrado.' };
+    const r = await chamar('POST', `/api/agendamentos/${agendamentoId}/avaliacao/pedido`, {});
+    if (!r.ok) return r;
+    const d = r.dados && typeof r.dados === 'object' ? r.dados : {};
+    if (!TOKEN_AVALIACAO.test(String(d.token))) return { ok: false, status: 502, erro: mensagemPadrao(500) };
+    return { ok: true, pedido: { token: d.token, numero: /^55\d{10,11}$/.test(String(d.numero)) ? d.numero : '', nome: texto(d.nome, 100), loja: texto(d.loja, 120) } };
+  },
+  // GET /api/avaliacoes?de=&ate=&profissionalId=&servicoId=  → { avaliacoes, mostraAnonimo, soMinhas }  (profissional sem a seção: só as dele)
+  async listar(filtros) {
+    const r = await chamar('GET', `/api/avaliacoes${consultaAvaliacoes(filtros)}`);
+    if (!r.ok) return r;
+    const d = r.dados && typeof r.dados === 'object' ? r.dados : {};
+    return { ok: true, avaliacoes: listaDe(d.avaliacoes, 500).map(lerAvaliacao).filter((x) => x.id && x.nota), mostraAnonimo: d.mostraAnonimo === true, soMinhas: d.soMinhas === true };
+  },
+  // GET /api/avaliacoes/resumo?…  → { total, media|null, distribuicao: {1..5} }  (oculta não entra)
+  async resumo(filtros) {
+    const r = await chamar('GET', `/api/avaliacoes/resumo${consultaAvaliacoes(filtros)}`);
+    if (!r.ok) return r;
+    const d = r.dados && typeof r.dados === 'object' ? r.dados : {};
+    return { ok: true, resumo: { total: Number.isInteger(d.total) && d.total >= 0 ? d.total : 0, media: typeof d.media === 'number' && d.media >= 1 && d.media <= 5 ? d.media : null, distribuicao: lerDistribuicao(d.distribuicao) } };
+  },
+  // POST /api/avaliacoes/{id}/ocultar  { motivo }  |  /reexibir  (só o dono; não apaga: sai da lista dos outros e da média)
+  async ocultar(id, motivo) { return mudarOculta(id, 'ocultar', motivo); },
+  async reexibir(id, motivo) { return mudarOculta(id, 'reexibir', motivo); },
+};
+async function mudarOculta(id, acao, motivo) {
+  if (!ID.test(String(id))) return { ok: false, status: 0, erro: 'Avaliação não encontrada.' };
+  const r = await chamar('POST', `/api/avaliacoes/${id}/${acao}`, { motivo: texto(motivo, 200) });
+  return r.ok ? { ok: true } : r;
+}
+const STATUS_ITEM = ['pendente', 'aberto', 'enviado', 'pulou'];
+const lerContagem = (c) => { c = c && typeof c === 'object' ? c : {}; const n = (v) => (Number.isInteger(v) && v >= 0 ? Math.min(v, 1e6) : 0); return { atendimentos: n(c.atendimentos), semCadastro: n(c.semCadastro), semTelefone: n(c.semTelefone), semMensagens: n(c.semMensagens), duplicados: n(c.duplicados), jaAvaliou: n(c.jaAvaliou), excedente: n(c.excedente) }; };
+const lerItemFila = (i) => { i = i && typeof i === 'object' ? i : {}; return { id: Number.isInteger(i.id) && i.id >= 0 ? i.id : 0, agendamentoId: IDV(i.agendamentoId), nome: texto(i.nome, 100), telefoneMascarado: texto(i.telefoneMascarado, 20), servicos: listaDe(i.servicos, 20).map((x) => texto(x, 120)), inicio: instante(i.inicio), status: STATUS_ITEM.includes(i.status) ? i.status : 'pendente' }; };
+const lerFila = (f) => {
+  f = f && typeof f === 'object' ? f : {};
+  const fi = f.filtros && typeof f.filtros === 'object' ? f.filtros : {};
+  return { id: IDV(f.id), tipo: f.tipo === 'aviso' ? 'aviso' : 'avaliacao', modelo: texto(f.modelo, 300), encerrada: f.encerrada === true, contagem: lerContagem(f.contagem), filtros: { de: texto(fi.de, 10), ate: texto(fi.ate, 10) }, itens: listaDe(f.itens, 200).map(lerItemFila) };
+};
+export const mensagens = {
+  // GET /api/mensagens/fila?tipo=&de=&ate=&profissionalId=&servicoId=  → prévia (não grava; telefone só mascarado)
+  async previa({ tipo, de, ate, profissionalId, servicoId } = {}) {
+    const q = [`tipo=${tipo === 'aviso' ? 'aviso' : 'avaliacao'}`];
+    for (const [k, v] of [['de', de], ['ate', ate]]) if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) q.push(`${k}=${v}`);
+    for (const [k, v] of [['profissionalId', profissionalId], ['servicoId', servicoId]]) if (ID.test(String(v ?? ''))) q.push(`${k}=${v}`);
+    const r = await chamar('GET', `/api/mensagens/fila?${q.join('&')}`);
+    if (!r.ok) return r;
+    const d = r.dados && typeof r.dados === 'object' ? r.dados : {};
+    return { ok: true, previa: { tipo: d.tipo === 'aviso' ? 'aviso' : 'avaliacao', itens: listaDe(d.itens, 200).map(lerItemFila), contagem: lerContagem(d.contagem), limite: Number.isInteger(d.limite) ? d.limite : 200 } };
+  },
+  // POST /api/mensagens/filas  { tipo, modelo, de, ate, profissionalId?, servicoId? }  (uma fila aberta por pessoa)
+  async iniciarFila({ tipo, modelo, de, ate, profissionalId, servicoId } = {}) {
+    const corpo = { tipo: tipo === 'aviso' ? 'aviso' : 'avaliacao', modelo: texto(modelo, 300), de: texto(de, 10), ate: texto(ate, 10) };
+    if (ID.test(String(profissionalId ?? ''))) corpo.profissionalId = profissionalId;
+    if (ID.test(String(servicoId ?? ''))) corpo.servicoId = servicoId;
+    const r = await chamar('POST', '/api/mensagens/filas', corpo);
+    return r.ok ? { ok: true, fila: lerFila(r.dados) } : r;
+  },
+  // GET /api/mensagens/filas/atual  → { fila: null | {...} }
+  async filaAtual() {
+    const r = await chamar('GET', '/api/mensagens/filas/atual');
+    if (!r.ok) return r;
+    const f = r.dados && r.dados.fila ? lerFila(r.dados.fila) : null;
+    return { ok: true, fila: f && f.id ? f : null };
+  },
+  // POST /api/mensagens/filas/{filaId}/itens/{item}/abrir  → { tipo, modelo, token?, numero, nome, loja }: o token de avaliação nasce neste clique e aparece uma vez
+  async abrirItem(filaId, item) {
+    if (!ID.test(String(filaId)) || !Number.isInteger(item) || item < 0) return { ok: false, status: 0, erro: 'Fila não encontrada.' };
+    const r = await chamar('POST', `/api/mensagens/filas/${filaId}/itens/${item}/abrir`, {});
+    if (!r.ok) return r;
+    const d = r.dados && typeof r.dados === 'object' ? r.dados : {};
+    return { ok: true, aberto: { tipo: d.tipo === 'aviso' ? 'aviso' : 'avaliacao', modelo: texto(d.modelo, 300), token: TOKEN_AVALIACAO.test(String(d.token)) ? d.token : '', numero: /^55\d{10,11}$/.test(String(d.numero)) ? d.numero : '', nome: texto(d.nome, 100), loja: texto(d.loja, 120) } };
+  },
+  // PUT /api/mensagens/filas/{filaId}/itens/{item}  { status: enviado|pulou }
+  async marcarItem(filaId, item, status) {
+    if (!ID.test(String(filaId)) || !Number.isInteger(item) || item < 0) return { ok: false, status: 0, erro: 'Fila não encontrada.' };
+    const r = await chamar('PUT', `/api/mensagens/filas/${filaId}/itens/${item}`, { status: status === 'pulou' ? 'pulou' : 'enviado' });
+    return r.ok ? { ok: true, fila: lerFila(r.dados) } : r;
+  },
+  // POST /api/mensagens/filas/{filaId}/encerrar
+  async encerrarFila(filaId) {
+    if (!ID.test(String(filaId))) return { ok: false, status: 0, erro: 'Fila não encontrada.' };
+    const r = await chamar('POST', `/api/mensagens/filas/${filaId}/encerrar`, {});
+    return r.ok ? { ok: true } : r;
   },
 };
 

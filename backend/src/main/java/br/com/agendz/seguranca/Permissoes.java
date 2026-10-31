@@ -22,8 +22,8 @@ import org.springframework.stereotype.Component;
 @Component("perm")
 public class Permissoes {
 
-    /** Seções que o proprietário libera ou bloqueia para qualquer usuário. `planos` (v111) não faz parte do padrão de nenhum perfil: só o dono libera por pessoa. */
-    public static final List<String> LIBERAVEIS = List.of("clientes", "servicos", "estabelecimento", "agenda", "estoque", "financeiro", "planos");
+    /** Seções que o proprietário libera ou bloqueia para qualquer usuário. `planos` (v111) e `avaliacoes` (v118) não fazem parte do padrão de nenhum perfil: só o dono libera por pessoa. */
+    public static final List<String> LIBERAVEIS = List.of("clientes", "servicos", "estabelecimento", "agenda", "estoque", "financeiro", "planos", "avaliacoes");
     private static final Map<String, Set<String>> PADRAO = Map.of(
             "profissional", Set.of("agenda", "clientes"),
             "atendente", Set.of("agenda", "clientes", "servicos"),
@@ -81,5 +81,29 @@ public class Permissoes {
         } catch (JsonProcessingException e) {
             return false;
         }
+    }
+
+    /** Quem pediu as avaliações: `soDe` null = todas (dono ou seção liberada); `soDe` preenchido = só as desse profissional; ator null = sem acesso. */
+    public record EscopoAvaliacoes(UUID soDe, boolean dono) {
+    }
+
+    /**
+     * Avaliações (v118): o dono e quem tem a seção `avaliacoes` veem todas; o profissional ATIVO, mesmo sem a seção, vê só as próprias (e o próprio resumo).
+     * Atendente e administrador sem a seção não veem. Lê o banco a cada chamada.
+     */
+    public EscopoAvaliacoes escopoAvaliacoes(Authentication auth) {
+        if (auth == null || !(auth.getPrincipal() instanceof Jwt jwt)) return null;
+        String papel = jwt.getClaimAsString("papel");
+        if (papel == null) return null;
+        UUID id;
+        try {
+            id = UUID.fromString(jwt.getSubject());
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+        if (pode(auth, "avaliacoes")) return new EscopoAvaliacoes(null, "dono".equals(papel));
+        if (!"profissional".equals(papel)) return null;
+        List<Integer> ativo = banco.naLoja(jdbc -> jdbc.query("select 1 from usuario where id = ? and ativo", (rs, i) -> 1, id));
+        return ativo.isEmpty() ? null : new EscopoAvaliacoes(id, false);
     }
 }

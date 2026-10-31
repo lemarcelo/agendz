@@ -48,7 +48,8 @@ public class PlataformaInternaController {
     public record CorpoStatus(String status) {
     }
 
-    public record CorpoRegras(Integer limiteAgendas, Integer limiteUsuarios, Boolean mensagensAtivas, Integer limiteMensagensMes, List<String> cadastroObrigatorios) {
+    public record CorpoRegras(Integer limiteAgendas, Integer limiteUsuarios, Boolean mensagensAtivas, Integer limiteMensagensMes, List<String> cadastroObrigatorios,
+                       Boolean avaliacaoMostraAnonimo) {
     }
 
     public record CorpoDominio(String host) {
@@ -118,8 +119,10 @@ public class PlataformaInternaController {
     @PutMapping("/interno/plataforma/lojas/{slug}/regras")
     public ResponseEntity<RegrasDaLoja.Regras> salvarRegras(@PathVariable String slug, @RequestBody CorpoRegras c, @RequestHeader(value = "X-Interno-Chave", required = false) String enviada) {
         conferir(enviada);
+        // `avaliacaoMostraAnonimo` ausente = mantém o valor gravado (um Admin antigo, que não conhece a chave, nunca a desliga sem querer).
+        boolean mostra = c.avaliacaoMostraAnonimo() != null ? c.avaliacaoMostraAnonimo() : servico.regras(servico.loja(slug)).avaliacaoMostraAnonimo();
         RegrasDaLoja.Regras r = new RegrasDaLoja.Regras(c.limiteAgendas(), c.limiteUsuarios(), c.mensagensAtivas() == null || c.mensagensAtivas(), c.limiteMensagensMes(),
-                c.cadastroObrigatorios() == null ? List.of() : c.cadastroObrigatorios());
+                c.cadastroObrigatorios() == null ? List.of() : c.cadastroObrigatorios(), mostra);
         return ResponseEntity.ok().header("Cache-Control", "no-store").body(servico.salvarRegras(servico.loja(slug), r));
     }
 
