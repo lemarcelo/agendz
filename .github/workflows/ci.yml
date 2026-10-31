@@ -146,6 +146,8 @@ jobs:
           if [ -n "$VPS_KNOWN_HOSTS" ]; then printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts; else ssh-keyscan -T 10 "$VPS_HOST" > ~/.ssh/known_hosts; fi
           OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
           scp $OPTS dist/index-site.html "$VPS_USER@$VPS_HOST:/opt/agendz/site/index.html.novo"
+          # aviso com o app fechado (v130): service worker, manifesto e ícone na raiz do site (só o site real os usa)
+          if [ "$SITE_REAL" = "true" ]; then scp $OPTS dist/sw.js dist/manifest.webmanifest dist/icone.svg "$VPS_USER@$VPS_HOST:/opt/agendz/site/"; fi
           ssh $OPTS "$VPS_USER@$VPS_HOST" 'mv -f /opt/agendz/site/index.html.novo /opt/agendz/site/index.html'
           echo "Site publicado em https://$DOMINIO"
           rm -f ~/.ssh/deploy_key

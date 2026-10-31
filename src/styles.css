@@ -998,6 +998,7 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
 .perfil-opcao-real { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; } .perfil-opcao-real input { margin-top: 3px; flex: none; }
 .perfil-opcao-real span { display: grid; gap: 2px; min-width: 0; } .perfil-opcao-real small { overflow-wrap: anywhere; }
 .perfil-nota-real { margin: 0; font-size: 12.5px; }
+.perfil-acoes-real { display: flex; gap: 8px 12px; align-items: center; flex-wrap: wrap; }
 .perfil-senha-real { padding-top: 12px; border-top: 1px solid var(--line); }
 
 /* ---------- Suporte (chamados com a equipe da plataforma; tela compartilhada leve/Suporte.jsx) ---------- */

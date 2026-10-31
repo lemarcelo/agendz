@@ -189,6 +189,39 @@ export const aparelhos = {
   },
 };
 
+// ---------- aviso com o app fechado (v130; regras no servidor: br.com.agendz.push): cada pessoa cuida só dos próprios aparelhos ----------
+export const push = {
+  // GET /api/push/chave → { chave } pública (VAPID). 503 = recurso desligado neste servidor.
+  async chave() {
+    const r = await chamar('GET', '/api/push/chave');
+    return r.ok ? { ok: true, chave: texto(r.dados && r.dados.chave, 100) } : r;
+  },
+  // GET /api/push/inscricoes → aparelhos da pessoa (sem endpoint nem chaves)
+  async listar() {
+    const r = await chamar('GET', '/api/push/inscricoes');
+    return r.ok ? { ok: true, itens: listaDe(r.dados, 5).map((d) => ({ id: ID_REDE.test(String(d && d.id)) ? d.id : '', aparelho: texto(d && d.aparelho, 60), criadoEm: texto(d && d.criadoEm, 40), ultimoEnvio: texto(d && d.ultimoEnvio, 40) })).filter((x) => x.id) } : r;
+  },
+  // POST /api/push/inscricoes  { endpoint, keys: { p256dh, auth }, aparelho? }
+  async inscrever(corpo) {
+    const c = corpo || {};
+    const k = c.keys || {};
+    if (typeof c.endpoint !== 'string' || !/^https:\/\//.test(c.endpoint) || c.endpoint.length > 600) return { ok: false, status: 0, erro: 'Aparelho inválido.' };
+    const r = await chamar('POST', '/api/push/inscricoes', { endpoint: c.endpoint, keys: { p256dh: texto(k.p256dh, 120), auth: texto(k.auth, 60) }, aparelho: texto(c.aparelho, 60).trim() || undefined });
+    return r.ok ? { ok: true, id: ID_REDE.test(String(r.dados && r.dados.id)) ? r.dados.id : '' } : r;
+  },
+  // DELETE /api/push/inscricoes/{id}
+  async remover(id) {
+    if (!ID_REDE.test(String(id))) return { ok: false, status: 0, erro: 'Aparelho inválido.' };
+    const r = await chamar('DELETE', `/api/push/inscricoes/${id}`);
+    return r.ok ? { ok: true } : r;
+  },
+  // POST /api/push/teste → { enviados, falhas } (manda uma mensagem de teste aos aparelhos da própria pessoa)
+  async testar() {
+    const r = await chamar('POST', '/api/push/teste', {});
+    return r.ok ? { ok: true, enviados: Number(r.dados && r.dados.enviados) || 0, falhas: Number(r.dados && r.dados.falhas) || 0 } : r;
+  },
+};
+
 // ---------- login por digital / rosto / PIN do aparelho (passkey, WebAuthn; regras no servidor: PasskeyService) ----------
 // A passkey NUNCA substitui a senha: é uma segunda porta de entrada, que o aparelho assina. Cadastrar pede a senha de novo (recusa = 403, nunca 401).
 const paraB64u = (buf) => {

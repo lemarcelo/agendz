@@ -4,6 +4,10 @@ spring:
 agendz:
   automacao:
     ativa: false   # nos testes a rotina é chamada à mão (AutomacaoAgendaTest), com a hora na mão
+  push:
+    ativa: false   # nos testes o envio é chamado à mão (PushTest), com um serviço de push falso
+    publica: BBWQyt-uN29dETtxkuq1HAMg1LrrW-el87dF-KuiyngXqo171RiNQWiyOnzTzr2FYn7gG2uPcsDceRADqTmVuE4
+    privada: e9VIY0ckDVZTZHYkBUoHMLPZ0v6tFZQHizmplhAS3O4   # par descartável só de teste
   interno:
     chave: chave-interna-so-para-teste-0123456789
   jwt:

@@ -324,6 +324,17 @@ Rede = o **IP público que o servidor viu** (primeiro do `X-Forwarded-For` do Ca
 | `GET /api/usuarios/me/redes-confiaveis` / `DELETE …/{id}` | a própria pessoa | lista (com `atual`) e remove; de outra pessoa = 404 |
 `ConferirRedeDoTokenFilter` (depois de `ConferirLojaDoTokenFilter`), só para tokens com `auto`: a rede tem de existir, `rv` = `versao`, a pessoa tem de continuar **ativa e com o mesmo papel**; vindo da rede confiável não expira (365 dias); vindo de **outra** rede só vale até 24 h do `iat` (senão 401 "Sessão encerrada. Entre de novo."). Trocar a senha (`encerrarTodas`) derruba todos os tokens longos da pessoa. Token comum (24 h) não consulta o banco.
 
+## 10t. Aviso com o app fechado (v130, push; `PushTest`, `WebPushTest`)
+Web Push padrão (RFC 8291 `aes128gcm` + VAPID, RFC 8292) em Java puro (`push/WebPush`), sem biblioteca nova. Tabela `push_inscricao` (V41, RLS): endpoint e chaves públicas do navegador (`p256dh`, `auth`), por pessoa; `aviso_painel.push_em` marca o aviso já enviado. Chaves do servidor em `VAPID_PUBLICA`/`VAPID_PRIVADA` (geradas por `deploy/preparar-api.sh`, **nunca trocar** com inscrições feitas: todas morrem); sem elas o recurso fica desligado (503).
+| Rota | Quem | O que faz |
+|---|---|---|
+| `GET /api/push/chave` | logado | `{ chave }` pública; **503** se o servidor não tem as chaves |
+| `GET /api/push/inscricoes` | a própria pessoa | aparelhos dela (id, nome, datas; **nunca** endpoint nem chaves) |
+| `POST /api/push/inscricoes` `{ endpoint, keys:{p256dh,auth}, aparelho? }` | logado | grava (máx. **5 por pessoa**; mesmo endpoint = atualiza a linha). Endpoint só `https` em serviço conhecido (FCM, Mozilla, Apple, Windows; porta 443, sem usuário na URL): impede o servidor de ser usado para chamar qualquer endereço (SSRF) |
+| `DELETE /api/push/inscricoes/{id}` | a própria pessoa | apaga; de outra pessoa ou loja = 404 |
+| `POST /api/push/teste` | logado | manda uma mensagem de teste aos aparelhos da pessoa → `{ enviados, falhas }`; aparelho que o serviço diz que não existe mais (404/410) é apagado |
+`PushAvisos` (`@Scheduled`, 10 s): reserva os avisos novos (`push_em`, `update … returning`, cada um sai **uma vez**) e envia **fora da transação**; quem recebe tem a **mesma visibilidade** de `GET /api/avisos` (dono/admin/recepção todos; profissional só os dele); aviso com mais de 15 min não é enviado. Falha de envio soma `falhas` e a inscrição sai com 20. A mensagem leva só `{ titulo (nome da loja), texto, url "/", tag, tipo }`: nada de CPF, telefone ou token. Front: `PushAvisos.jsx` (Meu perfil), `sw.js` e `manifest.webmanifest` na raiz do site (build `--real`). **Limites:** iPhone/iPad só com o site instalado na tela de início; a entrega de verdade (Google/Apple/Mozilla) só se prova em produção, com "Enviar teste".
+
 ## 10s. Aparelho confiável (v125, B8; `AparelhoConfiavelTest`)
 Além da rede confiável (10q, computador da loja): o **celular** continua logado em qualquer rede. Tabela `aparelho_confiavel` (V38, RLS): só id, pessoa, nome, datas; **nenhum segredo** (o token é assinado, a linha só diz "ainda vale"). Token longo (`auto`, `ap`, `rid`; 365 dias; `redeConfiavel: true` na sessão).
 | Rota | Quem | O que faz |

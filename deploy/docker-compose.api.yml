@@ -31,6 +31,8 @@ services:
       JWT_SEGREDO: ${JWT_SEGREDO:?defina JWT_SEGREDO no .env}
       CIFRA_CHAVE: ${CIFRA_CHAVE:?defina CIFRA_CHAVE no .env (rode preparar-api.sh)}
       CIFRA_PEPPER: ${CIFRA_PEPPER:?defina CIFRA_PEPPER no .env (rode preparar-api.sh)}
+      VAPID_PUBLICA: ${VAPID_PUBLICA:-}    # aviso com o app fechado; vazio = desligado (preparar-api.sh gera o par)
+      VAPID_PRIVADA: ${VAPID_PRIVADA:-}
       INTERNO_CHAVE: ${INTERNO_CHAVE:-}   # rotas internas do Admin; vazio = desligadas (503)
       ADMIN_INTERNO_URL: http://admin-api:8080   # chamados do Suporte (Admin API na mesma rede); sem o Admin no ar o Suporte responde 503
       AGENDZ_DOMINIOS_BASE: ${DOMINIO}

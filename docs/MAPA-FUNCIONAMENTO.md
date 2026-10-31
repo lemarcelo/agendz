@@ -103,6 +103,8 @@ Dados e endereço, logo e tema (cores só por `tema.js`), expediente e escala, r
 | Avaliações e mensagens em lote | existem (fase 1) | ainda não (fase 2: `docs/F5-avaliacoes.md`) |
 | Suporte com imagens | até 3 por mensagem (simulado) | até 3 por mensagem, bytes no banco do Admin |
 
+**Aviso com o app fechado (v130, site real):** em Meu perfil, todo perfil que entra (dono, administrador, atendente, profissional) vê o bloco "Aviso com o app fechado" (ligar/desligar neste aparelho, enviar teste, remover aparelhos). Cada pessoa só mexe nos próprios aparelhos e só recebe os avisos que já vê na lista (profissional: só os seus). No Artifact não existe (não há servidor).
+
 ## 10. Como a varredura usa este mapa
 
 `tests/e2e67.mjs` entra com **cada perfil** no Artifact (claro e escuro; 390 px e desktop), confere: abas da tabela da seção 2, ausência de "Início", abertura na Agenda, ausência de rolagem lateral, nenhuma exceção na página, e que ações proibidas ao perfil não aparecem. A varredura do site real usa os mesmos perfis com a API simulada por rota (padrão dos `e2e4x`). Inconsistência achada vira teste e entra em `docs/DECISOES-E-DUVIDAS.md`.

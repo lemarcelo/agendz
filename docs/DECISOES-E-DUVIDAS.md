@@ -184,3 +184,10 @@ Lista simples. Cada item está no histórico do `prompt-agendz-regras.md` (v84 a
 ## v129 (31/10): link da demonstração com `?ir=`
 - Causa provável do "abre o login": o quadro do Artifact joga o fragmento fora. Reforço: a página também na busca; volta sozinho do `#` se ele existir (o `#` manda).
 - Dúvida aberta: se o quadro também descartar a busca, nada no app resolve; peço ao Marcelo para testar com um link de outra loja (Dalforno) para separar "loja perdida" de "página perdida".
+
+## v130 (31/10): aviso com o app fechado (push)
+- **Decisão:** Web Push padrão (VAPID) em Java puro, sem serviço pago e sem biblioteca nova; o aviso sai do mesmo registro dos avisos do painel (`aviso_painel`), uma vez só, com a mesma visibilidade da lista.
+- **Decisão:** a mensagem do push leva só nome da loja e o texto do aviso (sem CPF, telefone ou token). O navegador só aceita endpoint https de serviço conhecido (proteção contra SSRF).
+- **Decisão:** "Desligar neste aparelho" reenvia a inscrição (mesmo endpoint = mesma linha) para descobrir o id e apagar no servidor; assim não precisa guardar nada no aparelho.
+- **Dúvida/limite:** a entrega real (Google, Apple, Mozilla) não dá para provar fora de produção; a primeira prova é o botão "Enviar teste". No iPhone só funciona com o site instalado na tela de início (o ícone é SVG; se o iOS pedir PNG, trocar).
+- **Para ligar em produção:** rodar `deploy/preparar-api.sh` na VPS (gera `VAPID_PUBLICA`/`VAPID_PRIVADA` no `.env`) e redeploy da API; sem isso o bloco mostra "ainda não está ligado neste servidor".
