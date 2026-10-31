@@ -2,7 +2,7 @@
 import { pedirAbaEstabelecimento } from './destino.js';
 import React, { useEffect, useLayoutEffect, useState } from 'react';
 import { LOJA_NAO_ENCONTRADA, MODO_DEMO, auth, avisosDoUsuario, equipe, naoLidasDoSuporte, store, suporte } from '../services/api.js';
-import { lerHashAgendar, lerHashAvaliar, lerHashPlanos } from '../domain/link-publico.js';
+import { hashEfetivo, lerHashAgendar, lerHashAvaliar, lerHashPlanos } from '../domain/link-publico.js';
 import { criarAdaptadorDemo } from '../services/onboarding-demo.js';
 import PrimeiroAcesso from './leve/PrimeiroAcesso.jsx';
 import Suporte from './leve/Suporte.jsx';
@@ -60,8 +60,15 @@ function Toasts() {
 
 // Link de agendamento do cliente: #agendar (qualquer profissional) ou #agendar-<id do profissional>. Só letras, números e hífen: vale também dentro do Artifact.
 const lerHash = () => { try { return window.location.hash || ''; } catch { return ''; } };
+// v129: na carga, se o quadro do Artifact jogou o fragmento fora, a página vem da busca (`?ir=`); depois só o `hashchange` real manda.
+const hashDaCarga = () => { try { return MODO_DEMO ? hashEfetivo(window.location.hash, window.location.search) : lerHash(); } catch { return ''; } };
+// "Voltar" da página do cliente: tira também o `ir` da busca (senão a página voltaria sozinha) e avisa o app.
+function sairDoLink() {
+  try { const u = new URL(window.location.href); u.searchParams.delete('ir'); u.hash = ''; window.history.replaceState(null, '', u.toString()); } catch { try { window.location.hash = ''; } catch { /* sem endereço editável */ } }
+  window.dispatchEvent(new Event('hashchange'));
+}
 function useHash() {
-  const [h, setH] = useState(lerHash);
+  const [h, setH] = useState(hashDaCarga);
   useEffect(() => { const f = () => setH(lerHash()); window.addEventListener('hashchange', f); return () => window.removeEventListener('hashchange', f); }, []);
   return h;
 }
@@ -105,9 +112,9 @@ function AppDaLoja() {
   // Demonstração: o link traz a loja de quem enviou (#agendar@dalforno); `entrarNaLoja` só age sem loja fixa por build ou endereço.
   useLayoutEffect(() => { const l = publica?.loja || planosPub?.loja || avaliarPub?.loja; if (MODO_DEMO && l) store.entrarNaLoja(l); }, [publica?.loja, planosPub?.loja, avaliarPub?.loja]);
   if (MODO_DEMO && hash === '#primeiro-acesso') return <><TemaMarca /><PreviaPrimeiroAcesso st={st} /></>;
-  if (publica) return <><TemaMarca /><AgendarPublico key={st.estabelecimento.nome} profissionalInicial={publica.profissionalId} logado={!!user} aoVoltar={() => { window.location.hash = ''; }} /></>;
-  if (avaliarPub) return <><TemaMarca /><AvaliarPublico key={`${st.estabelecimento.nome}:${avaliarPub.token}`} token={avaliarPub.token} aoVoltar={user ? () => { window.location.hash = ''; } : null} /></>;
-  if (planosPub) return <><TemaMarca /><PlanosPublico key={st.estabelecimento.nome} aoVoltar={user ? () => { window.location.hash = ''; } : null} /></>;
+  if (publica) return <><TemaMarca /><AgendarPublico key={st.estabelecimento.nome} profissionalInicial={publica.profissionalId} logado={!!user} aoVoltar={() => { sairDoLink(); }} /></>;
+  if (avaliarPub) return <><TemaMarca /><AvaliarPublico key={`${st.estabelecimento.nome}:${avaliarPub.token}`} token={avaliarPub.token} aoVoltar={user ? () => { sairDoLink(); } : null} /></>;
+  if (planosPub) return <><TemaMarca /><PlanosPublico key={st.estabelecimento.nome} aoVoltar={user ? () => { sairDoLink(); } : null} /></>;
   if (!user) return <><TemaMarca /><Login /><Toasts /></>;
   return <><TemaMarca /><Shell user={user} st={st} tema={tema} setTema={setTema} /></>;
 }

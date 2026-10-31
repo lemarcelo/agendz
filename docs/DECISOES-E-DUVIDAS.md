@@ -180,3 +180,7 @@ Lista simples. Cada item está no histórico do `prompt-agendz-regras.md` (v84 a
 - A fila em lote mora dentro de Avaliações no site real (lá não existe a tela Mensagens).
 - Admin: a chave de anônimo só vai à loja quando vem no corpo; Admin antigo nunca a desliga sem querer.
 - Dúvida: `semMensagens` (cliente não quer mensagens) ainda não tem campo na ficha do cliente real; entra numa próxima.
+
+## v129 (31/10): link da demonstração com `?ir=`
+- Causa provável do "abre o login": o quadro do Artifact joga o fragmento fora. Reforço: a página também na busca; volta sozinho do `#` se ele existir (o `#` manda).
+- Dúvida aberta: se o quadro também descartar a busca, nada no app resolve; peço ao Marcelo para testar com um link de outra loja (Dalforno) para separar "loja perdida" de "página perdida".

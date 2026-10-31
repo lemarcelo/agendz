@@ -24,7 +24,7 @@ import { cpfMascarado, cpfValido } from '../domain/pix.js';
 import * as PU from '../domain/publico.js';
 import { FERIADOS_NACIONAIS } from '../domain/feriados.js';
 import { LOJAS_DEMO, LOJA_PADRAO, lojaDemo, lojaDoEndereco } from './lojas-demo.js';
-import { lerHashAgendar } from '../domain/link-publico.js';
+import { hashEfetivo, lerHashAgendar } from '../domain/link-publico.js';
 import * as SU from '../domain/suporte.js';
 import * as AV from '../domain/avaliacoes.js';
 
@@ -44,7 +44,7 @@ export const LOJA_NAO_ENCONTRADA = !!ENDERECO.slug && !ENDERECO.existe ? ENDEREC
 export const LOJA_FIXA = !!TIPO_DO_BUILD || (!!ENDERECO.slug && ENDERECO.existe); // loja decidida pelo build ou pelo endereço: sem seletor
 export const LOJA_TROCAVEL = !LOJA_FIXA && !LOJA_NAO_ENCONTRADA;
 // Demonstração: o link do cliente (#agendar@dalforno) já abre na loja de quem enviou, desde a primeira tela (sem passar antes pela loja salva ou pela padrão).
-const lojaDoLink = () => { try { const l = lerHashAgendar(globalThis.location?.hash)?.loja; return l && lojaDemo(l) ? l : ''; } catch { return ''; } };
+const lojaDoLink = () => { try { const l = lerHashAgendar(hashEfetivo(globalThis.location?.hash, globalThis.location?.search))?.loja; return l && lojaDemo(l) ? l : ''; } catch { return ''; } };
 let lojaSlug = (TIPO_DO_BUILD && LOJAS_DEMO.find((l) => l.tipo === TIPO_DO_BUILD)?.slug) || (ENDERECO.existe && ENDERECO.slug) || (LOJA_TROCAVEL && lojaDoLink()) || lerLojaSalva() || LOJA_PADRAO;
 const novoEstado = (slug = lojaSlug) => { const e = lojaDemo(slug).criar(Date.now()); E.tick(e, Date.now()); return e; };
 const estados = new Map();

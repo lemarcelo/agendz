@@ -109,7 +109,7 @@ test('link: token vai no fragmento, com ou sem loja; formato errado não é link
   assert.deepEqual(lerHashAvaliar(`#avaliar/${t}`), { loja: '', token: t });
   assert.deepEqual(lerHashAvaliar(`#avaliar@dalforno/${t}`), { loja: 'dalforno', token: t });
   for (const h of ['#avaliar', '#avaliar/abc', `#avaliar/${t}x`, `#avaliar/${'A'.repeat(48)}`, `#avaliar@/${t}`, `?avaliar=${t}`, '']) assert.equal(lerHashAvaliar(h), null, h);
-  assert.equal(montarLinkAvaliar({ base: 'https://x.io/', lojaNoLink: 'apex', token: t }), `https://x.io/?loja=apex#avaliar@apex/${t}`);
+  assert.equal(montarLinkAvaliar({ base: 'https://x.io/', lojaNoLink: 'apex', token: t }), `https://x.io/?loja=apex&ir=avaliar/${t}#avaliar@apex/${t}`);
   assert.equal(montarLinkAvaliar({ base: 'https://x.io/', token: t }), `https://x.io/#avaliar/${t}`);
 });
 
