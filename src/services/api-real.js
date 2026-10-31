@@ -864,6 +864,8 @@ function lerPlano(d) {
   return { id: texto(d.id, 40), nome: texto(d.nome, 60), descricao: texto(d.descricao, 200), preco: dinheiroOuZero(d.preco), cortes: inteiroPlano(d.cortes), servicoIds: idsDe(d.servicoIds, 10),
     adianta: inteiroPlano(d.adianta), acumuloMeses: inteiroPlano(d.acumuloMeses), intervaloDias: inteiroPlano(d.intervaloDias), ativo: d.ativo !== false };
 }
+const lerFixo = (f) => ({ id: texto(f && f.id, 40), dia: Number.isInteger(f && f.dia) && f.dia >= 0 && f.dia <= 6 ? f.dia : 0, hm: /^([01]\d|2[0-3]):[0-5]\d$/.test(f && f.hm) ? f.hm : '00:00',
+  profissionalId: texto(f && f.profissionalId, 40), servicoIds: idsDe(f && f.servicoIds, 10), ...(f && ID.test(String(f.veiculoId)) ? { veiculoId: f.veiculoId } : {}) });
 function lerAssinatura(d) {
   d = d && typeof d === 'object' ? d : {};
   const f = d.plano && typeof d.plano === 'object' ? d.plano : {};
@@ -875,7 +877,7 @@ function lerAssinatura(d) {
     status: STATUS_ASSINATURA.includes(d.status) ? d.status : 'pendente', inicioMes: mesPlano(d.inicioMes), diaCobranca: inteiroPlano(d.diaCobranca),
     pagamentos: listaDe(d.pagamentos, 120).map((p) => ({ id: texto(p && p.id, 40), mes: mesPlano(p && p.mes), valor: dinheiroOuZero(p && p.valor), forma: FORMAS_PLANO.includes(p && p.forma) ? p.forma : 'pix', em: instante(p && p.em),
       autor: { nome: texto(p && p.autor && p.autor.nome, 150) }, estornado: !!(p && p.estornado === true), estornoMotivo: p && p.estornoMotivo ? texto(p.estornoMotivo, 200) : '' })).filter((p) => ID.test(p.id)),
-    divida: inteiroPlano(d.divida), dividaQuitada: d.dividaQuitada === true, criadoEm: instante(d.criadoEm), encerradoEm: instante(d.encerradoEm),
+    fixos: listaDe(d.fixos, 3).map(lerFixo), divida: inteiroPlano(d.divida), dividaQuitada: d.dividaQuitada === true, criadoEm: instante(d.criadoEm), encerradoEm: instante(d.encerradoEm),
     log: listaDe(d.log, 30).map((x) => ({ em: instante(x && x.em), autor: { nome: texto(x && x.autor && x.autor.nome, 150) }, acao: texto(x && x.acao, 30), detalhe: texto(x && x.detalhe, 300) })),
     saldo: { planoNome: texto(sd.planoNome, 60), situacao: texto(sd.situacao, 20), cortesPorMes: inteiroPlano(sd.cortesPorMes), mes: mesPlano(sd.mes), pagoMes: sd.pagoMes === true, restantes: inteiroPlano(sd.restantes),
       usadosNoMes: inteiroPlano(sd.usadosNoMes), maisPermitidos: inteiroPlano(sd.maisPermitidos), pagoAte: mesPlano(sd.pagoAte) || null, atrasado: sd.atrasado === true },
@@ -956,6 +958,19 @@ export const planos = {
     if (!r.ok) return r;
     const a = lerAssinatura(r.dados);
     return { ok: true, assinatura: a, divida: a.divida };
+  },
+  // POST /api/assinaturas/{id}/fixos  { fixos: [{ dia 0-6 (0 = domingo), hm, profissionalId, servicoIds, veiculoId? }] }  (troca a lista inteira, até 3; o servidor cria cada horário
+  // 14 dias antes, gastando 1 atendimento do plano, e o deixa reservado; o que saiu da lista e ainda não aconteceu sai da agenda → { apagados })
+  async definirFixos(id, d) {
+    if (!ID.test(String(id ?? ''))) return semAssinatura;
+    const lista = d && Array.isArray(d.fixos) ? d.fixos : null;
+    if (!lista || lista.length > 3) return { ok: false, status: 0, erro: 'No máximo 3 horários fixos por semana.' };
+    const fixos = lista.map((f) => ({ dia: f && f.dia, hm: texto(f && f.hm, 5), profissionalId: texto(f && f.profissionalId, 40), servicoIds: idsDe(f && f.servicoIds, 10),
+      ...(f && ID.test(String(f.veiculoId)) ? { veiculoId: f.veiculoId } : {}) }));
+    const r = await chamar('POST', `/api/assinaturas/${id}/fixos`, { fixos });
+    if (!r.ok) return r;
+    const x = r.dados && typeof r.dados === 'object' ? r.dados : {};
+    return { ok: true, assinatura: lerAssinatura(x.assinatura), apagados: Number.isInteger(x.apagados) && x.apagados > 0 ? x.apagados : 0 };
   },
   // POST /api/assinaturas/{id}/quitar  (o dono recebeu por fora o que ficou devendo)
   async quitar(id) {
@@ -1437,7 +1452,7 @@ export const perfil = {
   },
 };
 
-const TIPOS_AVISO = ['pedido', 'remarcou', 'cancelou'];
+const TIPOS_AVISO = ['pedido', 'remarcou', 'cancelou', 'fixo']; // 'fixo' (v128): horário fixo de assinante que não coube; sem agendamento
 const lerAviso = (d) => {
   d = d && typeof d === 'object' ? d : {};
   return { id: IDV(d.id), em: instante(d.em), agendamentoId: IDV(d.agendamentoId), tipo: TIPOS_AVISO.includes(d.tipo) ? d.tipo : 'pedido', texto: texto(d.texto, 300), lido: d.lido === true };

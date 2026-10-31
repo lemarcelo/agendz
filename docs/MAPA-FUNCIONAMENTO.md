@@ -41,7 +41,7 @@ Um ícone distinto por aba (`tests/menu-icones.test.mjs`). **Não existe aba "In
 | Avisos | bell | sim | com Agenda | com Agenda | com Agenda |
 | Suporte | info | sim | sim | sim | sim |
 
-**Plano na ficha do cliente** (Clientes > Editar, bloco "Plano"; só com a seção Planos, senão o bloco nem monta e a API de planos não é chamada): plano em andamento (saldo, vencimento, horários fixos no Artifact), histórico curto, "Sem plano" + Adicionar plano (sem plano cadastrado: aviso com atalho para Planos), Editar (trocar de plano com motivo, horários fixos, registrar mensalidade) e Encerrar. Usa as mesmas rotas da aba Planos; `tests/e2e90.mjs` (Artifact) e `tests/e2e91.mjs` (site real).
+**Plano na ficha do cliente** (Clientes > Editar, bloco "Plano"; só com a seção Planos, senão o bloco nem monta e a API de planos não é chamada): plano em andamento (saldo, vencimento, horários fixos, no Artifact e no site real), histórico curto, "Sem plano" + Adicionar plano (sem plano cadastrado: aviso com atalho para Planos), Editar (trocar de plano com motivo, horários fixos, registrar mensalidade) e Encerrar. Usa as mesmas rotas da aba Planos; `tests/e2e90.mjs` (Artifact) e `tests/e2e91.mjs` (site real); os horários fixos têm formulário próprio nos dois (`tests/e2e101.mjs` no site real).
 
 Só no Artifact: Mensagens (simulador de WhatsApp só nessa tela), Financeiro, Minha escala (profissional). Avaliações existe nos dois (v127: no site real a estrela do cartão faz Preparar → Abrir no WhatsApp, e a aba **Mensagens em lote** fica dentro de Avaliações; teste `tests/e2e100.mjs`).
 Só no Artifact: Mensagens (simulador de WhatsApp só nessa tela; no Artifact a aba **Mensagens em lote** fica nela), Financeiro, Minha escala (profissional). Só no site real: nada a mais.

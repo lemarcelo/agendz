@@ -174,6 +174,11 @@ Lista simples. Cada item está no histórico do `prompt-agendz-regras.md` (v84 a
 - **Hipótese:** o fragmento (`#`) se perde no caminho (redirecionamento ou quadro do claude.ai) e a página cai na loja padrão.
 - **Decisão sem confirmação:** reforçar com `?loja=<slug>` além do `#…@<slug>`; a Apex só aparece se nenhum dos dois chegar. **Em aberto:** se ainda abrir a Apex, preciso saber se o endereço aberto no navegador ainda tem `?loja=` e `#` (copie a barra de endereços da aba aberta).
 
+## v128 (31/10): horários fixos dos planos no servidor e no site real
+- Pedido do Marcelo (07:06, item 2 da fila). Mesmas regras do simulador (`assinaturas.js`/`fixos.js`), agora também no servidor: até 3 por assinante, 14 dias à frente, 1 atendimento do plano por ocorrência, reservado ao assinante, encerrar apaga os futuros.
+- Decisões sem confirmação: (1) cada ocorrência é criada numa transação própria e o par (fixo, data) é único no banco, então duas execuções da automação nunca duplicam; (2) o aviso de "não coube" é um por ocorrência (tabela `assinatura_fixo_aviso`), nunca a cada minuto; (3) tirar o fixo cancela com motivo `plano_fixo` só o agendamento que tem produto vendido, o resto é apagado; (4) na estética o fixo leva o único veículo do cliente (ou o escolhido, se tiver mais de um); (5) reserva do fixo vale também para a remarcação.
+- Dúvida: aviso de fixo ainda não leva a um cartão (não há agendamento); só texto no cartão de Avisos.
+
 ## v127 (31/10): Avaliações no servidor e no site real
 - Estrela do cartão fica num `div.cartao-bloco` (relativo) para ficar no canto do cartão mesmo com o painel aberto.
 - Pedir avaliação no site real tem dois toques (Preparar chama o servidor; Abrir no WhatsApp abre a aba sem `await` antes).
