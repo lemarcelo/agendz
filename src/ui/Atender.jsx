@@ -2,13 +2,15 @@
 import ListaItens from './ListaItens.jsx';
 import PickerCliente from './PickerCliente.jsx';
 import { porUltimoUso } from '../domain/codigo.js';
+import { servicosNaOrdemDaLoja } from '../domain/ordem-servicos.js';
 import React, { useMemo, useState } from 'react';
 import { agenda, agendamentosVisiveis, planos as apiPlanos } from '../services/api.js';
-import { acharClientePorTelefone, camposObrigatorios, nomeMaisCompleto } from '../domain/engine.js';
+import { rotuloMes as rotuloMesPlano } from '../domain/planos.js';
+import { acharClientePorTelefone, CAMPOS_DE_VEICULO, camposObrigatorios, nomeMaisCompleto } from '../domain/engine.js';
 import { FORMAS_PAGAMENTO, STATUS, boxesAtivos, duracaoMin, formaEfetiva, formatarTelefone, nomeBox, ocupadoMin, servicoNoPorte, servicosPorIds, telefoneNacional, totalPreco, usaIntegracaoPix } from '../domain/rules.js';
-import { EXEMPLO_PORTE, PORTES, PORTE_PADRAO, ROTULO_PORTE, placaValida, rotuloVeiculo } from '../domain/veiculos.js';
+import { EXEMPLO_PORTE, PORTE_PADRAO, ROTULO_PORTE, placaValida, portesParaEscolher, rotuloVeiculo } from '../domain/veiculos.js';
 import { MIN, fmtDate, fmtDuration, fmtHM, fmtMoney, fromYmd, startOfDay, tsAt, ymd } from '../domain/time.js';
-import { Aviso, Btn, Campo, Icon, Modal } from './common.jsx';
+import { Aviso, rolarAoErro, Btn, Campo, Icon, Modal } from './common.jsx';
 import { SeletorHora } from './Agendamento.jsx';
 import { nomeCliente } from './format.js';
 import { toast, useStore } from './hooks.js';
@@ -55,7 +57,7 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
   // Últimos usados primeiro (no histórico que este usuário enxerga); quem nunca foi usado vem depois, na ordem do cadastro.
   const visiveis = agendamentosVisiveis(st, user);
   const produtos = porUltimoUso(st.materiais.filter((m) => m.tipo === 'produto' && m.ativo !== false), visiveis, 'produto');
-  const servicos = porUltimoUso(st.servicos.filter((s) => s.ativo !== false), visiveis, 'servico');
+  const servicos = servicosNaOrdemDaLoja(st, st.servicos.filter((s) => s.ativo !== false)); // mais usados primeiro ou a ordem do dono (Estabelecimento > Regras)
   const itensProduto = produtos.filter((m) => Number(qtds[m.id]) > 0).map((m) => ({ materialId: m.id, qtd: Number(qtds[m.id]) }));
   const temServico = servicoIds.length > 0;
   const vendeProduto = itensProduto.length > 0;
@@ -94,6 +96,7 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
   const cobertos = planoCli ? servicoIds.filter((id) => planoCli.servicoIds.includes(id)) : [];
   const podePlano = !!planoCli && cobertos.length > 0 && (planoCli.restantes > 0 || planoCli.maisPermitidos > 0);
   const usaPlano = podePlano && !semPlano;
+  const gratisPlano = usaPlano ? totalPreco(sel.filter((x) => cobertos.includes(x.id))) : 0; // o que o plano paga: o total mostrado já sem isso
   // Vendedor: por padrão quem está lançando (se tem "Pode vender produtos"); senão o profissional. O profissional vende como ele mesmo.
   const vendedores = st.usuarios.filter((u) => u.papel !== 'master' && u.ativo !== false && u.podeVender !== false);
   const euVendo = vendedores.some((u) => u.id === user.id);
@@ -114,7 +117,7 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
       ...(temServico && usaVeiculo ? (veicSel === 'novo' ? { veiculo: vNovo } : veicSel ? { veiculoId: veicSel } : {}) : {}),
       ...(futuro ? { status, encaixe, boxId: boxId || undefined, cupomChave: chaveCupom.trim() || undefined } : {}),
     });
-    if (!r.ok) { setErros(r.erros); return; }
+    if (!r.ok) { setErros(r.erros); rolarAoErro(); return; }
     toast(r.tipo === 'futuro' ? 'Agendamento criado.' : 'Atendimento registrado.');
     if (r.plano?.aviso) toast(`Plano ${r.plano.nome}: ${r.plano.aviso}`); // o aviso vem DEPOIS de salvar: nunca atrasa nem bloqueia o agendamento
     onSalvo && onSalvo(r.agendamento, r.tipo);
@@ -170,7 +173,7 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
         {planoCli && (
           <div className="campo-largo subcartao" data-testid="atender-plano">
             <b><Icon n="ticket" size={15} /> Plano {planoCli.plano}</b>
-            <span className="muted" data-testid="atender-plano-saldo">Restam {planoCli.restantes} atendimento{planoCli.restantes === 1 ? '' : 's'} em {planoCli.mes}{planoCli.restantes <= 0 && planoCli.maisPermitidos > 0 ? ` · pode adiantar ${planoCli.maisPermitidos}` : ''}{planoCli.atrasado ? ' · mensalidade do mês ainda não registrada' : ''}.</span>
+            <span className="muted" data-testid="atender-plano-saldo">Restam {planoCli.restantes} atendimento{planoCli.restantes === 1 ? '' : 's'} em {rotuloMesPlano(planoCli.mes)}{planoCli.restantes <= 0 && planoCli.maisPermitidos > 0 ? ` · pode adiantar ${planoCli.maisPermitidos}` : ''}{planoCli.atrasado ? ' · mensalidade do mês ainda não registrada' : ''}.</span>
             {cobertos.length === 0 && <span className="muted">Escolha um serviço que o plano inclui para usar o plano.</span>}
             {cobertos.length > 0 && !podePlano && <span className="msg-conflito" data-testid="atender-plano-esgotado"><Icon n="alert" size={15} /> Os atendimentos do plano acabaram: este atendimento será cobrado pelo preço normal.</span>}
             {podePlano && <label className="interruptor"><input type="checkbox" checked={!semPlano} onChange={(e) => setSemPlano(!e.target.checked)} data-testid="atender-usar-plano" /><span className="trilho"><i className="bolinha" /></span><span className="interruptor-txt"><b>Usar o plano neste atendimento</b><small className="muted">Os serviços do plano saem de graça; o resto é cobrado normalmente.</small></span></label>}
@@ -193,7 +196,7 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
         </Campo>
         {temServico && usaVeiculo && (
           <fieldset className="campo-largo conj" data-testid="atender-veiculo">
-            <legend>Veículo *</legend>
+            <legend>Veículo{obrig.some((k) => CAMPOS_DE_VEICULO.includes(k)) ? ' *' : ''}</legend>
             {veiculosCli.length > 0 && (
               <Campo rotulo="Veículo do cliente">
                 <select value={veicSel} onChange={(e) => setVeiculoId(e.target.value)} data-testid="atender-veiculo-sel">
@@ -205,14 +208,14 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
             )}
             {veicSel === 'novo' && (
               <div className="form-grade">
-                <Campo rotulo="Placa" erro={vNovo.placa && !placaValida(vNovo.placa) ? 'Placa inválida (ABC-1234 ou ABC1D23).' : undefined}><input value={vNovo.placa} onChange={(e) => setVNovo({ ...vNovo, placa: e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 8) })} maxLength={8} autoComplete="off" placeholder="ABC1D23" data-testid="atender-placa" /></Campo>
-                <Campo rotulo="Modelo"><input value={vNovo.modelo} onChange={(e) => setVNovo({ ...vNovo, modelo: e.target.value })} maxLength={40} autoComplete="off" placeholder="Ex.: Onix" data-testid="atender-modelo" /></Campo>
+                <Campo rotulo={`Placa${obrig.includes('placa') ? ' *' : ''}`} erro={vNovo.placa && !placaValida(vNovo.placa) ? 'Placa inválida (ABC-1234 ou ABC1D23).' : undefined}><input value={vNovo.placa} onChange={(e) => setVNovo({ ...vNovo, placa: e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 8) })} maxLength={8} autoComplete="off" placeholder="ABC1D23" data-testid="atender-placa" /></Campo>
+                <Campo rotulo={`Modelo${obrig.includes('modelo') ? ' *' : ''}`}><input value={vNovo.modelo} onChange={(e) => setVNovo({ ...vNovo, modelo: e.target.value })} maxLength={40} autoComplete="off" placeholder="Ex.: Onix" data-testid="atender-modelo" /></Campo>
                 <Campo rotulo="Marca (opcional)"><input value={vNovo.marca} onChange={(e) => setVNovo({ ...vNovo, marca: e.target.value })} maxLength={30} autoComplete="off" data-testid="atender-marca" /></Campo>
                 <Campo rotulo="Cor (opcional)"><input value={vNovo.cor} onChange={(e) => setVNovo({ ...vNovo, cor: e.target.value })} maxLength={20} autoComplete="off" data-testid="atender-cor" /></Campo>
-                <Campo rotulo="Porte" className="campo-largo" dica={vNovo.porte ? EXEMPLO_PORTE[vNovo.porte] : 'O porte define o preço e a duração dos serviços.'}>
+                <Campo rotulo={`Porte${obrig.includes('porte') ? ' *' : ''}`} className="campo-largo" dica={vNovo.porte ? EXEMPLO_PORTE[vNovo.porte] : 'O porte define o preço e a duração dos serviços. Sem porte vale o médio.'}>
                   <select value={vNovo.porte} onChange={(e) => setVNovo({ ...vNovo, porte: e.target.value })} data-testid="atender-porte">
-                    <option value="">Escolha…</option>
-                    {PORTES.map((k) => <option key={k} value={k}>{ROTULO_PORTE[k]}</option>)}
+                    <option value="">{obrig.includes('porte') ? 'Escolha…' : `${ROTULO_PORTE[PORTE_PADRAO]} (padrão)`}</option>
+                    {portesParaEscolher(vNovo.porte).map(({ id: k }) => <option key={k} value={k}>{ROTULO_PORTE[k]}</option>)}
                   </select>
                 </Campo>
               </div>
@@ -269,7 +272,7 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
         )}
         {(temServico || vendeProduto) && !ehProfissional && (
           <p className="muted campo-largo" data-testid="atender-total">
-            Total: {fmtMoney(totalPreco(sel) + totalProdutos)}{temServico ? (sel.some((x) => x.multiDia) ? ' · serviço de vários dias' : ` · ${fmtDuration(duracaoMin(sel))} de atendimento (+ ${fmtDuration(ocupadoMin(sel) - duracaoMin(sel))} de intervalo)`) : ''}
+            Total: {fmtMoney(totalPreco(sel) + totalProdutos - gratisPlano)}{gratisPlano > 0 ? ` (o plano cobre ${fmtMoney(gratisPlano)})` : ''}{temServico ? (sel.some((x) => x.multiDia) ? ' · serviço de vários dias' : ` · ${fmtDuration(duracaoMin(sel))} de atendimento (+ ${fmtDuration(ocupadoMin(sel) - duracaoMin(sel))} de intervalo)`) : ''}
           </p>
         )}
       </div>

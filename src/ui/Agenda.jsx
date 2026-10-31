@@ -1,9 +1,10 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:b3ec830fb7 */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { abreviarNome } from '../domain/abreviar.js';
-import { LOJA_TROCAVEL, MODO_DEMO, agendamentosVisiveis, profissionaisVisiveis } from '../services/api.js';
+import { LOJA_TROCAVEL, MODO_DEMO, agenda as apiAgenda, agendamentosVisiveis, profissionaisVisiveis } from '../services/api.js';
 import { baseDoLink, montarLinkAgendamento } from '../domain/link-publico.js';
-import { ATIVOS, STATUS, boxesAtivos, ocupacaoDe, retiradaDe } from '../domain/rules.js';
+import { ATIVOS, STATUS, boxesAtivos, ocupacaoDe, pode, retiradaDe, semBoxAtivo } from '../domain/rules.js';
+import AvisoSemBox from './leve/AvisoSemBox.jsx';
 import { faixasDoProfissional, excecaoDoDia, TIPOS_EXCECAO } from '../domain/schedule.js';
 import { rotuloDoGrupo, separarCancelados, rotuloCancelados } from '../domain/agenda-grupos.js';
 import { DIAS_CURTOS, addDays, addMonths, fmtDate, fmtDayLong, maiuscula1, fmtDiaMesSemana, fmtHM, fmtMonthYear, monthStart, sameDay, startOfDay, weekStart, fmtDateShort, fmtMoney } from '../domain/time.js';
@@ -19,6 +20,8 @@ import { sanearModoAgenda, sanearRolagem } from '../domain/agenda-modo.js';
 import { alternarMulti, escolherUnico, removerUm, sanearSelecao } from '../domain/selecao.js';
 import { BotaoRemover, useGestosSelecao } from './selecao.jsx';
 import { copiarTexto } from './clipboard.js';
+import FormaPagamento from './leve/FormaPagamento.jsx';
+import { useToqueLongo } from './leve/segurar.js';
 import { abrirWhatsapp } from './whatsapp.js';
 import { EstrelaAvaliar } from './PedirAvaliacao.jsx';
 import { textoConvite } from '../domain/whatsapp.js';
@@ -47,9 +50,13 @@ function CartaoAgendamento({ a, st, agora, onClick, mostraBarb, testid = 'cartao
   const v = visualDoCartao(a, agora);
   const podePedir = a.status === STATUS.CONCLUIDO && (a.servicoIds || []).length > 0;
   const avaliada = (st.avaliacoes || []).some((x) => x.agendamentoId === a.id);
+  const [trocando, setTrocando] = useState(false); // v119: segurar o cartão abre a forma de pagamento (futuro ou concluído; cancelado não)
+  const toque = useToqueLongo(() => setTrocando(true));
   return (
     <div className="cartao-bloco">
-    <button type="button" className={`cartao st-${v.chave}`} onClick={onClick} data-testid={testid} data-status={v.chave}
+    {trocando && <FormaPagamento quem={`${nomeCliente(st, a)} · ${fmtHM(a.inicio)}`} atual={(a.pagamento && a.pagamento.forma) || ''} aoFechar={() => setTrocando(false)}
+      aoEscolher={async (k) => { const r = apiAgenda.mudarFormaPagamento(a.id, k); if (r.ok) toast('Forma de pagamento alterada.'); return r; }} />}
+    <button type="button" className={`cartao st-${v.chave}`} onClick={onClick} data-testid={testid} data-status={v.chave} {...(a.status !== STATUS.CANCELADO ? toque : {})}
       title={`${fmtHM(a.inicio)} ${nomeCliente(st, a)} · ${nomeServicos(st, a)}${a.veiculo ? ` · ${textoVeiculo(a)}` : ''} · ${v.rotulo}`}>
       <div className="cartao-topo">
         <div className="cartao-quem">
@@ -125,7 +132,7 @@ function Mes({ cursor, evs, st, agora, onDia, onEvento, mostraBarb }) {
 
 const ultimaRolagem = new Map(); // rolagem da Agenda por usuário, em memória (na mesma sessão)
 
-export default function Agenda({ user, onAbrir, onNovo }) {
+export default function Agenda({ user, onAbrir, onNovo, onIrBoxes }) {
   const { state: st, agora, loja: lojaSlug } = useStore();
   const ehProfissional = user.papel === 'profissional';
   // Duas formas de ver a agenda (v73): Horários (cartões do dia) e Calendário (só o mês). O modo escolhido fica lembrado por usuário neste navegador.
@@ -218,14 +225,16 @@ export default function Agenda({ user, onAbrir, onNovo }) {
     window.addEventListener('scroll', aoRolar, { passive: true });
     return () => { cancelAnimationFrame(volta); clearTimeout(t); window.removeEventListener('scroll', aoRolar); }; // sem gravar aqui: ao sair da tela o navegador já pode ter zerado a rolagem
   }, [chaveRolagem]);
+  const semBox = semBoxAtivo(st);
+  const [avisoBox, setAvisoBox] = useState(false); // estética sem box: Atender e Link Agenda só mostram o aviso
   const botaoLink = (
-  <button type="button" className={`btn btn-link-agendar ${copiado ? 'copiado' : ''}`} onClick={copiarLink} disabled={!linkAtivo} aria-label="Enviar link de agendamento pelo WhatsApp"
+  <button type="button" className={`btn btn-link-agendar ${copiado ? 'copiado' : ''}`} onClick={() => (semBox ? setAvisoBox(true) : copiarLink())} disabled={!linkAtivo} aria-label="Enviar link de agendamento pelo WhatsApp"
     title={linkAtivo ? 'Abrir o WhatsApp com o link da página de agendamento do cliente (o link também é copiado)' : 'Link desligado em Estabelecimento > Regras'} data-testid="copiar-link">
     <Icon n={copiado ? 'check' : 'link'} size={17} /><span className="rotulo-link">{copiado ? 'Link copiado' : 'Link de agendamento'}</span><span className="rotulo-link-curto">{copiado ? 'Copiado' : 'Link Agenda'}</span>
   </button>
   );
   const botaoAtender = (
-  <Btn variante="primario" icone="plus" onClick={() => onNovo({ profissionalId: selecionados.length === 1 ? selecionados[0] : ehProfissional ? user.id : '' })} data-testid="atender">Atender</Btn>
+  <Btn variante="primario" icone="plus" onClick={() => (semBox ? setAvisoBox(true) : onNovo({ profissionalId: selecionados.length === 1 ? selecionados[0] : ehProfissional ? user.id : '' }))} data-testid="atender">Atender</Btn>
   );
   return (
     <section className="tela">
@@ -252,6 +261,7 @@ export default function Agenda({ user, onAbrir, onNovo }) {
 
       <div className="agenda-topo" data-testid="agenda-topo">
         <div className="agenda-acoes">{botaoLink}{botaoAtender}</div>
+        {semBox && avisoBox && <AvisoSemBox podeCadastrar={pode(user, 'estabelecimento') && !!onIrBoxes} aoCadastrar={onIrBoxes} aoFechar={() => setAvisoBox(false)} />}
         <div className="segmentado agenda-modos" role="group" aria-label="Como ver a agenda">
           {[['horarios', 'Horários'], ['calendario', 'Calendário']].map(([k, r]) => (
             <button key={k} type="button" className={modo === k ? 'on' : ''} onClick={() => salvarModo(k)} aria-pressed={modo === k} data-testid={`agenda-modo-${k}`}>{r}</button>

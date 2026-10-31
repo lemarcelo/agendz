@@ -1,13 +1,14 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:f2513d1752 */
 // Autoagendamento pelo link: o cliente (sem login) vê só horários livres, pede um horário e depois gerencia só os próprios agendamentos.
 // Tudo aqui é regra pura. A API pública (`publico.*` em api.js) acrescenta os limites de uso; nada daqui devolve dado de outro cliente.
-import { STATUS, acharConflitos, errosServicoIds, limparTexto, retiradaDe, servicosDoAg, statusVisual, telefoneBrasileiro, telefoneNacional, validarHorario } from './rules.js';
-import { PORTES, ROTULO_PORTE, porteValido, resumoVeiculo } from './veiculos.js';
+import { STATUS, acharConflitos, errosServicoIds, limparTexto, retiradaDe, semBoxAtivo, servicosDoAg, statusVisual, telefoneBrasileiro, telefoneNacional, validarHorario } from './rules.js';
+import { PORTE_PADRAO, porteAtivo, portesAtivos, precoNoPorte, resumoVeiculo } from './veiculos.js';
 import { faixasDoProfissional } from './schedule.js';
 import { DIA, MIN, fmtDate, fmtHM, startOfDay } from './time.js';
 import * as E from './engine.js';
-import { limparVeiculo } from './veiculos.js';
+import { CAMPOS_VEICULO_EXIGIVEIS, limparVeiculoComRegras } from './veiculos.js';
 import { cap, rot, tipoDe } from './tipos.js';
+import { servicosNaOrdemDaLoja } from './ordem-servicos.js';
 
 export const PASSO_PUBLICO_MIN = 30; // os horários do link saem de 30 em 30 minutos
 export const MAX_ABERTOS_LINK = 3; // agendamentos futuros em aberto por cliente
@@ -21,10 +22,13 @@ export const ERRO_HORARIO = 'Esse horário acabou de ser ocupado. Escolha outro.
 export const ERRO_ACESSO = 'Não foi possível abrir. Peça um novo código.';
 export const ERRO_NAO_ACHEI = 'Agendamento não encontrado.';
 
+export const VEICULO_DE_FABRICA_NO_LINK = ['placa', 'modelo', 'porte'];
 export function configLink(s) {
   const c = s.estabelecimento.linkAgendamento || {};
   const d = Number.isInteger(c.diasMax) ? Math.min(60, Math.max(1, c.diasMax)) : DIAS_MAX_PADRAO;
-  return { ativo: c.ativo !== false, diasMax: d, telefoneObrigatorio: c.telefoneObrigatorio !== false }; // telefone obrigatório de fábrica; o dono pode tirar em Estabelecimento
+  // Tudo obrigatório de fábrica (nome, telefone e, na estética, placa, modelo e porte); o dono pode tirar cada um em Estabelecimento (v121).
+  const vei = Array.isArray(c.veiculoObrigatorio) ? c.veiculoObrigatorio.filter((k) => CAMPOS_VEICULO_EXIGIVEIS.includes(k)) : VEICULO_DE_FABRICA_NO_LINK;
+  return { ativo: c.ativo !== false, diasMax: d, telefoneObrigatorio: c.telefoneObrigatorio !== false, nomeObrigatorio: c.nomeObrigatorio !== false, veiculoObrigatorio: [...vei] };
 }
 
 // Livre = sem erro de escala/antecedência e sem NENHUM agendamento ativo na janela (pendente também ocupa: o cliente nunca disputa horário).
@@ -39,7 +43,7 @@ export function horarioLivre(s, { profissionalId, inicio, servicoIds, porte, ago
 // O porte do veículo define a duração; sem ele não há horário para mostrar. Um horário só aparece se houver profissional E box livres.
 export function horariosPublicos(s, { profissionalId, servicoIds, porte, dayTs, agora, ignoreId, boxPreferido, limite = Infinity }) {
   const cfg = configLink(s);
-  if (!cfg.ativo || (cap(s.estabelecimento, 'precoPorPorte') && !porteValido(porte)) || errosServicoIds(s, servicoIds, { ativos: true }) || !Number.isFinite(dayTs)) return [];
+  if (!cfg.ativo || semBoxAtivo(s) || (cap(s.estabelecimento, 'precoPorPorte') && !porteAtivo(porte || PORTE_PADRAO)) || errosServicoIds(s, servicoIds, { ativos: true }) || !Number.isFinite(dayTs)) return [];
   const dia = startOfDay(dayTs);
   if (dia > agora + cfg.diasMax * DIA) return [];
   const barbs = s.usuarios.filter((u) => u.atende && (!profissionalId || u.id === profissionalId));
@@ -77,11 +81,11 @@ export function mapaDaLoja(e) {
 export function configPublica(s) {
   const cfg = configLink(s);
   return {
-    ativo: cfg.ativo, diasMax: cfg.diasMax, exigeTelefone: cfg.telefoneObrigatorio, tipo: tipoDe(s.estabelecimento), nome: s.estabelecimento.nome, telefone: s.estabelecimento.telefone || '', endereco: s.estabelecimento.enderecoNoLink === false ? '' : s.estabelecimento.endereco || '', mapaUrl: s.estabelecimento.enderecoNoLink === false ? '' : mapaDaLoja(s.estabelecimento),
-    ...(cap(s.estabelecimento, 'precoPorPorte') ? { portes: PORTES.map((id) => ({ id, nome: ROTULO_PORTE[id] })) } : {}),
+    ativo: cfg.ativo && !semBoxAtivo(s), diasMax: cfg.diasMax, exigeTelefone: cfg.telefoneObrigatorio, exigeNome: cfg.nomeObrigatorio, ...(cap(s.estabelecimento, 'usaVeiculo') ? { exigeVeiculo: cfg.veiculoObrigatorio } : {}), tipo: tipoDe(s.estabelecimento), nome: s.estabelecimento.nome, telefone: s.estabelecimento.telefone || '', endereco: s.estabelecimento.enderecoNoLink === false ? '' : s.estabelecimento.endereco || '', mapaUrl: s.estabelecimento.enderecoNoLink === false ? '' : mapaDaLoja(s.estabelecimento),
+    ...(cap(s.estabelecimento, 'precoPorPorte') ? { portes: portesAtivos().map((x) => ({ id: x.id, nome: x.nome, exemplo: x.exemplo })) } : {}),
     // preço e duração de cada serviço (por porte quando o tipo cobra por porte; a página mostra os do porte escolhido); nada de custo, material ou comissão
-    servicos: s.servicos.filter((x) => x.ativo !== false).map((x) => (cap(s.estabelecimento, 'precoPorPorte')
-      ? { id: x.id, nome: x.nome, precos: { ...x.precos }, duracoes: { ...x.duracoes }, combo: !!x.combo, multiDia: !!x.multiDia, categoria: x.categoria || '' }
+    servicos: servicosNaOrdemDaLoja(s, s.servicos.filter((x) => x.ativo !== false)).map((x) => (cap(s.estabelecimento, 'precoPorPorte')
+      ? { id: x.id, nome: x.nome, precos: Object.fromEntries(portesAtivos().map((p) => [p.id, precoNoPorte(x.preco, x.precos?.[p.id], p.id)])), duracoes: Object.fromEntries(portesAtivos().map((p) => [p.id, Number(x.duracoes?.[p.id]) > 0 ? Number(x.duracoes[p.id]) : x.duracao])), combo: !!x.combo, multiDia: !!x.multiDia, categoria: x.categoria || '' }
       : { id: x.id, nome: x.nome, duracao: x.duracao, preco: x.preco })),
     profissionais: s.usuarios.filter((u) => u.atende).map((u) => ({ id: u.id, nome: u.apelido || u.nome, foto: u.foto || null })),
   };
@@ -139,25 +143,27 @@ export function validarCodigo(s, telefone, codigo, agora) {
 // ---------- pedido de horário ----------
 export function agendarPorLink(s, d, agora) {
   const cfg = configLink(s);
-  if (!cfg.ativo) return { ok: false, erros: [ERRO_DESLIGADO] };
+  if (!cfg.ativo || semBoxAtivo(s)) return { ok: false, erros: [ERRO_DESLIGADO] };
   if (d.site) return { ok: false, erros: ['Não foi possível agendar. Tente de novo.'] }; // campo isca preenchido: robô
-  const nome = limparTexto(String(d.nome ?? ''), 60).trim();
-  if (nome.length < 2) return { ok: false, erros: ['Informe o seu nome.'] };
+  let nome = limparTexto(String(d.nome ?? ''), 60).trim();
+  if (cfg.nomeObrigatorio ? nome.length < 2 : nome.length === 1) return { ok: false, erros: ['Informe o seu nome.'] };
   // Sem telefone só quando o dono tirou a obrigatoriedade: o pedido fica sem cadastro (só o nome), sem aviso por WhatsApp e sem acesso pelo link depois. Telefone digitado sempre precisa ser válido.
   const semTelefone = !cfg.telefoneObrigatorio && String(d.telefone ?? '').replace(/\D/g, '') === '';
   if (!semTelefone && !telefoneBrasileiro(d.telefone)) return { ok: false, erros: ['Informe o telefone com DDD.'] };
   const nac = semTelefone ? null : telefoneNacional(d.telefone);
   if (nac && !s.estabelecimento.ddds.includes(Number(nac.slice(0, 2)))) return { ok: false, erros: ['Esse DDD está fora da área de atendimento.'] };
   const usaVeiculo = cap(s.estabelecimento, 'usaVeiculo');
-  const lv = usaVeiculo ? limparVeiculo({ placa: d.placa, marca: d.marca, modelo: d.modelo, cor: d.cor, porte: d.porte }) : { ok: true, veiculo: null };
+  const lv = usaVeiculo ? limparVeiculoComRegras({ placa: d.placa, marca: d.marca, modelo: d.modelo, cor: d.cor, porte: d.porte }, cfg.veiculoObrigatorio) : { ok: true, veiculo: null };
   if (!lv.ok) return { ok: false, erros: [lv.erro] };
+  if (lv.veiculo?.porte && !porteAtivo(lv.veiculo.porte)) return { ok: false, erros: ['Escolha o porte do veículo.'] };
   { const e = errosServicoIds(s, d.servicoIds, { ativos: true }); if (e) return { ok: false, erros: [e] }; }
   if (!Number.isInteger(d.inicio) || d.inicio > agora + cfg.diasMax * DIA) return { ok: false, erros: ['Escolha um dia e um horário.'] };
   const candidatos = s.usuarios.filter((u) => u.atende && (!d.profissionalId || u.id === d.profissionalId));
   const profissional = candidatos.find((u) => horarioLivre(s, { profissionalId: u.id, inicio: d.inicio, servicoIds: d.servicoIds, porte: lv.veiculo?.porte, agora }));
   if (!profissional) return { ok: false, erros: [ERRO_HORARIO] };
   if (semTelefone) {
-    const r = E.criarAgendamento(s, { semCliente: true, nomeAvulso: nome, profissionalId: profissional.id, servicoIds: d.servicoIds, inicio: d.inicio, origem: 'link', ...(usaVeiculo ? { veiculo: lv.veiculo } : {}) }, { tipo: 'cliente', nome, id: null }, agora);
+    if (!nome) nome = 'Sem nome'; // dono tirou nome e telefone: o horário fica anônimo, só para a agenda
+    const r = E.criarAgendamento(s, { semCliente: true, nomeAvulso: nome, profissionalId: profissional.id, servicoIds: d.servicoIds, inicio: d.inicio, origem: 'link', exigirVeiculo: cfg.veiculoObrigatorio, ...(usaVeiculo ? { veiculo: lv.veiculo } : {}) }, { tipo: 'cliente', nome, id: null }, agora);
     if (!r.ok) return { ok: false, erros: r.erros };
     const a = r.agendamento;
     const sv = servicosDoAg(s, a).map((x) => x.nome).join(', ');
@@ -170,7 +176,7 @@ export function agendarPorLink(s, d, agora) {
   const c = r0.cliente;
   if (r0.criado) c.origemCadastro = 'link';
   if (abertos(c) >= MAX_ABERTOS_LINK) return { ok: false, erros: [`Você já tem ${MAX_ABERTOS_LINK} horários marcados. Cancele ou remarque um deles para agendar outro.`] };
-  const r = E.criarAgendamento(s, { clienteId: c.id, profissionalId: profissional.id, servicoIds: d.servicoIds, inicio: d.inicio, origem: 'link', ...(usaVeiculo ? { veiculo: lv.veiculo } : {}) }, E.AUTOR_CLIENTE(c), agora);
+  const r = E.criarAgendamento(s, { clienteId: c.id, profissionalId: profissional.id, servicoIds: d.servicoIds, inicio: d.inicio, origem: 'link', exigirVeiculo: cfg.veiculoObrigatorio, ...(usaVeiculo ? { veiculo: lv.veiculo } : {}) }, E.AUTOR_CLIENTE(c), agora);
   if (!r.ok) return { ok: false, erros: r.erros };
   const a = r.agendamento;
   if (typeof d.lembretes === 'boolean') c.lembretes = d.lembretes;

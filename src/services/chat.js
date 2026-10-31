@@ -4,7 +4,7 @@
 import { marcar } from '../domain/autoria.js';
 import { store, whatsapp } from './api.js';
 import * as R from '../domain/rules.js';
-import { EXEMPLO_PORTE, PORTES, ROTULO_PORTE, formatarPlaca, placaValida, porteValido, resumoVeiculo, veiculoPorPlaca } from '../domain/veiculos.js';
+import { EXEMPLO_PORTE, ROTULO_PORTE, formatarPlaca, placaValida, porteAtivo, portesAtivos, resumoVeiculo, veiculoPorPlaca } from '../domain/veiculos.js';
 import { addDays, DIAS_CURTOS, fmtDate, fmtDateShort, fmtHM, fmtMoney, minutesOfDay, startOfDay, tsAt } from '../domain/time.js';
 import { capAtiva, Rot, rot, rots, voc } from '../domain/tipos.js';
 
@@ -425,7 +425,7 @@ function confirmarPorChip(th, id) {
 
 // ---------- agendar: veículo ----------
 // O porte do veículo define preço e duração. Cliente com veículo cadastrado escolhe um; senão informa placa, modelo e porte.
-const rotuloPorte = (p) => `${ROTULO_PORTE[p]} (${EXEMPLO_PORTE[p].replace(/^Ex\.:\s*/, '')})`;
+const rotuloPorte = (p) => { const ex = (EXEMPLO_PORTE[p] || '').replace(/^Ex\.:\s*/, ''); return ex ? `${ROTULO_PORTE[p]} (${ex})` : ROTULO_PORTE[p]; };
 function iniciarAgendamento(th) {
   th.ctx.servicoIds = [];
   th.ctx.editarId = null;
@@ -466,12 +466,12 @@ function etapaModelo(th, texto) {
   if (modelo.length < 2 || modelo.length > 40) return bot(th, 'Escreva o modelo do veículo (ex.: Civic).', [], { dica: 'Escreva o modelo.' });
   th.ctx.veiculoNovo = { ...th.ctx.veiculoNovo, modelo };
   th.etapa = 'vei_porte';
-  return bot(th, 'Qual é o porte do veículo?', PORTES.map((p) => B(rotuloPorte(p), `porte:${p}`, [ROTULO_PORTE[p]])));
+  return bot(th, 'Qual é o porte do veículo?', portesAtivos().map(({ id: p }) => B(rotuloPorte(p), `porte:${p}`, [ROTULO_PORTE[p]])));
 }
 
 function etapaPorte(th, valor) {
   const p = valor && valor.startsWith('porte:') ? valor.slice(6) : null;
-  if (!porteValido(p)) return repetir(th, 'Escolha o porte do veículo:');
+  if (!porteAtivo(p)) return repetir(th, 'Escolha o porte do veículo:');
   th.ctx.veiculoNovo = { ...th.ctx.veiculoNovo, porte: p };
   th.ctx.porte = p;
   return promptServicos(th, `Veículo: ${resumoVeiculo(th.ctx.veiculoNovo)}. `);

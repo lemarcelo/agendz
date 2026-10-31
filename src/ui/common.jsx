@@ -91,6 +91,12 @@ export function Vazio({ icone = 'info', titulo, texto, acao }) {
   );
 }
 
+// Depois de um erro de formulário: leva o aviso até a vista. A janela é longa e o aviso fica no fim; sem isto, "Salvar" parece não fazer nada.
+export function rolarAoErro() {
+  const rolar = () => { try { document.querySelector('.modal [role="alert"]')?.scrollIntoView({ block: 'nearest' }); } catch { /* sem rolagem */ } };
+  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => requestAnimationFrame(rolar)); else rolar();
+}
+
 export function Aviso({ tipo = 'info', children, icone }) {
   return (
     <div className={`aviso aviso-${tipo}`} role={tipo === 'erro' ? 'alert' : undefined}>

@@ -50,6 +50,7 @@ class OnboardingTest extends BaseApi {
     }
 
     private void limpar() {
+        jdbc.update("delete from box where nome like 'Teste Box%'");
         jdbc.update("delete from reconfiguracao");
         jdbc.update("delete from material");
         jdbc.update("delete from configuracao_loja");
@@ -272,6 +273,35 @@ class OnboardingTest extends BaseApi {
         pegar(OFFBOX, t, "/api/onboarding").andExpect(jsonPath("$.passo").value("expediente"));
         // a mesma loja não vira outra: a equipe criada só existe na loja do Host
         assertEquals(0, jdbc.queryForObject("select count(*) from usuario where identificador = 'zeferino' and loja_id <> ?::uuid", Integer.class, LOJA_OFFBOX));
+    }
+
+    @Test
+    void boxesDaEsteticaSaoAditivosSemRepetirNemPassarDoLimite() throws Exception {
+        abrirAssistente(LOJA_APEX);
+        abrirAssistente(LOJA_DALFORNO);
+        String t = token(APEX, "davi");
+        int antes = jdbc.queryForObject("select count(*) from box where loja_id = ?::uuid", Integer.class, LOJA_APEX);
+        pegar(APEX, t, "/api/onboarding").andExpect(jsonPath("$.usaBox").value(true));
+        enviar(APEX, t, "/api/onboarding/boxes", "{\"nomes\":[\"Teste Box A\",\"  Teste   Box B \"]}").andExpect(status().isOk()).andExpect(jsonPath("$.criados").value(2)).andExpect(jsonPath("$.jaExistiam").value(0));
+        // de novo (outra caixa): não recria
+        enviar(APEX, t, "/api/onboarding/boxes", "{\"nomes\":[\"teste box a\"]}").andExpect(status().isOk()).andExpect(jsonPath("$.criados").value(0)).andExpect(jsonPath("$.jaExistiam").value(1));
+        assertEquals(antes + 2, jdbc.queryForObject("select count(*) from box where loja_id = ?::uuid", Integer.class, LOJA_APEX));
+        pegar(APEX, t, "/api/onboarding").andExpect(jsonPath("$.boxes", hasItem("Teste Box B")));
+        // validação: nome vazio, nome grande, repetido na própria lista
+        enviar(APEX, t, "/api/onboarding/boxes", "{\"nomes\":[\" \"]}").andExpect(status().isBadRequest());
+        enviar(APEX, t, "/api/onboarding/boxes", "{\"nomes\":[\"" + "x".repeat(31) + "\"]}").andExpect(status().isBadRequest());
+        enviar(APEX, t, "/api/onboarding/boxes", "{\"nomes\":[\"Teste Box C\",\"teste box c\"]}").andExpect(status().isBadRequest());
+        // barbearia não usa box; profissional não abre o assistente do dono
+        enviar(DALFORNO, token(DALFORNO, "alan"), "/api/onboarding/boxes", "{\"nomes\":[\"Teste Box D\"]}").andExpect(status().isBadRequest());
+        pegar(DALFORNO, token(DALFORNO, "alan"), "/api/onboarding").andExpect(jsonPath("$.usaBox").value(false));
+        // limite de agendas do Admin: só barra quem AUMENTA além do limite
+        jdbc.update("insert into loja_regra_plataforma (loja_id, limite_agendas, mensagens_ativas, cadastro_obrigatorios, atualizado_em) values (?::uuid, ?, true, '', now()) "
+                + "on conflict (loja_id) do update set limite_agendas = excluded.limite_agendas", LOJA_APEX, antes + 2);
+        try {
+            enviar(APEX, t, "/api/onboarding/boxes", "{\"nomes\":[\"Teste Box E\"]}").andExpect(status().isConflict());
+        } finally {
+            jdbc.update("delete from loja_regra_plataforma where loja_id = ?::uuid", LOJA_APEX);
+        }
     }
 
     @Test

@@ -5,10 +5,12 @@
 import React, { useEffect, useState } from 'react';
 import { regras as api } from '../../services/api-real.js';
 import { CAMPOS_DO_ATENDER, FORMAS_PAGAMENTO } from '../../domain/atender-form.js';
+import { capAtiva } from '../../domain/tipos.js';
 import { Aviso, Btn, Campo } from '../leve/mini.jsx';
 
-const CAMPOS_FUTURO = ['nome', 'telefone', 'profissional', 'vendedor'];
-const CAMPOS_LOCAL = ['nome', 'telefone', 'profissional', 'vendedor', 'formaPagamento'];
+const VEICULO = ['veiculo', 'placa', 'modelo', 'porte']; // só na estética (v121)
+const CAMPOS_FUTURO = () => ['nome', 'telefone', 'profissional', 'vendedor', ...(capAtiva('usaVeiculo') ? VEICULO : [])];
+const CAMPOS_LOCAL = () => ['nome', 'telefone', 'profissional', 'vendedor', 'formaPagamento', ...(capAtiva('usaVeiculo') ? VEICULO : [])];
 
 export default function RegrasAtendimento() {
   const [regras, setRegras] = useState(null);
@@ -32,7 +34,7 @@ export default function RegrasAtendimento() {
     e.preventDefault();
     if (salvando) return;
     setSalvando(true); setErro(''); setOk('');
-    const r = await api.gravar({ formaPagamentoPadrao: regras.formaPagamentoPadrao, camposObrigatorios: { futuro: regras.futuro, local: regras.local } });
+    const r = await api.gravar({ formaPagamentoPadrao: regras.formaPagamentoPadrao, camposObrigatorios: { futuro: regras.futuro, local: regras.local }, ordemServicos: regras.ordemServicos });
     setSalvando(false);
     if (!r.ok) { setErro(r.erro); return; }
     setRegras(r.regras); setOk('Regras salvas.');
@@ -55,8 +57,13 @@ export default function RegrasAtendimento() {
           <option value="">Sem padrão (perguntar sempre)</option>
         </select>
       </Campo>
-      {grupo('futuro', 'Campos obrigatórios no agendamento (data futura)', CAMPOS_FUTURO)}
-      {grupo('local', 'Campos obrigatórios no atendimento feito (agora ou passado)', CAMPOS_LOCAL)}
+      <Campo rotulo="Ordem dos serviços no Atender e no link" dica="Mais usados: os que mais saem ficam em cima. Minha ordem: a que você montou na lista de Serviços (setas).">
+        <select value={regras.ordemServicos} onChange={(e) => { setOk(''); setErro(''); setRegras({ ...regras, ordemServicos: e.target.value }); }} data-testid="regras-ordem-servicos">
+          <option value="uso">Mais usados primeiro</option><option value="manual">Minha ordem</option>
+        </select>
+      </Campo>
+      {grupo('futuro', 'Campos obrigatórios no agendamento (data futura)', CAMPOS_FUTURO())}
+      {grupo('local', 'Campos obrigatórios no atendimento feito (agora ou passado)', CAMPOS_LOCAL())}
       {erro && <Aviso tipo="erro" data-testid="regras-erro">{erro}</Aviso>}
       {ok && <p className="msg-ok" role="status" data-testid="regras-ok">{ok}</p>}
       <div className="acoes"><Btn variante="primario" type="submit" disabled={salvando} data-testid="regras-salvar">{salvando ? 'Salvando…' : 'Salvar regras'}</Btn></div>

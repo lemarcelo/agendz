@@ -1,5 +1,7 @@
 package br.com.agendz.auth;
 
+import br.com.agendz.auth.aparelho.AparelhosConfiaveis;
+import br.com.agendz.auth.rede.RedesConfiaveis;
 import br.com.agendz.erro.ErroDeNegocio;
 import br.com.agendz.tenant.Loja;
 import br.com.agendz.tenant.LojaContext;
@@ -47,12 +49,16 @@ public class SenhaController {
     private final PasswordEncoder encoder;
     private final LimiteDeLogin limite;
     private final SessaoService sessao;
+    private final RedesConfiaveis redes;
+    private final AparelhosConfiaveis aparelhos;
 
-    public SenhaController(LojaJdbc banco, PasswordEncoder encoder, LimiteDeLogin limite, SessaoService sessao) {
+    public SenhaController(LojaJdbc banco, PasswordEncoder encoder, LimiteDeLogin limite, SessaoService sessao, RedesConfiaveis redes, AparelhosConfiaveis aparelhos) {
         this.banco = banco;
         this.encoder = encoder;
         this.limite = limite;
         this.sessao = sessao;
+        this.redes = redes;
+        this.aparelhos = aparelhos;
     }
 
     @PutMapping("/api/usuarios/me/senha")
@@ -102,6 +108,8 @@ public class SenhaController {
         } catch (DuplicateKeyException e) { // duas pessoas escolhendo o mesmo login ao mesmo tempo: a trava única do banco decide
             throw new ErroDeNegocio(HttpStatus.CONFLICT, "Esse usuário já está em uso nesta loja. Escolha outro.");
         }
+        redes.encerrarTodas(id); // trocou a senha: os tokens longos de redes confiáveis deixam de valer
+        aparelhos.removerTodos(id); // e os aparelhos confiáveis deixam de ser confiáveis (v125)
         return sessao.abrir(id, loja, u.papel(), u.nome(), false);
     }
 }

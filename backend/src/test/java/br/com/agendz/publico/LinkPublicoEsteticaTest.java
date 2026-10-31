@@ -1,6 +1,7 @@
 package br.com.agendz.publico;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -122,6 +123,53 @@ class LinkPublicoEsteticaTest extends BaseApi {
     private int contar(String sql, Object... args) {
         Integer n = jdbc.queryForObject(sql, Integer.class, args);
         return n == null ? 0 : n;
+    }
+
+    @Test
+    void oDonoPodeTirarAObrigatoriedadeDoNomeEDosDadosDoVeiculoNoLink() throws Exception {
+        // de fábrica tudo é obrigatório: sem veículo e sem nome o pedido é recusado
+        pedir(novoTelefone(), as(dia, 9, 0), "").andExpect(status().isBadRequest());
+        mvc.perform(get("/api/publico/agendar").header("X-Forwarded-For", ip).with(host(APEX))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.exigeNome").value(true)).andExpect(jsonPath("$.exigeVeiculo", hasSize(3)));
+        // configuração inválida é recusada
+        mvc.perform(put("/api/estabelecimento/link-agendamento").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"veiculoObrigatorio\":[\"cor\"]}")).andExpect(status().isBadRequest());
+        mvc.perform(put("/api/estabelecimento/link-agendamento").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"veiculoObrigatorio\":[\"placa\"],\"nomeObrigatorio\":false}")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.nomeObrigatorio").value(false)).andExpect(jsonPath("$.veiculoObrigatorio[0]").value("placa"));
+        // só a placa é exigida: sem placa recusa; com placa e sem modelo nem porte aceita (vale o porte médio) e o veículo fica só como foto
+        pedir(novoTelefone(), as(dia, 9, 0), ",\"veiculo\":{\"modelo\":\"Onix\"}").andExpect(status().isBadRequest());
+        String corpo = pedir(novoTelefone(), as(dia, 9, 0), ",\"veiculo\":{\"placa\":\"ABC1D23\",\"modelo\":\"\",\"porte\":\"\"}").andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String agId = texto(corpo, "id");
+        assertEquals("medio", jdbc.queryForObject("select porte from agendamento where id = ?::uuid", String.class, agId));
+        assertEquals(new java.math.BigDecimal("80.00"), jdbc.queryForObject("select total from agendamento where id = ?::uuid", java.math.BigDecimal.class, agId));
+        // placa informada errada continua recusada mesmo sem ser obrigatória
+        mvc.perform(put("/api/estabelecimento/link-agendamento").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"veiculoObrigatorio\":[]}")).andExpect(status().isOk());
+        pedir(novoTelefone(), as(dia, 10, 0), ",\"veiculo\":{\"placa\":\"ZZ99\"}").andExpect(status().isBadRequest());
+        // sem nada do veículo e sem nome: aceita, com o nome "Sem nome" no cadastro do telefone
+        String corpo2 = mvc.perform(post("/api/publico/agendamentos").header("X-Forwarded-For", ip).with(host(APEX)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"nome\":\"\",\"telefone\":\"" + novoTelefone() + "\",\"servicoIds\":[\"" + lavagem + "\"],\"inicio\":\"" + as(dia, 10, 0) + "\"}"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        assertEquals(1, contar("select count(*) from agendamento where id = ?::uuid and veiculo_placa is null", texto(corpo2, "id")));
+        // nome de uma letra só nunca vale
+        mvc.perform(post("/api/publico/agendamentos").header("X-Forwarded-For", ip).with(host(APEX)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"nome\":\"A\",\"telefone\":\"" + novoTelefone() + "\",\"servicoIds\":[\"" + lavagem + "\"],\"inicio\":\"" + as(dia, 11, 0) + "\"}")).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void oProprietarioVeOQueFaltaQuandoOClienteNaoVeHorarios() throws Exception {
+        mvc.perform(get("/api/estabelecimento/link-agendamento").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.pendencias", hasSize(0)));
+        jdbc.update("update box set ativo = false where loja_id = ?::uuid", LOJA_APEX);
+        mvc.perform(get("/api/estabelecimento/link-agendamento").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.pendencias", hasSize(1))).andExpect(jsonPath("$.pendencias[0]", containsString("Boxes")));
+        mvc.perform(put("/api/estabelecimento/link-agendamento").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON).content("{\"diasMax\":30}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.pendencias[0]", containsString("Boxes")));
+        jdbc.update("delete from escala_faixa");
+        mvc.perform(get("/api/estabelecimento/link-agendamento").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.pendencias", hasItem(containsString("expediente"))));
     }
 
     @Test

@@ -5,7 +5,7 @@ import { ehDoFixo } from './fixos.js';
 import { blocosDeTrabalho, cabeEm, faixasDoProfissional, proximaAbertura } from './schedule.js';
 import { cpfValido } from './pix.js';
 import { limparTexto } from './texto.js';
-import { PORTE_PADRAO, porteValido } from './veiculos.js';
+import { PORTE_PADRAO, porteValido, precoNoPorte } from './veiculos.js';
 import { Rot, rot, capAtiva, cap } from './tipos.js';
 
 export const STATUS = {
@@ -39,9 +39,9 @@ export function errosServicoIds(state, ids, { ativos = false } = {}) {
 export function servicoNoPorte(sv, porte) {
   if (!capAtiva('precoPorPorte')) return sv; // tipo sem preço por porte (barbearia): preço e duração são os do serviço
   const p = porteValido(porte) ? porte : PORTE_PADRAO;
-  const preco = sv.precos ? Number(sv.precos[p]) : NaN;
   const duracao = sv.duracoes ? Number(sv.duracoes[p]) : NaN;
-  return { ...sv, preco: Number.isFinite(preco) && preco >= 0 ? preco : sv.preco, duracao: Number.isFinite(duracao) && duracao > 0 ? duracao : sv.duracao, porte: p };
+  // v124: preço específico do porte (se o dono definiu) ou preço base × fator do porte
+  return { ...sv, preco: precoNoPorte(sv.preco, sv.precos ? sv.precos[p] : undefined, p), duracao: Number.isFinite(duracao) && duracao > 0 ? duracao : sv.duracao, porte: p };
 }
 export const servicosPorIds = (state, ids, porte) => ids.map((id) => state.servicos.find((s) => s.id === id)).filter(Boolean).map((s) => servicoNoPorte(s, porte));
 // Os serviços de um agendamento, com o preço e a duração do porte do veículo dele.
@@ -186,6 +186,9 @@ export function acharConflitos(state, { profissionalId, boxId, inicio, fim, ocup
 }
 
 export const boxesAtivos = (state) => (state.estabelecimento.boxes || []).filter((b) => b.ativo !== false);
+// Estética sem nenhum box ativo (v120): não se atende, não se agenda e o link do cliente não abre até cadastrar um box.
+export const semBoxAtivo = (state) => cap(state.estabelecimento, 'usaRecursoFisico') && boxesAtivos(state).length === 0;
+export const ERRO_SEM_BOX = 'Cadastre ao menos um box (Estabelecimento > Boxes) antes de atender.';
 export const nomeBox = (state, id) => (state.estabelecimento.boxes || []).find((b) => b.id === id)?.nome || '';
 // Box para o atendimento: o pedido (se estiver livre), senão o preferido (o que já tinha), senão o primeiro livre. Box nunca é "forçado": dois carros não ocupam o mesmo.
 export function escolherBox(state, ocup, { boxId, preferido, ignoreId } = {}) {
@@ -358,7 +361,7 @@ export function identificarCliente(clientes, { telefone, cpf, nome }) {
 }
 
 // ---------- permissões ----------
-export const SECOES = { clientes: 'Clientes', servicos: 'Serviços', estabelecimento: 'Estabelecimento', agenda: 'Agenda', relatorios: 'Relatórios', estoque: 'Estoque', financeiro: 'Financeiro', planos: 'Planos', avaliacoes: 'Avaliações' };
+export const SECOES = { clientes: 'Clientes', servicos: 'Serviços', estabelecimento: 'Estabelecimento', agenda: 'Agenda', relatorios: 'Relatórios', estoque: 'Estoque', financeiro: 'Financeiro', planos: 'Planos', avaliacoes: 'Avaliações', suporte: 'Suporte' };
 
 // Grupos de menu que o proprietário libera ou bloqueia para qualquer usuário. Relatórios fica de fora: é só do proprietário e do master
 // (o profissional vê apenas os próprios números, e isso não é uma liberação).

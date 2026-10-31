@@ -3,14 +3,15 @@
 // mensagem; limites por hora; entrada ruim recusada; selo de não lidas; sem sessão nada funciona. O servidor repete as mesmas regras (SuporteChamadosTest, ChamadosTest).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { store, auth, suporte, chamadosDoUsuario, naoLidasDoSuporte } from '../src/services/api.js';
+import { store, auth, suporte, equipe, chamadosDoUsuario, naoLidasDoSuporte } from '../src/services/api.js';
 import { reiniciar } from './helpers.mjs';
 
 const st = () => store.getState();
 const como = (u) => assert.ok(auth.login({ identificador: u, senha: '1234' }).ok, u);
 const usuario = (id) => st().usuarios.find((u) => u.id === id);
 const ok = { assunto: 'Não consigo salvar', categoria: 'problema', texto: 'A tela fica branca.' };
-test.beforeEach(() => reiniciar());
+// v119: de fábrica só o proprietário abre chamados; estes testes liberam a seção Suporte para os profissionais e a atendente (a regra padrão tem teste próprio).
+test.beforeEach(() => { reiniciar(); for (const u of store.getState().usuarios) if (u.papel !== 'dono') u.permissoes = { ...(u.permissoes || {}), suporte: true }; });
 
 test('sem sessão nada funciona', () => {
   auth.logout?.();
@@ -111,4 +112,22 @@ test('chamado fechado não recebe mensagem; responder reabre o aguardando/resolv
 test('entrada de id estranho não quebra', () => {
   como('pablo');
   for (const id of [undefined, null, 5, {}, 'x'.repeat(60), '../../etc']) { assert.equal(suporte.obter(id).ok, false); assert.equal(suporte.responder(id, 'oi').ok, false); }
+});
+
+test('v119: de fábrica só o proprietário abre chamados; o dono libera por usuário e retira; a lista e o selo seguem a mesma regra', () => {
+  reiniciar(); // sem a liberação do beforeEach
+  como('pablo');
+  for (const r of [suporte.listar(), suporte.abrir(ok), suporte.naoLidas()]) assert.equal(r.ok, false, 'profissional sem a seção');
+  assert.equal((st().suporteChamados || []).length, 0, 'nada foi gravado');
+  como('davi'); assert.ok(suporte.abrir(ok).ok, 'o proprietário abre');
+  const pablo = () => store.getState().usuarios.find((u) => u.id === 'u-pablo'); // o estado é clonado a cada escrita: buscar de novo
+  pablo().permissoes = { suporte: true };
+  como('pablo'); assert.ok(suporte.abrir({ ...ok, assunto: 'Do Pablo' }).ok, 'liberado, abre');
+  assert.equal(suporte.listar().chamados.length, 1, 'e vê só o dele');
+  pablo().permissoes = { suporte: false };
+  como('pablo'); assert.equal(suporte.listar().ok, false, 'retirado, perde o acesso na hora');
+  // a seção é liberável pela Equipe (o dono marca no cadastro) e vale como as outras
+  como('davi');
+  const r = equipe.salvar({ ...pablo(), permissoes: { suporte: true } });
+  assert.ok(r.ok, JSON.stringify(r)); assert.equal(store.getState().usuarios.find((u) => u.id === 'u-pablo').permissoes.suporte, true);
 });

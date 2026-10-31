@@ -9,6 +9,7 @@ import * as AV from '../src/domain/avaliacoes.js';
 import { lerHashAvaliar, montarLinkAvaliar } from '../src/domain/link-publico.js';
 import { store, auth, agenda, avaliacoes, clientes, equipe, mensagens, publico } from '../src/services/api.js';
 import { reiniciar } from './helpers.mjs';
+import { ymd } from '../src/domain/time.js';
 
 const DIA = 86400000;
 const AGORA = new Date(2026, 9, 30, 12, 0).getTime();
@@ -108,7 +109,7 @@ test('link: token vai no fragmento, com ou sem loja; formato errado não é link
   assert.deepEqual(lerHashAvaliar(`#avaliar/${t}`), { loja: '', token: t });
   assert.deepEqual(lerHashAvaliar(`#avaliar@dalforno/${t}`), { loja: 'dalforno', token: t });
   for (const h of ['#avaliar', '#avaliar/abc', `#avaliar/${t}x`, `#avaliar/${'A'.repeat(48)}`, `#avaliar@/${t}`, `?avaliar=${t}`, '']) assert.equal(lerHashAvaliar(h), null, h);
-  assert.equal(montarLinkAvaliar({ base: 'https://x.io/', lojaNoLink: 'apex', token: t }), `https://x.io/#avaliar@apex/${t}`);
+  assert.equal(montarLinkAvaliar({ base: 'https://x.io/', lojaNoLink: 'apex', token: t }), `https://x.io/?loja=apex#avaliar@apex/${t}`);
   assert.equal(montarLinkAvaliar({ base: 'https://x.io/', token: t }), `https://x.io/#avaliar/${t}`);
 });
 
@@ -243,6 +244,8 @@ const concluir = (extra = {}) => {
   if (d.clienteId) { const v = store.getState().clientes.find((c) => c.id === d.clienteId)?.veiculos?.[0]; if (v) d.veiculoId = v.id; else d.veiculo = VEI; }
   const r = agenda.atender(d); assert.ok(r.ok, JSON.stringify(r)); return r.agendamento.id;
 };
+// O seed traz concluídos "de hoje" que variam com a hora do dia: o teste de fila parte de uma agenda sem concluídos.
+const semConcluidosDoSeed = () => { const ag = store.getState().agendamentos; for (let i = ag.length - 1; i >= 0; i--) if (ag[i].status === 'concluido') ag.splice(i, 1); };
 const avaliarDe = (token, extra = {}) => publico.avaliar({ token, nota: 5, texto: 'Muito bom', ...extra });
 test.beforeEach(() => reiniciar());
 
@@ -364,9 +367,9 @@ test('API: filtro por serviço e por profissional, lista e resumo usam o mesmo f
   assert.equal(avaliacoes.listar({ servicoId: { $ne: 1 } }).ok, false);
 });
 test('API fila: prévia, iniciar, abrir (token e telefone só aqui), marcar enviado/pulou, pausa e encerrar', () => {
-  como('davi');
+  como('davi'); semConcluidosDoSeed();
   const ids = [concluir(), concluir({ clienteId: 'c-jon', profissionalId: 'u-marcelo' })];
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = ymd(store.agora()); // dia local (UTC já vira o dia seguinte depois das 21h)
   const f = { de: hoje, ate: hoje };
   const pre = mensagens.fila(f); assert.ok(pre.ok, JSON.stringify(pre)); assert.equal(pre.itens.length, 2); assert.equal(JSON.stringify(pre).includes('c-igor-fone'), false);
   assert.equal(mensagens.fila({ ...f, ate: undefined }).ok, false);
@@ -388,8 +391,8 @@ test('API fila: prévia, iniciar, abrir (token e telefone só aqui), marcar envi
   assert.ok(ids.length === 2);
 });
 test('API fila: contato que ficou impossível depois de entrar na fila é pulado e a recusa fica registrada', () => {
-  como('davi'); concluir();
-  const hoje = new Date().toISOString().slice(0, 10);
+  como('davi'); semConcluidosDoSeed(); concluir();
+  const hoje = ymd(store.agora()); // dia local (UTC já vira o dia seguinte depois das 21h)
   const fila = mensagens.iniciarFila({ de: hoje, ate: hoje, modelo: 'Oi {nome}: {link}' }).fila;
   store.getState().clientes.find((c) => c.id === 'c-igor').semMensagens = true;
   const r = mensagens.abrirItem(fila.id, fila.itens[0].id);
@@ -397,19 +400,19 @@ test('API fila: contato que ficou impossível depois de entrar na fila é pulado
   assert.equal(mensagens.filaAtual().fila.itens[0].status, 'pulou', 'persistir: a recusa deixa o registro');
 });
 test('API: opt-out do cliente (semMensagens) é só booleano e tira da fila e da estrela', () => {
-  como('davi');
+  como('davi'); semConcluidosDoSeed();
   const id = concluir();
   assert.equal(clientes.salvar({ id: 'c-igor', nome: 'Igor', telefone: '(51) 99999-0001', semMensagens: 'sim' }).ok, false);
   const c = store.getState().clientes.find((x) => x.id === 'c-igor');
   assert.ok(clientes.salvar({ id: c.id, nome: c.nome, telefone: c.telefone, semMensagens: true }).ok);
   assert.equal(avaliacoes.situacao(id).motivo, 'sem_mensagens');
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = ymd(store.agora()); // dia local (UTC já vira o dia seguinte depois das 21h)
   const pre = mensagens.fila({ de: hoje, ate: hoje }); assert.equal(pre.itens.length, 0); assert.equal(pre.contagem.semMensagens, 1);
   assert.equal(mensagens.iniciarFila({ de: hoje, ate: hoje, modelo: 'Oi {nome}: {link}' }).ok, false, 'fila vazia não é criada');
 });
 test('API fila aviso: sem {link}, sem token e sem marcar avaliação pedida', () => {
-  como('davi'); const id = concluir();
-  const hoje = new Date().toISOString().slice(0, 10);
+  como('davi'); semConcluidosDoSeed(); const id = concluir();
+  const hoje = ymd(store.agora()); // dia local (UTC já vira o dia seguinte depois das 21h)
   const fila = mensagens.iniciarFila({ tipo: 'aviso', de: hoje, ate: hoje, modelo: 'Oi {nome}, promoção de sexta!' }).fila;
   const ab = mensagens.abrirItem(fila.id, fila.itens[0].id); assert.ok(ab.ok); assert.equal(ab.token, null);
   assert.equal(avaliacoes.situacao(id).pedidaEm, null); assert.equal((store.getState().avaliacaoAcessos || []).length, 0);

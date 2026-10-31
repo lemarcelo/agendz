@@ -12,7 +12,7 @@ import { publico } from '../../services/api-real.js';
 import { fmtMoney, maiuscula1 } from '../../domain/time.js';
 import { formatarTelefone } from '../../domain/rules.js';
 import { Rot, capAtiva, rot } from '../../domain/tipos.js';
-import { EXEMPLO_PORTE, formatarPlaca, placaValida, tipoPlaca } from '../../domain/veiculos.js';
+import { PORTE_PADRAO, formatarPlaca, limparVeiculoComRegras, placaValida, tipoPlaca } from '../../domain/veiculos.js';
 import { logoValida } from '../../domain/tema.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
 
@@ -138,13 +138,16 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
   const [enviando, setEnviando] = useState(false);
   const [feito, setFeito] = useState(null);
   const servicos = pagina.servicos.filter((x) => srv.includes(x.id));
-  const preco = (x) => (usaVeiculo ? x.precos[porte] ?? x.preco : x.preco);
-  const minutos = (x) => (usaVeiculo ? x.duracoes[porte] ?? x.duracao : x.duracao);
+  const preco = (x) => (usaVeiculo ? x.precos[porte || PORTE_PADRAO] ?? x.preco : x.preco); // sem porte (dono tirou a obrigatoriedade) vale o médio
+  const minutos = (x) => (usaVeiculo ? x.duracoes[porte || PORTE_PADRAO] ?? x.duracao : x.duracao);
   const total = servicos.reduce((t, x) => t + preco(x), 0);
   const duracao = servicos.reduce((t, x) => t + minutos(x), 0);
   const placaOk = placaValida(placa);
-  const veiculoOk = placaOk && modelo.trim().length >= 2 && !!porte;
+  const exV = pagina.exigeVeiculo || ['placa', 'modelo', 'porte']; // o que o dono marcou como obrigatório (Estabelecimento > Link)
+  const veiculoOk = limparVeiculoComRegras({ placa, modelo, porte }, exV).ok;
+  const estrela = (k) => (exV.includes(k) ? ' *' : '');
   const rotuloPorte = (pagina.portes || []).find((x) => x.id === porte)?.nome || '';
+  const textoV = [modelo.trim(), placa && formatarPlaca(placa), rotuloPorte && `porte ${rotuloPorte.toLowerCase()}`].filter(Boolean).join(' · ');
   const chave = `${srv.join(',')}|${barb}|${porte}`;
   const nomeBarb = (id) => pagina.profissionais.find((b) => b.id === id)?.nome || `Qualquer ${rot('profissional')}`;
   const alternar = (id) => { setSrv((l) => (l.includes(id) ? l.filter((x) => x !== id) : l.length >= 5 ? l : [...l, id])); setEscolha(null); };
@@ -192,20 +195,20 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
           <h2>Qual é o seu veículo?</h2>
           <p className="muted">O porte define o preço e o tempo de cada serviço.</p>
           <div className="pub-form">
-            <Campo rotulo="Placa (ABC-1234 ou ABC1D23)">
+            <Campo rotulo={`Placa (ABC-1234 ou ABC1D23)${estrela('placa')}`}>
               <input value={placa} onChange={(e) => setPlaca(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 8))} maxLength={8} autoCapitalize="characters" autoComplete="off" placeholder="ABC1D23" aria-invalid={!!placa && !placaOk} data-testid="pub-placa" />
             </Campo>
             {placa && !placaOk && <p className="erro-txt" role="alert" data-testid="pub-placa-erro">Placa inválida.</p>}
-            <Campo rotulo="Modelo"><input value={modelo} onChange={(e) => setModelo(e.target.value)} maxLength={40} placeholder="Ex.: Onix, Corolla, Hilux" autoComplete="off" data-testid="pub-modelo" /></Campo>
+            <Campo rotulo={`Modelo${estrela('modelo')}`}><input value={modelo} onChange={(e) => setModelo(e.target.value)} maxLength={40} placeholder="Ex.: Onix, Corolla, Hilux" autoComplete="off" data-testid="pub-modelo" /></Campo>
             <div className="pub-duas">
               <Campo rotulo="Marca (opcional)"><input value={marca} onChange={(e) => setMarca(e.target.value)} maxLength={30} autoComplete="off" data-testid="pub-marca" /></Campo>
               <Campo rotulo="Cor (opcional)"><input value={cor} onChange={(e) => setCor(e.target.value)} maxLength={20} autoComplete="off" data-testid="pub-cor" /></Campo>
             </div>
-            <div className="campo"><span className="campo-rotulo" id="pub-porte-r">Porte</span>
+            <div className="campo"><span className="campo-rotulo" id="pub-porte-r">{`Porte${estrela('porte')}`}</span>
               <div className="pub-portes" role="group" aria-labelledby="pub-porte-r">
                 {(pagina.portes || []).map((x) => (
                   <button type="button" key={x.id} className={`pub-porte ${porte === x.id ? 'on' : ''}`} aria-pressed={porte === x.id} onClick={() => { setPorte(x.id); setEscolha(null); }} data-testid={`pub-porte-${x.id}`}>
-                    <b>{x.nome}</b><small>{(EXEMPLO_PORTE[x.id] || '').replace('Ex.: ', '')}</small>
+                    <b>{x.nome}</b><small>{(x.exemplo || '').replace('Ex.: ', '')}</small>
                   </button>
                 ))}
               </div>
@@ -221,7 +224,7 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
       {etapa === 1 && (
         <div className="pub-bloco">
           <h2>O que vamos fazer?</h2>
-          {usaVeiculo && <p className="muted" data-testid="pub-veiculo-atual">{modelo.trim()} · {formatarPlaca(placa)} · porte {rotuloPorte.toLowerCase()} <button type="button" className="link" onClick={() => setEtapa(0)} data-testid="pub-trocar-veiculo">Trocar</button></p>}
+          {usaVeiculo && <p className="muted" data-testid="pub-veiculo-atual">{textoV || 'Sem dados do veículo'} <button type="button" className="link" onClick={() => setEtapa(0)} data-testid="pub-trocar-veiculo">Trocar</button></p>}
           {!pagina.servicos.length && <p className="muted" data-testid="pub-sem-servicos">Nenhum serviço disponível para agendar por aqui. Fale com a loja.</p>}
           <div className="pub-lista">
             {pagina.servicos.map((x) => (
@@ -263,12 +266,12 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
           <h2>Seus dados</h2>
           <div className="pub-resumo" data-testid="pub-resumo">
             <b>{servicos.map((x) => x.nome).join(', ')}</b>
-            {usaVeiculo && <span>{modelo.trim()} · {formatarPlaca(placa)} ({rotuloPorte})</span>}
+            {usaVeiculo && textoV && <span>{textoV}</span>}
             <span>{diaLongo(escolha.inicio)}, {horaDe(escolha.inicio)} · {nomeBarb(escolha.profissionalId)}</span>
             <span className="muted">{fmtDur(duracao)} · {fmtMoney(total)}</span>
           </div>
           <form className="pub-form" onSubmit={(e) => { e.preventDefault(); enviar(); }} noValidate>
-            <Campo rotulo="Nome"><input value={nome} onChange={(e) => setNome(e.target.value)} maxLength={60} autoComplete="name" data-testid="pub-nome" /></Campo>
+            <Campo rotulo={pagina.exigeNome === false ? 'Nome, se quiser' : 'Nome'}><input value={nome} onChange={(e) => setNome(e.target.value)} maxLength={60} autoComplete="name" data-testid="pub-nome" /></Campo>
             <Campo rotulo={pagina.exigeTelefone ? 'Telefone (WhatsApp, com DDD)' : 'Telefone (WhatsApp), se quiser'} dica={pagina.exigeTelefone ? undefined : 'Opcional. Com telefone a loja avisa do seu horário; sem ele, só vê o seu pedido.'}><input type="tel" inputMode="tel" value={tel} onChange={(e) => setTel(formatarTelefone(e.target.value))} maxLength={16} autoComplete="tel" placeholder="(51) 99999-9999" data-testid="pub-tel" /></Campo>
             <Campo rotulo="Cupom (opcional)"><input value={cupom} onChange={(e) => setCupom(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 14))} maxLength={14} autoComplete="off" autoCapitalize="characters" placeholder="XXXX-XXXX-XXXX" data-testid="pub-cupom" /></Campo>
             <input className="pub-isca" tabIndex={-1} aria-hidden="true" autoComplete="off" name="site" value={isca} onChange={(e) => setIsca(e.target.value)} data-testid="pub-isca" />

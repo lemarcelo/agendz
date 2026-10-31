@@ -3,10 +3,10 @@
 // altera e devolve um resultado. Espelha os casos de uso do futuro back-end.
 import {
   ATIVOS, STATUS, comissaoJaPaga, ERRO_COMISSAO_PAGA, formaEfetiva, formatarTelefone, acharConflitos, cadastroPorCpf, somenteDigitos, telefoneNacional, telefoneDoCanal, errosServicoIds, limparTexto, duracaoMin, exigeConfirmacaoServico, identificarCliente, janelaOcupada,
-  montarPlano, montarLembretes, notificacoesEfetivas, ocupadoMin, servicosPorIds, servicosDoAg, validarHorario, congelarComissoes, ocupacaoDe, retiradaDe, nomeBox,
+  montarPlano, montarLembretes, notificacoesEfetivas, ocupadoMin, servicosPorIds, servicosDoAg, validarHorario, congelarComissoes, ocupacaoDe, retiradaDe, nomeBox, semBoxAtivo, ERRO_SEM_BOX,
 } from './rules.js';
 import { assinaturaDoCliente, podeUsar, usoParaAgendamento } from './planos.js';
-import { LIMITE_VEICULOS, fotoDoVeiculo, limparVeiculo, resumoVeiculo, veiculoPorPlaca } from './veiculos.js';
+import { LIMITE_VEICULOS, fotoDoVeiculo, limparVeiculoComRegras, resumoVeiculo, veiculoInformado, veiculoPorPlaca } from './veiculos.js';
 import { fmtDate, fmtHM, fmtMoney, HORA, MIN, startOfDay } from './time.js';
 import { consumoDoAgendamento, r2, r3, totalAgendamento } from './reports.js';
 import { renderizar } from './templates.js';
@@ -109,7 +109,9 @@ const ERRO_DEVOLVIDO = ['O valor pago desse agendamento já foi acertado (crédi
 // Veículo do atendimento: um do cadastro do cliente (`veiculoId`) ou um novo (`veiculo`: placa, modelo, porte…), que entra no cadastro do cliente
 // se ele existe. Sem cliente cadastrado (balcão), o veículo fica só na foto do atendimento. NÃO grava nada: devolve `adicionar` para quem for gravar
 // (`gravarVeiculo`), só depois de o horário ser aprovado, para um pedido recusado não deixar veículo para trás.
-export function resolverVeiculo(s, cliente, { veiculoId, veiculo } = {}) {
+// `exigirVeiculo` (v121): lista do que é obrigatório (`veiculo`, `placa`, `modelo`, `porte`); sem ela vale a regra antiga (tudo). Veículo incompleto (sem placa ou modelo) vale só
+// como foto do atendimento: não entra no cadastro do cliente. Nada informado e nada exigido = atendimento sem veículo (preço e duração do médio).
+export function resolverVeiculo(s, cliente, { veiculoId, veiculo, exigirVeiculo } = {}) {
   if (!cap(s.estabelecimento, 'usaVeiculo')) return { ok: true, veiculoId: null, veiculo: null, adicionar: null }; // tipo sem veículo (barbearia)
   if (veiculoId !== undefined && veiculoId !== null && veiculoId !== '') {
     const v = typeof veiculoId === 'string' && cliente ? (cliente.veiculos || []).find((x) => x.id === veiculoId) : null;
@@ -117,9 +119,11 @@ export function resolverVeiculo(s, cliente, { veiculoId, veiculo } = {}) {
     return { ok: true, veiculoId: v.id, veiculo: fotoDoVeiculo(v), adicionar: null };
   }
   // Sem veículo informado e cliente com um só veículo cadastrado: é esse (o painel e o robô sempre mandam o veículo; isto cobre integrações simples).
-  if ((veiculo === undefined || veiculo === null) && cliente && (cliente.veiculos || []).length === 1) { const u = cliente.veiculos[0]; return { ok: true, veiculoId: u.id, veiculo: fotoDoVeiculo(u), adicionar: null }; }
-  const l = limparVeiculo(veiculo);
-  if (!l.ok) return { ok: false, erros: [l.erro === 'Informe o veículo.' ? 'Escolha o veículo do atendimento.' : l.erro] };
+  if (!veiculoInformado(veiculo) && cliente && (cliente.veiculos || []).length === 1) { const u = cliente.veiculos[0]; return { ok: true, veiculoId: u.id, veiculo: fotoDoVeiculo(u), adicionar: null }; }
+  const l = limparVeiculoComRegras(veiculo, exigirVeiculo);
+  if (!l.ok) return { ok: false, erros: [l.erro] };
+  if (!l.veiculo) return { ok: true, veiculoId: null, veiculo: null, adicionar: null };
+  if (!l.completo) return { ok: true, veiculoId: null, veiculo: l.veiculo, adicionar: null };
   const existente = cliente ? veiculoPorPlaca(cliente, l.veiculo.placa) : null;
   if (existente) return { ok: true, veiculoId: existente.id, veiculo: fotoDoVeiculo(existente), adicionar: null };
   if (cliente && (cliente.veiculos || []).length >= LIMITE_VEICULOS) return { ok: false, erros: [`O cliente já tem ${LIMITE_VEICULOS} veículos cadastrados.`] };
@@ -410,7 +414,7 @@ export function resolverClienteDoAtendimento(s, { nome, telefone, clienteId }, a
 // Atendimento local (cliente que chegou no balcão, ou registro de algo que já aconteceu): nasce concluído, para entrar no relatório, no estoque,
 // na comissão e no financeiro. Não manda mensagem, não passa por conflito de horário (já aconteceu). `inicio` opcional (passado); sem ele, é agora.
 // Cliente: ver `resolverClienteDoAtendimento` (telefone cria cadastro; só nome não).
-export function registrarAtendimentoLocal(s, { profissionalId, servicoIds, nome, telefone, clienteId: clienteEscolhido, produtos, vendedorId, formaPagamento, inicio, veiculoId, veiculo, motivoRetroativo, assinaturaId }, autor, agora) {
+export function registrarAtendimentoLocal(s, { profissionalId, servicoIds, nome, telefone, clienteId: clienteEscolhido, produtos, vendedorId, formaPagamento, inicio, veiculoId, veiculo, exigirVeiculo, motivoRetroativo, assinaturaId }, autor, agora) {
   const ids = Array.isArray(servicoIds) ? servicoIds : [];
   const temProdutos = Array.isArray(produtos) && produtos.length > 0;
   // Venda de produto sem serviço: vale quando há ao menos um produto; senão continua exigindo ao menos um serviço.
@@ -446,7 +450,7 @@ export function registrarAtendimentoLocal(s, { profissionalId, servicoIds, nome,
   if (!rc.ok) return rc;
   const cli = rc.cliente;
   // Serviço tem preço por porte: o atendimento precisa de um veículo (do cadastro do cliente ou novo). Venda só de produto não precisa.
-  const rv = ids.length ? resolverVeiculo(s, cli, { veiculoId, veiculo }) : null;
+  const rv = ids.length ? resolverVeiculo(s, cli, { veiculoId, veiculo, exigirVeiculo }) : null;
   if (rv && !rv.ok) return { ok: false, erros: rv.erros };
   const sv = servicosPorIds(s, ids, rv?.veiculo?.porte);
   let usoPlano = null;
@@ -489,13 +493,15 @@ export function registrarAtendimentoLocal(s, { profissionalId, servicoIds, nome,
 // ---------- Atender: uma ação só para atendimento no balcão, registro do que já aconteceu e agendamento futuro ----------
 // Sem data (ou data de agora/passado): atendimento já feito (local, concluído nessa data). Data futura: agendamento (a confirmar ou confirmado).
 // O único requisito fixo é ≥1 serviço ou produto; o resto depende dos campos obrigatórios de cada tipo (Estabelecimento > Regras).
-export const CAMPOS_ATENDER = { nome: 'nome', telefone: 'telefone', profissional: 'profissional', vendedor: 'vendedor', formaPagamento: 'forma de pagamento' };
+export const CAMPOS_ATENDER = { nome: 'nome', telefone: 'telefone', profissional: 'profissional', vendedor: 'vendedor', formaPagamento: 'forma de pagamento', veiculo: 'veículo', placa: 'placa', modelo: 'modelo do veículo', porte: 'porte do veículo' };
+export const CAMPOS_DE_VEICULO = ['veiculo', 'placa', 'modelo', 'porte']; // só valem no tipo com veículo (estética) e quando há serviço
 export const CAMPOS_OBRIGATORIOS_PADRAO = { futuro: [], local: [] }; // de fábrica nada é obrigatório; o dono marca em Estabelecimento > Regras do atendimento
 export const camposObrigatorios = (s, tipo) => {
   const c = (s.estabelecimento.camposObrigatorios || CAMPOS_OBRIGATORIOS_PADRAO)[tipo];
   return Array.isArray(c) ? c : CAMPOS_OBRIGATORIOS_PADRAO[tipo];
 };
 export function atender(s, d, autor, agora) {
+  if (semBoxAtivo(s)) return { ok: false, erros: [ERRO_SEM_BOX] }; // estética sem box ativo: nem atendimento local nem agendamento (v120)
   const ids = Array.isArray(d.servicoIds) ? d.servicoIds : [];
   const produtos = Array.isArray(d.produtos) ? d.produtos : [];
   if (!ids.length && !produtos.length) return { ok: false, erros: ['Escolha ao menos um serviço ou um produto.'] };
@@ -511,11 +517,13 @@ export function atender(s, d, autor, agora) {
     vendedor: produtos.length === 0 || !!d.vendedorId,
     formaPagamento: futuro || !!formaEfetiva(s, d.formaPagamento),
   };
-  const faltam = camposObrigatorios(s, tipo).filter((k) => tem[k] === false).map((k) => CAMPOS_ATENDER[k]);
+  const obrig = camposObrigatorios(s, tipo);
+  const exigirVeiculo = obrig.filter((k) => CAMPOS_DE_VEICULO.includes(k)); // conferido por resolverVeiculo (só quando há serviço)
+  const faltam = obrig.filter((k) => tem[k] === false).map((k) => CAMPOS_ATENDER[k]);
   if (faltam.length) return { ok: false, erros: [`Preencha ${faltam.length === 1 ? 'o campo obrigatório' : 'os campos obrigatórios'}: ${faltam.join(', ')}.`] };
   if (!futuro) {
     if (d.cupomChave) return { ok: false, erros: ['Cupom só vale em agendamento (data futura).'] };
-    const r = registrarAtendimentoLocal(s, d, autor, agora);
+    const r = registrarAtendimentoLocal(s, { ...d, exigirVeiculo }, autor, agora);
     return r.ok ? { ...r, tipo: 'local' } : r;
   }
   // Futuro: precisa de serviço (duração e horário livre) e de um cliente com telefone (o aviso do horário vai por WhatsApp).
@@ -526,7 +534,7 @@ export function atender(s, d, autor, agora) {
   const rc = resolverClienteDoAtendimento(s, d, agora);
   if (!rc.ok) return rc;
   // Sem telefone (e sem cliente escolhido) não há cadastro: o horário fica com o nome avulso, confirmado e sem aviso por WhatsApp. Só vira obrigatório se a loja marcar.
-  const r = criarAgendamento(s, { clienteId: rc.cliente ? rc.cliente.id : null, ...(rc.cliente ? {} : { semCliente: true, nomeAvulso: rc.nomeAvulso }), profissionalId: d.profissionalId, servicoIds: ids, inicio: Number(d.inicio), status, encaixe: !!d.encaixe, origem: 'painel', boxId: d.boxId, veiculoId: d.veiculoId, veiculo: d.veiculo, assinaturaId: d.assinaturaId }, autor, agora);
+  const r = criarAgendamento(s, { clienteId: rc.cliente ? rc.cliente.id : null, ...(rc.cliente ? {} : { semCliente: true, nomeAvulso: rc.nomeAvulso }), profissionalId: d.profissionalId, servicoIds: ids, inicio: Number(d.inicio), status, encaixe: !!d.encaixe, origem: 'painel', boxId: d.boxId, veiculoId: d.veiculoId, veiculo: d.veiculo, exigirVeiculo, assinaturaId: d.assinaturaId }, autor, agora);
   if (!r.ok) return r;
   for (const p of produtos) {
     const x = adicionarProdutoAoAgendamento(s, r.agendamento.id, { materialId: p && p.materialId, qtd: p && p.qtd, vendedorId: d.vendedorId }, autor, agora);

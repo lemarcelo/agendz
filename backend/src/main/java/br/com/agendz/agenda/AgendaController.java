@@ -2,6 +2,7 @@ package br.com.agendz.agenda;
 
 import br.com.agendz.clientes.ClienteService;
 import br.com.agendz.comissao.ComissaoService;
+import br.com.agendz.configuracao.PorteController;
 import br.com.agendz.configuracao.RegrasAtendimento;
 import br.com.agendz.cupom.CupomService;
 import br.com.agendz.erro.ErroDeNegocio;
@@ -27,6 +28,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -112,7 +114,8 @@ public class AgendaController {
         }
     }
 
-    private static final Map<String, String> ROTULO_CAMPO = Map.of("nome", "nome", "telefone", "telefone", "profissional", "profissional", "vendedor", "vendedor", "formaPagamento", "forma de pagamento");
+    private static final Map<String, String> ROTULO_CAMPO = Map.of("nome", "nome", "telefone", "telefone", "profissional", "profissional", "vendedor", "vendedor", "formaPagamento", "forma de pagamento",
+            "veiculo", "veículo", "placa", "placa", "modelo", "modelo do veículo", "porte", "porte do veículo");
 
     /** Produto pedido no Atender: material do tipo produto e quantidade inteira de 1 a 999 (a regra é conferida em {@link #lancarProdutos}, com a mensagem do simulador). */
     public record ProdutoPedido(UUID materialId, Integer qtd) {
@@ -160,6 +163,11 @@ public class AgendaController {
 
     public record NovoStatus(@NotNull @Size(max = 30) String status) {
     }
+
+    public record NovaForma(@NotNull @Size(max = 20) String formaPagamento) {
+    }
+
+    private static final Map<String, String> ROTULO_FORMA = Map.of("pix", "Pix", "dinheiro", "Dinheiro", "cartao", "Cartão");
 
     private record ServicoLinha(UUID id, String nome, BigDecimal preco, int duracaoMin, int intervaloMin, boolean multiDia, boolean ativo) {
     }
@@ -254,7 +262,7 @@ public class AgendaController {
         if (new HashSet<>(servicoIds).size() != servicoIds.size()) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "O mesmo serviço aparece duas vezes.");
         boolean encaixe = Boolean.TRUE.equals(d.encaixe());
         Agendamento criado = idempotencia.executar(chave, UUID.fromString(jwt.getSubject()), "POST /api/agendamentos", d, Agendamento.class, () -> banco.naLoja(jdbc -> {
-            return inserirAgendamento(jdbc, loja, jwt, d.clienteId(), null, d.profissionalId(), servicoIds, d.inicio(), status, encaixe, d.veiculoId(), d.veiculo(), d.boxId(), d.assinaturaId());
+            return inserirAgendamento(jdbc, loja, jwt, d.clienteId(), null, d.profissionalId(), servicoIds, d.inicio(), status, encaixe, d.veiculoId(), d.veiculo(), d.boxId(), d.assinaturaId(), ClienteService.EXIGE_TUDO_DO_VEICULO);
         }));
         return ResponseEntity.status(HttpStatus.CREATED).body(criado);
     }
@@ -264,7 +272,7 @@ public class AgendaController {
      * serviços, cliente, veículo (estética), profissional/expediente, conflito do profissional, box.
      */
     private Agendamento inserirAgendamento(JdbcTemplate jdbc, Loja loja, Jwt jwt, UUID clienteId, String nomeAvulsoPedido, UUID profissionalId, List<UUID> servicoIds, Instant inicioBruto, String status, boolean encaixe,
-                                           UUID veiculoId, ClienteService.EntradaVeiculo veiculoNovo, UUID boxPedido, UUID assinaturaId) {
+                                           UUID veiculoId, ClienteService.EntradaVeiculo veiculoNovo, UUID boxPedido, UUID assinaturaId, Set<String> exigirVeiculo) {
         carregarServicos(jdbc, servicoIds, null); // só confere que existem e estão ativos; o preço do porte vem depois do veículo
         // Pelo botão Atender o horário futuro pode ficar sem cadastro (só o nome, ou nem isso): nasce confirmado e sem aviso ao cliente. Pela tela de agendar o cliente é obrigatório.
         boolean semCadastro = clienteId == null && nomeAvulsoPedido != null;
@@ -275,7 +283,7 @@ public class AgendaController {
         }
         if (semCadastro) status = CONFIRMADO;
         String avulso = semCadastro && !nomeAvulsoPedido.isEmpty() ? nomeAvulsoPedido : null;
-        ClienteService.VeiculoDoAgendamento vei = clientes.resolverVeiculo(jdbc, loja, clienteId, veiculoId, veiculoNovo);
+        ClienteService.VeiculoDoAgendamento vei = clientes.resolverVeiculo(jdbc, loja, clienteId, veiculoId, veiculoNovo, exigirVeiculo);
         List<ServicoLinha> servicos = carregarServicos(jdbc, servicoIds, vei == null ? null : vei.porte());
         travarProfissional(jdbc, profissionalId);
         Instant inicio = conferirInicio(inicioBruto);
@@ -350,6 +358,10 @@ public class AgendaController {
                 if (achado.isEmpty()) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, "Cliente não encontrado.");
                 semNome = achado.get(0);
             }
+            // estética: sem nenhum box ativo não se atende nem se agenda (v120); o front leva o proprietário ao cadastro
+            if (usaBox(loja) && Integer.valueOf(0).equals(jdbc.queryForObject("select count(*) from box where ativo", Integer.class))) {
+                throw new ErroDeNegocio(HttpStatus.CONFLICT, SEM_BOX);
+            }
             // campos obrigatórios do tipo (Estabelecimento > Regras): o que o formulário já traz por padrão (profissional, vendedor, forma padrão) conta como preenchido
             RegrasAtendimento.Regras regras = RegrasAtendimento.ler(jdbc);
             Map<String, Boolean> tem = new LinkedHashMap<>();
@@ -373,7 +385,7 @@ public class AgendaController {
                 UUID vendedor = produtos.isEmpty() ? null : vendedorPedido != null ? vendedorPedido : profissionalId;
                 if (vendedor != null) exigirVendedor(jdbc, vendedor);
                 ClienteService.DoAtendimento quem = clientes.resolverDoAtendimento(jdbc, d.nome(), d.telefone(), d.clienteId());
-                Agendamento criado = inserirAgendamento(jdbc, loja, jwt, quem.clienteId(), quem.clienteId() == null ? (quem.nomeAvulso() == null ? "" : quem.nomeAvulso()) : null, profissionalId, servicoIds, d.inicio(), status, Boolean.TRUE.equals(d.encaixe()), d.veiculoId(), d.veiculo(), d.boxId(), d.assinaturaId());
+                Agendamento criado = inserirAgendamento(jdbc, loja, jwt, quem.clienteId(), quem.clienteId() == null ? (quem.nomeAvulso() == null ? "" : quem.nomeAvulso()) : null, profissionalId, servicoIds, d.inicio(), status, Boolean.TRUE.equals(d.encaixe()), d.veiculoId(), d.veiculo(), d.boxId(), d.assinaturaId(), exigirVeiculo(futuro ? regras.futuro() : regras.local()));
                 if (!produtos.isEmpty()) lancarProdutos(jdbc, loja, criado.id(), produtos, vendedor, jwt);
                 if (comCupom) {
                     // cupom recusado: o agendamento também não é criado (a transação volta atrás; só a tentativa errada fica gravada)
@@ -386,6 +398,13 @@ public class AgendaController {
             return inserirLocal(jdbc, loja, jwt, d, profissionalId, servicoIds, produtos, vendedorPedido, agoraMinuto, regras);
         }));
         return ResponseEntity.status(HttpStatus.CREATED).body(feito);
+    }
+
+    /** Só os campos de veículo da lista de campos obrigatórios (Estabelecimento > Regras). */
+    private static Set<String> exigirVeiculo(List<String> campos) {
+        Set<String> r = new HashSet<>();
+        for (String k : campos) if (ClienteService.CAMPOS_DO_VEICULO.contains(k)) r.add(k);
+        return r;
     }
 
     private Agendamento inserirLocal(JdbcTemplate jdbc, Loja loja, Jwt jwt, NovoAtendimento d, UUID profissionalId, List<UUID> servicoIds, List<ProdutoPedido> produtos, UUID vendedorPedido, Instant agoraMinuto, RegrasAtendimento.Regras regras) {
@@ -416,7 +435,7 @@ public class AgendaController {
         }
         ClienteService.DoAtendimento quem = clientes.resolverDoAtendimento(jdbc, d.nome(), d.telefone(), d.clienteId());
         // estética: o atendimento de serviço precisa do veículo (o porte define preço e duração); venda só de produto não
-        ClienteService.VeiculoDoAgendamento vei = servicoIds.isEmpty() ? null : clientes.resolverVeiculo(jdbc, loja, quem.clienteId(), d.veiculoId(), d.veiculo());
+        ClienteService.VeiculoDoAgendamento vei = servicoIds.isEmpty() ? null : clientes.resolverVeiculo(jdbc, loja, quem.clienteId(), d.veiculoId(), d.veiculo(), exigirVeiculo(regras.local()));
         if (vei != null) servicos = carregarServicos(jdbc, servicoIds, vei.porte());
         Instant inicio = quando.isAfter(agoraMinuto) ? agoraMinuto : quando;
         int minutos = 0;
@@ -531,6 +550,25 @@ public class AgendaController {
         });
     }
 
+    // ---------------------------------------------------------------- forma de pagamento
+
+    /** Troca a forma de pagamento (segurar o cartão): futuro ou concluído, nunca cancelado. O profissional só age no dele. Só registra a escolha (o servidor ainda não tem financeiro). */
+    @PutMapping("/api/agendamentos/{id}/forma-pagamento")
+    public Agendamento mudarFormaPagamento(@PathVariable UUID id, @Valid @RequestBody NovaForma d, @AuthenticationPrincipal Jwt jwt) {
+        if (!RegrasAtendimento.FORMAS.contains(d.formaPagamento())) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Forma de pagamento inválida.");
+        UUID so = somenteDe(jwt);
+        Loja loja = LojaContext.exigir();
+        return banco.naLoja(jdbc -> {
+            Atual a = ler(jdbc, id, so, true);
+            if (CANCELADO.equals(a.status())) throw new ErroDeNegocio(HttpStatus.CONFLICT, "Agendamento cancelado não tem forma de pagamento.");
+            String antes = jdbc.queryForObject("select forma_pagamento from agendamento where id = ?", String.class, id);
+            if (d.formaPagamento().equals(antes)) return buscar(jdbc, id, so);
+            jdbc.update("update agendamento set forma_pagamento = ?, atualizado_em = now() where id = ?", d.formaPagamento(), id);
+            registrar(jdbc, loja.id(), id, jwt, "forma de pagamento", antes == null || antes.isEmpty() ? "(padrão da loja)" : ROTULO_FORMA.getOrDefault(antes, antes), ROTULO_FORMA.get(d.formaPagamento()));
+            return buscar(jdbc, id, so);
+        });
+    }
+
     // ---------------------------------------------------------------- remarcar
 
     @PutMapping("/api/agendamentos/{id}/remarcar")
@@ -596,6 +634,8 @@ public class AgendaController {
         return m == null || m <= 0 ? 1 : m;
     }
 
+    public static final String SEM_BOX = "Cadastre ao menos um box (Estabelecimento > Boxes) antes de atender.";
+
     private static boolean usaBox(Loja loja) {
         return br.com.agendz.tenant.Capacidades.usaRecursoFisico(loja);
     }
@@ -627,15 +667,15 @@ public class AgendaController {
     private List<ServicoLinha> carregarServicos(JdbcTemplate jdbc, List<UUID> ids, String porte) {
         if (ids.isEmpty()) return List.of(); // venda só de produto
         String marcas = String.join(",", ids.stream().map(x -> "?").toList());
+        List<PorteController.Porte> portesDaLoja = porte == null ? List.of() : PorteController.ler(jdbc);
         List<ServicoLinha> achados = jdbc.query(
                 "select id, nome, preco, duracao_min, intervalo_min, multi_dia, ativo, precos::text as precos, duracoes::text as duracoes from servico where id in (" + marcas + ")",
                 (rs, i) -> {
                     BigDecimal preco = rs.getBigDecimal("preco");
                     int duracao = rs.getInt("duracao_min");
                     if (porte != null) {
-                        BigDecimal p = valorDoPorte(rs.getString("precos"), porte);
                         BigDecimal dur = valorDoPorte(rs.getString("duracoes"), porte);
-                        if (p != null && p.signum() >= 0) preco = p.setScale(2, java.math.RoundingMode.HALF_UP);
+                        preco = PorteController.precoNoPorte(preco, valorDoPorte(rs.getString("precos"), porte), portesDaLoja, porte); // v124: específico ou base × fator
                         if (dur != null && dur.signum() > 0) duracao = dur.intValue();
                     }
                     return new ServicoLinha(rs.getObject("id", UUID.class), rs.getString("nome"), preco, duracao, rs.getInt("intervalo_min"), rs.getBoolean("multi_dia"), rs.getBoolean("ativo"));

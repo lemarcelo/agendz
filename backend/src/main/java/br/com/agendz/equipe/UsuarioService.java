@@ -217,6 +217,9 @@ public class UsuarioService {
         banco.naLoja(jdbc -> {
             if (buscar(jdbc, id) == null) throw naoEncontrado();
             jdbc.update("update usuario set senha_hash = ?, deve_trocar_senha = true where id = ?", hash, id);
+            // senha refeita por outra pessoa: nenhum acesso longo anterior (rede ou aparelho confiável) continua valendo
+            jdbc.update("update rede_confiavel set versao = versao + 1 where usuario_id = ?", id);
+            jdbc.update("delete from aparelho_confiavel where usuario_id = ?", id);
             return null;
         });
         return new ComSenha(obter(id), senha);

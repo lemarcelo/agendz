@@ -3,7 +3,7 @@
 // Fala com um `adaptador` (async, { ok, erro, ... }): no site real é o de api-real.js (/api/onboarding); no Artifact, a pré-visualização
 // de services/onboarding-demo.js (nada é gravado). Não importa a API simulada: textos do tipo vêm de `rotulo`.
 import React, { useEffect, useMemo, useState } from 'react';
-import { rotulo } from '../../domain/tipos.js';
+import { cap, rotulo } from '../../domain/tipos.js';
 import { produtosDoTipo } from '../../domain/catalogo.js';
 import { Aviso, Btn, Campo, Icone } from './mini.jsx';
 
@@ -11,6 +11,7 @@ const dinheiro = (v) => Number(v).toLocaleString('pt-BR', { style: 'currency', c
 const lerNumero = (t) => { const n = Number(String(t).replace(/\./g, '').replace(',', '.')); return Number.isFinite(n) ? n : NaN; };
 const faixa = (mapa) => { const v = Object.values(mapa || {}); return v.length ? [Math.min(...v), Math.max(...v)] : null; };
 const ETAPAS = [['servicos', 'Serviços'], ['produtos', 'Produtos'], ['equipe', 'Equipe'], ['expediente', 'Expediente'], ['pronto', 'Pronto']];
+const ETAPAS_BOX = [['servicos', 'Serviços'], ['produtos', 'Produtos'], ['equipe', 'Equipe'], ['boxes', 'Boxes'], ['expediente', 'Expediente'], ['pronto', 'Pronto']]; // tipo com box (estética): sem box a agenda não aceita carro
 const pctTxt = (n) => String(n).replace('.', ',');
 // Comissão de cada pessoa (pedido do Marcelo, v102): sobre serviços (modo 'geral' = usa a geral da loja, 'propria' = percentual da pessoa) e sobre produtos
 // (modoProd 'sem' = nenhuma, a menos que o próprio produto tenha a sua; 'propria' = percentual da pessoa).
@@ -50,6 +51,7 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
   const [enviando, setEnviando] = useState(false);
   const [copiado, setCopiado] = useState(false);
   const [exp, setExp] = useState(() => camposDoExpediente(null));
+  const [boxLinhas, setBoxLinhas] = useState(['Box 1']); // nomes dos boxes (textos); os que já existem vêm do servidor e não são recriados
   // Reconfigurar com senha e desfazer: depois de concluído, a primeira tela pede a senha do dono; o histórico mostra o que cada reconfiguração mudou.
   const [confirmada, setConfirmada] = useState(false);
   const [senhaTxt, setSenhaTxt] = useState('');
@@ -64,7 +66,9 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
     if (!r.ok) { setErroCarga(r.erro); setFase('erro'); return; }
     setEstado(r.estado);
     setExp(camposDoExpediente(r.estado.expediente || r.estado.expedienteSugerido));
-    setEtapa(reconf ? 'servicos' : r.estado.concluido ? 'pronto' : etapaDoPasso(r.estado.passo));
+    setBoxLinhas(r.estado.boxes && r.estado.boxes.length ? r.estado.boxes : ['Box 1']);
+    const et = etapaDoPasso(r.estado.passo);
+    setEtapa(reconf ? 'servicos' : r.estado.concluido ? 'pronto' : et === 'expediente' && r.estado.usaBox && !(r.estado.boxes || []).length ? 'boxes' : et); // retomou depois da equipe e ainda sem box: pede os boxes
     setMarcas(Object.fromEntries(r.estado.servicos.map((s) => [s.chave, { on: false, preco: String(s.preco).replace('.', ','), duracao: String(s.duracaoMin) }])));
     setProds(Object.fromEntries(produtosDoTipo(tipo).map((p) => [p.chave, { on: false, preco: pctTxt(p.preco), estoque: '' }])));
     const g = Number.isFinite(r.estado.comissaoPadrao) ? r.estado.comissaoPadrao : 50;
@@ -203,8 +207,23 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
     const r = await adaptador.equipe(pessoas);
     setEnviando(false);
     if (!r.ok) { falha(r); return; }
-    if (!pessoas.length) { setEtapa('expediente'); return; }
+    if (!pessoas.length) { setEtapa(depoisDaEquipe); return; }
     setCriadas(r.pessoas);
+  };
+
+  const usaBox = !!(estado && estado.usaBox) && cap({ tipo }, 'usaRecursoFisico');
+  const depoisDaEquipe = usaBox ? 'boxes' : 'expediente';
+  const enviarBoxes = async () => {
+    if (enviando) return;
+    const nomes = boxLinhas.map((n) => n.trim().replace(/\s+/g, ' ')).filter(Boolean);
+    if (!nomes.length) { setErro('Informe ao menos um box.'); return; }
+    if (nomes.some((n) => n.length > 30)) { setErro('Cada box pode ter até 30 letras.'); return; }
+    if (new Set(nomes.map((n) => n.toLowerCase())).size !== nomes.length) { setErro('Dois boxes têm o mesmo nome.'); return; }
+    setEnviando(true); setErro('');
+    const r = await adaptador.boxes(nomes);
+    setEnviando(false);
+    if (!r.ok) { falha(r); return; }
+    setEtapa('expediente');
   };
 
   const mudarExp = (campo, valor) => { setExp((e) => ({ ...e, [campo]: valor })); setErro(''); };
@@ -248,7 +267,8 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
     aoConcluir();
   };
 
-  const indice = ETAPAS.findIndex((e) => e[0] === etapa);
+  const etapas = usaBox ? ETAPAS_BOX : ETAPAS;
+  const indice = etapas.findIndex((e) => e[0] === etapa);
   const Raiz = reconf ? 'div' : 'main';
   return (
     <Raiz className={reconf ? 'pa pa-embutido' : 'login pa'} data-testid="pa">
@@ -259,7 +279,7 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
           {reconf && <p className="muted" data-testid="pa-reconf-nota">Aqui você só adiciona: serviços, produtos e pessoas que já existem continuam como estão e ninguém é excluído. O horário de funcionamento, se você salvar, substitui o atual. Dá para desfazer pelo histórico abaixo (por 30 dias).</p>}
           {previa && <Aviso data-testid="pa-previa">Pré-visualização: nada do que você marcar aqui é gravado.</Aviso>}
           {!precisaSenha && <ol className="pa-passos" aria-label="Etapas">
-            {ETAPAS.map(([id, nome], i) => <li key={id} className={i === indice ? 'atual' : i < indice ? 'feito' : ''} aria-current={i === indice ? 'step' : undefined} data-testid={`pa-etapa-${id}`}><span>{i + 1}</span> {nome}</li>)}
+            {etapas.map(([id, nome], i) => <li key={id} className={i === indice ? 'atual' : i < indice ? 'feito' : ''} aria-current={i === indice ? 'step' : undefined} data-testid={`pa-etapa-${id}`}><span>{i + 1}</span> {nome}</li>)}
           </ol>}
         </header>
 
@@ -433,7 +453,7 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
             <p className="muted">Os {profissionais} que “atendem clientes” aparecem na agenda. Comissão sobre serviços: o serviço com percentual próprio vale sobre o da pessoa, e o da pessoa vale sobre o geral da loja (0% é sem comissão). Sobre produtos: vale o percentual do próprio produto, se ele tiver; senão o da pessoa que vendeu. O proprietário que atende fica com 100% a menos que tenha percentual próprio.</p>
             {erro && <Aviso tipo="erro" data-testid="pa-erro">{erro}</Aviso>}
             <div className="acoes pa-acoes">
-              <Btn onClick={() => { setAviso(''); setEtapa('expediente'); }} data-testid="pa-pular-equipe">Pular</Btn>
+              <Btn onClick={() => { setAviso(''); setEtapa(depoisDaEquipe); }} data-testid="pa-pular-equipe">Pular</Btn>
               <Btn variante="primario" disabled={enviando} onClick={enviarEquipe} data-testid="pa-criar-acessos">{enviando ? 'Salvando…' : 'Criar acessos'}</Btn>
             </div>
           </section>
@@ -447,7 +467,26 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
             </ul>
             <div className="acoes"><Btn tamanho="sm" onClick={copiar} data-testid="pa-copiar">{copiado ? 'Copiado' : 'Copiar tudo'}</Btn></div>
             {erro && <Aviso tipo="erro" data-testid="pa-erro">{erro}</Aviso>}
-            <div className="acoes pa-acoes"><Btn variante="primario" onClick={() => { setErro(''); setEtapa('expediente'); }} data-testid="pa-anotei">Anotei, continuar</Btn></div>
+            <div className="acoes pa-acoes"><Btn variante="primario" onClick={() => { setErro(''); setEtapa(depoisDaEquipe); }} data-testid="pa-anotei">Anotei, continuar</Btn></div>
+          </section>
+        )}
+
+        {fase === 'ok' && !precisaSenha && etapa === 'boxes' && usaBox && (
+          <section data-testid="pa-boxes">
+            <p>Em quais boxes (vagas) a loja atende? Sem box cadastrado a agenda não aceita carro e o link do cliente fica sem horários. Dois carros não ocupam o mesmo box ao mesmo tempo. {reconf ? 'Os que já existem não são recriados nem removidos.' : 'Dá para renomear e incluir mais depois, em Estabelecimento > Boxes.'}</p>
+            <ul className="pa-lista">
+              {boxLinhas.map((n, i) => (
+                <li key={i} className="pa-linha">
+                  <Campo rotulo={`Box ${i + 1}`}><input value={n} maxLength={30} onChange={(e) => { setBoxLinhas((l) => l.map((x, j) => (j === i ? e.target.value : x))); setErro(''); }} data-testid={`pa-box-${i}`} /></Campo>
+                  {boxLinhas.length > 1 && <button type="button" className="btn btn-neutro btn-sm" onClick={() => setBoxLinhas((l) => l.filter((_, j) => j !== i))} aria-label={`Remover o box ${i + 1}`} data-testid={`pa-box-remover-${i}`}><Icone n="x" size={15} /></button>}
+                </li>
+              ))}
+            </ul>
+            {boxLinhas.length < 20 && <div className="acoes"><Btn tamanho="sm" onClick={() => setBoxLinhas((l) => [...l, `Box ${l.length + 1}`])} data-testid="pa-box-add">Adicionar box</Btn></div>}
+            {erro && <Aviso tipo="erro" data-testid="pa-erro">{erro}</Aviso>}
+            <div className="acoes pa-acoes">
+              <Btn variante="primario" disabled={enviando} onClick={enviarBoxes} data-testid="pa-continuar-boxes">{enviando ? 'Salvando…' : 'Continuar'}</Btn>
+            </div>
           </section>
         )}
 

@@ -46,7 +46,13 @@ public class SuporteDaLoja {
     public Resultado refazerSenha(UUID lojaId) {
         String senha = Temporarias.senha();
         String hash = encoder.encode(senha);
-        int mudou = banco.naLoja(lojaId, jdbc -> jdbc.update("update usuario set senha_hash = ?, deve_trocar_senha = true, ativo = true where identificador = ?", hash, Reservados.SUPORTE));
+        int mudou = banco.naLoja(lojaId, jdbc -> {
+            int n = jdbc.update("update usuario set senha_hash = ?, deve_trocar_senha = true, ativo = true where identificador = ?", hash, Reservados.SUPORTE);
+            // senha refeita: nenhum acesso longo anterior (rede ou aparelho confiável) continua valendo
+            jdbc.update("update rede_confiavel set versao = versao + 1 where usuario_id in (select id from usuario where identificador = ?)", Reservados.SUPORTE);
+            jdbc.update("delete from aparelho_confiavel where usuario_id in (select id from usuario where identificador = ?)", Reservados.SUPORTE);
+            return n;
+        });
         if (mudou == 0) return garantir(lojaId);
         return new Resultado(false, Reservados.SUPORTE, senha);
     }

@@ -4,8 +4,9 @@
 // devolve, com as mensagens dele. O profissional só recebe os próprios agendamentos (o servidor filtra). Atender (atendimento local e novo agendamento) é o `Atender.jsx` (5c);
 // nas lojas com veículo/porte e box (estética) o Atender pede o veículo e deixa escolher o box; o cartão e a ficha mostram veículo, porte e box.
 // Não importa `api.js`, `hooks.js` nem `common.jsx` (tests/estatico.test.mjs).
+import PedirAvaliacao, { EstrelaAvaliar } from './PedirAvaliacao.jsx';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { agenda as api, boxes as apiBoxes, clientes as apiClientes, local as apiLocal, profissionais as apiProf } from '../../services/api-real.js';
+import { agenda as api, boxes as apiBoxes, clientes as apiClientes, linkAgendamento as apiLink, local as apiLocal, profissionais as apiProf } from '../../services/api-real.js';
 import { DIAS_CURTOS, addDays, addMonths, fmtDateTime, fmtDayLong, maiuscula1, fmtDiaMesSemana, fmtHM, fmtMoney, fmtMonthYear, monthStart, sameDay, startOfDay, weekStart, ymd } from '../../domain/time.js';
 import { ATIVOS, ROTULO_STATUS } from '../../domain/rules.js';
 import { agruparPorDia, rotuloCancelados, rotuloDoGrupo, separarCancelados } from '../../domain/agenda-grupos.js';
@@ -14,10 +15,13 @@ import { Rot, capAtiva } from '../../domain/tipos.js';
 import { ROTULO_PORTE, rotuloVeiculo } from '../../domain/veiculos.js';
 import { boxesAtivos } from '../../domain/atender-form.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
+import FormaPagamento from '../leve/FormaPagamento.jsx';
+import { useToqueLongo } from '../leve/segurar.js';
 import { montarLinkAgendamento } from '../../domain/link-publico.js';
 import { numeroWhatsapp, textoConvite, textoReagendamento } from '../../domain/whatsapp.js';
 import { abrirWhatsapp } from '../whatsapp.js';
 import Atender from './Atender.jsx';
+import AvisoSemBox from '../leve/AvisoSemBox.jsx';
 import { useAtualizacaoAutomatica } from './atualizar.js';
 
 const CHAVE_COR = { a_confirmar: 'amarelo', confirmado: 'azul', concluido: 'verde', cancelado: 'cinza' };
@@ -27,13 +31,17 @@ const aoLocal = (ts) => { const d = new Date(ts); const p = (n) => String(n).pad
 const doLocal = (v) => { const t = new Date(v).getTime(); return Number.isFinite(t) ? t : null; };
 
 
-function Cartao({ a, nomeCliente, nomeProf, mostraProf, aberto, aoAbrir, testid, destaque = false, children }) {
+function Cartao({ a, nomeCliente, nomeProf, mostraProf, aberto, aoAbrir, aoSegurar, testid, destaque = false, children }) {
   const v = visual(a);
+  const [pedindo, setPedindo] = useState(false); // painel "Pedir avaliação" (F5 fase 2): só atendimento concluído com serviço; o servidor diz se dá para pedir
+  const podePedir = a.status === 'concluido' && a.servicos.length > 0;
+  const toque = useToqueLongo(() => { if (aoSegurar) aoSegurar(a); }); // v119: segurar abre a forma de pagamento (concluído ou futuro; cancelado não)
   const venda = a.produtos.length ? a.produtos.map((p) => `${p.qtd}× ${p.nome}`).join(', ') : '';
   const servicos = a.servicos.map((s) => s.nome).join(' + ') || (venda ? 'Venda de produtos' : 'Sem serviço');
   return (
     <div className={`cartao-real st-${v.cor}${destaque ? ' cartao-novo-real' : ''}`} data-testid={testid} data-status={a.status} data-id={a.id} data-destaque={destaque ? 'sim' : undefined}>
-      <button type="button" className="cartao" onClick={aoAbrir} aria-expanded={aberto} data-testid={`${testid}-abrir`}>
+      <div className="cartao-bloco">
+      <button type="button" className="cartao" onClick={aoAbrir} aria-expanded={aberto} data-testid={`${testid}-abrir`} {...(aoSegurar && a.status !== 'cancelado' ? toque : {})}>
         <div className="cartao-topo">
           <div className="cartao-quem">
             <span className="cartao-nome" title={nomeCliente} data-testid={`${testid}-cliente`}>{abreviarNome(nomeCliente, 24)}</span>
@@ -55,6 +63,9 @@ function Cartao({ a, nomeCliente, nomeProf, mostraProf, aberto, aoAbrir, testid,
           {a.conflitosPendentes.length > 0 && <span className="chip chip-p chip-alerta" data-testid="cartao-conflito">{a.conflitosPendentes.length === 1 ? '1 a confirmar no mesmo horário' : `${a.conflitosPendentes.length} a confirmar no mesmo horário`}</span>}
         </div>
       </button>
+      {podePedir && <EstrelaAvaliar aberto={pedindo} aoAlternar={() => setPedindo((x) => !x)} />}
+      </div>
+      {pedindo && <PedirAvaliacao a={a} quem={nomeCliente} aoFechar={() => setPedindo(false)} />}
       {aberto && children}
     </div>
   );
@@ -231,14 +242,14 @@ function AvisoRemarcado({ avisar, aoFechar, aoErro }) {
   return (
     <div className="confirmar-linha" data-testid="avisar-whats">
       <span data-testid="avisar-whats-pergunta">Horário remarcado. Avisar o cliente pelo WhatsApp? Abrimos a conversa com a mensagem pronta; você confere e envia.</span>
-      <p className="muted" data-testid="avisar-whats-texto" style={{ whiteSpace: 'pre-line' }}>{avisar.texto}</p>
+      <p className="muted" data-testid="avisar-whats-texto" style={{ whiteSpace: 'pre-line', overflowWrap: 'anywhere' }}>{avisar.texto}</p>
       <Btn tamanho="sm" variante="primario" onClick={avisarCliente} data-testid="avisar-whats-sim">Avisar no WhatsApp</Btn>
       <Btn tamanho="sm" onClick={aoFechar} data-testid="avisar-whats-nao">Agora não</Btn>
     </div>
   );
 }
 
-export default function Agenda({ ehProprio = false, ehDono = false, meuId = '', nomeLoja = '', destaqueIds = [], foco = null, recarregar = 0 }) {
+export default function Agenda({ ehProprio = false, ehDono = false, ehProprietario = false, aoIrBoxes = null, meuId = '', nomeLoja = '', destaqueIds = [], foco = null, recarregar = 0 }) {
   const [modo, setModo] = useState('horarios');
   const [cursor, setCursor] = useState(() => startOfDay(Date.now()));
   const [diasAdiante, setDiasAdiante] = useState(7);
@@ -250,6 +261,7 @@ export default function Agenda({ ehProprio = false, ehDono = false, meuId = '', 
   // Link da página do cliente: o geral (#agendar) ou, para o profissional, o da própria agenda (#agendar-<id>). A loja vem do endereço, então não vai no link.
   // Um clique abre o WhatsApp (aba nova, mensagem pronta; sem await antes, senão o navegador bloqueia) e copia o link como reserva.
   const enviarLink = () => {
+    if (semBox) { setSemBoxAberto(true); return; }
     const base = `${globalThis.location.origin}${globalThis.location.pathname}`;
     const link = montarLinkAgendamento({ base, profissionalId: ehProprio ? meuId : '' });
     const abriu = abrirWhatsapp(textoConvite(nomeLoja, link, localizacaoUrl));
@@ -261,6 +273,11 @@ export default function Agenda({ ehProprio = false, ehDono = false, meuId = '', 
   const [clientes, setClientes] = useState(new Map());
   const [profs, setProfs] = useState([]);
   const [boxes, setBoxes] = useState([]);
+  const [boxesPronto, setBoxesPronto] = useState(false);
+  const [semBoxAberto, setSemBoxAberto] = useState(false); // aviso "falta cadastrar o box" (estética): bloqueia Atender e Link Agenda
+  const semBox = capAtiva('usaRecursoFisico') && boxesPronto && boxes.length === 0;
+  const [pendLink, setPendLink] = useState([]); // só o proprietário: o que falta cadastrar para o link do cliente ter horários
+  const [trocaForma, setTrocaForma] = useState(null); // agendamento cuja forma de pagamento está sendo trocada (segurar o cartão)
   const [avisoRemarcar, setAvisoRemarcar] = useState(null); // { tel, texto } | { semTelefone }: fica na Agenda porque o cartão pode sair da lista ao mudar de dia
   const [fichas, setFichas] = useState(new Map()); // id → { nome, telefone }: só para avisar o cliente pelo WhatsApp (quem não lê Clientes fica sem o aviso)
   const [lojaInfo, setLojaInfo] = useState({ endereco: '', mapaUrl: '' });
@@ -270,8 +287,9 @@ export default function Agenda({ ehProprio = false, ehDono = false, meuId = '', 
   useEffect(() => {
     apiClientes.listar().then((r) => { if (r.ok) { setClientes(new Map(r.clientes.map((c) => [c.id, c.apelido || c.nome]))); setFichas(new Map(r.clientes.map((c) => [c.id, { nome: c.apelido || c.nome, telefone: c.telefone }]))); } });
     apiProf.listar().then((r) => { if (r.ok) setProfs(r.profissionais); });
+    if (ehDono) apiLink.obter().then((r) => { if (r.ok) setPendLink(r.link.pendencias); });
     apiLocal.obter().then((r) => { if (r.ok) { setLocalizacaoUrl(r.local.localizacaoWhatsappUrl); setLojaInfo(r.local.localizacaoNoWhatsapp ? { endereco: r.local.enderecoTexto, mapaUrl: r.local.localizacaoWhatsappUrl } : { endereco: '', mapaUrl: '' }); } });
-    if (capAtiva('usaRecursoFisico')) apiBoxes.listar().then((r) => { if (r.ok) setBoxes(boxesAtivos(r.boxes)); });
+    if (capAtiva('usaRecursoFisico')) apiBoxes.listar().then((r) => { if (r.ok) { setBoxes(boxesAtivos(r.boxes)); setBoxesPronto(true); } });
   }, []);
 
   const de = modo === 'horarios' ? cursor : weekStart(monthStart(cursor));
@@ -350,7 +368,7 @@ export default function Agenda({ ehProprio = false, ehDono = false, meuId = '', 
 
   const cartao = (a, testid) => (
     <Cartao key={a.id} a={a} testid={testid} nomeCliente={nomeCliente(a)} nomeProf={nomeProf(a.profissionalId)} mostraProf={!ehProprio && selecionado === 'todos' && atendem.length > 1}
-      aberto={aberto === a.id} aoAbrir={() => setAberto(aberto === a.id ? null : a.id)} destaque={destaqueIds.includes(a.id)}>
+      aberto={aberto === a.id} aoAbrir={() => setAberto(aberto === a.id ? null : a.id)} aoSegurar={setTrocaForma} destaque={destaqueIds.includes(a.id)}>
       <Detalhe a={a} nomeProf={nomeProf(a.profissionalId)} nomeDe={nomeProf} profissionais={atendem} boxes={boxes} ehDono={ehDono} aoAlterar={alterou} aoAvisar={setAvisoRemarcar} cliente={a.clienteId ? fichas.get(a.clienteId) || null : null} loja={{ nome: nomeLoja, ...lojaInfo }} />
     </Cartao>
   );
@@ -367,8 +385,9 @@ export default function Agenda({ ehProprio = false, ehDono = false, meuId = '', 
         <Btn tamanho="sm" onClick={() => passo(1)} aria-label={modo === 'horarios' ? 'Próximo dia' : 'Próximo mês'} data-testid="agenda-proximo"><Icone n="right" size={15} /></Btn>
         <h2 className="agenda-titulo-real" data-testid="agenda-titulo">{titulo}</h2>
         <Btn tamanho="sm" onClick={enviarLink} aria-label="Enviar o link de agendamento pelo WhatsApp" title="Abre o WhatsApp com o link da página do cliente (o link também é copiado)" data-testid="agenda-link"><Icone n={linkCopiado ? 'check' : 'link'} size={15} />{linkCopiado ? 'Copiado' : 'Link Agenda'}</Btn>
-        <Btn variante="primario" tamanho="sm" onClick={() => { setAtendendo(true); setAviso(''); }} disabled={atendendo || atendem.length === 0} data-testid="atender-abrir"><Icone n="plus" size={15} />Atender</Btn>
+        <Btn variante="primario" tamanho="sm" onClick={() => { if (semBox) { setSemBoxAberto(true); return; } setAtendendo(true); setAviso(''); }} disabled={atendendo || atendem.length === 0} data-testid="atender-abrir"><Icone n="plus" size={15} />Atender</Btn>
       </div>
+      {semBox && semBoxAberto && <AvisoSemBox podeCadastrar={ehProprietario && !!aoIrBoxes} aoCadastrar={() => aoIrBoxes('boxes')} aoFechar={() => setSemBoxAberto(false)} />}
       {atendendo && <Atender profissionais={atendem} equipe={profs} meuId={meuId} ehProprio={ehProprio} aoSalvar={atendeu} aoFechar={() => setAtendendo(false)} />}
       {mostrarSeletor && (
         <div className="seletor-chips" role="group" aria-label={Rot('profissional')} data-testid="seletor-profissionais">
@@ -376,8 +395,13 @@ export default function Agenda({ ehProprio = false, ehDono = false, meuId = '', 
           {atendem.map((p) => <button key={p.id} type="button" className={`chip${selecionado === p.id ? ' on' : ''}`} aria-pressed={selecionado === p.id} onClick={() => setSelecionado(p.id)} title={p.nome} data-testid={`sel-${p.id}`}>{abreviarNome(p.nome, 16)}</button>)}
         </div>
       )}
+      {pendLink.length > 0 && <Aviso tipo="erro" data-testid="agenda-link-pendencia">O link do cliente está sem horários: {pendLink[0]}</Aviso>}
       {erro && <Aviso tipo="erro" data-testid="agenda-erro">{erro}</Aviso>}
       {aviso && <Aviso data-testid="agenda-aviso">{aviso}</Aviso>}
+      {trocaForma && (
+        <FormaPagamento quem={`${nomeCliente(trocaForma)} · ${fmtDateTime(trocaForma.inicio)}`} atual={trocaForma.formaPagamento || ''} aoFechar={() => setTrocaForma(null)}
+          aoEscolher={async (k) => { const r = await api.mudarFormaPagamento(trocaForma.id, k); if (r.ok) alterou('Forma de pagamento alterada.', r.agendamento); return r; }} />
+      )}
       {avisoRemarcar && <AvisoRemarcado avisar={avisoRemarcar} aoFechar={() => setAvisoRemarcar(null)} aoErro={setErro} />}
       {lista === null && <p className="muted" role="status" data-testid="agenda-carregando">Carregando…</p>}
       {lista !== null && modo === 'calendario' && <Calendario cursor={cursor} lista={visiveis} aoEscolherDia={(d) => { setModo('horarios'); irPara(d); }} />}

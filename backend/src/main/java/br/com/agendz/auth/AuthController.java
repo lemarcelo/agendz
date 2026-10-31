@@ -1,9 +1,11 @@
 package br.com.agendz.auth;
 
+import br.com.agendz.auth.rede.Rede;
 import br.com.agendz.erro.ErroDeNegocio;
 import br.com.agendz.tenant.Loja;
 import br.com.agendz.tenant.LojaContext;
 import br.com.agendz.tenant.LojaJdbc;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -20,7 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class AuthController {
 
-    public record LoginRequest(@NotBlank @Size(max = 60) String identificador, @NotBlank @Size(max = 100) String senha) {
+    public record LoginRequest(@NotBlank @Size(max = 60) String identificador, @NotBlank @Size(max = 100) String senha, Boolean loginAutomatico) {
     }
 
     private record Usuario(UUID id, String nome, String papel, String senhaHash, boolean ativo, boolean deveTrocarSenha) {
@@ -42,7 +44,7 @@ public class AuthController {
     }
 
     @PostMapping("/api/auth/login")
-    public Sessao login(@Valid @RequestBody LoginRequest req) {
+    public Sessao login(@Valid @RequestBody LoginRequest req, HttpServletRequest http) {
         Loja loja = LojaContext.exigir();
         String login = req.identificador().trim().toLowerCase(Locale.ROOT);
         String chave = loja.id() + "|" + login;
@@ -62,6 +64,6 @@ public class AuthController {
         }
         limite.limpar(chave);
         banco.naLoja(jdbc -> jdbc.update("update usuario set ultimo_acesso = now() where id = ?", u.id()));
-        return sessao.abrir(u.id(), loja, u.papel(), u.nome(), u.deveTrocarSenha());
+        return sessao.abrir(u.id(), loja, u.papel(), u.nome(), u.deveTrocarSenha(), Rede.ip(http), Boolean.TRUE.equals(req.loginAutomatico()));
     }
 }

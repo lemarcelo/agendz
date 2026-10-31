@@ -23,6 +23,8 @@ ag(7, '2026-11-10T09:00:00', 45, ALAN, CAIO, 'confirmado', 'Corte'); // fora dos
 const chamadas = [];
 const pedidosWa = [];
 let papel = 'dono';
+let negarForma = false; // v119: o servidor recusa a troca da forma de pagamento (cancelado, conciliado…)
+let comMapa = false; // só o teste do aviso em 390 px liga o link do mapa
 let ocupadoEm = null; // remarcar para este horário responde 409
 const servidor = http.createServer((req, res) => {
   let corpo = '';
@@ -35,18 +37,20 @@ const servidor = http.createServer((req, res) => {
     if (u.pathname === '/api/publico/loja') return json(200, { slug: 'dalforno', nome: 'Dalforno', tipo: 'barbearia', logo: null, temaCor: null, temaCor2: null });
     if (u.pathname === '/api/auth/login') return json(200, { token: 'tok', id: ALAN, nome: 'Alan', papel, deveTrocarSenha: false, onboardingPendente: false, secoes: ['agenda', 'clientes'] });
     if (u.pathname === '/api/clientes') return json(200, [{ id: BRUNO, nome: 'Bruno Lima', apelido: 'Bruno', telefone: '11999990001' }, { id: CAIO, nome: 'Caio Souza', apelido: '', telefone: '11999990002' }, { id: DEBORA, nome: 'Débora Reis', apelido: '', telefone: '' }]);
+    if (u.pathname === '/api/estabelecimento/local' && comMapa) return json(200, { enderecoNoLink: false, localizacaoNoWhatsapp: true, enderecoTexto: 'Rua das Flores, 100', localizacaoUrl: '', localizacaoWhatsappUrl: 'https://maps.example.com/' + 'a'.repeat(150) });
     if (u.pathname === '/api/profissionais') return json(200, [{ id: ALAN, nome: 'Alan', papel: 'dono', atende: true }, { id: KIKO, nome: 'Kiko', papel: 'profissional', atende: true }]);
     if (u.pathname === '/api/agendamentos' && req.method === 'GET') {
       const de = Date.parse(u.searchParams.get('de')), ate = Date.parse(u.searchParams.get('ate'));
       return json(200, banco.filter((a) => Date.parse(a.inicio) < ate && Date.parse(a.fimOcupado) > de && (papel !== 'profissional' || a.profissionalId === ALAN)));
     }
-    const m = /^\/api\/agendamentos\/([^/]+)(\/status|\/remarcar)?$/.exec(u.pathname);
+    const m = /^\/api\/agendamentos\/([^/]+)(\/status|\/remarcar|\/forma-pagamento)?$/.exec(u.pathname);
     if (m) {
       const a = banco.find((x) => x.id === m[1]);
       if (!a) return json(404, { mensagem: 'Agendamento não encontrado.' });
       if (!m[2]) return json(200, { ...a, historico: [{ em: new Date().toISOString(), autor: 'Alan', campo: 'criação', para: 'Corte' }] });
       const c = JSON.parse(corpo);
       if (m[2] === '/status') { a.status = c.status; return json(200, a); }
+      if (m[2] === '/forma-pagamento') { if (negarForma) return json(409, { mensagem: 'Agendamento cancelado não tem forma de pagamento.' }); a.formaPagamento = c.formaPagamento; return json(200, a); }
       if (c.inicio === ocupadoEm) return json(409, { mensagem: 'Esse horário já está ocupado por um agendamento confirmado.' });
       a.inicio = c.inicio; a.fim = new Date(Date.parse(c.inicio) + 45 * 60000).toISOString(); a.fimOcupado = new Date(Date.parse(c.inicio) + 55 * 60000).toISOString(); a.reagendado = true;
       return json(200, a);
@@ -266,6 +270,78 @@ const textoDe = (p, t) => p.getByTestId(t).innerText();
   await p.locator('[data-testid="cartao"][data-status="confirmado"]').first().locator('[data-testid="cartao-abrir"]').click(); await p.getByTestId('acao-remarcar').click(); await semRolagem('remarcar');
   await p.getByTestId('aba-calendario').click(); await p.getByTestId('calendario').waitFor(); await semRolagem('calendário');
   ok('390 px com fonte larga: sem rolagem lateral');
+  await ctx.close();
+}
+
+// 10b. celular: o aviso de remarcar tem o link do mapa (sem espaços, 170 caracteres): o botão "Avisar" tem que ficar dentro da tela (bug: o modal chegava a 1000 px)
+{
+  comMapa = true;
+  const fotoDoBanco = JSON.stringify(banco); // o teste remarca um horário: devolve o banco ao que era para não mexer nos testes seguintes
+  const { ctx, p } = await abrir({ width: 390, height: 780 });
+  await p.addStyleTag({ content: '*{font-family:"DejaVu Sans" !important}' });
+  await p.waitForFunction(() => document.querySelectorAll('[data-testid="cartao"]').length >= 1);
+  await p.locator('[data-testid="cartao"][data-status="confirmado"]').first().locator('[data-testid="cartao-abrir"]').click();
+  await p.getByTestId('acao-remarcar').click();
+  await p.getByTestId('remarcar-quando').fill('2026-10-28T18:30');
+  await p.getByTestId('remarcar-salvar').click();
+  await p.getByTestId('avisar-whats-sim').waitFor();
+  assert.match(await textoDe(p, 'avisar-whats-texto'), /Como chegar: https:\/\/maps\.example\.com\//, 'a mensagem leva o link do mapa');
+  const bs = await p.getByTestId('avisar-whats-sim').boundingBox();
+  assert.ok(bs && bs.x >= 0 && bs.x + bs.width <= 390 && bs.y + bs.height <= 780, 'o botão Avisar está dentro da tela: ' + JSON.stringify(bs));
+  assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'sem rolagem horizontal com o aviso aberto');
+  ok('390 px: aviso de remarcar com link longo cabe na tela');
+  comMapa = false;
+  banco.splice(0, banco.length, ...JSON.parse(fotoDoBanco));
+  await ctx.close();
+}
+
+// 4b. v119: segurar o cartão abre a forma de pagamento (mouse e toque); clique curto continua abrindo os detalhes; recusa do servidor aparece na própria janela
+for (const [w, h] of [[1280, 860], [390, 800]]) {
+  const { ctx, p } = await abrir({ width: w, height: h });
+  await p.waitForFunction(() => document.querySelectorAll('[data-testid="cartao"]').length === 2);
+  const alvo = p.locator('[data-testid="cartao-abrir"]').first();
+  const centro = async () => { await alvo.scrollIntoViewIfNeeded(); const r = await alvo.boundingBox(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; };
+  const segurar = async (ms = 650, anda = 0) => {
+    const c = await centro();
+    if (w < 700) {
+      const cdp = await ctx.newCDPSession(p); const t = (type, x, y) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y }] });
+      await t('touchStart', c.x, c.y);
+      if (anda) for (let i = 1; i <= 4; i++) { await t('touchMove', c.x, c.y + (anda * i) / 4); await p.waitForTimeout(30); }
+      await p.waitForTimeout(ms); await t('touchEnd');
+    } else { await p.mouse.move(c.x, c.y); await p.mouse.down(); await p.waitForTimeout(ms); await p.mouse.up(); }
+    await p.waitForTimeout(150);
+  };
+  await segurar();
+  await p.getByTestId('forma-pagamento').waitFor();
+  assert.equal(await alvo.getAttribute('aria-expanded'), 'false', `${w}: segurar não abre os detalhes`);
+  assert.equal(await p.getByTestId('forma-sem-atual').count(), 1, 'sem forma gravada: avisa que vale a padrão');
+  await p.getByTestId('forma-cartao').click();
+  await p.getByTestId('forma-pagamento').waitFor({ state: 'detached' });
+  assert.deepEqual(ultimo('PUT', '/forma-pagamento').corpo, { formaPagamento: 'cartao' });
+  assert.match(await textoDe(p, 'agenda-aviso'), /Forma de pagamento alterada/);
+  await p.waitForFunction(() => document.querySelectorAll('[data-testid="cartao"]').length === 2);
+  await segurar();
+  await p.getByTestId('forma-pagamento').waitFor();
+  assert.equal(await p.getByTestId('forma-cartao').getAttribute('aria-pressed'), 'true', 'a troca ficou marcada');
+  const antes = chamadas.filter((c) => c.u.endsWith('/forma-pagamento')).length;
+  await p.getByTestId('forma-cartao').click(); // a mesma forma: só fecha, sem chamada
+  await p.getByTestId('forma-pagamento').waitFor({ state: 'detached' });
+  assert.equal(chamadas.filter((c) => c.u.endsWith('/forma-pagamento')).length, antes, 'mesma forma não chama o servidor');
+  // recusa do servidor: erro na janela, que continua aberta
+  negarForma = true;
+  await segurar(); await p.getByTestId('forma-pagamento').waitFor();
+  await p.getByTestId('forma-pix').click();
+  assert.match(await textoDe(p, 'forma-erro'), /cancelado não tem forma/);
+  assert.equal(await p.getByTestId('forma-pagamento').count(), 1, 'recusado: a janela fica');
+  negarForma = false;
+  await p.getByTestId('forma-fechar').click(); await p.getByTestId('forma-pagamento').waitFor({ state: 'detached' });
+  // soltar cedo ou rolar não abre; clique curto abre os detalhes
+  if (w >= 700) await segurar(200); else await segurar(650, 40);
+  assert.equal(await p.getByTestId('forma-pagamento').count(), 0, `${w}: soltou cedo/rolou: nada abre`);
+  if (w >= 700) { await p.waitForTimeout(100); assert.equal(await alvo.getAttribute('aria-expanded'), 'true', 'o clique curto abre os detalhes'); }
+  assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `${w}: sem rolagem lateral`);
+  banco.forEach((a) => { delete a.formaPagamento; });
+  ok(`${w} px: segurar o cartão troca a forma de pagamento`);
   await ctx.close();
 }
 

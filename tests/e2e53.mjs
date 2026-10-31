@@ -49,6 +49,7 @@ const servidor = http.createServer((req, res) => {
         regras = { ...regras, futuro: k.futuro, local: k.local };
       }
       if (f !== undefined) regras = { ...regras, formaPagamentoPadrao: f };
+      if (c.ordemServicos !== undefined) { if (!['uso', 'manual'].includes(c.ordemServicos)) return json(400, { mensagem: 'Ordem dos serviços inválida.' }); regras = { ...regras, ordemServicos: c.ordemServicos }; }
       return json(200, regras);
     }
     if (u.pathname === '/api/atendimentos' && req.method === 'POST') {
@@ -100,11 +101,13 @@ const abrirAtender = async (p) => { await p.getByTestId('nav-agenda').click(); a
   await p.getByTestId('regras-local-telefone').check();
   await p.getByTestId('regras-local-formaPagamento').check();
   await p.getByTestId('regras-futuro-telefone').uncheck();
+  assert.equal(await p.getByTestId('regras-ordem-servicos').inputValue(), 'uso', 'padrão: mais usados primeiro');
+  await p.getByTestId('regras-ordem-servicos').selectOption('manual');
   await p.getByTestId('regras-salvar').click();
   await p.getByTestId('regras-ok').waitFor();
   const put = chamadas.filter((c) => c.m === 'PUT' && c.u === '/api/estabelecimento/regras-atendimento').at(-1).corpo;
-  assert.deepEqual(put, { formaPagamentoPadrao: 'dinheiro', camposObrigatorios: { futuro: ['nome'], local: ['telefone', 'formaPagamento'] } });
-  assert.deepEqual(regras, { formaPagamentoPadrao: 'dinheiro', futuro: ['nome'], local: ['telefone', 'formaPagamento'] });
+  assert.deepEqual(put, { formaPagamentoPadrao: 'dinheiro', camposObrigatorios: { futuro: ['nome'], local: ['telefone', 'formaPagamento'] }, ordemServicos: 'manual' });
+  assert.deepEqual(regras, { formaPagamentoPadrao: 'dinheiro', futuro: ['nome'], local: ['telefone', 'formaPagamento'], ordemServicos: 'manual' });
   ok('Início do dono: muda forma padrão e campos obrigatórios; corpo certo, servidor guardou');
   await ctx.close();
 }

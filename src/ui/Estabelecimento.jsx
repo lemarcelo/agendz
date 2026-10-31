@@ -1,8 +1,10 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:003f7f8e99 */
+import { consumirAbaEstabelecimento } from './destino.js';
 import React, { useState } from 'react';
 import { estabelecimento as apiEst, excecoes as apiEx, afetadosPorExcecoes } from '../services/api.js';
 import { FORMAS_PAGAMENTO, ehDono } from '../domain/rules.js';
-import { CAMPOS_ATENDER, CAMPOS_OBRIGATORIOS_PADRAO } from '../domain/engine.js';
+import { configLink } from '../domain/publico.js';
+import { CAMPOS_ATENDER, CAMPOS_DE_VEICULO, CAMPOS_OBRIGATORIOS_PADRAO } from '../domain/engine.js';
 import { DIAS_SEMANA, fmtDate, fmtHM, fromYmd, ymd, startOfDay } from '../domain/time.js';
 import { TIPOS_EXCECAO, diasDaExcecao } from '../domain/schedule.js';
 import { FERIADOS_NACIONAIS } from '../domain/feriados.js';
@@ -16,6 +18,9 @@ import { nomeCliente, nomeServicos } from './format.js';
 import { toast, useStore } from './hooks.js';
 import { capAtiva, rot, tipoDe, TIPOS, voc, Voc } from '../domain/tipos.js';
 import { coordenadasDeTexto } from '../domain/localizacao.js';
+import { LIMITE_PORTES, PORTE_PADRAO, listaDePortes } from '../domain/veiculos.js';
+import { fatorDeTexto, fatorEmTexto } from '../domain/previa-portes.js';
+import PreviaPortes from './leve/PreviaPortes.jsx';
 
 const ORDEM_SEMANA = [1, 2, 3, 4, 5, 6, 0];
 
@@ -183,7 +188,7 @@ import { PainelMarca } from './Marca.jsx';
 export default function Estabelecimento({ user }) {
   const { state: st } = useStore();
   const e = st.estabelecimento;
-  const [aba, setAba] = useState('dados');
+  const [aba, setAba] = useState(() => consumirAbaEstabelecimento() || 'dados');
   const [dados, setDados] = useState({ nome: e.nome, telefone: e.telefone, endereco: e.endereco || '', enderecoNoLink: e.enderecoNoLink !== false, localizacaoNoWhatsapp: !!e.localizacaoNoWhatsapp, localizacao: Number.isFinite(e.latitude) ? `${e.latitude}, ${e.longitude}` : '', email: e.email, visaoPadrao: e.visaoPadrao, grupoMovimentacaoId: e.grupoMovimentacaoId });
   const [notifs, setNotifs] = useState(e.notificacoes);
   const [notifSujo, setNotifSujo] = useState(false);
@@ -205,7 +210,7 @@ export default function Estabelecimento({ user }) {
   return (
     <section className="tela">
       <header className="tela-topo"><h1>Estabelecimento</h1></header>
-      <Abas valor={aba} onChange={setAba} ordem="estabelecimento" itens={[['dados', 'Dados'], ['escala', 'Horário e exceções'], ['calendario', 'Calendário'], ...(capAtiva('usaRecursoFisico') ? [['boxes', 'Boxes']] : []), ['marca', 'Aparência'], ['notificacoes', 'Notificações'], ['regras', 'Regras'], ['cupons', 'Cupons'], ...(ehDono(user) ? [['reconfigurar', 'Reconfigurar']] : [])]} />
+      <Abas valor={aba} onChange={setAba} ordem="estabelecimento" itens={[['dados', 'Dados'], ['escala', 'Horário e exceções'], ['calendario', 'Calendário'], ...(capAtiva('usaRecursoFisico') ? [['boxes', 'Boxes']] : []), ...(capAtiva('precoPorPorte') ? [['portes', 'Portes']] : []), ['marca', 'Aparência'], ['notificacoes', 'Notificações'], ['regras', 'Regras'], ['cupons', 'Cupons'], ...(ehDono(user) ? [['reconfigurar', 'Reconfigurar']] : [])]} />
       <div className="painel">
         {aba === 'dados' && (
           <div className="form-grade">
@@ -224,6 +229,7 @@ export default function Estabelecimento({ user }) {
         {aba === 'escala' && <PainelEscala escopo="estab" />}
         {aba === 'calendario' && <PainelCalendario />}
         {aba === 'boxes' && <PainelBoxes e={e} />}
+        {aba === 'portes' && <PainelPortes e={e} servicos={st.servicos} />}
         {aba === 'marca' && <PainelMarca />}
         {aba === 'cupons' && <Cupons />}
         {aba === 'reconfigurar' && ehDono(user) && <Reconfigurar st={st} />}
@@ -240,6 +246,11 @@ export default function Estabelecimento({ user }) {
             <Interruptor checked={!!e.confirmacaoServico} onChange={(v) => apiEst.salvar({ confirmacaoServico: v })} rotulo={Voc('confirmacao')} descricao={`O ${rot('profissional')} informa quais serviços foram feitos para concluir o atendimento. Sem isso, o atendimento conclui sozinho quando o horário passa. A regra do serviço prevalece.`} />
             <LinkAgendamentoRegras e={e} />
             <CamposObrigatorios e={e} />
+            <Campo rotulo="Ordem dos serviços no Atender e no link" dica="Mais usados: os serviços que mais saem ficam em cima. Minha ordem: a que você montou em Serviços (setas subir e descer).">
+              <select value={e.ordemServicos ?? 'uso'} onChange={(x) => { const r = apiEst.salvar({ ordemServicos: x.target.value }); if (r.ok) toast('Ordem dos serviços salva.'); else toast(r.erros[0], 'erro'); }} data-testid="regras-ordem-servicos">
+                <option value="uso">Mais usados primeiro</option><option value="manual">Minha ordem</option>
+              </select>
+            </Campo>
             <PagamentoRegras st={st} e={e} />
             {ehDono(user) && <Campo rotulo={`Comissão padrão do ${rot('profissional')} (%)`} dica={`Parte de cada ${rot('atendimento')} que fica com o ${rot('profissional')}. O restante é do estabelecimento. Pode ser mudada por serviço ou por ${rot('profissional')}. Só o proprietário altera e vê.`}>
               <ComissaoPadrao valor={e.comissaoPadrao ?? 50} />
@@ -300,6 +311,49 @@ function PainelBoxes({ e }) {
   );
 }
 
+// Portes (tamanhos de veículo): o preço e o tempo de cada serviço mudam com o porte. A ordem da lista é a ordem que o cliente vê. O Médio fica sempre (é o padrão de quem não escolhe).
+function PainelPortes({ e, servicos = [] }) {
+  // `fator` fica como texto enquanto se digita (1,25); vira número ao salvar. O Médio é a base (fator 1, fixo).
+  const atuais = () => listaDePortes().map((x) => ({ ...x, fator: fatorEmTexto(x.fator) }));
+  const [lista, setLista] = useState(atuais);
+  const [erro, setErro] = useState('');
+  const sujo = JSON.stringify(lista) !== JSON.stringify(atuais());
+  const muda = (i, patch) => setLista(lista.map((y, j) => (j === i ? { ...y, ...patch } : y)));
+  const move = (i, d) => { const j = i + d; if (j < 0 || j >= lista.length) return; const n = [...lista]; [n[i], n[j]] = [n[j], n[i]]; setLista(n); };
+  const salvar = () => {
+    const ruim = lista.find((x) => x.id !== PORTE_PADRAO && fatorDeTexto(x.fator) === null);
+    if (ruim) { setErro(`O fator do porte ${ruim.nome || 'novo'} vai de 0,10 a 10.`); return; }
+    const r = apiEst.salvar({ portes: lista.map((x) => ({ id: x.id, nome: x.nome, exemplo: x.exemplo, ativo: x.ativo !== false, fator: x.id === PORTE_PADRAO ? 1 : fatorDeTexto(x.fator) })) });
+    if (!r.ok) { setErro(r.erros[0]); return; }
+    setErro(''); setLista(atuais()); toast('Portes salvos.');
+  };
+  return (
+    <div className="bloco-largo" data-testid="painel-portes">
+      <p>O porte do veículo muda o preço do serviço: <b>preço do serviço (Médio) × fator do porte</b>. Ex.: serviço de R$ 100 e fator 1,2 = R$ 120. Para um serviço ter um valor diferente num porte, use <b>Preço específico por porte</b> no cadastro do serviço. Quem não escolhe o porte fica no <b>Médio</b>.</p>
+      <div className="boxes-lista">
+        {lista.map((x, i) => (
+          <div key={x.id || `novo-${i}`} className="box-linha" data-testid={`porte-${i}`}>
+            <Campo rotulo={`Porte ${i + 1}`}><input value={x.nome} maxLength={20} onChange={(ev) => muda(i, { nome: ev.target.value })} data-testid={`porte-nome-${i}`} /></Campo>
+            <Campo rotulo="Exemplos (opcional)"><input value={x.exemplo} maxLength={60} placeholder="Ex.: Onix, HB20" onChange={(ev) => muda(i, { exemplo: ev.target.value })} data-testid={`porte-exemplo-${i}`} /></Campo>
+            <Campo rotulo="Fator" dica={x.id === PORTE_PADRAO ? 'Médio é a base' : undefined}><input className="porte-fator" inputMode="decimal" value={x.id === PORTE_PADRAO ? '1' : x.fator ?? ''} disabled={x.id === PORTE_PADRAO} maxLength={5} onChange={(ev) => muda(i, { fator: ev.target.value })} data-testid={`porte-fator-${i}`} /></Campo>
+            <label className="check-linha"><input type="checkbox" checked={x.ativo !== false} disabled={x.id === PORTE_PADRAO} onChange={(ev) => muda(i, { ativo: ev.target.checked })} data-testid={`porte-ativo-${i}`} /> Ativo</label>
+            <button type="button" className="icone-btn" disabled={i === 0} onClick={() => move(i, -1)} aria-label={`Subir ${x.nome}`} data-testid={`porte-sobe-${i}`}><Icon n="up" size={16} /></button>
+            <button type="button" className="icone-btn" disabled={i === lista.length - 1} onClick={() => move(i, 1)} aria-label={`Descer ${x.nome}`} data-testid={`porte-desce-${i}`}><Icon n="down" size={16} /></button>
+            {!x.id && <button type="button" className="icone-btn" onClick={() => setLista(lista.filter((_, j) => j !== i))} aria-label={`Remover porte ${i + 1}`}><Icon n="trash" size={16} /></button>}
+          </div>
+        ))}
+      </div>
+      {erro && <Aviso tipo="erro"><span data-testid="portes-erro">{erro}</span></Aviso>}
+      <div className="acoes">
+        <Btn icone="plus" disabled={lista.length >= LIMITE_PORTES} onClick={() => setLista([...lista, { nome: '', exemplo: '', ativo: true, fator: '1' }])} data-testid="porte-add">Adicionar porte</Btn>
+        <Btn variante="primario" disabled={!sujo} onClick={salvar} data-testid="porte-salvar">Salvar portes</Btn>
+      </div>
+      <PreviaPortes servicos={servicos} portes={lista} />
+      <small className="muted">Porte já usado em veículo ou atendimento não pode ser removido, só desativado. O tempo do serviço é o mesmo em todo porte, a não ser que você defina um tempo específico no serviço.</small>
+    </div>
+  );
+}
+
 function ComissaoPadrao({ valor }) {
   const [v, setV] = useState(String(valor));
   const salvar = () => { const r = apiEst.salvar({ comissaoPadrao: v === '' ? null : Number(v) }); if (r.ok) toast('Comissão padrão salva.'); else toast(r.erros[0], 'erro'); };
@@ -335,13 +389,24 @@ function PagamentoRegras({ st, e }) {
 
 // Link de agendamento do cliente: liga/desliga e até quantos dias à frente o cliente pode marcar.
 function LinkAgendamentoRegras({ e }) {
-  const cfg = e.linkAgendamento || { ativo: true, diasMax: 30, telefoneObrigatorio: true };
+  const cfg = configLink({ estabelecimento: e }); // com os padrões de fábrica (tudo obrigatório) onde o dono ainda não mexeu
+  const alternaVei = (k) => salvar({ veiculoObrigatorio: cfg.veiculoObrigatorio.includes(k) ? cfg.veiculoObrigatorio.filter((x) => x !== k) : [...cfg.veiculoObrigatorio, k] }, 'Regra do veículo no link salva.');
   const salvar = (patch, msg) => { const r = apiEst.salvar({ linkAgendamento: { ...cfg, ...patch } }); if (r.ok) toast(msg); else toast(r.erros[0], 'erro'); };
   return (
     <div className="bloco" data-testid="regras-link">
       <h3>Link de agendamento do cliente</h3>
       <Interruptor checked={cfg.ativo !== false} onChange={(v) => salvar({ ativo: v }, v ? 'Link ligado.' : 'Link desligado.')} rotulo="Cliente agenda pelo link" descricao="O botão “Link de agendamento” fica na Agenda. Desligado, a página do cliente avisa que está indisponível." />
       <Interruptor checked={cfg.telefoneObrigatorio !== false} onChange={(v) => salvar({ telefoneObrigatorio: v }, v ? 'Telefone obrigatório no link.' : 'Telefone opcional no link.')} rotulo="Telefone obrigatório no link" descricao="Ligado (padrão), o cliente só pede o horário com telefone e recebe os avisos. Desligado, ele pode pedir só com o nome; o pedido fica sem cadastro e sem aviso por WhatsApp." testid="link-telefone-obrigatorio" />
+      <Interruptor checked={cfg.nomeObrigatorio} onChange={(v) => salvar({ nomeObrigatorio: v }, v ? 'Nome obrigatório no link.' : 'Nome opcional no link.')} rotulo="Nome obrigatório no link" descricao="Desligado, o cliente pode pedir o horário sem dizer o nome. Sem nome e sem telefone o horário fica anônimo." testid="link-nome-obrigatorio" />
+      {capAtiva('usaVeiculo') && (
+        <fieldset className="conj" data-testid="link-veiculo-obrigatorio">
+          <legend>Dados do veículo obrigatórios no link</legend>
+          {[['placa', 'Placa'], ['modelo', 'Modelo'], ['porte', 'Porte']].map(([k, r]) => (
+            <label key={k} className="check-linha"><input type="checkbox" checked={cfg.veiculoObrigatorio.includes(k)} onChange={() => alternaVei(k)} data-testid={`link-veic-${k}`} /> {r}</label>
+          ))}
+          <small className="muted">Sem porte, vale o preço e a duração do porte médio.</small>
+        </fieldset>
+      )}
       <Campo rotulo="Até quantos dias à frente o cliente pode marcar" dica="De 1 a 60. A antecedência mínima de cada serviço continua valendo.">
         <select value={cfg.diasMax} onChange={(x) => salvar({ diasMax: Number(x.target.value) }, 'Prazo salvo.')} data-testid="link-dias-max">
           {[7, 14, 30, 45, 60].map((d) => <option key={d} value={d}>{d} dias</option>)}
@@ -363,13 +428,13 @@ function CamposObrigatorios({ e }) {
   return (
     <div className="bloco" data-testid="campos-obrigatorios">
       <h3>Campos obrigatórios do botão Atender</h3>
-      <p className="muted">Serviço ou produto sempre é obrigatório. Marque o que mais deve ser preenchido em cada tipo. Para agendar, o telefone é sempre necessário (o aviso do horário vai por WhatsApp).</p>
+      <p className="muted">Serviço ou produto sempre é obrigatório. Marque o que mais deve ser preenchido em cada tipo. Todos podem ficar desmarcados. Sem telefone o horário fica sem cadastro e sem aviso por WhatsApp.</p>
       <div className="form-grade">
         {grupos.map(([tipo, titulo, dica]) => (
           <fieldset key={tipo} className="conj" data-testid={`obrig-${tipo}`}>
             <legend>{titulo}</legend>
             <small className="muted">{dica}</small>
-            {Object.entries(CAMPOS_ATENDER).filter(([k]) => !(tipo === 'futuro' && k === 'formaPagamento')).map(([k, r]) => (
+            {Object.entries(CAMPOS_ATENDER).filter(([k]) => !(tipo === 'futuro' && k === 'formaPagamento') && (capAtiva('usaVeiculo') || !CAMPOS_DE_VEICULO.includes(k))).map(([k, r]) => (
               <label key={k} className="check-linha"><input type="checkbox" checked={atual[tipo].includes(k)} onChange={() => alterna(tipo, k)} data-testid={`obrig-${tipo}-${k}`} /> {r[0].toUpperCase() + r.slice(1)}</label>
             ))}
           </fieldset>

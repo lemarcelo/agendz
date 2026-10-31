@@ -94,6 +94,8 @@ const erros = [];
 async function abrir(viewport = { width: 1280, height: 860 }) {
   const touch = viewport.width < 700;
   const ctx = await b.newContext({ viewport, hasTouch: touch, isMobile: touch, locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' });
+  // o autenticador virtual responde sozinho (a pessoa não escolhe na lista de sugestões): sem a interface condicional este teste controla quando a digital é usada (a condicional é testada no e2e93)
+  await ctx.addInitScript(() => { window.PublicKeyCredential.isConditionalMediationAvailable = async () => false; });
   const p = await ctx.newPage(); p.setDefaultTimeout(8000);
   p.on('pageerror', (e) => erros.push('PAGE: ' + e.message));
   p.on('dialog', async (d) => { erros.push('DIALOG: ' + d.message()); await d.dismiss(); });

@@ -36,7 +36,9 @@ agendz:
   jwt:
     # OBRIGATÓRIO em produção (env JWT_SEGREDO, mínimo 32 caracteres, aleatório). Sem ele a API não sobe.
     segredo: ${JWT_SEGREDO:}
-    validade-minutos: ${JWT_VALIDADE_MINUTOS:480}
+    validade-minutos: ${JWT_VALIDADE_MINUTOS:1440}
+    # Token de quem entrou numa rede confiável (login automático): praticamente sem vencimento. Fora da rede o filtro limita a 24 h do login.
+    validade-rede-confiavel-dias: ${JWT_VALIDADE_REDE_CONFIAVEL_DIAS:365}
   cifra:
     # OBRIGATÓRIOS em produção (CIFRA_CHAVE e CIFRA_PEPPER, aleatórios, ≥ 32 caracteres, diferentes entre si). A VPS os gera em .env (deploy/preparar-api.sh).
     chave: ${CIFRA_CHAVE:}

@@ -25,6 +25,8 @@ export function configurar({ base: b } = {}) {
 
 export const sessaoAtual = () => (sessao ? { ...sessao } : null);
 export const sair = () => { token = null; sessao = null; };
+// Login automático (v119): SÓ o token de uma rede confiável pode ser guardado no aparelho (quem guarda é ui/real/sessao-rede.js; este arquivo nunca toca em storage).
+export const tokenDeRedeConfiavel = () => (token && sessao && sessao.redeConfiavel ? token : null);
 export const quandoEsperar = (f) => { aoEsperar = typeof f === 'function' ? f : null; };
 export const esperandoRede = () => esperas.length > 0;
 // A pessoa desistiu de esperar: as chamadas paradas terminam com a mensagem de sem conexão (nada foi enviado).
@@ -115,20 +117,77 @@ export async function carregarLoja() {
 function guardarSessao(d) {
   if (!d || typeof d.token !== 'string' || !d.token) return false;
   token = d.token;
-  sessao = { id: ID.test(String(d.id)) ? d.id : '', nome: texto(d.nome, 120), papel: texto(d.papel, 20), deveTrocarSenha: d.deveTrocarSenha === true, onboardingPendente: d.onboardingPendente === true, secoes: listaDe(d.secoes, 20).filter((x) => typeof x === 'string' && /^[a-z]{1,20}$/.test(x)) };
+  sessao = { id: ID.test(String(d.id)) ? d.id : '', nome: texto(d.nome, 120), papel: texto(d.papel, 20), deveTrocarSenha: d.deveTrocarSenha === true, onboardingPendente: d.onboardingPendente === true, redeConfiavel: d.redeConfiavel === true, perguntarRede: d.perguntarRede === true, secoes: listaDe(d.secoes, 20).filter((x) => typeof x === 'string' && /^[a-z]{1,20}$/.test(x)) };
   return true;
 }
 
 // POST /api/auth/login
-export async function entrar({ identificador, senha }) {
+export async function entrar({ identificador, senha, loginAutomatico = false }) {
   const id = String(identificador ?? '').trim();
   const sn = String(senha ?? '');
   if (!id || !sn) return { ok: false, status: 0, erro: 'Informe o usuário e a senha' };
-  const r = await chamar('POST', '/api/auth/login', { identificador: id.slice(0, 60), senha: sn.slice(0, 100) });
+  const r = await chamar('POST', '/api/auth/login', { identificador: id.slice(0, 60), senha: sn.slice(0, 100), ...(loginAutomatico === true ? { loginAutomatico: true } : {}) });
   if (!r.ok) return r;
   if (!guardarSessao(r.dados)) return { ok: false, status: 502, erro: mensagemPadrao(500) };
   return { ok: true, sessao: sessaoAtual() };
 }
+
+// ---------- login automático por rede confiável (regras no servidor: RedesConfiaveis, ConferirRedeDoTokenFilter; a rede é a que o SERVIDOR viu) ----------
+const ID_REDE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// GET /api/auth/sessao  com o token que o aparelho guardou: mesma sessão, sem pedir login. 401/403 = o token não vale mais (quem chamou esquece). Sem conexão = status 0.
+export async function restaurar(tokenGuardado) {
+  const t = String(tokenGuardado ?? '');
+  if (!/^[\w-]{10,2000}\.[\w-]{10,2000}\.[\w-]{10,2000}$/.test(t)) return { ok: false, status: 401, erro: 'Sessão guardada inválida.' };
+  token = t; sessao = null;
+  const r = await chamar('GET', '/api/auth/sessao');
+  if (!r.ok) { token = null; sessao = null; return r; }
+  if (!r.dados || r.dados.token !== t || !guardarSessao(r.dados)) { token = null; sessao = null; return { ok: false, status: 401, erro: 'Sessão guardada inválida.' }; }
+  return { ok: true, sessao: sessaoAtual() };
+}
+export const redes = {
+  // POST /api/auth/redes-confiaveis  { rotulo? }  (só logo depois de entrar: até 10 min) → sessão nova, com token de rede confiável
+  async confiar(rotulo) {
+    const r = await chamar('POST', '/api/auth/redes-confiaveis', { rotulo: texto(rotulo, 60).trim() || undefined });
+    if (!r.ok) return r;
+    if (!guardarSessao(r.dados) || !sessao.redeConfiavel) return { ok: false, status: 502, erro: mensagemPadrao(500) };
+    return { ok: true, sessao: sessaoAtual() };
+  },
+  // GET /api/usuarios/me/redes-confiaveis  (as da própria pessoa; `atual` = a rede de onde ela pede agora)
+  async listar() {
+    const r = await chamar('GET', '/api/usuarios/me/redes-confiaveis');
+    return r.ok ? { ok: true, itens: listaDe(r.dados, 5).map((d) => ({ id: ID_REDE.test(String(d && d.id)) ? d.id : '', rotulo: texto(d && d.rotulo, 60), criadoEm: texto(d && d.criadoEm, 40), ultimoUso: d && d.ultimoUso ? texto(d.ultimoUso, 40) : '', atual: !!(d && d.atual === true) })).filter((x) => x.id) } : r;
+  },
+  // DELETE /api/usuarios/me/redes-confiaveis/{id}
+  async remover(id) {
+    if (!ID_REDE.test(String(id))) return { ok: false, status: 0, erro: 'Rede inválida.' };
+    const r = await chamar('DELETE', `/api/usuarios/me/redes-confiaveis/${id}`);
+    return r.ok ? { ok: true } : r;
+  },
+  // POST /api/auth/sair  (o token longo desta rede deixa de valer no servidor; quem chamou também limpa o aparelho). Sem conexão não trava a saída.
+  async encerrar() { if (token && sessao && sessao.redeConfiavel) await tentar('POST', '/api/auth/sair', {}); return { ok: true }; }, // tentar (sem esperar a internet): o cabeçalho sai antes de quem chamou limpar o token
+};
+
+// ---------- aparelho confiável (v125, B8; regras no servidor: AparelhosConfiaveis, ConferirRedeDoTokenFilter): o celular continua logado em qualquer rede ----------
+export const aparelhos = {
+  // POST /api/auth/aparelhos-confiaveis  { rotulo? }  (só logo depois de entrar: até 10 min; nunca com senha temporária) → sessão nova, com token de aparelho confiável (365 dias)
+  async confiar(rotulo) {
+    const r = await chamar('POST', '/api/auth/aparelhos-confiaveis', { rotulo: texto(rotulo, 60).trim() || undefined });
+    if (!r.ok) return r;
+    if (!guardarSessao(r.dados) || !sessao.redeConfiavel) return { ok: false, status: 502, erro: mensagemPadrao(500) };
+    return { ok: true, sessao: sessaoAtual() };
+  },
+  // GET /api/usuarios/me/aparelhos-confiaveis  (os da própria pessoa; `atual` = o aparelho deste token)
+  async listar() {
+    const r = await chamar('GET', '/api/usuarios/me/aparelhos-confiaveis');
+    return r.ok ? { ok: true, itens: listaDe(r.dados, 5).map((d) => ({ id: ID_REDE.test(String(d && d.id)) ? d.id : '', rotulo: texto(d && d.rotulo, 60), criadoEm: texto(d && d.criadoEm, 40), ultimoUso: d && d.ultimoUso ? texto(d.ultimoUso, 40) : '', atual: !!(d && d.atual === true) })).filter((x) => x.id) } : r;
+  },
+  // DELETE /api/usuarios/me/aparelhos-confiaveis/{id}  (o token daquele aparelho cai na hora)
+  async remover(id) {
+    if (!ID_REDE.test(String(id))) return { ok: false, status: 0, erro: 'Aparelho inválido.' };
+    const r = await chamar('DELETE', `/api/usuarios/me/aparelhos-confiaveis/${id}`);
+    return r.ok ? { ok: true } : r;
+  },
+};
 
 // ---------- login por digital / rosto / PIN do aparelho (passkey, WebAuthn; regras no servidor: PasskeyService) ----------
 // A passkey NUNCA substitui a senha: é uma segunda porta de entrada, que o aparelho assina. Cadastrar pede a senha de novo (recusa = 403, nunca 401).
@@ -157,20 +216,28 @@ export const passkey = {
     return !!(globalThis.isSecureContext && typeof globalThis.PublicKeyCredential === 'function' && globalThis.navigator && globalThis.navigator.credentials && typeof globalThis.btoa === 'function');
   },
   // POST /api/auth/passkey/desafio  →  navigator.credentials.get  →  POST /api/auth/passkey/entrar  (devolve a mesma sessão do login por senha)
-  async entrar() {
+  // `condicional` (preenchimento automático do campo de usuário, autocomplete="username webauthn"): o aparelho oferece a digital junto das sugestões e só abre quando a pessoa escolhe;
+  // `sinal` (AbortSignal) cancela a espera quando a tela sai. Sem suporte do navegador à interface condicional = { ok: false, indisponivel: true } (silencioso).
+  async entrar({ loginAutomatico = false, condicional = false, sinal } = {}) {
     if (!this.disponivel()) return { ok: false, status: 0, erro: 'Este navegador não permite entrar com a digital.' };
+    if (condicional) {
+      let sup = false;
+      try { sup = typeof globalThis.PublicKeyCredential.isConditionalMediationAvailable === 'function' && (await globalThis.PublicKeyCredential.isConditionalMediationAvailable()) === true; } catch { sup = false; }
+      if (!sup) return { ok: false, status: 0, indisponivel: true, erro: '' };
+    }
     const a = await chamar('POST', '/api/auth/passkey/desafio', {});
     const ped = a.ok ? lerPedidoPasskey(a.dados) : null;
     if (!ped) return a.ok ? { ok: false, status: 502, erro: mensagemPadrao(500) } : a;
     let cred;
     try {
-      cred = await globalThis.navigator.credentials.get({ publicKey: { challenge: deB64u(ped.desafio), rpId: ped.rpId, timeout: 60000, userVerification: 'required', allowCredentials: [] } });
-    } catch (e) { return { ok: false, status: 0, erro: recusaDoAparelho(e) }; }
+      cred = await globalThis.navigator.credentials.get({ ...(condicional ? { mediation: 'conditional', signal: sinal } : {}), publicKey: { challenge: deB64u(ped.desafio), rpId: ped.rpId, timeout: condicional ? undefined : 60000, userVerification: 'required', allowCredentials: [] } });
+    } catch (e) { return { ok: false, status: 0, cancelado: !!(e && (e.name === 'AbortError' || e.name === 'NotAllowedError')), erro: e && e.name === 'AbortError' ? '' : recusaDoAparelho(e) }; }
     if (!cred || !cred.response) return { ok: false, status: 0, erro: 'Não foi possível usar a digital neste aparelho.' };
     const r = await chamar('POST', '/api/auth/passkey/entrar', {
       desafioId: ped.desafioId, credencialId: paraB64u(cred.rawId), clientDataJSON: paraB64u(cred.response.clientDataJSON),
       authenticatorData: paraB64u(cred.response.authenticatorData), assinatura: paraB64u(cred.response.signature),
       ...(cred.response.userHandle ? { userHandle: paraB64u(cred.response.userHandle) } : {}),
+      ...(loginAutomatico === true ? { loginAutomatico: true } : {}),
     });
     if (!r.ok) return r;
     if (!guardarSessao(r.dados)) return { ok: false, status: 502, erro: mensagemPadrao(500) };
@@ -258,6 +325,7 @@ function lerEstado(d) {
     jaCadastrados: listaDe(d.jaCadastrados, 60).map((c) => texto(c, 40)),
     comissaoPadrao: Number.isFinite(Number(d.comissaoPadrao)) && d.comissaoPadrao !== null ? Number(d.comissaoPadrao) : 50,
     produtosCadastrados: listaDe(d.produtosCadastrados, 200).map((n) => texto(n, 100)),
+    usaBox: d.usaBox === true, boxes: listaDe(d.boxes, 20).map((n) => texto(n, 30)),
   };
 }
 export const onboarding = {
@@ -285,6 +353,11 @@ export const onboarding = {
   async comissao(padrao) {
     const r = await chamar('POST', '/api/onboarding/comissao', { padrao: Number(padrao) });
     return r.ok ? { ok: true, padrao: Number(r.dados && r.dados.padrao) } : r;
+  },
+  // POST /api/onboarding/boxes  { nomes: ['Box 1', ...] }  (estética; aditivo: nome que já existe não é recriado; 1 a 20 no total; respeita o limite de agendas do Admin)
+  async boxes(nomes) {
+    const r = await chamar('POST', '/api/onboarding/boxes', { nomes: listaDe(nomes, 20).map((n) => texto(n, 30)) });
+    return r.ok ? { ok: true, resultado: { criados: Number(r.dados && r.dados.criados) || 0, jaExistiam: Number(r.dados && r.dados.jaExistiam) || 0 } } : r;
   },
   // POST /api/onboarding/expediente  { semana: { 0..6: { aberto, faixas: [['09:00','12:00']] } } }  (semana vazia = pular)
   async expediente(semana) {
@@ -369,10 +442,15 @@ function lerServico(d) {
   };
 }
 export const servicos = {
-  // GET /api/servicos  (dono vê todos; profissional só os ativos)
-  async listar() {
-    const r = await chamar('GET', '/api/servicos');
+  // GET /api/servicos  (dono vê todos; profissional só os ativos). `para: 'atender'` = ordem do Atender (modo da loja: mais usados ou a ordem do dono); sem ela, a ordem da lista de Serviços
+  async listar({ para } = {}) {
+    const r = await chamar('GET', para === 'atender' ? '/api/servicos?para=atender' : '/api/servicos');
     return r.ok ? { ok: true, servicos: listaDe(r.dados, 500).map(lerServico) } : r;
+  },
+  // PUT /api/servicos/ordem  { ids }  (quem tem a seção Serviços; nova ordem manual, a que vale no modo "minha ordem")
+  async reordenar(ids) {
+    if (!Array.isArray(ids) || ids.length > 300 || !ids.every((x) => ID.test(String(x)))) return { ok: false, status: 0, erro: 'Ordem dos serviços inválida.' };
+    return chamar('PUT', '/api/servicos/ordem', { ids });
   },
   // GET /api/servicos/{id}
   async obter(id) {
@@ -629,6 +707,13 @@ export const agenda = {
     const r = await chamar('PUT', `/api/agendamentos/${id}/status`, { status });
     return r.ok ? { ok: true, agendamento: lerAgendamento(r.dados) } : r;
   },
+  // PUT /api/agendamentos/{id}/forma-pagamento  { formaPagamento }  (v119: futuro ou concluído, nunca cancelado; profissional só nos seus; só registra a escolha)
+  async mudarFormaPagamento(id, forma) {
+    if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Agendamento não encontrado.' };
+    if (!['pix', 'dinheiro', 'cartao'].includes(forma)) return { ok: false, status: 0, erro: 'Forma de pagamento inválida.' };
+    const r = await chamar('PUT', `/api/agendamentos/${id}/forma-pagamento`, { formaPagamento: forma });
+    return r.ok ? { ok: true, agendamento: lerAgendamento(r.dados) } : r;
+  },
   // POST /api/agendamentos/{id}/cupom  { chave }  (só a confirmar ou confirmado; um cupom por horário; chave errada responde sempre a mesma mensagem e 5 seguidas bloqueiam por 15 min)
   async aplicarCupom(id, chave) {
     if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Agendamento não encontrado.' };
@@ -673,6 +758,28 @@ export const boxes = {
     const corpo = { boxes: itens.map((b) => ({ ...(ID.test(String(b && b.id)) ? { id: b.id } : {}), nome: texto(b && b.nome, 30), ativo: !(b && b.ativo === false) })) };
     const r = await chamar('PUT', '/api/estabelecimento/boxes', corpo);
     return r.ok ? { ok: true, boxes: listaDe(r.dados, 20).map(lerBox).filter((b) => ID.test(b.id)) } : r;
+  },
+};
+
+// ---------- portes de veículo (v122; regras no servidor: PorteService; só o proprietário grava) ----------
+function lerPorte(d) {
+  d = d || {};
+  return { id: texto(d.id, 24), nome: texto(d.nome, 20), exemplo: texto(d.exemplo || '', 60), ativo: d.ativo !== false, ...(typeof d.fator === 'number' && Number.isFinite(d.fator) ? { fator: d.fator } : {}) };
+}
+const lerPortes = (d) => listaDe(d, 12).map(lerPorte).filter((x) => /^[a-z0-9-]{2,24}$/.test(x.id) && x.nome);
+export const portes = {
+  // GET /api/estabelecimento/portes  (quem está logado; estética. Sem cadastro o servidor devolve os cinco de fábrica)
+  async listar() {
+    const r = await chamar('GET', '/api/estabelecimento/portes');
+    return r.ok ? { ok: true, portes: lerPortes(r.dados) } : r;
+  },
+  // PUT /api/estabelecimento/portes  { portes: [{ id?, nome, exemplo?, ativo }] }  (só o proprietário; a lista inteira substitui a anterior, por id; 1 a 12; o Médio fica e ativo; porte usado só desativa)
+  async gravar(lista) {
+    const itens = Array.isArray(lista) ? lista.slice(0, 12) : [];
+    if (itens.length === 0) return { ok: false, status: 0, erro: 'Cadastre ao menos um porte.' };
+    const corpo = { portes: itens.map((x) => ({ ...(/^[a-z0-9-]{2,24}$/.test(String(x && x.id)) ? { id: x.id } : {}), nome: texto(x && x.nome, 20), exemplo: texto((x && x.exemplo) || '', 60), ativo: !(x && x.ativo === false), ...(x && Number.isFinite(x.fator) ? { fator: Math.round(x.fator * 100) / 100 } : {}) })) };
+    const r = await chamar('PUT', '/api/estabelecimento/portes', corpo);
+    return r.ok ? { ok: true, portes: lerPortes(r.dados) } : r;
   },
 };
 
@@ -994,11 +1101,11 @@ export const profissionais = {
 };
 
 // ---------- regras do Atender (5d-4c) ----------
-const CAMPOS_ATENDER = ['nome', 'telefone', 'profissional', 'vendedor', 'formaPagamento'];
+const CAMPOS_ATENDER = ['nome', 'telefone', 'profissional', 'vendedor', 'formaPagamento', 'veiculo', 'placa', 'modelo', 'porte']; // v121: os quatro últimos só valem na estética
 const lerRegras = (d) => {
   d = d && typeof d === 'object' ? d : {};
-  const campos = (l, futuro) => listaDe(l, 5).map((x) => texto(x, 20)).filter((x) => CAMPOS_ATENDER.includes(x) && !(futuro && x === 'formaPagamento'));
-  return { formaPagamentoPadrao: ['', 'pix', 'dinheiro', 'cartao'].includes(d.formaPagamentoPadrao) ? d.formaPagamentoPadrao : 'pix', futuro: campos(d.futuro, true), local: campos(d.local, false) };
+  const campos = (l, futuro) => listaDe(l, 9).map((x) => texto(x, 20)).filter((x) => CAMPOS_ATENDER.includes(x) && !(futuro && x === 'formaPagamento'));
+  return { formaPagamentoPadrao: ['', 'pix', 'dinheiro', 'cartao'].includes(d.formaPagamentoPadrao) ? d.formaPagamentoPadrao : 'pix', futuro: campos(d.futuro, true), local: campos(d.local, false), ordemServicos: d.ordemServicos === 'manual' ? 'manual' : 'uso' };
 };
 export const regras = {
   // GET /api/estabelecimento/regras-atendimento  (quem usa a agenda; o formulário Atender precisa da forma padrão e dos campos obrigatórios)
@@ -1007,15 +1114,19 @@ export const regras = {
     return r.ok ? { ok: true, regras: lerRegras(r.dados) } : r;
   },
   // PUT /api/estabelecimento/regras-atendimento  { formaPagamentoPadrao?, camposObrigatorios?: { futuro, local } }  (só o proprietário)
-  async gravar({ formaPagamentoPadrao, camposObrigatorios } = {}) {
+  async gravar({ formaPagamentoPadrao, camposObrigatorios, ordemServicos } = {}) {
     const corpo = {};
+    if (ordemServicos !== undefined) {
+      if (!['uso', 'manual'].includes(ordemServicos)) return { ok: false, status: 0, erro: 'Ordem dos serviços inválida.' };
+      corpo.ordemServicos = ordemServicos;
+    }
     if (formaPagamentoPadrao !== undefined) {
       if (!['', 'pix', 'dinheiro', 'cartao'].includes(formaPagamentoPadrao)) return { ok: false, status: 0, erro: 'Forma de pagamento padrão inválida.' };
       corpo.formaPagamentoPadrao = formaPagamentoPadrao;
     }
     if (camposObrigatorios !== undefined) {
       const c = camposObrigatorios;
-      const ok = c && typeof c === 'object' && ['futuro', 'local'].every((k) => Array.isArray(c[k]) && c[k].length <= 5 && new Set(c[k]).size === c[k].length && c[k].every((x) => CAMPOS_ATENDER.includes(x) && !(k === 'futuro' && x === 'formaPagamento')));
+      const ok = c && typeof c === 'object' && ['futuro', 'local'].every((k) => Array.isArray(c[k]) && c[k].length <= 9 && new Set(c[k]).size === c[k].length && c[k].every((x) => CAMPOS_ATENDER.includes(x) && !(k === 'futuro' && x === 'formaPagamento')));
       if (!ok) return { ok: false, status: 0, erro: 'Campos obrigatórios inválidos.' };
       corpo.camposObrigatorios = { futuro: [...c.futuro], local: [...c.local] };
     }
@@ -1029,7 +1140,9 @@ export const regras = {
 const lerLink = (d) => {
   d = d && typeof d === 'object' ? d : {};
   const dm = Number.isInteger(d.diasMax) ? Math.min(60, Math.max(1, d.diasMax)) : 30;
-  return { ativo: d.ativo !== false, diasMax: dm, disponivel: d.disponivel !== false, telefoneObrigatorio: d.telefoneObrigatorio !== false };
+  return { ativo: d.ativo !== false, diasMax: dm, disponivel: d.disponivel !== false, telefoneObrigatorio: d.telefoneObrigatorio !== false,
+    nomeObrigatorio: d.nomeObrigatorio !== false, veiculoObrigatorio: Array.isArray(d.veiculoObrigatorio) ? d.veiculoObrigatorio.filter((x) => ['placa', 'modelo', 'porte'].includes(x)) : ['placa', 'modelo', 'porte'],
+    pendencias: Array.isArray(d.pendencias) ? d.pendencias.filter((x) => typeof x === 'string' && x).slice(0, 5).map((x) => x.slice(0, 300)) : [] }; // v119: o que falta cadastrar para o cliente ver horários
 };
 export const linkAgendamento = {
   // GET /api/estabelecimento/link-agendamento
@@ -1037,9 +1150,17 @@ export const linkAgendamento = {
     const r = await chamar('GET', '/api/estabelecimento/link-agendamento');
     return r.ok ? { ok: true, link: lerLink(r.dados) } : r;
   },
-  // PUT /api/estabelecimento/link-agendamento  { ativo?, diasMax?, telefoneObrigatorio? }
-  async gravar({ ativo, diasMax, telefoneObrigatorio } = {}) {
+  // PUT /api/estabelecimento/link-agendamento  { ativo?, diasMax?, telefoneObrigatorio?, nomeObrigatorio?, veiculoObrigatorio?: ['placa','modelo','porte'] }
+  async gravar({ ativo, diasMax, telefoneObrigatorio, nomeObrigatorio, veiculoObrigatorio } = {}) {
     const corpo = {};
+    if (nomeObrigatorio !== undefined) {
+      if (typeof nomeObrigatorio !== 'boolean') return { ok: false, status: 0, erro: 'Valor inválido.' };
+      corpo.nomeObrigatorio = nomeObrigatorio;
+    }
+    if (veiculoObrigatorio !== undefined) {
+      if (!Array.isArray(veiculoObrigatorio) || veiculoObrigatorio.length > 3 || new Set(veiculoObrigatorio).size !== veiculoObrigatorio.length || !veiculoObrigatorio.every((x) => ['placa', 'modelo', 'porte'].includes(x))) return { ok: false, status: 0, erro: 'Dados do veículo obrigatórios inválidos.' };
+      corpo.veiculoObrigatorio = [...veiculoObrigatorio];
+    }
     if (telefoneObrigatorio !== undefined) corpo.telefoneObrigatorio = telefoneObrigatorio === true;
     if (ativo !== undefined) corpo.ativo = ativo === true;
     if (diasMax !== undefined) {
@@ -1140,10 +1261,11 @@ export const marca = {
 const PUB = { publico: true };
 const IDV = (v) => (ID.test(String(v)) ? String(v) : '');
 const inteiroOuZero = (v) => (Number.isInteger(v) && v >= 0 ? v : 0);
-const PORTES_PUB = ['pequeno', 'medio', 'grande', 'suv', 'pickup'];
+const ID_PORTE = /^[a-z0-9-]{2,24}$/; // portes cadastrados pelo dono (v122): ids dos de fábrica (medio, suv…) e gerados pelo servidor
+const porteDoPublico = (p) => typeof p === 'string' && ID_PORTE.test(p);
 const tabelaPorPorte = (t, conv) => {
   const o = {};
-  if (t && typeof t === 'object') for (const p of PORTES_PUB) if (conv(t[p]) !== null) o[p] = conv(t[p]);
+  if (t && typeof t === 'object') for (const p of Object.keys(t)) if (porteDoPublico(p) && conv(t[p]) !== null) o[p] = conv(t[p]);
   return o;
 };
 const dinheiroOuNulo = (v) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v < 1e7 ? v : null);
@@ -1153,8 +1275,9 @@ function lerPaginaPublica(d) {
   return {
     endereco: opcional(d.endereco, 300), mapaUrl: httpsOuVazio(d.mapaUrl),
     ativo: d.ativo === true, aviso: texto(d.aviso, 200), diasMax: Number.isInteger(d.diasMax) ? Math.min(60, Math.max(1, d.diasMax)) : 30,
-    tipo: texto(d.tipo, 40), exigeTelefone: d.exigeTelefone !== false, // telefone obrigatório de fábrica
-    portes: listaDe(d.portes, 10).filter((x) => x && PORTES_PUB.includes(x.id)).map((x) => ({ id: x.id, nome: texto(x.nome, 20) })),
+    tipo: texto(d.tipo, 40), exigeTelefone: d.exigeTelefone !== false, exigeNome: d.exigeNome !== false, // tudo obrigatório de fábrica; o dono tira em Estabelecimento
+    exigeVeiculo: Array.isArray(d.exigeVeiculo) ? d.exigeVeiculo.filter((x) => ['placa', 'modelo', 'porte'].includes(x)) : ['placa', 'modelo', 'porte'],
+    portes: listaDe(d.portes, 12).filter((x) => x && porteDoPublico(x.id)).map((x) => ({ id: x.id, nome: texto(x.nome, 20), exemplo: texto(x.exemplo || '', 60) })),
     servicos: listaDe(d.servicos, 200).filter((x) => x && IDV(x.id)).map((x) => ({
       id: x.id, nome: texto(x.nome, 120), duracao: inteiroOuZero(x.duracao), preco: dinheiroOuZero(x.preco), antecedenciaH: inteiroOuZero(x.antecedenciaH),
       precos: tabelaPorPorte(x.precos, dinheiroOuNulo), duracoes: tabelaPorPorte(x.duracoes, minutosOuNulo),
@@ -1168,7 +1291,7 @@ function lerResumoPublico(d) {
     id: IDV(d.id), inicio: instante(d.inicio), fim: instante(d.fim), status: STATUS_AGENDA.includes(d.status) ? d.status : 'a_confirmar', rotulo: texto(d.rotulo, 40),
     servicos: listaDe(d.servicos, 20).map((x) => texto(x, 120)), duracao: inteiroOuZero(d.duracao), total: dinheiroOuZero(d.total), desconto: dinheiroOuZero(d.desconto),
     cupom: d.cupom ? texto(d.cupom, 60) : '', profissional: texto(d.profissional, 80), ativo: d.ativo === true, podeCancelar: d.podeCancelar === true,
-    veiculo: d.veiculo && typeof d.veiculo === 'object' ? { placa: texto(d.veiculo.placa, 10), modelo: texto(d.veiculo.modelo, 60), porte: PORTES_PUB.includes(d.veiculo.porte) ? d.veiculo.porte : '' } : null,
+    veiculo: d.veiculo && typeof d.veiculo === 'object' ? { placa: texto(d.veiculo.placa, 10), modelo: texto(d.veiculo.modelo, 60), porte: porteDoPublico(d.veiculo.porte) ? d.veiculo.porte : '' } : null,
   };
 }
 const consultaServicos = (ids) => (Array.isArray(ids) ? ids.filter((x) => ID.test(String(x))).slice(0, 5).join(',') : '');
@@ -1181,14 +1304,14 @@ export const publico = {
   // GET /api/publico/dias?de=AAAA-MM-DD&dias=14&servicos=id,id&profissionalId=&porte=   → ['AAAA-MM-DD', ...]  (porte só na estética)
   async dias({ de, dias, servicoIds, profissionalId, porte }) {
     if (!DIA_ISO.test(String(de)) || !consultaServicos(servicoIds)) return { ok: true, dias: [] };
-    const q = `de=${de}&dias=${Math.min(31, Math.max(1, Number(dias) || 1))}&servicos=${consultaServicos(servicoIds)}${ID.test(String(profissionalId)) ? `&profissionalId=${profissionalId}` : ''}${PORTES_PUB.includes(porte) ? `&porte=${porte}` : ''}`;
+    const q = `de=${de}&dias=${Math.min(31, Math.max(1, Number(dias) || 1))}&servicos=${consultaServicos(servicoIds)}${ID.test(String(profissionalId)) ? `&profissionalId=${profissionalId}` : ''}${porteDoPublico(porte) ? `&porte=${porte}` : ''}`;
     const r = await chamar('GET', `/api/publico/dias?${q}`, undefined, undefined, PUB);
     return r.ok ? { ok: true, dias: listaDe(r.dados, 62).filter((x) => DIA_ISO.test(String(x))) } : r;
   },
   // GET /api/publico/horarios?data=AAAA-MM-DD&servicos=id,id&profissionalId=&porte=   → [{ inicio, profissionalId }]  (porte só na estética)
   async horarios({ data, servicoIds, profissionalId, porte }) {
     if (!DIA_ISO.test(String(data)) || !consultaServicos(servicoIds)) return { ok: true, horarios: [] };
-    const q = `data=${data}&servicos=${consultaServicos(servicoIds)}${ID.test(String(profissionalId)) ? `&profissionalId=${profissionalId}` : ''}${PORTES_PUB.includes(porte) ? `&porte=${porte}` : ''}`;
+    const q = `data=${data}&servicos=${consultaServicos(servicoIds)}${ID.test(String(profissionalId)) ? `&profissionalId=${profissionalId}` : ''}${porteDoPublico(porte) ? `&porte=${porte}` : ''}`;
     const r = await chamar('GET', `/api/publico/horarios?${q}`, undefined, undefined, PUB);
     return r.ok ? { ok: true, horarios: listaDe(r.dados, 100).filter((x) => x && instante(x.inicio) !== null && IDV(x.profissionalId)).map((x) => ({ inicio: instante(x.inicio), profissionalId: x.profissionalId })) } : r;
   },
@@ -1200,7 +1323,7 @@ export const publico = {
     if (typeof cupomChave === 'string' && cupomChave.trim()) corpo.cupomChave = texto(cupomChave.trim(), 40);
     if (typeof site === 'string' && site) corpo.site = texto(site, 100);
     if (veiculo && typeof veiculo === 'object') {
-      corpo.veiculo = { placa: texto(veiculo.placa, 20), modelo: texto(veiculo.modelo, 60), porte: PORTES_PUB.includes(veiculo.porte) ? veiculo.porte : '' };
+      corpo.veiculo = { placa: texto(veiculo.placa, 20), modelo: texto(veiculo.modelo, 60), porte: porteDoPublico(veiculo.porte) ? veiculo.porte : '' }; // campo vazio vai vazio: o servidor trata como "não informado"
       if (typeof veiculo.marca === 'string' && veiculo.marca.trim()) corpo.veiculo.marca = texto(veiculo.marca, 60);
       if (typeof veiculo.cor === 'string' && veiculo.cor.trim()) corpo.veiculo.cor = texto(veiculo.cor, 40);
     }

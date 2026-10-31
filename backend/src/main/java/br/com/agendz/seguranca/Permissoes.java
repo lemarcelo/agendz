@@ -22,8 +22,8 @@ import org.springframework.stereotype.Component;
 @Component("perm")
 public class Permissoes {
 
-    /** Seções que o proprietário libera ou bloqueia para qualquer usuário. `planos` (v111) e `avaliacoes` (v118) não fazem parte do padrão de nenhum perfil: só o dono libera por pessoa. */
-    public static final List<String> LIBERAVEIS = List.of("clientes", "servicos", "estabelecimento", "agenda", "estoque", "financeiro", "planos", "avaliacoes");
+    /** Seções que o proprietário libera ou bloqueia para qualquer usuário. `planos` (v111), `avaliacoes` (v118) e `suporte` (v119: abrir chamados com a plataforma) não fazem parte do padrão de nenhum perfil: só o dono libera por pessoa. */
+    public static final List<String> LIBERAVEIS = List.of("clientes", "servicos", "estabelecimento", "agenda", "estoque", "financeiro", "planos", "avaliacoes", "suporte");
     private static final Map<String, Set<String>> PADRAO = Map.of(
             "profissional", Set.of("agenda", "clientes"),
             "atendente", Set.of("agenda", "clientes", "servicos"),

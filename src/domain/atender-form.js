@@ -2,7 +2,7 @@
 // Regras puras do formulário Atender do site real (F2 parte 5c). A decisão de verdade é do servidor (POST /api/atendimentos); aqui só o que a tela
 // precisa saber antes de enviar: se é atendimento já feito ou agendamento, se o dia é anterior a hoje (pede motivo) e o resumo de serviços.
 import { startOfDay } from './time.js';
-import { PORTE_PADRAO, placaValida, porteValido } from './veiculos.js';
+import { EXIGE_TUDO_DO_VEICULO, PORTE_PADRAO, limparVeiculoComRegras, placaValida, porteValido, precoNoPorte } from './veiculos.js';
 
 const MARGEM_MS = 60000; // mesma tolerância do servidor: até 1 minuto à frente ainda é "agora"
 
@@ -17,7 +17,8 @@ export const ehRetroativo = (inicio, agora) => Number.isFinite(inicio) && tipoDo
 // Regras do Atender (Estabelecimento > Regras, no servidor: GET /api/estabelecimento/regras-atendimento). De fábrica: agendamento pede nome e telefone
 // (o aviso do horário vai por telefone), atendimento local não pede nada e a forma padrão é Pix.
 export const FORMAS_PAGAMENTO = [['pix', 'Pix'], ['dinheiro', 'Dinheiro'], ['cartao', 'Cartão']];
-export const CAMPOS_DO_ATENDER = { nome: 'nome', telefone: 'telefone', profissional: 'profissional', vendedor: 'vendedor', formaPagamento: 'forma de pagamento' };
+export const CAMPOS_DO_ATENDER = { nome: 'nome', telefone: 'telefone', profissional: 'profissional', vendedor: 'vendedor', formaPagamento: 'forma de pagamento', veiculo: 'veículo', placa: 'placa', modelo: 'modelo do veículo', porte: 'porte do veículo' };
+export const CAMPOS_DE_VEICULO = ['veiculo', 'placa', 'modelo', 'porte'];
 export const REGRAS_DE_FABRICA = { formaPagamentoPadrao: 'pix', futuro: [], local: [] };
 export const formaValida = (f) => FORMAS_PAGAMENTO.some(([k]) => k === f);
 
@@ -50,9 +51,9 @@ export const exige = (regras, tipo, campo) => ((regras && regras[tipo]) || REGRA
 export function servicoNoPorte(s, porte) {
   if (!s.precos && !s.duracoes) return { preco: Number(s.preco) || 0, duracaoMin: Number(s.duracaoMin) || 0 };
   const p = porteValido(porte) ? porte : PORTE_PADRAO;
-  const preco = s.precos ? Number(s.precos[p]) : NaN;
   const dur = s.duracoes ? Number(s.duracoes[p]) : NaN;
-  return { preco: Number.isFinite(preco) && preco >= 0 ? preco : Number(s.preco) || 0, duracaoMin: Number.isFinite(dur) && dur > 0 ? dur : Number(s.duracaoMin) || 0 };
+  // v124: preço específico do porte ou preço base × fator do porte (o servidor recalcula e congela)
+  return { preco: precoNoPorte(Number(s.preco) || 0, s.precos ? s.precos[p] : undefined, p), duracaoMin: Number.isFinite(dur) && dur > 0 ? dur : Number(s.duracaoMin) || 0 };
 }
 
 // Soma de preço e minutos dos serviços marcados (só para mostrar; o servidor recalcula). `porte` só conta onde o serviço tem preço por porte.
@@ -62,21 +63,22 @@ export function resumoDosServicos(servicos, ids, porte) {
 }
 
 // ---------- estética: veículo e box (V25) ----------
-// Veículo novo digitado no Atender: placa válida (antiga ou Mercosul), modelo e porte. Devolve o aviso ou ''. O servidor confere de novo.
-export function faltaVeiculoNovo(v) {
-  if (!v || !String(v.placa || '').trim()) return 'Informe a placa do veículo.';
-  if (!placaValida(v.placa)) return 'Placa inválida. Use o formato antigo (ABC-1234) ou Mercosul (ABC1D23).';
-  if (!String(v.modelo || '').trim()) return 'Informe o modelo do veículo.';
-  if (!porteValido(v.porte)) return 'Escolha o porte do veículo.';
-  return '';
+// Veículo digitado no Atender: só o que as regras exigem (`exigir`: veiculo, placa, modelo, porte) é obrigatório; o que foi digitado sempre é conferido (placa no
+// formato, porte conhecido). Devolve o aviso ou ''. O servidor confere de novo. Sem a lista vale a regra antiga (tudo).
+export function faltaVeiculoNovo(v, exigir = EXIGE_TUDO_DO_VEICULO) {
+  const r = limparVeiculoComRegras(v, exigir);
+  return r.ok ? '' : r.erro;
 }
 
-// Serviço exige veículo; só produto, não. Devolve o aviso ou '' (`escolhido` = veículo já cadastrado, `novo` = o digitado).
-export function faltaVeiculo(usaVeiculo, servicoIds, escolhido, novo) {
+// Com serviço, o veículo só é exigido se as regras mandarem. Devolve o aviso ou '' (`escolhido` = veículo já cadastrado, `novo` = o digitado).
+export function faltaVeiculo(usaVeiculo, servicoIds, escolhido, novo, exigir = EXIGE_TUDO_DO_VEICULO) {
   if (!usaVeiculo || servicoIds.length === 0) return '';
   if (escolhido) return '';
-  return novo ? faltaVeiculoNovo(novo) : 'Escolha o veículo do atendimento.';
+  return faltaVeiculoNovo(novo, exigir);
 }
+
+// Só os campos de veículo da lista de campos obrigatórios de um tipo (para passar a `faltaVeiculo`).
+export const exigenciasDoVeiculo = (regras, tipo) => ((regras && regras[tipo]) || REGRAS_DE_FABRICA[tipo] || []).filter((k) => CAMPOS_DE_VEICULO.includes(k));
 
 // Porte que vale para o resumo: o do veículo escolhido, o do digitado ou o médio.
 export const porteDoAtendimento = (escolhido, novo) => (escolhido && porteValido(escolhido.porte) ? escolhido.porte : novo && porteValido(novo.porte) ? novo.porte : PORTE_PADRAO);

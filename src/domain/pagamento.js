@@ -3,7 +3,7 @@
 // A cada passada do relógio (`tickFinanceiro`) o financeiro compara o valor do atendimento com o que já foi lançado e cobre a diferença:
 // valor a mais (produto ou serviço acrescentado depois) vira uma nova receita; valor a menos (retirada, cancelamento) vira um estorno.
 // Só registra o que o cliente JÁ pagou: não existe "a receber".
-import { ganchos, nextId, AUTOR_SISTEMA } from './engine.js';
+import { ganchos, nextId, registrar, AUTOR_SISTEMA } from './engine.js';
 import { contaDe, grupoDe, grupoDoServico } from './financeiro.js';
 import { itensDoAgendamento, produtosDoAgendamento, r2, totalAgendamento, totalProdutos } from './reports.js';
 import { FORMAS_PAGAMENTO, formaValida, STATUS } from './rules.js';
@@ -69,3 +69,29 @@ function tickPagamentoLocal(s, agora) {
   for (const a of s.agendamentos) if (a.local && a.pagamento) sincronizarPagamentoLocal(s, a, agora);
 }
 ganchos.push(tickPagamentoLocal);
+
+// v119: trocar a forma de pagamento de um agendamento (segurar o cartão). Vale para futuro e concluído, nunca para cancelado.
+// Atendimento local já lançado no financeiro: as receitas e estornos mudam de forma, de conta e de categoria juntos; se alguma já foi conciliada
+// com o extrato, recusa (a conciliação é do banco e não se mexe sozinha). Agendamento comum só guarda a escolha. Registra no histórico.
+export function trocarFormaDoAgendamento(s, a, forma, autor, agora) {
+  if (!a) return { ok: false, erros: ['Agendamento não encontrado.'] };
+  if (!formaValida(forma)) return { ok: false, erros: ['Forma de pagamento inválida.'] };
+  if (a.status === STATUS.CANCELADO) return { ok: false, erros: ['Agendamento cancelado não tem forma de pagamento.'] };
+  const antes = a.pagamento && formaValida(a.pagamento.forma) ? a.pagamento.forma : '';
+  if (antes === forma) return { ok: true, agendamento: a, igual: true };
+  const lancs = a.local ? lancsDoAtendimento(s, a) : [];
+  if (lancs.some((l) => l.conciliado)) return { ok: false, erros: ['O pagamento deste atendimento já foi conciliado com o banco. Desfaça a conciliação no Financeiro antes de trocar a forma.'] };
+  if (lancs.length) {
+    const conta = contaDaForma(s, forma, grupoDoAtendimento(s, a));
+    if (!conta) return { ok: false, erros: [`A forma ${FORMAS_PAGAMENTO[forma]} não tem conta configurada. Defina em Estabelecimento > Regras.`] };
+    for (const l of lancs) {
+      const velha = FORMAS_PAGAMENTO[l.forma] || FORMAS_PAGAMENTO[antes] || '';
+      if (velha && typeof l.descricao === 'string') l.descricao = l.descricao.replace(`(${velha})`, `(${FORMAS_PAGAMENTO[forma]})`);
+      l.forma = forma; l.contaId = conta.id;
+      if (l.tipo === 'credito') l.categoria = categoriaDaForma(forma);
+    }
+  }
+  a.pagamento = { forma };
+  registrar(s, a, autor, 'forma de pagamento', antes ? FORMAS_PAGAMENTO[antes] : '(padrão da loja)', FORMAS_PAGAMENTO[forma], agora);
+  return { ok: true, agendamento: a };
+}

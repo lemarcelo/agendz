@@ -438,6 +438,7 @@ test('pix: sem Open Finance a confirmação é manual e o banco concilia depois'
 });
 
 test('financeiro: expiração, cancelamento junto com o agendamento, permissões e resumo', () => {
+  const t0 = store.agora(); // o relógio avança 25 h abaixo: perto da virada do mês o resumo olha o mês do seed (t0)
   const a = futuro();
   const c = financeiro.gerarCobranca(a.id, { cpf: MARCELO_CPF }).cobranca;
   store.avancar(25 * HORA);
@@ -449,12 +450,12 @@ test('financeiro: expiração, cancelamento junto com o agendamento, permissões
   // barbeiro: gera para o próprio agendamento, mas não vê o financeiro
   auth.logout(); auth.login({ identificador: 'kiko', senha: '1234' });
   assert.equal(R.pode(R.pode ? st().usuarios.find((u) => u.id === 'u-kiko') : null, 'financeiro'), false);
-  assert.equal(financeiro.salvarLancamento({ tipo: 'despesa', descricao: 'x', valor: 1, data: store.agora() }).ok, false);
+  assert.equal(financeiro.salvarLancamento({ tipo: 'despesa', descricao: 'x', valor: 1, data: t0 }).ok, false);
   assert.equal(financeiro.confirmarManual(c.id).ok, false);
   auth.logout(); login();
-  financeiro.salvarLancamento({ tipo: 'despesa', descricao: 'Internet', valor: 120, data: store.agora(), categoria: 'Internet e telefone' });
-  financeiro.salvarLancamento({ tipo: 'credito', descricao: 'Aporte', valor: 500, data: store.agora(), categoria: 'Outros créditos' });
-  const r = resumoFinanceiro(st(), { mesTs: store.agora() });
+  financeiro.salvarLancamento({ tipo: 'despesa', descricao: 'Internet', valor: 120, data: t0, categoria: 'Internet e telefone' });
+  financeiro.salvarLancamento({ tipo: 'credito', descricao: 'Aporte', valor: 500, data: t0, categoria: 'Outros créditos' });
+  const r = resumoFinanceiro(st(), { mesTs: t0 });
   assert.equal(r.creditos, 500); assert.equal(r.despesas, 1506.9); assert.equal(r.saldo, -1006.9);
 });
 

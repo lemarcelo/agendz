@@ -2,8 +2,11 @@
 // Casca do site publicado (API real), F2: carrega a loja do endereço (GET /api/publico/loja), faz o login real, troca a senha
 // temporária e mostra o painel com o menu. Os módulos entram um a um (Clientes na parte 2, Serviços na 3, Equipe na 4; a agenda na seguinte), cada um só
 // quando o servidor tem a regra inteira. Não importa `api.js` (a simulada) nem `hooks.js`: o estado aqui é só o da sessão real, em memória.
-import React, { useEffect, useMemo, useState } from 'react';
-import { cancelarEspera, carregarLoja, entrar, esperandoRede, loginValido, onboarding, passkey, perfil as apiPerfil, quandoEsperar, sair, sessaoAtual, suporte as apiSuporte, trocarSenha } from '../../services/api-real.js';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { lerHashAvaliar } from '../../domain/link-publico.js';
+import { aparelhos as apiAparelhos, cancelarEspera, carregarLoja, entrar, esperandoRede, onboarding, passkey, perfil as apiPerfil, portes as apiPortes, quandoEsperar, redes as apiRedes, restaurar, sair, sessaoAtual, suporte as apiSuporte, tokenDeRedeConfiavel, trocarSenha } from '../../services/api-real.js';
+import { esquecerSessaoDaRede, lembrarSessaoDaRede, sessaoGuardada } from './sessao-rede.js';
+import { ehCelular, rotuloDoAparelho } from '../../domain/aparelho.js';
 import PrimeiroAcesso from '../leve/PrimeiroAcesso.jsx';
 import Agenda from './Agenda.jsx';
 import Clientes from './Clientes.jsx';
@@ -19,6 +22,8 @@ import RegrasAtendimento from './RegrasAtendimento.jsx';
 import Cupons from './Cupons.jsx';
 import Planos from './Planos.jsx';
 import AgendarPublico from './AgendarPublico.jsx';
+import AvaliarPublico from './AvaliarPublico.jsx';
+import Avaliacoes from './Avaliacoes.jsx';
 import LinkAgendamento from './LinkAgendamento.jsx';
 import Avisos from './Avisos.jsx';
 import Suporte from '../leve/Suporte.jsx';
@@ -28,6 +33,7 @@ import MeuPerfil, { AvatarReal } from './MeuPerfil.jsx';
 import { lerPrefs } from './alerta.js';
 import { DESTAQUE_MS, podarDestaques } from '../../domain/notificacao.js';
 import { TIPOS, capAtiva, definirTipoAtivo, rotulo, tipoValido } from '../../domain/tipos.js';
+import { definirPortes } from '../../domain/veiculos.js';
 import { cssDaMarca, logoValida } from '../../domain/tema.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
 
@@ -66,11 +72,14 @@ function Login({ loja, aoEntrar }) {
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [esqueci, setEsqueci] = useState(false);
+  const [auto, setAuto] = useState(false); // "Login automático": depois de entrar, o servidor pergunta se esta rede é de confiança
+  const autoRef = useRef(false);
+  autoRef.current = auto;
   const enviar = async (e) => {
     e.preventDefault();
     if (enviando) return;
     setEnviando(true); setErro('');
-    const r = await entrar({ identificador: id, senha });
+    const r = await entrar({ identificador: id, senha, loginAutomatico: auto });
     setEnviando(false);
     if (!r.ok) { setErro(r.erro); setSenha(''); return; }
     aoEntrar(r.sessao, r.sessao.deveTrocarSenha ? senha : '');
@@ -79,16 +88,29 @@ function Login({ loja, aoEntrar }) {
   const entrarComDigital = async () => {
     if (enviando) return;
     setEnviando(true); setErro('');
-    const r = await passkey.entrar();
+    const r = await passkey.entrar({ loginAutomatico: auto });
     setEnviando(false);
     if (!r.ok) { setErro(r.erro); return; }
     aoEntrar(r.sessao, '');
   };
+  // Digital pelo preenchimento do campo de usuário (autocomplete="username webauthn"): o aparelho mostra a digital junto das sugestões; some em quem não tem suporte.
+  useEffect(() => {
+    if (!passkey.disponivel() || typeof AbortController !== 'function') return undefined;
+    const ctl = new AbortController();
+    passkey.entrar({ condicional: true, sinal: ctl.signal, loginAutomatico: autoRef.current }).then((r) => {
+      if (ctl.signal.aborted) return;
+      if (r.ok) aoEntrar(r.sessao, '');
+      else if (r.erro && !r.cancelado && !r.indisponivel) setErro(r.erro);
+    });
+    return () => ctl.abort();
+  }, []);
   return (
     <Cartao loja={loja}>
-      <form onSubmit={enviar} className="form-grade um">
-        <Campo rotulo="Usuário"><input value={id} onChange={(e) => { setId(e.target.value); setErro(''); }} autoComplete="username" autoFocus maxLength={60} data-testid="login-id" /></Campo>
+      <form onSubmit={enviar} className="form-grade um form-acesso-real">
+        <Campo rotulo="Usuário"><input value={id} onChange={(e) => { setId(e.target.value); setErro(''); }} autoComplete="username webauthn" autoFocus maxLength={60} data-testid="login-id" /></Campo>
         <Campo rotulo="Senha"><input type="password" value={senha} onChange={(e) => { setSenha(e.target.value); setErro(''); }} autoComplete="current-password" maxLength={100} data-testid="login-senha" /></Campo>
+        <label className="pa-check" data-testid="login-auto-rotulo"><input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} data-testid="login-auto" /> Login automático</label>
+        {auto && <p className="muted" data-testid="login-auto-ajuda">Depois de entrar, o Agendz pergunta se você quer confiar nesta rede (computador da loja) ou só neste aparelho (celular). Na rede confiável não precisa entrar de novo; em qualquer outra rede o acesso pede a digital ou a senha depois de 1 dia. No aparelho confiável você continua logado em qualquer rede.</p>}
         {erro && <Aviso tipo="erro" data-testid="login-erro">{erro}</Aviso>}
         <Btn variante="primario" type="submit" disabled={enviando} data-testid="login-entrar">{enviando ? 'Entrando…' : 'Entrar'}</Btn>
         {passkey.disponivel() && <Btn type="button" disabled={enviando} onClick={entrarComDigital} data-testid="login-digital">Entrar com a digital</Btn>}
@@ -99,10 +121,54 @@ function Login({ loja, aoEntrar }) {
   );
 }
 
-// Primeiro acesso: a pessoa já entrou com o usuário e a senha que recebeu; aqui só redefine (usuário que ela escolhe + senha nova). A senha enviada vem da
+// Depois de entrar com "Login automático": a pessoa escolhe confiar na REDE (computador da loja: o servidor identifica o IP público, nunca o nome do Wi-Fi, e guarda só uma
+// marca irreversível) ou só neste APARELHO (celular: o token longo vale em qualquer rede). No celular a sugestão é o aparelho; no computador, a rede. (v125)
+function PerguntaRede({ loja, aoResponder }) {
+  const [rotulo, setRotulo] = useState('');
+  const [enviando, setEnviando] = useState('');
+  const [erro, setErro] = useState('');
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+  const celular = ehCelular(ua);
+  const enviar = async (qual) => {
+    if (enviando) return;
+    setEnviando(qual); setErro('');
+    const r = qual === 'aparelho' ? await apiAparelhos.confiar(rotuloDoAparelho(ua)) : await apiRedes.confiar(rotulo);
+    setEnviando('');
+    if (!r.ok) { setErro(r.erro); return; }
+    aoResponder(r.sessao);
+  };
+  const blocoRede = (
+    <div className="form-grade um" key="rede" data-testid="pergunta-rede-rede">
+      <p><b>Neste Wi-Fi (computador da loja)</b></p>
+      <p className="muted">Quem entra por esta rede não digita nada e a sessão não vence. Em qualquer outra rede, o acesso dura 1 dia e depois pede a digital ou a senha. Dá para remover a rede quando quiser em Meu perfil.</p>
+      <Campo rotulo="Nome desta rede (opcional)"><input value={rotulo} onChange={(e) => setRotulo(e.target.value)} maxLength={60} placeholder="Ex.: Casa, Loja" data-testid="rede-rotulo" /></Campo>
+      <Btn variante={celular ? undefined : 'primario'} disabled={!!enviando} onClick={() => enviar('rede')} data-testid="rede-sim">{enviando === 'rede' ? 'Salvando…' : 'Sim, confiar nesta rede'}</Btn>
+    </div>
+  );
+  const blocoAparelho = (
+    <div className="form-grade um" key="aparelho" data-testid="pergunta-rede-aparelho">
+      <p><b>Só neste aparelho (celular)</b></p>
+      <p className="muted">Este aparelho continua logado em qualquer rede (Wi-Fi ou internet do chip) por até 1 ano, desde que você o use ao menos a cada 90 dias. Se perder o aparelho, remova-o em Meu perfil, de outro lugar. Sair ou trocar a senha também tira a confiança.</p>
+      <Btn variante={celular ? 'primario' : undefined} disabled={!!enviando} onClick={() => enviar('aparelho')} data-testid="aparelho-sim">{enviando === 'aparelho' ? 'Salvando…' : 'Sim, confiar neste aparelho'}</Btn>
+    </div>
+  );
+  return (
+    <Cartao loja={loja}>
+      <div className="form-grade um form-acesso-real" data-testid="pergunta-rede">
+        <p><b>Deseja logar automaticamente?</b></p>
+        <p className="muted">Use só em aparelho e rede que são seus.</p>
+        {celular ? [blocoAparelho, blocoRede] : [blocoRede, blocoAparelho]}
+        {erro && <Aviso tipo="erro" data-testid="rede-erro">{erro}</Aviso>}
+        <Btn disabled={!!enviando} onClick={() => aoResponder(null)} data-testid="rede-nao">Agora não</Btn>
+      </div>
+    </Cartao>
+  );
+}
+
+// Primeiro acesso: a pessoa já entrou com o usuário e a senha que recebeu; aqui só redefine a senha (o usuário continua o mesmo que ela digitou ao entrar; v119). A senha enviada vem da
 // tela de entrada e fica só em memória até a troca (nunca vai ao storage); depois de salvar a sessão já é a nova e a tela segue sozinha (assistente ou agenda).
 function TrocarSenha({ loja, sessao, senhaEnviada, aoTrocar, aoSair }) {
-  const [f, setF] = useState({ atual: '', usuario: '', nova: '', repetir: '' });
+  const [f, setF] = useState({ atual: '', nova: '', repetir: '' });
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
   const mudar = (k) => (e) => { setF({ ...f, [k]: e.target.value }); setErro(''); };
@@ -110,22 +176,19 @@ function TrocarSenha({ loja, sessao, senhaEnviada, aoTrocar, aoSair }) {
   const enviar = async (e) => {
     e.preventDefault();
     if (enviando) return;
-    const usuario = f.usuario.trim().toLowerCase();
-    if (!loginValido(usuario)) { setErro('Escolha o seu usuário: de 2 a 60 caracteres, só letras, números, ponto, hífen e sublinhado'); return; }
     if (f.nova !== f.repetir) { setErro('A confirmação da nova senha não confere'); return; }
     setEnviando(true); setErro('');
-    const r = await trocarSenha({ senhaAtual: senhaEnviada || f.atual, nova: f.nova, usuario });
+    const r = await trocarSenha({ senhaAtual: senhaEnviada || f.atual, nova: f.nova });
     setEnviando(false);
     if (!r.ok) { setErro(r.erro); return; }
     aoTrocar(r.sessao);
   };
   return (
     <Cartao loja={loja}>
-      <form onSubmit={enviar} className="form-grade um">
-        <p><b>Olá, {sessao.nome}.</b> Sua senha é temporária. Escolha o seu usuário e a sua senha definitiva: depois disso você já entra e segue para a configuração.</p>
+      <form onSubmit={enviar} className="form-grade um form-acesso-real">
+        <p><b>Olá, {sessao.nome}.</b> Sua senha é temporária. Escolha a sua senha definitiva: depois disso você já entra e segue para a configuração.</p>
         {precisaAtual && <Campo rotulo="Senha temporária (a que você recebeu)"><input type="password" value={f.atual} onChange={mudar('atual')} autoComplete="current-password" autoFocus maxLength={100} data-testid="troca-atual" /></Campo>}
-        <Campo rotulo="Seu usuário (você escolhe; letras, números, ponto, hífen)"><input value={f.usuario} onChange={mudar('usuario')} autoComplete="username" autoCapitalize="none" spellCheck={false} maxLength={60} autoFocus={!precisaAtual} data-testid="troca-usuario" /></Campo>
-        <Campo rotulo="Sua senha definitiva (8 caracteres ou mais)"><input type="password" value={f.nova} onChange={mudar('nova')} autoComplete="new-password" maxLength={100} data-testid="troca-nova" /></Campo>
+        <Campo rotulo="Sua senha definitiva (8 caracteres ou mais)"><input type="password" value={f.nova} onChange={mudar('nova')} autoComplete="new-password" autoFocus={!precisaAtual} maxLength={100} data-testid="troca-nova" /></Campo>
         <Campo rotulo="Repita a senha definitiva"><input type="password" value={f.repetir} onChange={mudar('repetir')} autoComplete="new-password" maxLength={100} data-testid="troca-repetir" /></Campo>
         {erro && <Aviso tipo="erro" data-testid="troca-erro">{erro}</Aviso>}
         <p className="muted" data-testid="troca-esqueci">Esqueceu a senha depois? Quando o e-mail ou o WhatsApp da loja estiver configurado, dá para redefinir por lá. Até lá, peça ao suporte do Agendz, que redefine para você.</p>
@@ -159,9 +222,15 @@ function Painel({ loja, sessao, aoSair, aoMudarMarca }) {
   const [foco, setFoco] = useState(null);
   const [recarregar, setRecarregar] = useState(0);
   useEffect(() => { apiPerfil.obter().then((r) => { if (r.ok) setMeus(r.dados); }); }, []);
+  // Portes de veículo cadastrados pelo dono (estética): as telas usam a lista da loja, não a de fábrica. Se a consulta falhar, valem os de fábrica.
+  const [versaoPortes, setVersaoPortes] = useState(0);
+  useEffect(() => {
+    if (!capAtiva('precoPorPorte')) return;
+    apiPortes.listar().then((r) => { if (r.ok && r.portes.length) { definirPortes(r.portes); setVersaoPortes((v) => v + 1); } });
+  }, []);
   // Selo do Suporte: respostas novas da equipe da plataforma (consulta de fundo; se falhar, o selo só não muda).
   const [chamadosNovos, setChamadosNovos] = useState(0);
-  const lerChamadosNovos = () => { apiSuporte.naoLidas().then((r) => { if (r.ok) setChamadosNovos(r.naoLidas); }); };
+  const lerChamadosNovos = () => { if (!(sessao.papel === 'dono' || (sessao.secoes || []).includes('suporte'))) return; apiSuporte.naoLidas().then((r) => { if (r.ok) setChamadosNovos(r.naoLidas); }); };
   useEffect(lerChamadosNovos, []);
   useAtualizacaoAutomatica(lerChamadosNovos);
   useEffect(() => {
@@ -193,13 +262,15 @@ function Painel({ loja, sessao, aoSair, aoMudarMarca }) {
   if (dono && capAtiva('usaRecursoFisico')) itens.push(['boxes', 'Boxes', 'car']);
   if (dono || (sessao.secoes || []).includes('estabelecimento')) itens.push(['cupons', 'Cupons', 'tag']);
   if (dono || (sessao.secoes || []).includes('planos')) itens.push(['planos', 'Planos', 'ticket']);
+  if (dono || (sessao.secoes || []).includes('avaliacoes') || sessao.papel === 'profissional') itens.push(['avaliacoes', 'Avaliações', 'star']); // o profissional sem a seção vê só as dele (o servidor decide)
   if (dono || (sessao.secoes || []).includes('estoque')) itens.push(['estoque', 'Estoque', 'box']);
   if (dono || (sessao.secoes || []).includes('estabelecimento')) itens.push(['estabelecimento', 'Estabelecimento', 'store']);
   if (dono) itens.push(['relatorios', 'Relatórios', 'list']);
   if (dono) itens.push(['comissoes', 'Comissões', 'wallet']);
   else itens.push(['ganhos', 'Meus ganhos', 'gauge']);
   if (dono || (sessao.secoes || []).includes('agenda')) itens.push(['avisos', 'Avisos', 'bell']);
-  itens.push(['suporte', 'Suporte', 'info']);
+  const comSuporte = dono || (sessao.secoes || []).includes('suporte'); // v119: de fábrica só o proprietário; os outros se ele liberar
+  if (comSuporte) itens.push(['suporte', 'Suporte', 'info']);
   return (
     <div className="app">
       <header className="topo">
@@ -220,22 +291,23 @@ function Painel({ loja, sessao, aoSair, aoMudarMarca }) {
         </div>
       </header>
       {(sessao.secoes || []).includes('agenda') && <AlertaAgenda prefs={prefs} aoIr={irParaAgendamento} aoDestacar={destacar} />}
-      {perfilAberto && <MeuPerfil loja={loja} sessao={sessao} dados={meus} prefs={prefs} aoPrefs={setPrefs} aoMudou={(d) => setMeus((antes) => ({ ...(antes || {}), ...d }))} aoFechar={() => setPerfilAberto(false)} />}
+      {perfilAberto && <MeuPerfil aoSair={aoSair} loja={loja} sessao={sessao} dados={meus} prefs={prefs} aoPrefs={setPrefs} aoMudou={(d) => setMeus((antes) => ({ ...(antes || {}), ...d }))} aoFechar={() => setPerfilAberto(false)} />}
       <div className="corpo">
-        <main className="principal">
+        <main className="principal" data-portes={versaoPortes}>
           {aba === 'avisos' && (dono || (sessao.secoes || []).includes('agenda')) && (
             <section className="tela" data-testid="tela-avisos">
               <header className="tela-topo"><h1>Avisos</h1></header>
               <Avisos />
             </section>
           )}
-          {aba === 'agenda' && <Agenda destaqueIds={Object.keys(destaques)} foco={foco} recarregar={recarregar} nomeLoja={loja.nome} meuId={sessao.id} ehProprio={sessao.papel === 'profissional'} ehDono={dono || sessao.papel === 'admin' || sessao.papel === 'atendente'} />}
+          {aba === 'agenda' && <Agenda ehProprietario={dono} aoIrBoxes={setAba} destaqueIds={Object.keys(destaques)} foco={foco} recarregar={recarregar} nomeLoja={loja.nome} meuId={sessao.id} ehProprio={sessao.papel === 'profissional'} ehDono={dono || sessao.papel === 'admin' || sessao.papel === 'atendente'} />}
           {aba === 'clientes' && <Clientes podePlanos={dono || (sessao.secoes || []).includes('planos')} aoIr={setAba} />}
           {aba === 'servicos' && <Servicos ehDono={dono || (sessao.secoes || []).includes('servicos')} />}
           {aba === 'equipe' && dono && <Equipe meuId={sessao.id} />}
           {aba === 'boxes' && dono && <Boxes />}
           {aba === 'cupons' && (dono || (sessao.secoes || []).includes('estabelecimento')) && <Cupons />}
           {aba === 'planos' && (dono || (sessao.secoes || []).includes('planos')) && <Planos />}
+          {aba === 'avaliacoes' && (dono || (sessao.secoes || []).includes('avaliacoes') || sessao.papel === 'profissional') && <Avaliacoes dono={dono} podeLote={dono || (sessao.secoes || []).includes('avaliacoes')} />}
           {aba === 'estoque' && (dono || (sessao.secoes || []).includes('estoque')) && <Estoque ehDono={dono} />}
           {aba === 'estabelecimento' && (dono || (sessao.secoes || []).includes('estabelecimento')) && <Estabelecimento ehDono={dono} aoReconfigurar={() => setReconfigurando(true)} aoMudarMarca={aoMudarMarca} />}
           {aba === 'relatorios' && dono && <Relatorios />}
@@ -272,17 +344,45 @@ export default function AppReal() {
     if (!r.ok) { setEstado({ fase: r.status === 404 ? 'sem-loja' : 'erro', erro: r.erro }); return; }
     if (!tipoValido(r.loja.tipo)) { setEstado({ fase: 'erro', erro: 'Esta loja usa um tipo que este site ainda não conhece. Tente de novo mais tarde.' }); return; }
     definirTipoAtivo({ tipo: r.loja.tipo });
+    // Rede confiável guardada neste aparelho: reabre sem pedir login. Token recusado (401/403) é esquecido; sem conexão ele fica para a próxima vez.
+    if (!sessaoAtual()) {
+      const g = sessaoGuardada(r.loja.slug);
+      if (g) {
+        const s = await restaurar(g);
+        if (s.ok) setSessao(s.sessao);
+        else if (s.status === 401 || s.status === 403) esquecerSessaoDaRede(r.loja.slug);
+      }
+    }
     setEstado({ fase: 'ok', loja: r.loja });
   };
   useEffect(() => { carregar(); }, []);
   const loja = estado.fase === 'ok' ? estado.loja : null;
   useEffect(() => { if (loja) document.documentElement.setAttribute('data-tipo', loja.tipo); }, [loja]);
   const css = useMemo(() => (loja ? cssDaMarca({ logo: loja.logo, corTema: loja.temaCor, corTema2: loja.temaCor2, temaCor: loja.temaCor ? 'logo' : 'padrao' }) : ''), [loja]);
-  const aoSair = () => { sair(); setSessao(null); setSenhaEnviada(''); };
+  const aoSair = () => {
+    if (loja) esquecerSessaoDaRede(loja.slug);
+    apiRedes.encerrar(); // derruba o token longo no servidor (o cabeçalho já saiu); depois limpa a memória
+    sair(); setSessao(null); setSenhaEnviada('');
+  };
+  const aoEntrar = (se, senha) => {
+    setSenhaEnviada(senha || '');
+    if (se.redeConfiavel && loja) lembrarSessaoDaRede(loja.slug, tokenDeRedeConfiavel());
+    setSessao(se);
+  };
 
   if (estado.fase === 'carregando') return <><AvisoRede /><main className="login"><div className="login-cartao" role="status" data-testid="carregando"><p className="muted">Carregando…</p></div></main></>;
   if (estado.fase === 'sem-loja') return <Cartao><h1>Loja não encontrada</h1><p className="muted" data-testid="loja-nao-encontrada">O endereço usado não aponta para nenhuma loja do Agendz. Confira o link com o estabelecimento.</p></Cartao>;
   if (estado.fase === 'erro') return <Cartao><h1>Não foi possível abrir</h1><Aviso tipo="erro" data-testid="erro-carga">{estado.erro}</Aviso><Btn variante="primario" onClick={carregar} data-testid="tentar-de-novo">Tentar de novo</Btn></Cartao>;
+  const avaliar = lerHashAvaliar(hash);
+  if (avaliar) {
+    return (
+      <>
+        <AvisoRede />
+        {css && <style id="tema-marca">{css}</style>}
+        <AvaliarPublico loja={loja} token={avaliar.token} aoVoltar={sessao ? () => { globalThis.location.hash = ''; } : null} />
+      </>
+    );
+  }
   const publica = PUBLICA.exec(hash);
   if (publica) {
     return (
@@ -297,10 +397,11 @@ export default function AppReal() {
     <>
       <AvisoRede />
       {css && <style id="tema-marca">{css}</style>}
-      {!sessao && <Login loja={loja} aoEntrar={(se, senha) => { setSenhaEnviada(senha || ''); setSessao(se); }} />}
-      {sessao && sessao.deveTrocarSenha && <TrocarSenha loja={loja} sessao={sessao} senhaEnviada={senhaEnviada} aoTrocar={(se) => { setSenhaEnviada(''); setSessao(se); }} aoSair={aoSair} />}
-      {sessao && !sessao.deveTrocarSenha && sessao.papel === 'dono' && sessao.onboardingPendente && <PrimeiroAcesso tipo={loja.tipo} nomeLoja={loja.nome} adaptador={onboarding} aoConcluir={() => setSessao({ ...sessao, onboardingPendente: false })} />}
-      {sessao && !sessao.deveTrocarSenha && !(sessao.papel === 'dono' && sessao.onboardingPendente) && <Painel loja={loja} sessao={sessao} aoSair={aoSair} aoMudarMarca={(m) => setEstado((e) => (e.fase === 'ok' ? { ...e, loja: { ...e.loja, logo: m.logo, temaCor: m.temaCor, temaCor2: m.temaCor2 } } : e))} />}
+      {!sessao && <Login loja={loja} aoEntrar={aoEntrar} />}
+      {sessao && sessao.perguntarRede && !sessao.deveTrocarSenha && <PerguntaRede loja={loja} aoResponder={(se) => { if (se) aoEntrar(se, ''); else setSessao({ ...sessao, perguntarRede: false }); }} />}
+      {sessao && !sessao.perguntarRede && sessao.deveTrocarSenha && <TrocarSenha loja={loja} sessao={sessao} senhaEnviada={senhaEnviada} aoTrocar={(se) => { esquecerSessaoDaRede(loja.slug); setSenhaEnviada(''); setSessao(se); }} aoSair={aoSair} />}
+      {sessao && !sessao.perguntarRede && !sessao.deveTrocarSenha && sessao.papel === 'dono' && sessao.onboardingPendente && <PrimeiroAcesso tipo={loja.tipo} nomeLoja={loja.nome} adaptador={onboarding} aoConcluir={() => setSessao({ ...sessao, onboardingPendente: false })} />}
+      {sessao && !sessao.perguntarRede && !sessao.deveTrocarSenha && !(sessao.papel === 'dono' && sessao.onboardingPendente) && <Painel loja={loja} sessao={sessao} aoSair={aoSair} aoMudarMarca={(m) => setEstado((e) => (e.fase === 'ok' ? { ...e, loja: { ...e.loja, logo: m.logo, temaCor: m.temaCor, temaCor2: m.temaCor2 } } : e))} />}
     </>
   );
 }

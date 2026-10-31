@@ -48,6 +48,12 @@ const servidor = http.createServer((req, res) => {
       banco.push(novo);
       return json(201, novo);
     }
+    if (url.pathname === '/api/servicos/ordem' && req.method === 'PUT') { // v123: ordem manual
+      if (!dono) return json(403, { mensagem: 'Sem permissão' });
+      const novos = c.ids.map((i) => banco.find((y) => y.id === i)).filter(Boolean);
+      banco = [...novos, ...banco.filter((y) => !c.ids.includes(y.id))];
+      return json(204);
+    }
     const m = url.pathname.match(/^\/api\/servicos\/([0-9a-f-]{36})$/);
     if (m) {
       const x = banco.find((y) => y.id === m[1]);
@@ -214,6 +220,25 @@ const portes = async (p, precos, duracoes) => { for (const [i, k] of PORTES.entr
   assert.equal(post.corpo.preco, 45); assert.equal(post.corpo.duracaoMin, 50);
   assert.ok(!('precos' in post.corpo) && !('multiDia' in post.corpo), 'tipo sem porte nem vários dias não manda esses campos');
   ok('barbearia: preço único; sem porte nem vários dias; 390 px sem rolagem lateral');
+
+  // v123: setas subir/descer gravam a ordem manual (PUT /api/servicos/ordem); com busca ativa as setas somem
+  const base = { ...banco[0] };
+  banco.push({ ...base, id: id(), codigo: '77', nome: 'Segundo serviço' }, { ...base, id: id(), codigo: '78', nome: 'Terceiro serviço' });
+  await p.getByTestId('nav-clientes').click(); await p.getByTestId('nav-servicos').click();
+  await p.getByTestId('srv-lista').waitFor();
+  const nomes = () => p.locator('[data-testid="srv-item-nome"]').allInnerTexts();
+  const antesOrdem = await nomes();
+  assert.equal(antesOrdem.length, 3);
+  assert.equal(await p.locator('[data-testid^="srv-sobe-"]').first().isDisabled(), true);
+  await p.locator('[data-testid^="srv-desce-"]').first().click();
+  await p.waitForFunction((n) => document.querySelectorAll('[data-testid="srv-item-nome"]')[0]?.textContent !== n, antesOrdem[0]);
+  const put = chamadas.filter((c) => c.m === 'PUT' && c.u === '/api/servicos/ordem').at(-1);
+  assert.equal(put.corpo.ids.length, 3); assert.equal(put.auth, 'Bearer tok-login');
+  const depoisOrdem = await nomes();
+  assert.deepEqual([depoisOrdem[0], depoisOrdem[1]], [antesOrdem[1], antesOrdem[0]]);
+  await p.getByLabel('Buscar serviço').fill('Segundo');
+  assert.equal(await p.locator('[data-testid^="srv-sobe-"]').count(), 0, 'com busca ativa não há setas');
+  ok('barbearia: setas gravam a ordem dos serviços');
   await ctx.close();
 }
 

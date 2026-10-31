@@ -32,7 +32,7 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 /**
- * Avaliações do atendimento e mensagens em lote no servidor (V35): seção `avaliacoes` (padrão de ninguém; o profissional vê só as próprias), só atendimento concluído,
+ * Avaliações do atendimento e mensagens em lote no servidor (V39): seção `avaliacoes` (padrão de ninguém; o profissional vê só as próprias), só atendimento concluído,
  * token pessoal (só o hash no banco, uso único, errado/vencido/reusado respondem igual), anônimo SEM identidade no JSON com a regra do Admin desligada (e com nome
  * quando ligada), ocultar só pelo dono com motivo, fila em lote (telefone, duplicado, opt-out, período, limite 200, uma aberta por pessoa), limite de pedidos na porta
  * pública e isolamento entre lojas (API e Row Level Security). Usa a Offbox (barbearia) e a Dalforno como "outra loja".

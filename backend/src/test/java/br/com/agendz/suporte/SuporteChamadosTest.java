@@ -87,6 +87,12 @@ class SuporteChamadosTest extends BaseApi {
         consulta.set(null);
         corpo.set(null);
         jdbc.update("update loja set status = 'ativo' where slug = 'offbox'");
+        jdbc.update("update usuario set permissoes = '{}'::jsonb where identificador = 'colaborador1' and loja_id = (select id from loja where slug = 'offbox')"); // padrão v119: só o proprietário
+    }
+
+    /** O proprietário libera a seção Suporte para o colaborador (v119); de fábrica só o proprietário abre chamados. */
+    private void liberar(boolean sim) {
+        jdbc.update("update usuario set permissoes = ?::jsonb where identificador = 'colaborador1' and loja_id = (select id from loja where slug = 'offbox')", "{\"suporte\":" + sim + "}");
     }
 
     private UUID idDe(String identificador) {
@@ -101,8 +107,25 @@ class SuporteChamadosTest extends BaseApi {
     }
 
     @Test
+    void deFabricaSoOProprietarioAbreChamadoEQuemOEleLiberaVeSoOsProprios() throws Exception {
+        String dono = token(OFFBOX, "proprietario");
+        String colega = token(OFFBOX, "colaborador1");
+        mvc.perform(get("/api/suporte/chamados").with(host(OFFBOX)).header(HttpHeaders.AUTHORIZATION, bearer(colega))).andExpect(status().isForbidden());
+        mvc.perform(post("/api/suporte/chamados").with(host(OFFBOX)).header(HttpHeaders.AUTHORIZATION, bearer(colega)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"assunto\":\"Oi\",\"categoria\":\"duvida\",\"texto\":\"Teste de chamado\"}")).andExpect(status().isForbidden());
+        mvc.perform(get("/api/suporte/chamados/nao-lidas").with(host(OFFBOX)).header(HttpHeaders.AUTHORIZATION, bearer(colega))).andExpect(status().isForbidden());
+        assertNull(caminho.get(), "sem a seção, nada chega à Admin API");
+        mvc.perform(get("/api/suporte/chamados").with(host(OFFBOX)).header(HttpHeaders.AUTHORIZATION, bearer(dono))).andExpect(status().isOk());
+        liberar(true);
+        mvc.perform(get("/api/suporte/chamados").with(host(OFFBOX)).header(HttpHeaders.AUTHORIZATION, bearer(colega))).andExpect(status().isOk());
+        liberar(false);
+        mvc.perform(get("/api/suporte/chamados").with(host(OFFBOX)).header(HttpHeaders.AUTHORIZATION, bearer(colega))).andExpect(status().isForbidden());
+    }
+
+    @Test
     void listaUsaLojaDoHostEUsuarioDoTokenESoDonoPedeTodos() throws Exception {
         String dono = token(OFFBOX, "proprietario");
+        liberar(true);
         String colega = token(OFFBOX, "colaborador1");
         mvc.perform(get("/api/suporte/chamados").with(host(OFFBOX)).header(HttpHeaders.AUTHORIZATION, bearer(dono))).andExpect(status().isOk());
         assertEquals("/interno/chamados", caminho.get());
@@ -119,6 +142,7 @@ class SuporteChamadosTest extends BaseApi {
 
     @Test
     void abrirIgnoraVinculoDoCorpoERecusaCampoDesconhecido() throws Exception {
+        liberar(true);
         String colega = token(OFFBOX, "colaborador1");
         respostaStatus = 201;
         respostaCorpo = "{\"id\":\"" + UUID.randomUUID() + "\",\"status\":\"aberto\"}";
@@ -139,6 +163,7 @@ class SuporteChamadosTest extends BaseApi {
 
     @Test
     void erroDoAdminVoltaComMensagemEForaDoArVira503() throws Exception {
+        liberar(true);
         String colega = token(OFFBOX, "colaborador1");
         String id = UUID.randomUUID().toString();
         respostaStatus = 404;
@@ -176,6 +201,7 @@ class SuporteChamadosTest extends BaseApi {
 
     @Test
     void imagemDoChamadoPassaPelaRotaAutenticadaComOTipoDoConteudo() throws Exception {
+        liberar(true);
         String colega = token(OFFBOX, "colaborador1");
         String chamado = UUID.randomUUID().toString(), anexo = UUID.randomUUID().toString();
         mvc.perform(get("/api/suporte/chamados/" + chamado + "/anexos/" + anexo).with(host(OFFBOX))).andExpect(status().isUnauthorized());
@@ -198,6 +224,7 @@ class SuporteChamadosTest extends BaseApi {
 
     @Test
     void imagensSaoConferidasAntesDeIrAoAdmin() throws Exception {
+        liberar(true);
         String colega = token(OFFBOX, "colaborador1");
         String ok = java.util.Base64.getEncoder().encodeToString(png());
         String svg = java.util.Base64.getEncoder().encodeToString("<svg xmlns=\"http://www.w3.org/2000/svg\"><script>1</script></svg>".getBytes(StandardCharsets.UTF_8));

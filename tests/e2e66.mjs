@@ -12,6 +12,7 @@ const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const EU = id(1), CH = id(201);
 const chamadas = [];
 let papel = 'profissional';
+let secoes = ['suporte']; // v119: o profissional só vê o Suporte se o dono liberou a seção
 let naoLidas = 2;
 let status429 = false;
 let chamado = null; // vira objeto depois de abrir
@@ -25,7 +26,7 @@ const servidor = http.createServer((req, res) => {
     if (u.pathname === '/') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); return res.end(pagina); }
     chamadas.push({ m: req.method, u: u.pathname, corpo: corpo ? JSON.parse(corpo) : null });
     if (u.pathname === '/api/publico/loja') return json(200, { slug: 'dalforno', nome: 'Dalforno', tipo: 'barbearia', logo: null, temaCor: null, temaCor2: null });
-    if (u.pathname === '/api/auth/login') return json(200, { token: 'tok', id: EU, nome: 'Alan', papel, deveTrocarSenha: false, onboardingPendente: false, secoes: [] });
+    if (u.pathname === '/api/auth/login') return json(200, { token: 'tok', id: EU, nome: 'Alan', papel, deveTrocarSenha: false, onboardingPendente: false, secoes });
     if (u.pathname === '/api/usuarios/me') return json(200, { id: EU, nome: 'Alan Dalforno', apelido: 'Alan', usuario: 'alan', papel, email: '', telefone: '', nascimento: '', foto: null });
     if (u.pathname === '/api/suporte/chamados/nao-lidas') return json(200, { naoLidas });
     if (u.pathname === '/api/suporte/chamados' && req.method === 'GET') {
@@ -53,7 +54,7 @@ await new Promise((r) => servidor.listen(0, '127.0.0.1', r));
 const url = `http://127.0.0.1:${servidor.address().port}/`;
 const b = await chromium.launch();
 const erros = [];
-async function abrir(viewport) {
+async function abrir(viewport, { semSuporte = false } = {}) {
   const touch = viewport.width < 700;
   const ctx = await b.newContext({ viewport, hasTouch: touch, isMobile: touch, locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' });
   const p = await ctx.newPage(); p.setDefaultTimeout(8000);
@@ -61,7 +62,7 @@ async function abrir(viewport) {
   p.on('dialog', async (d) => { erros.push('DIALOG: ' + d.message()); await d.dismiss(); });
   await p.goto(url);
   await p.getByTestId('login-id').fill('alan'); await p.getByTestId('login-senha').fill('Minha-senha'); await p.getByTestId('login-entrar').click();
-  await p.getByTestId('nav-suporte').waitFor();
+  if (semSuporte) await p.getByTestId('nav-servicos').waitFor(); else await p.getByTestId('nav-suporte').waitFor();
   return { ctx, p };
 }
 const semRolagem = async (p, onde) => { const l = await p.evaluate(() => ({ doc: document.documentElement.scrollWidth, janela: window.innerWidth })); assert.ok(l.doc <= l.janela, `${onde}: rolagem lateral ${l.doc} > ${l.janela}`); };
@@ -118,6 +119,17 @@ papel = 'dono'; chamado = { assunto: 'Cobrança errada', categoria: 'cobranca', 
   assert.match(await p.getByTestId('suporte').innerText(), /toda a loja/);
   ok('o proprietário vê os chamados da loja com o nome de quem abriu');
   await ctx.close();
+}
+// v119: de fábrica só o proprietário abre chamado: profissional sem a seção não vê o menu e o site nem consulta o Suporte
+{
+  secoes = []; papel = 'profissional'; chamadas.length = 0;
+  const { ctx, p } = await abrir({ width: 1280, height: 860 }, { semSuporte: true });
+  await p.waitForTimeout(500);
+  assert.equal(await p.getByTestId('nav-suporte').count(), 0, 'sem a seção: sem menu');
+  assert.equal(chamadas.filter((c) => c.u.includes('/api/suporte')).length, 0, 'sem a seção: nenhuma consulta ao Suporte');
+  ok('profissional sem a seção Suporte: sem menu e sem consulta');
+  await ctx.close();
+  secoes = ['suporte'];
 }
 await b.close(); servidor.close();
 assert.deepEqual(erros, [], erros.join('\n'));

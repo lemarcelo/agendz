@@ -6,7 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import { servicos as api } from '../../services/api-real.js';
 import { capAtiva } from '../../domain/tipos.js';
-import { PORTES, ROTULO_PORTE } from '../../domain/veiculos.js';
+import { PORTES, PORTE_PADRAO, ROTULO_PORTE, portesAtivos, precoNoPorte } from '../../domain/veiculos.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
 
 const dinheiro = (v) => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -20,8 +20,9 @@ export function duracaoTexto(min) {
 }
 
 function precoDoCartao(s, porPorte) {
-  if (!porPorte || !s.precos) return dinheiro(s.preco);
-  const v = PORTES.map((p) => s.precos[p]).filter((x) => typeof x === 'number');
+  if (!porPorte) return dinheiro(s.preco);
+  // v124: preço no porte = específico ou base × fator
+  const v = portesAtivos().map(({ id }) => precoNoPorte(s.preco, s.precos ? s.precos[id] : undefined, id));
   if (!v.length) return dinheiro(s.preco);
   const a = Math.min(...v), b = Math.max(...v);
   return a === b ? dinheiro(a) : `${dinheiro(a)} a ${dinheiro(b)}`;
@@ -80,14 +81,25 @@ function FormServico({ ficha, todos, ehDono, aoSalvar, aoCancelar }) {
           <Campo rotulo="Categoria (opcional)"><input value={f.categoria} maxLength={30} onChange={mudar('categoria')} data-testid="srv-categoria" /></Campo>
           {porPorte ? (
             <div className="srv-portes" data-testid="srv-portes">
-              <p className="muted">Preço e duração (em minutos) para cada porte de veículo.</p>
-              {PORTES.map((p) => (
-                <div key={p} className="srv-porte-linha">
-                  <b>{ROTULO_PORTE[p]}</b>
-                  <Campo rotulo="Preço (R$)"><input value={f.precos[p]} inputMode="decimal" onChange={mudarPorte('precos', p)} data-testid={`srv-preco-${p}`} /></Campo>
-                  <Campo rotulo="Duração (min)"><input value={f.duracoes[p]} inputMode="numeric" onChange={mudarPorte('duracoes', p)} data-testid={`srv-duracao-${p}`} /></Campo>
-                </div>
-              ))}
+              <Campo rotulo="Preço base — Médio (R$)"><input value={f.precos[PORTE_PADRAO]} inputMode="decimal" onChange={mudarPorte('precos', PORTE_PADRAO)} data-testid={`srv-preco-${PORTE_PADRAO}`} /></Campo>
+              <Campo rotulo="Duração — Médio (minutos)"><input value={f.duracoes[PORTE_PADRAO]} inputMode="numeric" onChange={mudarPorte('duracoes', PORTE_PADRAO)} data-testid={`srv-duracao-${PORTE_PADRAO}`} /></Campo>
+              <p className="muted">Os outros portes saem do preço base × o fator do porte (Estabelecimento &gt; Portes). O tempo é o mesmo, a não ser que você defina um específico.</p>
+              {portesAtivos().some((x) => x.id !== PORTE_PADRAO) && (
+                <fieldset className="conj" data-testid="srv-especifico">
+                  <legend>Preço específico por porte</legend>
+                  <p className="muted">Opcional. O valor vale no lugar de "preço base × fator". Em branco, o porte usa o fator.</p>
+                  {portesAtivos().filter((x) => x.id !== PORTE_PADRAO).map(({ id: p }) => {
+                    const base = num(f.precos[PORTE_PADRAO]);
+                    return (
+                      <div key={p} className="srv-porte-linha" data-testid={`srv-esp-${p}`}>
+                        <b>{ROTULO_PORTE[p]}</b>
+                        <Campo rotulo="Preço (R$)"><input value={f.precos[p]} inputMode="decimal" placeholder={base === null ? 'Fator do porte' : `Fator: ${dinheiro(precoNoPorte(base, undefined, p))}`} onChange={mudarPorte('precos', p)} data-testid={`srv-preco-${p}`} /></Campo>
+                        <Campo rotulo="Duração (min)"><input value={f.duracoes[p]} inputMode="numeric" placeholder="Igual ao Médio" onChange={mudarPorte('duracoes', p)} data-testid={`srv-duracao-${p}`} /></Campo>
+                      </div>
+                    );
+                  })}
+                </fieldset>
+              )}
             </div>
           ) : (
             <>
@@ -152,6 +164,15 @@ export default function Servicos({ ehDono }) {
   if (ficha) {
     return <FormServico ficha={ficha} todos={lista || []} ehDono={ehDono} aoCancelar={() => setFicha(null)} aoSalvar={() => { setFicha(null); setAviso('Serviço salvo.'); setVersao((v) => v + 1); }} />;
   }
+  // PUT /api/servicos/ordem — troca de lugar na ordem manual (só sem busca ativa, para a posição ser a da lista inteira)
+  const mover = async (i, d) => {
+    const ids = (lista || []).map((x) => x.id);
+    [ids[i], ids[i + d]] = [ids[i + d], ids[i]];
+    setErro(''); setAviso('');
+    const r = await api.reordenar(ids);
+    if (!r.ok) { setErro(r.erro); return; }
+    setVersao((v) => v + 1);
+  };
   const q = busca.trim().toLowerCase();
   const visiveis = (lista || []).filter((s) => !q || s.nome.toLowerCase().includes(q) || s.codigo.toLowerCase().includes(q) || s.categoria.toLowerCase().includes(q));
   return (
@@ -166,7 +187,7 @@ export default function Servicos({ ehDono }) {
       {lista === null ? <p className="muted" role="status" data-testid="srv-carregando">Carregando…</p>
         : visiveis.length === 0 ? <p className="muted" data-testid="srv-vazio">{q ? 'Nenhum serviço encontrado.' : 'Nenhum serviço cadastrado ainda.'}</p> : (
           <ul className="clientes-lista" data-testid="srv-lista">
-            {visiveis.map((s) => (
+            {visiveis.map((s, i) => (
               <li key={s.id} className="cliente-cartao" data-testid={`srv-${s.id}`}>
                 <div className="cliente-dados">
                   <b data-testid="srv-item-nome">{s.nome}</b>{' '}
@@ -184,6 +205,8 @@ export default function Servicos({ ehDono }) {
                   )}
                 </div>
                 <div className="acoes">
+                  {ehDono && !q && <Btn tamanho="sm" disabled={i === 0} onClick={() => mover(i, -1)} aria-label={`Subir ${s.nome}`} data-testid={`srv-sobe-${s.id}`}><Icone n="up" size={15} /></Btn>}
+                  {ehDono && !q && <Btn tamanho="sm" disabled={i === visiveis.length - 1} onClick={() => mover(i, 1)} aria-label={`Descer ${s.nome}`} data-testid={`srv-desce-${s.id}`}><Icone n="down" size={15} /></Btn>}
                   <Btn tamanho="sm" onClick={() => { setAviso(''); setFicha(s); }} aria-label={`${ehDono ? 'Editar' : 'Ver'} ${s.nome}`} data-testid={`editar-${s.id}`}><Icone n={ehDono ? 'edit' : 'info'} size={15} /> {ehDono ? 'Editar' : 'Ver'}</Btn>
                   {ehDono && <Btn tamanho="sm" onClick={() => setRemovendo(s.id)} aria-label={`Remover ${s.nome}`} data-testid={`remover-${s.id}`}><Icone n="trash" size={15} /></Btn>}
                 </div>

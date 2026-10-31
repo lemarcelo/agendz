@@ -3,6 +3,8 @@ package br.com.agendz.publico;
 import br.com.agendz.clientes.ClienteService;
 import br.com.agendz.comissao.ComissaoService;
 import br.com.agendz.configuracao.LinkAgendamento;
+import br.com.agendz.configuracao.PorteController;
+import br.com.agendz.servicos.OrdemDosServicos;
 import br.com.agendz.configuracao.LocalDaLoja;
 import br.com.agendz.cupom.CupomService;
 import br.com.agendz.agenda.Ocupacao;
@@ -67,6 +69,7 @@ public class LinkPublicoService {
     public static final int MAX_DIAS_CONSULTA = 31;
     private static final UUID NINGUEM = new UUID(0L, 0L);
     public static final String ERRO_DESLIGADO = "O agendamento pelo link não está disponível agora. Fale com a loja.";
+    public static final String ERRO_SEM_BOX = "A agenda ainda não está disponível (falta cadastrar o box). Fale com a loja.";
     public static final String ERRO_HORARIO = "Esse horário acabou de ser ocupado. Escolha outro.";
     public static final String ERRO_NAO_ACHEI = "Agendamento não encontrado.";
     public static final String ERRO_MUITOS = "Muitos pedidos em pouco tempo. Tente de novo em alguns minutos.";
@@ -78,14 +81,14 @@ public class LinkPublicoService {
     public record ServicoPublico(UUID id, String nome, int duracao, BigDecimal preco, int antecedenciaH, Map<String, BigDecimal> precos, Map<String, Integer> duracoes) {
     }
 
-    public record PortePublico(String id, String nome) {
+    public record PortePublico(String id, String nome, String exemplo) {
     }
 
     public record ProfissionalPublico(UUID id, String nome, String foto) {
     }
 
     /** `endereco` e `mapaUrl` só vêm quando o proprietário ligou "mostrar o endereço no link" e há endereço gravado. */
-    public record Pagina(boolean ativo, String aviso, int diasMax, boolean exigeTelefone, List<ServicoPublico> servicos, List<ProfissionalPublico> profissionais, String endereco, String mapaUrl,
+    public record Pagina(boolean ativo, String aviso, int diasMax, boolean exigeTelefone, boolean exigeNome, List<String> exigeVeiculo, List<ServicoPublico> servicos, List<ProfissionalPublico> profissionais, String endereco, String mapaUrl,
                          String tipo, List<PortePublico> portes) {
     }
 
@@ -142,8 +145,6 @@ public class LinkPublicoService {
     private final LimitePublico limite;
     private final Ocupacao ocupacao;
     private static final ObjectMapper JSON = new ObjectMapper();
-    private static final List<String> PORTES = List.of("pequeno", "medio", "grande", "suv", "pickup");
-    private static final Map<String, String> ROTULO_PORTE = Map.of("pequeno", "Pequeno", "medio", "Médio", "grande", "Grande", "suv", "SUV", "pickup", "Pickup");
 
     public LinkPublicoService(LojaJdbc banco, Clock relogio, EscalaService escalas, ClienteService clientes, CupomService cupons, ComissaoService comissoes, LimitePublico limite, Ocupacao ocupacao) {
         this.banco = banco;
@@ -164,19 +165,23 @@ public class LinkPublicoService {
         return banco.naLoja(jdbc -> {
             LinkAgendamento.Config cfg = LinkAgendamento.ler(jdbc);
             boolean ativo = cfg.ativo() && LinkAgendamento.tipoSuportado(loja);
-            if (!ativo) return new Pagina(false, ERRO_DESLIGADO, cfg.diasMax(), cfg.telefoneObrigatorio(), List.of(), List.of(), null, null, loja.tipo(), List.of());
+            if (!ativo) return new Pagina(false, ERRO_DESLIGADO, cfg.diasMax(), cfg.telefoneObrigatorio(), cfg.nomeObrigatorio(), cfg.veiculoObrigatorio(), List.of(), List.of(), null, null, loja.tipo(), List.of());
+            if (Capacidades.usaRecursoFisico(loja) && Integer.valueOf(0).equals(jdbc.queryForObject("select count(*) from box where ativo", Integer.class))) {
+                return new Pagina(false, ERRO_SEM_BOX, cfg.diasMax(), cfg.telefoneObrigatorio(), cfg.nomeObrigatorio(), cfg.veiculoObrigatorio(), List.of(), List.of(), null, null, loja.tipo(), List.of()); // estética sem box: a agenda do cliente não abre (v120)
+            }
             boolean porPorte = Capacidades.precoPorPorte(loja);
+            List<PorteController.Porte> listaPortes = porPorte ? PorteController.ler(jdbc) : List.of();
             List<ServicoPublico> servicos = jdbc.query(
-                    "select id, nome, preco, duracao_min, antecedencia_h, precos::text as precos, duracoes::text as duracoes from servico where ativo and not multi_dia order by lower(nome), id",
+                    "select id, nome, preco, duracao_min, antecedencia_h, precos::text as precos, duracoes::text as duracoes from servico where ativo and not multi_dia order by " + OrdemDosServicos.sql(jdbc),
                     (rs, i) -> new ServicoPublico(rs.getObject("id", UUID.class), rs.getString("nome"), rs.getInt("duracao_min"), rs.getBigDecimal("preco"), rs.getInt("antecedencia_h"),
-                            porPorte ? tabelaPrecos(rs.getString("precos")) : null, porPorte ? tabelaDuracoes(rs.getString("duracoes")) : null));
+                            porPorte ? tabelaPrecos(listaPortes, rs.getBigDecimal("preco"), rs.getString("precos")) : null, porPorte ? tabelaDuracoes(listaPortes, rs.getString("duracoes")) : null));
             List<ProfissionalPublico> profissionais = jdbc.query(
                     "select id, coalesce(nullif(apelido, ''), nome) as n, foto from usuario where ativo and atende order by lower(coalesce(nullif(apelido, ''), nome)), id",
                     (rs, i) -> new ProfissionalPublico(rs.getObject("id", UUID.class), rs.getString("n"), rs.getString("foto")));
             LocalDaLoja.Local local = LocalDaLoja.ler(jdbc);
             boolean mostra = local.enderecoNoLink() && local.temEndereco();
-            List<PortePublico> portes = porPorte ? PORTES.stream().map(x -> new PortePublico(x, ROTULO_PORTE.get(x))).toList() : List.of();
-            return new Pagina(true, null, cfg.diasMax(), cfg.telefoneObrigatorio(), servicos, profissionais, mostra ? local.enderecoTexto() : null, mostra ? local.mapaUrl() : null, loja.tipo(), portes);
+            List<PortePublico> portes = listaPortes.stream().filter(PorteController.Porte::ativo).map(x -> new PortePublico(x.id(), x.nome(), x.exemplo())).toList();
+            return new Pagina(true, null, cfg.diasMax(), cfg.telefoneObrigatorio(), cfg.nomeObrigatorio(), cfg.veiculoObrigatorio(), servicos, profissionais, mostra ? local.enderecoTexto() : null, mostra ? local.mapaUrl() : null, loja.tipo(), portes);
         });
     }
 
@@ -190,7 +195,7 @@ public class LinkPublicoService {
         return banco.naLoja(jdbc -> {
             LinkAgendamento.Config cfg = config(jdbc, loja);
             if (!cfg.ativo()) return List.<Horario>of();
-            List<Svc> servicos = servicosDoLink(jdbc, ids(servicoIds), porteDoPedido(loja, porte));
+            List<Svc> servicos = servicosDoLink(jdbc, ids(servicoIds), porteDoPedido(jdbc, loja, porte, cfg.veiculoObrigatorio().contains("porte")));
             Base base = base(jdbc, loja, profissionalId);
             return horariosDoDia(jdbc, cfg, base, dia, servicos, relogio.instant(), false, null);
         });
@@ -205,7 +210,7 @@ public class LinkPublicoService {
         return banco.naLoja(jdbc -> {
             LinkAgendamento.Config cfg = config(jdbc, loja);
             if (!cfg.ativo() || n == 0) return List.<LocalDate>of();
-            List<Svc> servicos = servicosDoLink(jdbc, ids(servicoIds), porteDoPedido(loja, porte));
+            List<Svc> servicos = servicosDoLink(jdbc, ids(servicoIds), porteDoPedido(jdbc, loja, porte, cfg.veiculoObrigatorio().contains("porte")));
             Base base = base(jdbc, loja, profissionalId);
             Instant agora = relogio.instant();
             List<LocalDate> livres = new ArrayList<>();
@@ -223,7 +228,7 @@ public class LinkPublicoService {
 
     private LinkAgendamento.Config config(JdbcTemplate jdbc, Loja loja) {
         LinkAgendamento.Config c = LinkAgendamento.ler(jdbc);
-        return new LinkAgendamento.Config(c.ativo() && LinkAgendamento.tipoSuportado(loja), c.diasMax(), c.telefoneObrigatorio());
+        return new LinkAgendamento.Config(c.ativo() && LinkAgendamento.tipoSuportado(loja), c.diasMax(), c.telefoneObrigatorio(), c.nomeObrigatorio(), c.veiculoObrigatorio());
     }
 
     private Base base(JdbcTemplate jdbc, Loja loja, UUID profissionalId) {
@@ -293,14 +298,14 @@ public class LinkPublicoService {
         Loja loja = LojaContext.exigir();
         if (p.site() != null && !p.site().isBlank()) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Não foi possível agendar. Tente de novo."); // campo isca: robô
         String nome = p.nome() == null ? "" : Texto.limpar(p.nome()).trim();
-        if (nome.length() < 2) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe o seu nome.");
+        // nome em branco só vale se o dono tirou a obrigatoriedade (conferido de novo dentro da transação); uma letra só nunca vale
+        if (nome.length() == 1) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe o seu nome.");
         if (nome.length() > 60) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "O nome pode ter até 60 letras.");
         // telefone digitado precisa ser válido; em branco só vale se o proprietário tirou a obrigatoriedade (conferido de novo dentro da transação)
         boolean telefoneEmBranco = p.telefone() == null || p.telefone().replaceAll("\\D", "").isEmpty();
         String tel = telefoneEmBranco ? null : Documentos.telefone(p.telefone());
         if (tel == null && !telefoneEmBranco) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe o telefone com DDD.");
         List<UUID> servicoIds = ids(p.servicoIds());
-        if (Capacidades.usaVeiculo(loja) && p.veiculo() == null) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe o veículo (placa, modelo e porte).");
         boolean comCupom = p.cupomChave() != null && !p.cupomChave().isBlank();
         boolean liberado = (tel == null || limite.liberar("agendar-tel:" + loja.id() + ":" + tel, 5, Duration.ofMinutes(1)))
                 && limite.liberar("agendar-ip:" + loja.id() + ":" + ip, 20, Duration.ofMinutes(10))
@@ -312,9 +317,13 @@ public class LinkPublicoService {
             LinkAgendamento.Config cfg = config(jdbc, loja);
             if (!cfg.ativo()) throw new ErroDeNegocio(HttpStatus.FORBIDDEN, ERRO_DESLIGADO);
             if (tel == null && cfg.telefoneObrigatorio()) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe o telefone com DDD.");
+            if (nome.isEmpty() && cfg.nomeObrigatorio()) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe o seu nome.");
             // estética: o veículo vem do pedido (não entra no cadastro de quem já é cliente) e o porte dele define preço e duração
             ClienteService.VeiculoDoAgendamento vei = !Capacidades.usaVeiculo(loja) ? null
-                    : clientes.resolverVeiculo(jdbc, loja, null, null, new ClienteService.EntradaVeiculo(null, p.veiculo().placa(), p.veiculo().marca(), p.veiculo().modelo(), p.veiculo().cor(), p.veiculo().porte()));
+                    : clientes.resolverVeiculo(jdbc, loja, null, null, p.veiculo() == null ? null
+                            : new ClienteService.EntradaVeiculo(null, p.veiculo().placa(), p.veiculo().marca(), p.veiculo().modelo(), p.veiculo().cor(), p.veiculo().porte()),
+                            new java.util.HashSet<>(cfg.veiculoObrigatorio()));
+            if (vei != null && vei.porte() != null && !PorteController.ativos(jdbc).contains(vei.porte())) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha o porte do veículo."); // porte desativado não se oferece mais
             List<Svc> servicos = servicosDoLink(jdbc, servicoIds, vei == null ? null : vei.porte());
             Instant inicio = p.inicio();
             if (inicio.getNano() != 0 || inicio.getEpochSecond() % 60 != 0 || !inicio.isAfter(agora) || inicio.isAfter(agora.plus(cfg.diasMax(), ChronoUnit.DAYS))) {
@@ -350,6 +359,7 @@ public class LinkPublicoService {
             UUID boxId = escolherBoxDoLink(jdbc, loja, inicio, fimServico, fimOcupado, null, NINGUEM);
 
             // sem telefone não há cadastro: o pedido guarda só o nome (`nome_avulso`) e o limite de abertos fica por conta do limite por IP e da loja
+            String nomeNaAgenda = nome.isEmpty() ? "Sem nome" : nome; // dono tirou a obrigatoriedade do nome
             ClienteService.DoLink cli = tel == null ? null : clientes.resolverDoLink(jdbc, nome, tel);
             UUID clienteId = cli == null ? null : cli.clienteId();
             if (cli != null) {
@@ -361,7 +371,7 @@ public class LinkPublicoService {
             UUID id = jdbc.queryForObject(
                     "insert into agendamento (loja_id, cliente_id, nome_avulso, profissional_id, inicio, fim_servico, fim_ocupado, status, encaixe, total, origem, box_id, porte, veiculo_placa, veiculo_marca, veiculo_modelo, veiculo_cor) "
                             + "values (?::uuid, ?, ?, ?, ?, ?, ?, 'a_confirmar', false, ?, 'link', ?, ?, ?, ?, ?, ?) returning id",
-                    UUID.class, loja.id().toString(), clienteId, clienteId == null ? nome : null, profissional, utc(inicio), utc(fimServico), utc(fimOcupado), total, boxId,
+                    UUID.class, loja.id().toString(), clienteId, clienteId == null ? nomeNaAgenda : null, profissional, utc(inicio), utc(fimServico), utc(fimOcupado), total, boxId,
                     vei == null ? null : vei.porte(), vei == null ? null : vei.placa(), vei == null ? null : vei.marca(), vei == null ? null : vei.modelo(), vei == null ? null : vei.cor());
             short ordem = 0;
             for (Svc s : servicos) {
@@ -375,7 +385,7 @@ public class LinkPublicoService {
                 CupomService.Aplicado ap = cupons.aplicar(jdbc, loja.id(), id, null, "link:" + ip, p.cupomChave(), agora);
                 evento(jdbc, loja.id(), id, "cupom", null, ap.nome() + ": desconto de " + CupomService.reais(ap.desconto()));
             }
-            avisar(jdbc, loja.id(), id, "pedido", nome + (clienteId == null ? " (sem telefone)" : "") + " pediu horário pelo link" + (vei == null ? "" : " para o " + vei.modelo() + " " + vei.placa()) + ": " + dataHora(inicio) + " (aguardando a sua confirmação).");
+            avisar(jdbc, loja.id(), id, "pedido", nomeNaAgenda + (clienteId == null ? " (sem telefone)" : "") + " pediu horário pelo link" + (vei == null ? "" : " para o " + vei.modelo() + " " + vei.placa()) + ": " + dataHora(inicio) + " (aguardando a sua confirmação).");
             String token = novoToken();
             jdbc.update("delete from acesso_publico where expira_em < ?", utc(agora));
             jdbc.update("insert into acesso_publico (loja_id, agendamento_id, token_hash, expira_em) values (?::uuid, ?, ?, ?)",
@@ -611,14 +621,14 @@ public class LinkPublicoService {
     /** Serviços do pedido, na ordem escolhida. Só os que o link oferece: ativos e de um dia só. */
     private List<Svc> servicosDoLink(JdbcTemplate jdbc, List<UUID> ids, String porte) {
         String marcas = String.join(",", ids.stream().map(x -> "?").toList());
+        List<PorteController.Porte> portesDaLoja = porte == null ? List.of() : PorteController.ler(jdbc);
         List<Object[]> achados = jdbc.query("select id, nome, preco, duracao_min, intervalo_min, antecedencia_h, ativo, multi_dia, precos::text as precos, duracoes::text as duracoes from servico where id in (" + marcas + ")",
                 (rs, i) -> {
                     BigDecimal preco = rs.getBigDecimal("preco");
                     int duracao = rs.getInt("duracao_min");
                     if (porte != null) { // preço e duração do porte do veículo
-                        BigDecimal pp = valorDoPorte(rs.getString("precos"), porte);
                         BigDecimal dd = valorDoPorte(rs.getString("duracoes"), porte);
-                        if (pp != null && pp.signum() >= 0) preco = pp.setScale(2, java.math.RoundingMode.HALF_UP);
+                        preco = PorteController.precoNoPorte(preco, valorDoPorte(rs.getString("precos"), porte), portesDaLoja, porte); // v124: específico ou base × fator
                         if (dd != null && dd.signum() > 0) duracao = dd.intValue();
                     }
                     return new Object[]{rs.getObject("id", UUID.class), rs.getString("nome"), preco, duracao, rs.getInt("intervalo_min"),
@@ -636,10 +646,12 @@ public class LinkPublicoService {
     }
 
     /** Porte pedido nas consultas de horário: no tipo que cobra por porte é obrigatório e válido; nos outros é ignorado. */
-    private static String porteDoPedido(Loja loja, String porte) {
+    private static String porteDoPedido(JdbcTemplate jdbc, Loja loja, String porte, boolean exigir) {
         if (!Capacidades.precoPorPorte(loja)) return null;
         String p = porte == null ? "" : porte.trim().toLowerCase(java.util.Locale.ROOT);
-        if (!PORTES.contains(p)) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha o porte do veículo.");
+        if (p.isEmpty() && exigir) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha o porte do veículo.");
+        if (p.isEmpty()) return PorteController.PADRAO; // o dono pode tirar a obrigatoriedade do porte: quem não escolhe fica no Médio
+        if (!PorteController.ativos(jdbc).contains(p)) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha o porte do veículo.");
         return p;
     }
 
@@ -664,20 +676,23 @@ public class LinkPublicoService {
         }
     }
 
-    private static Map<String, BigDecimal> tabelaPrecos(String json) {
+    /** Preço de cada porte ativo para a página do cliente: o específico do serviço ou preço base × fator do porte (v124). */
+    private static Map<String, BigDecimal> tabelaPrecos(List<PorteController.Porte> portes, BigDecimal base, String json) {
         Map<String, BigDecimal> m = new LinkedHashMap<>();
-        for (String x : PORTES) {
-            BigDecimal v = valorDoPorte(json, x);
-            if (v != null) m.put(x, v);
+        for (PorteController.Porte x : portes) {
+            if (!x.ativo()) continue;
+            BigDecimal v = PorteController.precoNoPorte(base, valorDoPorte(json, x.id()), portes, x.id());
+            if (v != null) m.put(x.id(), v);
         }
         return m;
     }
 
-    private static Map<String, Integer> tabelaDuracoes(String json) {
+    private static Map<String, Integer> tabelaDuracoes(List<PorteController.Porte> portes, String json) {
         Map<String, Integer> m = new LinkedHashMap<>();
-        for (String x : PORTES) {
-            BigDecimal v = valorDoPorte(json, x);
-            if (v != null) m.put(x, v.intValue());
+        for (PorteController.Porte x : portes) {
+            if (!x.ativo()) continue;
+            BigDecimal v = valorDoPorte(json, x.id());
+            if (v != null) m.put(x.id(), v.intValue());
         }
         return m;
     }

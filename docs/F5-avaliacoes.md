@@ -18,7 +18,7 @@ Pedido do dono (resumo): avaliação do atendimento pelo próprio cliente; estre
 - `src/domain/avaliacoes.js` (puro: validar, resumir, filtrar, fila de mensagens) + `tests/avaliacoes.test.mjs`.
 - `api.js`: `avaliacoes.pedir|listar|resumo|ocultar`, `publico.avaliar|dadosAvaliacao`, `mensagens.fila` (+ `docs/MAPA-API-SPRING.md`).
 - UI Artifact: estrela no card concluído (`ui/Agenda.jsx`), `ui/Avaliacoes.jsx`, `ui/AvaliarPublico.jsx` (`#avaliar`), aba em Serviços, fila em Mensagens.
-- Servidor: migração **V35** (`avaliacao`, `avaliacao_acesso`; `configuracao_loja`/`loja_regra_plataforma.avaliacao_mostra_anonimo`), `avaliacoes/`, rota pública sem login com limite (`LimitePublico`), `Permissoes` seção `avaliacoes`, Admin: regra no `RegrasDaLoja`.
+- Servidor: migração **V39** (`avaliacao`, `avaliacao_acesso`; `configuracao_loja`/`loja_regra_plataforma.avaliacao_mostra_anonimo`), `avaliacoes/`, rota pública sem login com limite (`LimitePublico`), `Permissoes` seção `avaliacoes`, Admin: regra no `RegrasDaLoja`.
 - Site real: `ui/real/Avaliacoes.jsx`, `ui/real/AvaliarPublico.jsx`, estrela no cartão (`ui/real/Agenda.jsx`).
 - Admin (`agendz-admin`): chave "Mostrar dados de quem avalia como anônimo" nas regras da loja.
 - Testes (lição do remarcar): estrela em cliente com telefone, **sem telefone**, **sem cadastro**, card que sai da lista; anônimo com a regra ligada e desligada (DTO sem identidade); token errado/vencido/reusado; permissão por seção e por usuário; profissional só vê as suas; 390 px e desktop; claro/escuro; textos conferidos.
@@ -35,9 +35,11 @@ Decisões tomadas sem confirmação:
 - Ocultar/reexibir: só dono/master, motivo de 5 a 200 letras, histórico no registro; oculta sai da média.
 - Aviso geral (sem `{link}`) também existe na fila em lote; modelos aceitam só `{nome}`, `{loja}`, `{link}`.
 
-## Fase 2 (o que falta)
-- **Servidor:** migração V35 (`avaliacao`, `avaliacao_acesso` com `hash`, `fila_mensagem` e `fila_mensagem_item`, `cliente.sem_mensagens`, `agendamento.avaliacao_pedida_em/por`, `loja_regra_plataforma.avaliacao_mostra_anonimo`) com RLS como as demais; pacote `avaliacoes/` (service, controller, DTO sem identidade no anônimo); `Permissoes` seção `avaliacoes`; rotas públicas com token em `X-Acesso` e `LimitePublico`; `ClienteService` aceita `semMensagens`; testes Java equivalentes a `avaliacoes.test.mjs` (token vencido/errado/reusado, anônimo com a regra ligada e desligada sem identidade no JSON, profissional só as dele, fila: telefone/duplicado/limite 200/período) e casos em `equivalencia/avaliacoes.json`.
+## Fase 2 (feita na v127; o que sobrou está no fim)
+- **Servidor:** migração V39 (`avaliacao`, `avaliacao_acesso` com `hash`, `fila_mensagem` e `fila_mensagem_item`, `cliente.sem_mensagens`, `agendamento.avaliacao_pedida_em/por`, `loja_regra_plataforma.avaliacao_mostra_anonimo`) com RLS como as demais; pacote `avaliacoes/` (service, controller, DTO sem identidade no anônimo); `Permissoes` seção `avaliacoes`; rotas públicas com token em `X-Acesso` e `LimitePublico`; `ClienteService` aceita `semMensagens`; testes Java equivalentes a `avaliacoes.test.mjs` (token vencido/errado/reusado, anônimo com a regra ligada e desligada sem identidade no JSON, profissional só as dele, fila: telefone/duplicado/limite 200/período) e casos em `equivalencia/avaliacoes.json`.
 - **Site real:** `api-real.js` (`avaliacoes.*`, `mensagens.*`, `publico.*`), `ui/real/Avaliacoes.jsx`, `ui/real/AvaliarPublico.jsx`, estrela no cartão (`ui/real/Agenda.jsx`), aba de lote em Mensagens (hoje o site real não tem Mensagens), item no menu com o ícone `star` (`tests/menu-icones.test.mjs`), `semMensagens` na ficha do cliente; `tests/api-real-avaliacoes.test.mjs` e e2e equivalente a `e2e78`.
 - **Admin (`agendz-admin`):** chave "Mostrar dados de quem avalia como anônimo" nas regras da loja, com motivo e linha do tempo; `RegrasDaLoja` aplica no servidor da loja.
 - **Meta/WhatsApp oficial:** quando existir a API por loja (v100), a fila pode virar envio automático; até lá fica um clique por pessoa.
 
+
+- **Status v127:** servidor (V39, `avaliacoes/`), site real (`ui/real/Avaliacoes.jsx`, `PedirAvaliacao.jsx`, `AvaliarPublico.jsx`, `FilaMensagens.jsx`, menu `star`) e a chave do Admin (`avaliacaoMostraAnonimo`, com motivo) prontos. Teste de ponta a ponta: `tests/e2e100.mjs`. No site real a estrela abre um painel de dois toques (Preparar, depois Abrir no WhatsApp, sem `await` antes de abrir). Ainda fora: envio automático pela API da Meta (aguarda a v100) e `semMensagens` na ficha do cliente real.

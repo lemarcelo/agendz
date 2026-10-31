@@ -178,7 +178,7 @@
    }
   },
   {
-   "nome": "tabela de preços incompleta",
+   "nome": "preço específico só em um porte (v124: o resto sai do fator)",
    "passos": [
     {
      "corpo": {
@@ -192,8 +192,7 @@
     }
    ],
    "esperado": {
-    "ok": false,
-    "erro": "Informe o preço para o porte Médio."
+    "ok": true
    }
   },
   {

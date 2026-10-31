@@ -11,7 +11,7 @@ import { DIAS_SEMANA, DIAS_CURTOS } from '../domain/time.js';
 import { baseDoLink, montarLinkPlanos } from '../domain/link-publico.js';
 import { fmtMoney } from '../domain/time.js';
 import { LOJA_TROCAVEL, MODO_DEMO } from '../services/api.js';
-import { Abas, Aviso, Btn, Campo, Icon, Modal, Vazio } from './common.jsx';
+import { Abas, Aviso, rolarAoErro, Btn, Campo, Icon, Modal, Vazio } from './common.jsx';
 import PickerCliente from './PickerCliente.jsx';
 import Tabela from './Tabela.jsx';
 import { toast, useStore } from './hooks.js';
@@ -117,7 +117,7 @@ export function FormFixos({ a, st, onClose, aoFeito }) {
   const muda = (i, k, v) => setLinhas(linhas.map((l, j) => (j === i ? { ...l, [k]: v } : l)));
   const salvar = () => {
     const r = api.definirFixos(a.id, { fixos: linhas.map((l) => ({ dia: Number(l.dia), hm: l.hm, profissionalId: l.profissionalId, servicoIds: [l.servicoId], ...(comVeiculo && l.veiculoId ? { veiculoId: l.veiculoId } : {}) })) });
-    if (!r.ok) { setErro(r.erros[0]); return; }
+    if (!r.ok) { setErro(r.erros[0]); rolarAoErro(); return; }
     const msg = r.apagados ? `Horários fixos salvos. ${r.apagados} agendamento(s) que não valem mais saíram da agenda.` : 'Horários fixos salvos.';
     toast(msg); if (aoFeito) aoFeito(msg);
     onClose();
@@ -154,8 +154,9 @@ function FormAssinatura({ dados, clientes, onClose }) {
   const [diaCobranca, setDia] = useState(5);
   const [erro, setErro] = useState('');
   const salvar = () => {
+    if (!clienteId) { setErro('Escolha o cliente.'); rolarAoErro(); return; }
     const r = api.contratar({ clienteId, planoId, inicioMes, diaCobranca });
-    if (!r.ok) { setErro(r.erros[0]); return; }
+    if (!r.ok) { setErro(r.erros[0]); rolarAoErro(); return; }
     toast('Assinatura criada. Registre a mensalidade quando receber.');
     onClose();
   };
@@ -187,7 +188,7 @@ export function FormMensalidade({ a, mesInicial, onClose, aoFeito }) {
   const [erro, setErro] = useState('');
   const salvar = () => {
     const r = api.pagar(a.id, { mes, forma });
-    if (!r.ok) { setErro(r.erros[0]); return; }
+    if (!r.ok) { setErro(r.erros[0]); rolarAoErro(); return; }
     const msg = `Mensalidade de ${rotuloMes(mes)} registrada.`;
     toast(msg); if (aoFeito) aoFeito(msg);
     onClose();
@@ -218,7 +219,7 @@ export function FormEncerrar({ a, onClose, aoFeito }) {
   const [erro, setErro] = useState('');
   const salvar = () => {
     const r = api.encerrar(a.id, motivo);
-    if (!r.ok) { setErro(r.erros[0]); return; }
+    if (!r.ok) { setErro(r.erros[0]); rolarAoErro(); return; }
     const msg = r.divida > 0 ? `Plano encerrado. ${r.divida} atendimento(s) adiantado(s) ficaram como dívida.` : 'Plano encerrado.';
     toast(msg); if (aoFeito) aoFeito(msg);
     onClose();
@@ -239,7 +240,7 @@ function Extrato({ a, onClose, onChange }) {
   const [erro, setErro] = useState('');
   const fazer = () => {
     const r = api.estornar(a.id, estornar, motivo);
-    if (!r.ok) { setErro(r.erros[0]); return; }
+    if (!r.ok) { setErro(r.erros[0]); rolarAoErro(); return; }
     toast('Mensalidade estornada.'); setEstornar(null); setMotivo(''); onChange(); onClose();
   };
   return (
@@ -330,7 +331,7 @@ function FormPlano({ p, st, onClose }) {
   const [erro, setErro] = useState('');
   const salvar = () => {
     const r = api.salvar({ ...f, preco: f.preco === '' ? undefined : Number(f.preco) });
-    if (!r.ok) { setErro(r.erros[0]); return; }
+    if (!r.ok) { setErro(r.erros[0]); rolarAoErro(); return; }
     toast(f.id ? 'Plano salvo. Quem já assinou continua com as condições de quando contratou.' : 'Plano criado.');
     onClose();
   };

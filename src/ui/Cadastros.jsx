@@ -1,13 +1,14 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:48b7831473 */
 import { proximoCodigo } from '../domain/codigo.js';
+import { porOrdemManual } from '../domain/ordem-servicos.js';
 import React, { useState } from 'react';
 import { clientes as apiCli, servicos as apiSrv, equipe as apiEq, demo, MODO_DEMO, modelos as apiMod, agenda, avisosDoUsuario, pedidosVinculoVisiveis, avaliacoes as apiAv } from '../services/api.js';
 import { SECOES, SECOES_LIBERAVEIS, ehGestor, formatarCpf, formatarTelefone, papelRotulo, pode, podeAutorizarVinculo, ultimoAtendimento, ehDono } from '../domain/rules.js';
 import { creditoDoCliente } from '../domain/financeiro.js';
 import { CATEGORIAS, renderizar, validarModelo, variaveisDoCorpo } from '../domain/templates.js';
 import { fmtDate, fmtDateTime, fmtDuration, fmtHM, fmtMoney } from '../domain/time.js';
-import { LIMITE_VEICULOS, PORTES, ROTULO_PORTE, placaValida, rotuloVeiculo } from '../domain/veiculos.js';
-import { Abas, Aviso, Avatar, Btn, Campo, Icon, Interruptor, Modal, Vazio } from './common.jsx';
+import { LIMITE_VEICULOS, PORTES, PORTE_PADRAO, ROTULO_PORTE, placaValida, portesAtivos, portesParaEscolher, precoNoPorte, rotuloVeiculo } from '../domain/veiculos.js';
+import { Abas, Aviso, rolarAoErro, Avatar, Btn, Campo, Icon, Interruptor, Modal, Vazio } from './common.jsx';
 import { FotoCampo } from './Foto.jsx';
 import { fotoDeExemplo } from './imagem.js';
 import { EditorNotificacoes, EditorPixCancelamento } from './Notif.jsx';
@@ -22,8 +23,8 @@ import { BlocoPlano, ModaisPlano } from './PlanoDoCliente.jsx';
 import { capAtiva, rot, Rot, rots, voc, Voc } from '../domain/tipos.js';
 
 const faixa = (obj, fmt) => { const v = PORTES.map((p) => obj?.[p]).filter((x) => Number.isFinite(x)); if (!v.length) return ''; const a = Math.min(...v), b = Math.max(...v); return a === b ? fmt(a) : `${fmt(a)} a ${fmt(b)}`; };
-const faixaPreco = (s) => faixa(s.precos, fmtMoney) || fmtMoney(s.preco);
-const faixaDuracao = (s) => (s.multiDia ? 'vários dias' : faixa(s.duracoes, fmtDuration) || fmtDuration(s.duracao));
+const faixaPreco = (s) => (capAtiva('precoPorPorte') ? faixa(Object.fromEntries(portesAtivos().map(({ id }) => [id, precoNoPorte(s.preco, s.precos?.[id], id)])), fmtMoney) : '') || fmtMoney(s.preco);
+const faixaDuracao = (s) => (s.multiDia ? 'vários dias' : (capAtiva('precoPorPorte') ? faixa(Object.fromEntries(portesAtivos().map(({ id }) => [id, Number(s.duracoes?.[id]) > 0 ? Number(s.duracoes[id]) : s.duracao])), fmtDuration) : '') || fmtDuration(s.duracao));
 const fmtNasc = (s) => (s ? fmtDate(new Date(`${s}T00:00`).getTime()) : '');
 
 // ---------- Clientes ----------
@@ -77,7 +78,7 @@ function PedidosVinculo({ user }) {
   if (!todos.length) return null;
   const confirmar = () => {
     const r = alvo.aprovar ? apiCli.aprovarVinculo(alvo.p.id) : apiCli.recusarVinculo(alvo.p.id);
-    if (!r.ok) { setErro(r.erros[0]); return; }
+    if (!r.ok) { setErro(r.erros[0]); rolarAoErro(); return; }
     toast(alvo.aprovar ? 'Número vinculado ao cadastro.' : 'Pedido recusado.');
     setAlvo(null); setErro('');
   };
@@ -124,7 +125,7 @@ function PedidosVinculo({ user }) {
 function FormCliente({ c, onClose, plano }) {
   const [f, setF] = useState(c);
   const [erro, setErro] = useState('');
-  const salvar = () => { const r = apiCli.salvar(f); if (!r.ok) { setErro(r.erros[0]); return; } toast('Cliente salvo.'); onClose(); };
+  const salvar = () => { const r = apiCli.salvar(f); if (!r.ok) { setErro(r.erros[0]); rolarAoErro(); return; } toast('Cliente salvo.'); onClose(); };
   return (
     <Modal titulo={c.id ? 'Editar cliente' : 'Novo cliente'} onClose={onClose} rodape={<><Btn onClick={onClose}>Cancelar</Btn><Btn variante="primario" onClick={salvar} data-testid="salvar-cliente">Salvar</Btn></>}>
       <div className="form-grade">
@@ -146,7 +147,7 @@ function FormCliente({ c, onClose, plano }) {
                 <Campo rotulo="Marca"><input value={v.marca || ''} onChange={mud('marca')} maxLength={30} autoComplete="off" data-testid={`cli-v-marca-${i}`} /></Campo>
                 <Campo rotulo="Modelo"><input value={v.modelo || ''} onChange={mud('modelo')} maxLength={40} autoComplete="off" data-testid={`cli-v-modelo-${i}`} /></Campo>
                 <Campo rotulo="Cor"><input value={v.cor || ''} onChange={mud('cor')} maxLength={20} autoComplete="off" data-testid={`cli-v-cor-${i}`} /></Campo>
-                <Campo rotulo="Porte"><select value={v.porte || ''} onChange={mud('porte')} data-testid={`cli-v-porte-${i}`}><option value="">Escolha…</option>{PORTES.map((k) => <option key={k} value={k}>{ROTULO_PORTE[k]}</option>)}</select></Campo>
+                <Campo rotulo="Porte"><select value={v.porte || ''} onChange={mud('porte')} data-testid={`cli-v-porte-${i}`}><option value="">Escolha…</option>{portesParaEscolher(v.porte).map(({ id: k }) => <option key={k} value={k}>{ROTULO_PORTE[k]}</option>)}</select></Campo>
                 <button type="button" className="icone-btn" onClick={() => setF({ ...f, veiculos: f.veiculos.filter((_, j) => j !== i) })} aria-label={`Remover veículo ${i + 1}`} data-testid={`cli-v-remover-${i}`}><Icon n="trash" size={16} /></button>
               </div>
             );
@@ -166,7 +167,14 @@ export function Servicos({ user }) {
   const { state: st } = useStore();
   const [edit, setEdit] = useState(null);
   const podeEditar = pode(user, 'servicos');
-  const novo = !capAtiva('precoPorPorte') ? { nome: '', preco: 40, duracao: 40, intervalo: 10, antecedenciaH: 2, notificacoes: null, confirmacaoServico: null, combo: false, componentes: [] } : { nome: '', categoria: '', precos: { pequeno: 60, medio: 70, grande: 80, suv: 90, pickup: 95 }, duracoes: { pequeno: 40, medio: 45, grande: 50, suv: 55, pickup: 60 }, multiDia: false, combo: false, componentes: [], intervalo: 10, antecedenciaH: 2, notificacoes: null, confirmacaoServico: null };
+  // PUT /servicos/ordem — troca o serviço de lugar na ordem manual (vale no Atender e no link quando a regra é "minha ordem")
+  const mover = (lista, i, d) => {
+    const ids = lista.map((x) => x.id);
+    [ids[i], ids[i + d]] = [ids[i + d], ids[i]];
+    const r = apiSrv.reordenar(ids);
+    if (!r.ok) toast(r.erros?.[0] || 'Não foi possível mudar a ordem.');
+  };
+  const novo = !capAtiva('precoPorPorte') ? { nome: '', preco: 40, duracao: 40, intervalo: 10, antecedenciaH: 2, notificacoes: null, confirmacaoServico: null, combo: false, componentes: [] } : { nome: '', categoria: '', precos: { medio: 70 }, duracoes: { medio: 45 }, multiDia: false, combo: false, componentes: [], intervalo: 10, antecedenciaH: 2, notificacoes: null, confirmacaoServico: null };
   return (
     <section className="tela">
       <header className="tela-topo">
@@ -175,7 +183,7 @@ export function Servicos({ user }) {
       </header>
       {!podeEditar && <Aviso>Somente o proprietário (ou um admin com permissão de serviços) altera os serviços.</Aviso>}
       <div className="grade-cards">
-        {st.servicos.map((s) => (
+        {porOrdemManual(st.servicos).map((s, i, lista) => (
           <article key={s.id} className={`card-serv ${s.ativo === false ? 'inativo' : ''}`}>
             <div className="card-serv-topo"><h3>{s.nome}</h3><b>{faixaPreco(s)}</b></div>
             <small className="muted cod" data-testid={`srv-cod-${s.id}`}>Código {s.codigo}{s.categoria ? ` · ${s.categoria}` : ''}</small>
@@ -191,7 +199,13 @@ export function Servicos({ user }) {
             </ul>
             {s.ativo === false && <span className="chip chip-p">Desativado</span>}
             {pode(user, 'avaliacoes') && <ResumoDoServico id={s.id} />}
-            {podeEditar && <Btn tamanho="sm" icone="edit" onClick={() => setEdit(s)} aria-label={`Editar ${s.nome}`}>Editar</Btn>}
+            {podeEditar && (
+              <div className="acoes">
+                <Btn tamanho="sm" icone="edit" onClick={() => setEdit(s)} aria-label={`Editar ${s.nome}`}>Editar</Btn>
+                <Btn tamanho="sm" icone="up" disabled={i === 0} onClick={() => mover(lista, i, -1)} aria-label={`Subir ${s.nome}`} data-testid={`srv-sobe-${s.id}`} />
+                <Btn tamanho="sm" icone="down" disabled={i === lista.length - 1} onClick={() => mover(lista, i, 1)} aria-label={`Descer ${s.nome}`} data-testid={`srv-desce-${s.id}`} />
+              </div>
+            )}
           </article>
         ))}
       </div>
@@ -213,11 +227,11 @@ function FormServico({ s, user, onClose }) {
   const [f, setF] = useState(s.id ? s : { ...s, codigo: proximoCodigo(st.servicos) }); // serviço novo já vem com o próximo código (dá para trocar)
   const [erro, setErro] = useState('');
   const proprias = Array.isArray(f.notificacoes);
-  const salvar = () => { const r = apiSrv.salvar(f); if (!r.ok) { setErro(r.erros[0]); return; } toast('Serviço salvo.'); onClose(); };
+  const salvar = () => { const r = apiSrv.salvar(f); if (!r.ok) { setErro(r.erros[0]); rolarAoErro(); return; } toast('Serviço salvo.'); onClose(); };
   const num = (k) => (e) => setF({ ...f, [k]: e.target.value === '' ? '' : Number(e.target.value) });
   return (
     <Modal titulo={s.id ? 'Editar serviço' : 'Novo serviço'} onClose={onClose} largura={680}
-      rodape={<>{s.id && <Btn variante="perigo" icone="trash" onClick={() => { const r = apiSrv.remover(s.id); if (r.ok) { toast(r.desativado ? 'O serviço tem histórico e foi desativado.' : 'Serviço removido.'); onClose(); } }}>Remover</Btn>}<span className="espaco" /><Btn onClick={onClose}>Cancelar</Btn><Btn variante="primario" onClick={salvar} data-testid="salvar-servico">Salvar</Btn></>}>
+      rodape={<>{s.id && <Btn variante="perigo" icone="trash" onClick={() => { const r = apiSrv.remover(s.id); if (r.ok) { toast(r.desativado ? 'O serviço tem histórico e foi desativado.' : 'Serviço removido.'); onClose(); } else { setErro(r.erros[0]); rolarAoErro(); } }}>Remover</Btn>}<span className="espaco" /><Btn onClick={onClose}>Cancelar</Btn><Btn variante="primario" onClick={salvar} data-testid="salvar-servico">Salvar</Btn></>}>
       <div className="form-grade">
         <Campo rotulo="Nome do serviço" className="campo-largo"><input value={f.nome} onChange={(e) => setF({ ...f, nome: e.target.value })} data-testid="srv-nome" /></Campo>
         <Campo rotulo="Código" dica="Número automático; pode trocar. Não repete entre serviços."><input value={f.codigo ?? ''} maxLength={20} onChange={(e) => setF({ ...f, codigo: e.target.value })} data-testid="srv-codigo" /></Campo>
@@ -225,19 +239,24 @@ function FormServico({ s, user, onClose }) {
         {!capAtiva('precoPorPorte') ? <>
           <Campo rotulo="Preço (R$)"><input type="number" min="0" step="0.5" value={f.preco ?? ''} onChange={num('preco')} data-testid="srv-preco" /></Campo>
           <Campo rotulo="Duração (min)"><input type="number" min="5" step="5" value={f.duracao ?? ''} onChange={num('duracao')} data-testid="srv-dur" /></Campo>
-        </> : <div className="campo-largo">
-          <div className="tabela-portes" role="group" aria-labelledby="srv-portes-r" data-testid="srv-portes">
-            <span className="campo-rotulo" id="srv-portes-r">Preço e duração por porte do veículo</span>
-            <div className="porte-cab"><span>Porte</span><span>Preço (R$)</span><span>{f.multiDia ? 'Trabalho (min)' : 'Duração (min)'}</span></div>
-            {PORTES.map((p) => (
-              <div className="porte-linha" key={p}>
-                <b>{ROTULO_PORTE[p]}</b>
-                <input type="number" min="0" step="0.5" value={f.precos?.[p] ?? ''} onChange={(e) => setF({ ...f, precos: { ...f.precos, [p]: e.target.value === '' ? '' : Number(e.target.value) } })} aria-label={`Preço, porte ${ROTULO_PORTE[p]}`} data-testid={`srv-preco-${p}`} />
-                <input type="number" min="5" step="5" value={f.duracoes?.[p] ?? ''} onChange={(e) => setF({ ...f, duracoes: { ...f.duracoes, [p]: e.target.value === '' ? '' : Number(e.target.value) } })} aria-label={`Duração, porte ${ROTULO_PORTE[p]}`} data-testid={`srv-dur-${p}`} />
+        </> : <>
+          <Campo rotulo="Preço base — Médio (R$)" dica="Os outros portes saem deste valor × o fator do porte (Estabelecimento > Portes)."><input type="number" min="0" step="0.5" value={f.precos?.[PORTE_PADRAO] ?? ''} onChange={(e) => setF({ ...f, precos: { ...f.precos, [PORTE_PADRAO]: e.target.value === '' ? '' : Number(e.target.value) } })} data-testid={`srv-preco-${PORTE_PADRAO}`} /></Campo>
+          <Campo rotulo={f.multiDia ? 'Trabalho — Médio (min)' : 'Duração — Médio (min)'} dica="Vale para todos os portes, a não ser que você defina um tempo específico abaixo."><input type="number" min="5" step="5" value={f.duracoes?.[PORTE_PADRAO] ?? ''} onChange={(e) => setF({ ...f, duracoes: { ...f.duracoes, [PORTE_PADRAO]: e.target.value === '' ? '' : Number(e.target.value) } })} data-testid={`srv-dur-${PORTE_PADRAO}`} /></Campo>
+          {portesAtivos().some((x) => x.id !== PORTE_PADRAO) && (
+            <fieldset className="campo-largo conj" data-testid="srv-especifico">
+              <legend>Preço específico por porte</legend>
+              <small className="muted">Opcional. O valor digitado vale no lugar de "preço base × fator". Em branco, o porte usa o fator.</small>
+              <div className="preco-especifico-lista">
+                {portesAtivos().filter((x) => x.id !== PORTE_PADRAO).map(({ id: p }) => (
+                  <div className="preco-especifico-linha" key={p} data-testid={`srv-esp-${p}`}>
+                    <Campo rotulo={`${ROTULO_PORTE[p]} — preço (R$)`}><input type="number" min="0" step="0.5" value={f.precos?.[p] ?? ''} placeholder={Number.isFinite(Number(f.precos?.[PORTE_PADRAO])) && f.precos?.[PORTE_PADRAO] !== '' ? `Fator: ${fmtMoney(precoNoPorte(Number(f.precos[PORTE_PADRAO]), undefined, p))}` : 'Fator do porte'} onChange={(e) => setF({ ...f, precos: { ...f.precos, [p]: e.target.value === '' ? '' : Number(e.target.value) } })} data-testid={`srv-preco-${p}`} /></Campo>
+                    <Campo rotulo={`${ROTULO_PORTE[p]} — ${f.multiDia ? 'trabalho' : 'duração'} (min)`}><input type="number" min="5" step="5" value={f.duracoes?.[p] ?? ''} placeholder="Igual ao Médio" onChange={(e) => setF({ ...f, duracoes: { ...f.duracoes, [p]: e.target.value === '' ? '' : Number(e.target.value) } })} data-testid={`srv-dur-${p}`} /></Campo>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </div>}
+            </fieldset>
+          )}
+        </>}
         {capAtiva('multiDia') && <div className="campo-largo"><Interruptor checked={!!f.multiDia} onChange={(v) => setF({ ...f, multiDia: v })} rotulo="Serviço de vários dias" descricao="O carro entra, fica no box e é retirado depois. A duração conta só o tempo de trabalho (ex.: 480 = um dia de 8 h); a retirada cai no último dia útil necessário." testid="srv-multidia" /></div>}
         <div className="campo-largo"><Interruptor checked={!!f.combo} onChange={(v) => setF({ ...f, combo: v, componentes: v ? f.componentes || [] : [] })} rotulo="Combo" descricao="Junta serviços comuns com preço e tempo próprios. Os materiais saem do estoque pelos serviços que o combo junta." testid="srv-combo" /></div>
         {f.combo && (
@@ -347,7 +366,7 @@ function FormUsuario({ u, user, onClose }) {
   const { sessao } = useStore();
   const [f, setF] = useState({ ...u, senha: '' });
   const [erro, setErro] = useState('');
-  const salvar = () => { const r = apiEq.salvar(f); if (!r.ok) { setErro(r.erros[0]); return; } toast('Usuário salvo.'); onClose(); };
+  const salvar = () => { const r = apiEq.salvar(f); if (!r.ok) { setErro(r.erros[0]); rolarAoErro(); return; } toast('Usuário salvo.'); onClose(); };
   const ehMaster = u.papel === 'master';
   return (
     <Modal titulo={u.id ? 'Editar usuário' : 'Novo usuário'} onClose={onClose} largura={640}
@@ -446,7 +465,7 @@ function FormModelo({ m, onClose, somenteLeitura = false }) {
   const so = !!m.sistema || somenteLeitura;
   const problemas = f.corpo ? validarModelo(f.corpo) : [];
   const n = [...new Set(variaveisDoCorpo(f.corpo))].length;
-  const salvar = () => { const r = apiMod.salvar(f); if (!r.ok) { setErro(r.erros.join(' ')); return; } toast('Modelo salvo.'); onClose(); };
+  const salvar = () => { const r = apiMod.salvar(f); if (!r.ok) { setErro(r.erros.join(' ')); rolarAoErro(); return; } toast('Modelo salvo.'); onClose(); };
   return (
     <Modal titulo={so ? m.nome : m.id ? 'Editar modelo' : 'Novo modelo'} onClose={onClose} largura={640}
       rodape={<>{m.id && !so && <Btn variante="perigo" icone="trash" onClick={() => { apiMod.remover(m.id); onClose(); }}>Remover</Btn>}<span className="espaco" /><Btn onClick={onClose}>{so ? 'Fechar' : 'Cancelar'}</Btn>{!so && <Btn variante="primario" onClick={salvar} data-testid="salvar-modelo">Salvar</Btn>}</>}>

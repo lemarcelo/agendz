@@ -5,7 +5,7 @@ import * as E from '../domain/engine.js';
 import * as R from '../domain/rules.js';
 import * as CD from '../domain/codigo.js';
 import * as F from '../domain/financeiro.js';
-import '../domain/pagamento.js'; // registra no tick o lançamento das receitas e estornos do atendimento local
+import { trocarFormaDoAgendamento } from '../domain/pagamento.js'; // registra no tick o lançamento das receitas e estornos do atendimento local
 import * as CU from '../domain/resgate.js';
 import * as AS from '../domain/assinaturas.js';
 import { aReceber, extrato, rotuloMes, saldoAtual, planosPublicos } from '../domain/planos.js';
@@ -15,7 +15,8 @@ import * as T from '../domain/tema.js';
 import { capAtiva, definirTipoAtivo, exemploAtivo, rot, Rot, TIPO_PADRAO, tipoDe, tipoValido, Voc } from '../domain/tipos.js';
 import { fotoValida, proximoSlot } from '../domain/foto.js';
 import { diasDaExcecao } from '../domain/schedule.js';
-import { LIMITE_VEICULOS, PORTES, ROTULO_PORTE, chavePlaca, limparVeiculo, porteValido } from '../domain/veiculos.js';
+import { aplicarOrdemManual, modoOrdemValido } from '../domain/ordem-servicos.js';
+import { CAMPOS_VEICULO_EXIGIVEIS, LIMITE_VEICULOS, PORTES, PORTES_DE_FABRICA, PORTE_PADRAO, ROTULO_PORTE, chavePlaca, definirPortes, limparVeiculo, porteValido, portesAtivos, sanearPortes } from '../domain/veiculos.js';
 import { validarModelo } from '../domain/templates.js';
 import { addDays, fromYmd, startOfDay, ymd } from '../domain/time.js';
 import { itensDoAgendamento } from '../domain/reports.js';
@@ -56,6 +57,7 @@ const listeners = new Set();
 const now = () => Date.now() + offset;
 const emit = () => {
   definirTipoAtivo(state.estabelecimento); // textos e telas seguem o tipo da loja
+  definirPortes(state.estabelecimento.portes); // portes cadastrados pelo dono (v122); sem cadastro, os cinco de fábrica
   snap = { state, agora: now(), sessao, apiLog, offset, loja: lojaSlug };
   listeners.forEach((l) => l());
 };
@@ -146,7 +148,7 @@ const notificacaoValida = (n) => !!n && typeof n === 'object' && !Array.isArray(
 const notificacoesValidas = (l) => l == null || (Array.isArray(l) && l.length <= 10 && l.every(notificacaoValida));
 const texto = (v, max) => typeof v === 'string' && v.length <= max;
 // Campos que só existem em tipos com veículo/box (estética). Em outro tipo (barbearia) a API não os aceita: `pegar` os descarta como qualquer campo desconhecido.
-const CAMPOS_VEICULO = ['veiculoId', 'veiculo', 'veiculos', 'placa', 'marca', 'modelo', 'cor', 'porte'];
+const CAMPOS_VEICULO = ['veiculoId', 'veiculo', 'veiculos', 'placa', 'marca', 'modelo', 'cor', 'porte', 'portes'];
 const CAMPOS_RECURSO = ['boxId', 'boxes'];
 const permitidos = (campos) => campos.filter((k) => (capAtiva('usaVeiculo') || !CAMPOS_VEICULO.includes(k)) && (capAtiva('usaRecursoFisico') || !CAMPOS_RECURSO.includes(k)));
 const porteOk = (p) => !capAtiva('precoPorPorte') || porteValido(p);
@@ -398,6 +400,12 @@ export const agenda = {
     const n = meuAgendamento(id) || (state.agendamentos.find((x) => x.id === id)?.local ? erro('Atendimento local não é remarcado.') : null) || (usuario().papel === 'profissional' && dados?.profissionalId && dados.profissionalId !== usuario().id ? semPermissao() : null); if (n) return n;
     return mutate((s, agora) => E.profissionalRemarca(s, id, dados, autor(), agora), { metodo: 'PUT', rota: `/agendamentos/${id}/remarcar` });
   },
+  // PUT /agendamentos/{id}/forma-pagamento  ({ formaPagamento: 'pix' | 'dinheiro' | 'cartao' })  futuro ou concluído, nunca cancelado; profissional só nos seus; receita já lançada acompanha a troca
+  mudarFormaPagamento(id, forma) {
+    if (typeof id !== 'string' || !id || id.length > 60) return erro('Agendamento não encontrado.');
+    if (!R.formaValida(forma)) return erro('Forma de pagamento inválida.');
+    return meuAgendamento(id) || mutate((s, agora) => trocarFormaDoAgendamento(s, s.agendamentos.find((x) => x.id === id), forma, autor(), agora), { metodo: 'PUT', rota: `/agendamentos/${id}/forma-pagamento` });
+  },
   // POST /agendamentos/{id}/cancelar
   cancelar(id) { return meuAgendamento(id) || mutate((s, agora) => E.profissionalCancela(s, id, autor(), agora), { metodo: 'POST', rota: `/agendamentos/${id}/cancelar` }); },
   // PUT /agendamentos/{id}/status
@@ -546,10 +554,18 @@ export const servicos = {
       // Preço e duração por porte. Sem tabela, vale o preço/duração único para todos os portes (compatível com o cadastro simples); com tabela, os 5 portes são obrigatórios.
       const tabela = (bruto, unico, rotulo, ok, plural) => {
         // Valor único: vale para os 5 portes, mas também passa pelo teto (duração sem "vários dias" = no máximo 24 h).
-        if (bruto === undefined || bruto === null) return finito(unico) ? (ok(Number(unico)) ? { v: Object.fromEntries(PORTES.map((p) => [p, Number(unico)])) } : { erro: `Informe ${rotulo}.`, final: true }) : { erro: `Informe ${rotulo}.`, ausente: true };
+        if (bruto === undefined || bruto === null) return finito(unico) ? (ok(Number(unico)) ? { v: { [PORTE_PADRAO]: Number(unico) } } : { erro: `Informe ${rotulo}.`, final: true }) : { erro: `Informe ${rotulo}.`, ausente: true };
         if (typeof bruto !== 'object' || Array.isArray(bruto) || Object.keys(bruto).some((k) => !PORTES.includes(k))) return { erro: `Tabela de ${plural} inválida.` };
         const v = {};
-        for (const p of PORTES) { if (!finito(bruto[p]) || !ok(Number(bruto[p]))) return { erro: `Informe ${rotulo} para o porte ${ROTULO_PORTE[p]}.` }; v[p] = Number(bruto[p]); }
+        // v124: só o Médio (valor base) é obrigatório; nos demais portes o preço sai do fator do porte e a duração é a base, a não ser que o dono defina o valor específico.
+        const ativos = [PORTE_PADRAO];
+        if ((bruto[PORTE_PADRAO] === undefined || bruto[PORTE_PADRAO] === null || bruto[PORTE_PADRAO] === '') && finito(unico)) bruto = { ...bruto, [PORTE_PADRAO]: unico };
+        for (const p of PORTES) {
+          const dado = bruto[p] !== undefined && bruto[p] !== null && bruto[p] !== '';
+          if (!dado && !ativos.includes(p)) continue;
+          if (!finito(bruto[p]) || !ok(Number(bruto[p]))) return { erro: `Informe ${rotulo} para o porte ${ROTULO_PORTE[p]}.` };
+          v[p] = Number(bruto[p]);
+        }
         return { v };
       };
       if (sv.preco !== undefined && sv.preco !== null && (!finito(sv.preco) || Number(sv.preco) < 0 || Number(sv.preco) > 100000)) return erro('Informe o preço.');
@@ -590,9 +606,20 @@ export const servicos = {
         return { ok: true, servico: s.servicos[i] };
       }
       const novo = { ativo: true, notificacoes: null, confirmacaoServico: null, grupoMovimentacaoId: null, materiais: [], multiDia: false, combo: false, componentes: [], categoria: '', ...dados, id: `s${++s.seq}` };
+      novo.ordem = Math.max(0, ...s.servicos.map((x) => (Number.isFinite(x.ordem) ? x.ordem : 0))) + 1; // serviço novo entra no fim da ordem manual
       s.servicos.push(novo);
       return { ok: true, servico: novo };
     }, { metodo: sv.id ? 'PUT' : 'POST', rota: sv.id ? `/servicos/${sv.id}` : '/servicos' });
+  },
+  // PUT /servicos/ordem  { ids: [...] }  (ordem manual dos serviços; ids desconhecidos ou repetidos são ignorados e os que faltam seguem depois)
+  reordenar(ids) {
+    const n = exigir('servicos'); if (n) return n;
+    if (!Array.isArray(ids) || ids.length > 300 || !ids.every((x) => typeof x === 'string' && x.length <= 60)) return erro('Ordem dos serviços inválida.');
+    return mutate((s) => {
+      const nova = aplicarOrdemManual(s.servicos, ids);
+      for (const sv of s.servicos) sv.ordem = nova.get(sv.id);
+      return { ok: true };
+    }, { metodo: 'PUT', rota: '/servicos/ordem' });
   },
   // DELETE /servicos/{id}  (com histórico, só desativa)
   remover(id) {
@@ -1041,7 +1068,7 @@ export const estabelecimento = {
   salvar(entrada) {
     const n = exigir('estabelecimento'); if (n) return n;
     if (entrada && typeof entrada === 'object' && 'tipo' in entrada && entrada.tipo !== tipoDe(state.estabelecimento)) return erro('O tipo do estabelecimento não pode ser alterado depois de criado.');
-    const patch = pegar(entrada, permitidos(['nome', 'telefone', 'endereco', 'enderecoNoLink', 'latitude', 'longitude', 'localizacaoNoWhatsapp', 'email', 'ddds', 'visaoPadrao', 'confirmacaoServico', 'grupoMovimentacaoId', 'notificacoes', 'escala', 'calendario', 'pixCancelamento', 'logo', 'corTema', 'corTema2', 'temaCor', 'linkAgendamento', 'comissaoPadrao', 'usaIntegracaoPix', 'formaPagamentoPadrao', 'contaPorForma', 'camposObrigatorios', 'boxes']));
+    const patch = pegar(entrada, permitidos(['nome', 'telefone', 'endereco', 'enderecoNoLink', 'latitude', 'longitude', 'localizacaoNoWhatsapp', 'email', 'ddds', 'visaoPadrao', 'confirmacaoServico', 'grupoMovimentacaoId', 'notificacoes', 'escala', 'calendario', 'pixCancelamento', 'logo', 'corTema', 'corTema2', 'temaCor', 'linkAgendamento', 'comissaoPadrao', 'usaIntegracaoPix', 'formaPagamentoPadrao', 'contaPorForma', 'camposObrigatorios', 'boxes', 'portes', 'ordemServicos']));
     if ('comissaoPadrao' in patch && !R.ehDono(usuario())) delete patch.comissaoPadrao;
     if ('comissaoPadrao' in patch) { const c = lerPct(patch.comissaoPadrao); if (!c.ok || c.v === null) return erro('A comissão padrão vai de 0 a 100%.'); patch.comissaoPadrao = c.v; }
     for (const k of ['nome', 'telefone', 'endereco', 'email']) if (k in patch && !texto(patch[k], 200)) return erro('Texto grande demais em ' + k + '.');
@@ -1077,7 +1104,9 @@ export const estabelecimento = {
       const l = patch.linkAgendamento;
       if (!(l && typeof l === 'object' && typeof l.ativo === 'boolean' && Number.isInteger(l.diasMax) && l.diasMax >= 1 && l.diasMax <= 60)) return erro('Link de agendamento inválido: ligado ou desligado e de 1 a 60 dias à frente.');
       if ('telefoneObrigatorio' in l && typeof l.telefoneObrigatorio !== 'boolean') return erro('Link de agendamento inválido: telefone obrigatório é sim ou não.');
-      patch.linkAgendamento = { ativo: l.ativo, diasMax: l.diasMax, telefoneObrigatorio: l.telefoneObrigatorio !== false };
+      if ('nomeObrigatorio' in l && typeof l.nomeObrigatorio !== 'boolean') return erro('Link de agendamento inválido: nome obrigatório é sim ou não.');
+      if ('veiculoObrigatorio' in l && !(Array.isArray(l.veiculoObrigatorio) && l.veiculoObrigatorio.length <= 4 && new Set(l.veiculoObrigatorio).size === l.veiculoObrigatorio.length && l.veiculoObrigatorio.every((x) => CAMPOS_VEICULO_EXIGIVEIS.includes(x)))) return erro('Link de agendamento inválido: dados do veículo obrigatórios.');
+      patch.linkAgendamento = { ativo: l.ativo, diasMax: l.diasMax, telefoneObrigatorio: l.telefoneObrigatorio !== false, nomeObrigatorio: l.nomeObrigatorio !== false, veiculoObrigatorio: Array.isArray(l.veiculoObrigatorio) ? [...l.veiculoObrigatorio] : [...PU.VEICULO_DE_FABRICA_NO_LINK] };
     }
     if ('usaIntegracaoPix' in patch && typeof patch.usaIntegracaoPix !== 'boolean') return erro('Opção de integração Pix inválida.');
     if ('formaPagamentoPadrao' in patch && patch.formaPagamentoPadrao !== '' && !R.formaValida(patch.formaPagamentoPadrao)) return erro('Forma de pagamento padrão inválida.');
@@ -1088,10 +1117,11 @@ export const estabelecimento = {
     }
     if ('camposObrigatorios' in patch) {
       const c = patch.camposObrigatorios;
-      const ok = c && typeof c === 'object' && ['futuro', 'local'].every((k) => Array.isArray(c[k]) && c[k].length <= 5 && new Set(c[k]).size === c[k].length && c[k].every((x) => Object.hasOwn(E.CAMPOS_ATENDER, x) && !(k === 'futuro' && x === 'formaPagamento')));
+      const ok = c && typeof c === 'object' && ['futuro', 'local'].every((k) => Array.isArray(c[k]) && c[k].length <= 9 && new Set(c[k]).size === c[k].length && c[k].every((x) => Object.hasOwn(E.CAMPOS_ATENDER, x) && !(k === 'futuro' && x === 'formaPagamento')));
       if (!ok) return erro('Campos obrigatórios inválidos.');
       patch.camposObrigatorios = { futuro: [...c.futuro], local: [...c.local] };
     }
+    if ('ordemServicos' in patch && !modoOrdemValido(patch.ordemServicos)) return erro('Ordem dos serviços inválida: mais usados primeiro ou a ordem que você definiu.');
     if ('visaoPadrao' in patch && !['dia', 'semana', 'mes'].includes(patch.visaoPadrao)) return erro('Visão padrão inválida.');
     if ('confirmacaoServico' in patch && typeof patch.confirmacaoServico !== 'boolean') return erro(`${Voc('confirmacao')} inválida.`);
     if ('boxes' in patch) {
@@ -1102,6 +1132,20 @@ export const estabelecimento = {
       patch.boxes = b.map((x) => pegar(x, ['id', 'nome', 'ativo']));
     }
     return mutate((s, agora) => {
+      if (patch.portes) {
+        // Porte é por id: o nome pode mudar. Porte já usado (veículo de cliente ou agendamento) não é apagado, só desativado; o Médio fica sempre.
+        const r = sanearPortes(patch.portes, () => `pt${++s.seq}`);
+        if (!r.ok) return erro(r.erro);
+        const atuais = s.estabelecimento.portes || PORTES_DE_FABRICA;
+        for (const antigo of atuais) {
+          const depois = r.portes.find((x) => x.id === antigo.id);
+          const usado = s.clientes.some((c) => (c.veiculos || []).some((v) => v.porte === antigo.id)) || s.agendamentos.some((a) => a.porte === antigo.id);
+          if (!depois && usado) return erro(`O porte ${antigo.nome} já foi usado: desative em vez de remover.`);
+          if (depois && !depois.ativo && antigo.ativo !== false && s.agendamentos.some((a) => a.porte === antigo.id && [R.STATUS.A_CONFIRMAR, R.STATUS.CONFIRMADO].includes(a.status) && a.inicio > agora)) return erro(`O porte ${antigo.nome} tem agendamentos futuros: desative depois deles.`);
+        }
+        s.estabelecimento.portes = r.portes;
+        delete patch.portes;
+      }
       if (patch.boxes) {
         // Box é por id: o nome pode mudar. Box usado por algum agendamento não é apagado (só desativado) e não é desativado com carro agendado.
         const atuais = s.estabelecimento.boxes || [];
@@ -1599,7 +1643,8 @@ export const publico = {
   // POST /publico/agendamentos  (nome + telefone + placa, modelo e porte do veículo; nasce "Cliente agendou"; devolve o token pessoal)
   agendar(entrada) {
     const d = pegar(entrada, permitidos(['nome', 'telefone', 'placa', 'marca', 'modelo', 'cor', 'porte', 'servicoIds', 'profissionalId', 'inicio', 'lembretes', 'site']));
-    if (!texto(d.nome, 60) || !texto(d.telefone, 30)) return erro('Informe o nome e o telefone.');
+    // nome e telefone podem faltar se o dono tirou a obrigatoriedade (agendarPorLink confere); aqui só o tipo e o tamanho
+    for (const [k, n] of [['nome', 60], ['telefone', 30]]) if (d[k] !== undefined && d[k] !== null && (typeof d[k] !== 'string' || d[k].length > n)) return erro('Dados inválidos.');
     for (const k of ['placa', 'marca', 'modelo', 'cor', 'porte']) if (d[k] !== undefined && d[k] !== null && !texto(d[k], 40)) return erro('Dados do veículo inválidos.');
     if (!(Array.isArray(d.servicoIds) && d.servicoIds.length >= 1 && d.servicoIds.length <= 10 && d.servicoIds.every((x) => texto(x, 60)))) return erro('Escolha de 1 a 10 serviços.');
     if (d.profissionalId !== undefined && d.profissionalId !== null && d.profissionalId !== '' && !texto(d.profissionalId, 60)) return erro(`${Rot('profissional')} inválido.`);
@@ -1650,31 +1695,33 @@ export const publico = {
 // ---------- suporte (chamados com a equipe da plataforma) ----------
 // No sistema real isto fala com a Admin API pelo servidor (`/api/suporte/*`); aqui o chamado fica no estado da loja e a demonstração responde sozinha.
 // Loja e usuário vêm da sessão, nunca da entrada.
+// v119: só o proprietário abre chamados de fábrica; os outros só se o proprietário liberar a seção Suporte no cadastro deles.
+const usuarioSuporte = () => { const u = usuario(); return u && R.pode(u, 'suporte') ? u : null; };
 export const suporte = {
   // GET /suporte/chamados
-  listar() { const u = usuario(); return u ? { ok: true, chamados: chamadosDoUsuario(state, u) } : semPermissao(); },
+  listar() { const u = usuarioSuporte(); return u ? { ok: true, chamados: chamadosDoUsuario(state, u) } : semPermissao(); },
   // GET /suporte/chamados/nao-lidas
-  naoLidas() { const u = usuario(); return u ? { ok: true, naoLidas: SU.naoLidasDoUsuario(state, u) } : semPermissao(); },
+  naoLidas() { const u = usuarioSuporte(); return u ? { ok: true, naoLidas: SU.naoLidasDoUsuario(state, u) } : semPermissao(); },
   // POST /suporte/chamados  { assunto, categoria, texto, anexos? }  (até 3 imagens em base64; tipo pelo conteúdo)
   abrir(entrada) {
-    const u = usuario(); if (!u) return semPermissao();
+    const u = usuarioSuporte(); if (!u) return semPermissao();
     return mutate((s, agora) => SU.abrirChamado(s, s.usuarios.find((x) => x.id === u.id), pegar(entrada, ['assunto', 'categoria', 'texto', 'anexos']), agora), { metodo: 'POST', rota: '/suporte/chamados' });
   },
   // GET /suporte/chamados/{id}  (abrir marca como lido)
   obter(id) {
-    const u = usuario(); if (!u) return semPermissao();
+    const u = usuarioSuporte(); if (!u) return semPermissao();
     if (!texto(id, 40)) return erro('Chamado não encontrado.');
     return mutate((s) => SU.lerChamado(s, s.usuarios.find((x) => x.id === u.id), id), { metodo: 'GET', rota: `/suporte/chamados/${String(id).slice(0, 20)}`, silencioso: true });
   },
   // GET /suporte/chamados/{id}/anexos/{anexoId}  (os bytes da imagem; de outro usuário = não existe)
   imagem(id, anexoId) {
-    const u = usuario(); if (!u) return semPermissao();
+    const u = usuarioSuporte(); if (!u) return semPermissao();
     if (!texto(id, 40) || !texto(anexoId, 40)) return erro('Imagem não encontrada.');
     return SU.imagemDoChamado(state, state.usuarios.find((x) => x.id === u.id), id, anexoId);
   },
   // POST /suporte/chamados/{id}/mensagens  { texto, anexos? }
   responder(id, textoNovo, anexos) {
-    const u = usuario(); if (!u) return semPermissao();
+    const u = usuarioSuporte(); if (!u) return semPermissao();
     if (!texto(id, 40)) return erro('Chamado não encontrado.');
     if (typeof textoNovo !== 'string') return erro('A mensagem é obrigatória.');
     return mutate((s, agora) => SU.responderChamado(s, s.usuarios.find((x) => x.id === u.id), id, textoNovo, agora, Array.isArray(anexos) ? anexos : undefined), { metodo: 'POST', rota: `/suporte/chamados/${String(id).slice(0, 20)}/mensagens` });

@@ -124,3 +124,59 @@ Lista simples. Cada item está no histórico do `prompt-agendz-regras.md` (v84 a
 - **Decidi (D4):** comissão sobre preço menos desconto; item coberto pelo plano sai de graça (desconto na linha), então comissiona 0.
 - **Decidi:** "plano" não é forma de pagamento (marca `planoUso` no atendimento); passar do saldo é **recusado** (não só avisado); "pausar" é não registrar a mensalidade do mês; plano esgotado cobra o preço normal; um plano aberto por cliente; dívida de plano encerrado trava um novo.
 - **Dúvida:** horários fixos do assinante (`MAX_FIXOS`, `DIAS_FIXOS_A_FRENTE`), modelos de plano da barbearia e contar agendamento pelo link como corte ainda não foram feitos.
+
+## v119/v120 (30/10): login automático e box
+- **Decidi:** a rede é identificada só pelo servidor, pelo IP público (IPv4 inteiro; IPv6 /64). Nome do Wi-Fi é impossível de ler num site. Efeito: quem troca de internet (4G, outro Wi-Fi, IP que muda) cai em "rede não reconhecida" e o token vale 24 h. **Dúvida para o Marcelo:** se o IP da loja mudar com frequência (operadora), vale oferecer "confiar neste aparelho" (token no aparelho, sem IP)?
+- **Decidi:** confiar numa rede exige ter acabado de entrar (10 min) e a rede é a que o servidor vê agora; até 5 redes por pessoa; senha temporária nunca ganha rede confiável.
+- **Decidi:** a sessão comum passou de 8 h para 24 h para casar com "fora da rede vale 1 dia"; o token longo dura 365 dias e é derrubado por sair, trocar a senha, remover a rede, desativar a pessoa ou mudar o papel.
+- **Decidi:** a digital condicional (campo de usuário) é só um atalho do navegador; a digital continua sem substituir a senha.
+- **Decidi:** o assistente de estética ganhou a etapa Boxes (nome livre, padrão "Box 1"); o `concluir` ainda cria 1 box por profissional se o dono pular, para nunca deixar a loja sem box. Sem box ativo: Atender, Link Agenda e página do cliente ficam bloqueados; o aviso só leva ao cadastro se a pessoa for o proprietário.
+
+## v121 (30/10): campos opcionais, inclusive veículo
+- **Decidi:** no painel (Atender) nada é obrigatório de fábrica, inclusive veículo/placa/modelo/porte na estética; no link do cliente de fábrica nome, telefone, placa, modelo e porte continuam obrigatórios (cliente anônimo), e o dono desmarca o que quiser.
+- **Decidi:** veículo incompleto vale só como "foto" do atendimento; só placa + modelo cadastram o veículo no cliente; sem porte vale o médio. Placa informada é sempre conferida.
+- **Decidi:** nome opcional no link sem nome digitado = "Sem nome"; nome de uma letra continua recusado.
+- **Dúvida:** o atendimento sem veículo na estética usa o preço do porte médio; talvez o dono prefira exigir o porte (ele marca em Regras).
+
+## v122 (30/10): portes de veículo cadastráveis
+- **Decidi:** o Médio é fixo (nome editável, nunca sai nem desativa): é o porte de quem não informa e a base do preço.
+- **Decidi:** porte novo sem preço no serviço usa o preço e a duração do Médio, em vez de bloquear a gravação do serviço.
+- **Decidi:** porte usado (veículo de cliente ou agendamento) só desativa; desativar com agendamento futuro ativo é recusado.
+- ~~Dúvida:~~ preço do porte novo por serviço: **resolvida na v124** (seção "Preço específico por porte" no serviço).
+
+## v123 (30/10): ordem dos serviços
+- **Decidi:** padrão "mais usados primeiro" em toda loja; a ordem manual (setas) é o desempate e vale integral no modo "minha ordem".
+- **Decidi:** a contagem de uso é calculada na hora a partir dos agendamentos não cancelados (nunca guardada, nunca mostrada ao cliente).
+- **Decidi:** a lista de Serviços sempre mostra a ordem manual; "mais usados" só vale onde se escolhe serviço (Atender, agendamento, link).
+- ~~Dúvida:~~ janela de 90 dias: **aprovada pelo Marcelo e feita na v124**.
+
+## v124 (30/10): preço = base × fator do porte, preço específico e janela de 90 dias
+- **Decidi:** o preço que já estava gravado em cada porte vira **preço específico** (nada muda de valor sozinho); só quem não tem valor num porte passa a usar base × fator.
+- **Decidi:** fatores de fábrica: Pequeno 0,9 · Médio 1 · Grande 1,2 · SUV 1,3 · Pickup 1,4; porte novo nasce com 1; faixa 0,10 a 10 com duas casas; Médio fixo em 1.
+- **Decidi:** a **duração** não usa fator (é a base); tempo específico por porte continua opcional no serviço.
+- **Decidi:** preço específico 0 vale (porte grátis); campo em branco = usa o fator.
+- **Decidi:** a prévia no porte lista até 6 serviços ativos e comuns (combo fica de fora) e pesquisa por nome sem acento; mostra "preço específico" quando o serviço tem valor próprio no porte.
+- **Decidi:** os 90 dias contam do início do agendamento (o futuro também conta), iguais no Artifact e no servidor.
+- **Corrigi (sem relação):** teste de fila de avaliações usava data UTC e falhava depois das 21h (horário de Brasília).
+
+## v125 (31/10): aparelho confiável (login automático no celular)
+- **Decidi:** o token do aparelho é assinado e a tabela só guarda "ainda vale" (id, pessoa, nome, datas): sem hash de segredo no banco.
+- **Decidi:** Sair e trocar a senha **apagam** o aparelho (mais forte que subir versão): o próximo login pergunta de novo.
+- **Decidi:** sem uso por 90 dias o aparelho deixa de valer (cumpre o "renovado só com uso"); o prazo máximo do token é 365 dias.
+- **Decidi:** a pergunta continua atrás da caixa "Login automático"; no celular a sugestão é o aparelho, no computador a rede.
+- **Decidi:** o nome do aparelho vem do navegador (ex.: "Celular Android · Chrome"); para mudar, remove e inclui de novo.
+- **Corrigi (brecha antiga da v120):** senha refeita pelo proprietário, pelo Admin ou pelo suporte não derrubava a rede confiável; agora derruba a rede e os aparelhos.
+- **Adiado:** pedir a senha de novo em ação sensível do proprietário quando a sessão é de aparelho; faço junto do B6 (proprietário), com a sua aprovação.
+- **Confirmado pelo Marcelo:** DNS coringa `*.agendz.io` já existe.
+
+## v126 (31/10): link do cliente na demonstração leva a loja em `?loja=` e no `#`
+- **Relato:** link gerado pelo Artifact da Dalforno (`…frame.claudeusercontent.com/_f/…/#agendar@dalforno`) abria a Apex ao clicar. Não reproduzi: abrindo o mesmo tipo de endereço (origem http, caminho e `#agendar@loja`), a loja certa abre, com ou sem loja salva no navegador e também na troca de hash com a página já aberta. O navegador do app recusou abrir o link real do quadro.
+- **Hipótese:** o fragmento (`#`) se perde no caminho (redirecionamento ou quadro do claude.ai) e a página cai na loja padrão.
+- **Decisão sem confirmação:** reforçar com `?loja=<slug>` além do `#…@<slug>`; a Apex só aparece se nenhum dos dois chegar. **Em aberto:** se ainda abrir a Apex, preciso saber se o endereço aberto no navegador ainda tem `?loja=` e `#` (copie a barra de endereços da aba aberta).
+
+## v127 (31/10): Avaliações no servidor e no site real
+- Estrela do cartão fica num `div.cartao-bloco` (relativo) para ficar no canto do cartão mesmo com o painel aberto.
+- Pedir avaliação no site real tem dois toques (Preparar chama o servidor; Abrir no WhatsApp abre a aba sem `await` antes).
+- A fila em lote mora dentro de Avaliações no site real (lá não existe a tela Mensagens).
+- Admin: a chave de anônimo só vai à loja quando vem no corpo; Admin antigo nunca a desliga sem querer.
+- Dúvida: `semMensagens` (cliente não quer mensagens) ainda não tem campo na ficha do cliente real; entra numa próxima.

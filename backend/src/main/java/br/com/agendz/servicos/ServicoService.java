@@ -1,5 +1,6 @@
 package br.com.agendz.servicos;
 
+import br.com.agendz.configuracao.PorteController;
 import br.com.agendz.erro.ErroDeNegocio;
 import br.com.agendz.tenant.Loja;
 import br.com.agendz.tenant.LojaContext;
@@ -32,8 +33,6 @@ import org.springframework.stereotype.Service;
 @Service
 public class ServicoService {
 
-    static final List<String> PORTES = List.of("pequeno", "medio", "grande", "suv", "pickup");
-    private static final Map<String, String> ROTULO_PORTE = Map.of("pequeno", "Pequeno", "medio", "Médio", "grande", "Grande", "suv", "SUV", "pickup", "Pickup");
     private static final BigDecimal TETO_PRECO = new BigDecimal("100000");
     private static final int DURACAO_DIA = 1440, DURACAO_MULTIDIA = 14400;
     private static final String MSG_DURACAO = "A duração precisa ser maior que zero e de no máximo 24 horas.";
@@ -74,13 +73,29 @@ public class ServicoService {
 
     // ---------- leitura ----------
 
-    public List<Servico> listar(boolean dono) {
+    /** Lista de Serviços (ordem manual do dono; sem ordem, por nome). `paraAtender`: ordem do Atender, pelo modo da loja (mais usados primeiro ou manual). */
+    public List<Servico> listar(boolean dono, boolean paraAtender) {
         return banco.naLoja(jdbc -> {
-            List<Servico> lista = jdbc.query("select " + COLUNAS + " from servico" + (dono ? "" : " where ativo") + " order by lower(nome), id limit 500", (rs, i) -> linha(rs));
+            String ordem = paraAtender ? OrdemDosServicos.sql(jdbc) : OrdemDosServicos.MANUAL;
+            List<Servico> lista = jdbc.query("select " + COLUNAS + " from servico" + (dono ? "" : " where ativo") + " order by " + ordem + " limit 500", (rs, i) -> linha(rs));
             Map<UUID, List<UUID>> comps = componentesDaLoja(jdbc);
             List<Servico> saida = new ArrayList<>();
             for (Servico s : lista) saida.add(comComponentes(s, comps.getOrDefault(s.id(), List.of())));
             return saida;
+        });
+    }
+
+    /** PUT /api/servicos/ordem — nova ordem manual a partir da lista de ids (desconhecidos e repetidos são ignorados; os que faltam vão depois, na ordem de antes). */
+    public void reordenar(List<UUID> ids) {
+        if (ids == null || ids.size() > 300 || ids.stream().anyMatch(java.util.Objects::isNull)) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Ordem dos serviços inválida.");
+        banco.naLoja(jdbc -> {
+            List<UUID> atuais = jdbc.queryForList("select id from servico order by " + OrdemDosServicos.MANUAL, UUID.class);
+            java.util.LinkedHashSet<UUID> fila = new java.util.LinkedHashSet<>();
+            for (UUID id : ids) if (atuais.contains(id)) fila.add(id);
+            fila.addAll(atuais);
+            int n = 1;
+            for (UUID id : fila) jdbc.update("update servico set ordem = ? where id = ?", n++, id);
+            return null;
         });
     }
 
@@ -99,8 +114,8 @@ public class ServicoService {
             return banco.naLoja(jdbc -> {
                 String codigo = codigoFinal(jdbc, v.codigo, null);
                 UUID id = jdbc.queryForObject(
-                        "insert into servico (loja_id, codigo, nome, categoria, preco, duracao_min, intervalo_min, antecedencia_h, multi_dia, combo, comissao_pct, ativo, precos, duracoes) "
-                                + "values (?::uuid, ?, ?, nullif(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, cast(? as jsonb), cast(? as jsonb)) returning id",
+                        "insert into servico (loja_id, codigo, nome, categoria, preco, duracao_min, intervalo_min, antecedencia_h, multi_dia, combo, comissao_pct, ativo, precos, duracoes, ordem) "
+                                + "values (?::uuid, ?, ?, nullif(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, cast(? as jsonb), cast(? as jsonb), (select coalesce(max(ordem), 0) + 1 from servico)) returning id",
                         UUID.class, loja.id().toString(), codigo, v.nome, v.categoria, v.preco, v.duracao, v.intervalo == null ? 0 : v.intervalo, v.antecedencia == null ? 0 : v.antecedencia,
                         v.multiDia != null && v.multiDia, v.combo != null && v.combo, v.comissao, v.ativo == null || v.ativo, v.precosJson, v.duracoesJson);
                 conferirComponentes(jdbc, id, v);
@@ -201,8 +216,9 @@ public class ServicoService {
         // Edição sem o campo "vários dias": o teto certo depende do que já está gravado e é conferido em alterar().
         boolean generoso = multi || (edicao && d.multiDia() == null);
         int limite = generoso ? DURACAO_MULTIDIA : DURACAO_DIA;
-        Map<String, BigDecimal> tp = porPorte ? tabelaPrecos(d.precos(), d.preco()) : null;
-        Map<String, Integer> td = porPorte ? tabelaDuracoes(d.duracoes(), d.duracaoMin(), limite, multi) : null;
+        List<PorteController.Porte> portes = porPorte ? banco.naLoja(PorteController::ler) : List.of();
+        Map<String, BigDecimal> tp = porPorte ? tabelaPrecos(portes, d.precos(), d.preco()) : null;
+        Map<String, Integer> td = porPorte ? tabelaDuracoes(portes, d.duracoes(), d.duracaoMin(), limite, multi) : null;
         if (!porPorte) {
             if (d.preco() == null) throw ruim("Informe o preço.");
             if (d.duracaoMin() == null) throw ruim("Informe a duração.");
@@ -244,35 +260,52 @@ public class ServicoService {
         if (v.duracaoMapa != null) for (Integer x : v.duracaoMapa.values()) if (x > DURACAO_DIA) throw ruim(MSG_DURACAO);
     }
 
-    private static Map<String, BigDecimal> tabelaPrecos(Map<String, BigDecimal> bruto, BigDecimal unico) {
+    /** v124: só o Médio (preço base) é obrigatório; os demais portes valem base × fator, a não ser que o dono tenha definido o preço específico (guardado aqui). */
+    private static Map<String, BigDecimal> tabelaPrecos(List<PorteController.Porte> portes, Map<String, BigDecimal> bruto, BigDecimal unico) {
         Map<String, BigDecimal> v = new LinkedHashMap<>();
         if (bruto == null) {
             if (unico == null) throw ruim("Informe o preço.");
-            for (String p : PORTES) v.put(p, unico);
+            v.put(PorteController.PADRAO, unico);
             return v;
         }
-        if (!PORTES.containsAll(bruto.keySet())) throw ruim("Tabela de preços inválida.");
-        for (String p : PORTES) {
-            BigDecimal x = bruto.get(p);
-            if (x == null || x.signum() < 0 || x.compareTo(TETO_PRECO) > 0) throw ruim("Informe o preço para o porte " + ROTULO_PORTE.get(p) + ".");
-            v.put(p, x);
+        if (bruto.get(PorteController.PADRAO) == null && unico != null) {
+            bruto = new LinkedHashMap<>(bruto);
+            bruto.put(PorteController.PADRAO, unico);
+        }
+        java.util.Set<String> conhecidos = new java.util.HashSet<>();
+        for (PorteController.Porte p : portes) conhecidos.add(p.id());
+        if (!conhecidos.containsAll(bruto.keySet())) throw ruim("Tabela de preços inválida.");
+        java.util.Set<String> obrigatorios = PorteController.obrigatoriosNoServico(portes);
+        for (PorteController.Porte p : portes) {
+            BigDecimal x = bruto.get(p.id());
+            if (x == null && !obrigatorios.contains(p.id())) continue;
+            if (x == null || x.signum() < 0 || x.compareTo(TETO_PRECO) > 0) throw ruim("Informe o preço para o porte " + p.nome() + ".");
+            v.put(p.id(), x);
         }
         return v;
     }
 
-    private static Map<String, Integer> tabelaDuracoes(Map<String, Integer> bruto, Integer unico, int limite, boolean multi) {
+    private static Map<String, Integer> tabelaDuracoes(List<PorteController.Porte> portes, Map<String, Integer> bruto, Integer unico, int limite, boolean multi) {
         Map<String, Integer> v = new LinkedHashMap<>();
         if (bruto == null) {
             if (unico == null) throw ruim("Informe a duração.");
-            for (String p : PORTES) v.put(p, unico);
+            v.put(PorteController.PADRAO, unico);
             return v;
         }
+        if (bruto.get(PorteController.PADRAO) == null && unico != null) {
+            bruto = new LinkedHashMap<>(bruto);
+            bruto.put(PorteController.PADRAO, unico);
+        }
         String sufixo = multi ? "" : " " + MSG_DURACAO;
-        if (!PORTES.containsAll(bruto.keySet())) throw ruim("Tabela de durações inválida." + sufixo);
-        for (String p : PORTES) {
-            Integer x = bruto.get(p);
-            if (x == null || x <= 0 || x > limite) throw ruim("Informe a duração para o porte " + ROTULO_PORTE.get(p) + "." + sufixo);
-            v.put(p, x);
+        java.util.Set<String> conhecidos = new java.util.HashSet<>();
+        for (PorteController.Porte p : portes) conhecidos.add(p.id());
+        if (!conhecidos.containsAll(bruto.keySet())) throw ruim("Tabela de durações inválida." + sufixo);
+        java.util.Set<String> obrigatorios = PorteController.obrigatoriosNoServico(portes);
+        for (PorteController.Porte p : portes) {
+            Integer x = bruto.get(p.id());
+            if (x == null && !obrigatorios.contains(p.id())) continue;
+            if (x == null || x <= 0 || x > limite) throw ruim("Informe a duração para o porte " + p.nome() + "." + sufixo);
+            v.put(p.id(), x);
         }
         return v;
     }

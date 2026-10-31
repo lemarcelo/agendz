@@ -13,6 +13,7 @@ import br.com.agendz.produtos.ProdutoService;
 import br.com.agendz.tenant.Loja;
 import br.com.agendz.tenant.LojaContext;
 import br.com.agendz.tenant.LojaJdbc;
+import br.com.agendz.configuracao.BoxController;
 import br.com.agendz.validacao.Texto;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -61,7 +62,7 @@ public class OnboardingController {
 
 
     public record Estado(String tipo, String passo, boolean concluido, List<Item> servicos, List<String> jaCadastrados, Escala expedienteSugerido, Escala expediente,
-                         BigDecimal comissaoPadrao, List<String> produtosCadastrados) {
+                         BigDecimal comissaoPadrao, List<String> produtosCadastrados, boolean usaBox, List<String> boxes) {
     }
 
     public record ItemEscolhido(
@@ -110,6 +111,9 @@ public class OnboardingController {
     }
 
     /** `semana` ausente ou sem nenhum dia aberto = pular (nada é gravado). */
+    public record CorpoBoxes(@Size(max = 20) List<@Size(max = 200) String> nomes) {
+    }
+
     public record Expediente(Map<Integer, @Valid Dia> semana) {
     }
 
@@ -123,9 +127,11 @@ public class OnboardingController {
     private final EscalaService escalas;
     private final ReconfiguracaoService reconfiguracoes;
     private final ProdutoService produtosDaLoja;
+    private final br.com.agendz.interno.RegrasDaLoja regras;
 
     public OnboardingController(LojaJdbc banco, CatalogoDeServicos catalogos, PasswordEncoder encoder, ObjectMapper json, EscalaService escalas, ReconfiguracaoService reconfiguracoes,
-                                ProdutoService produtosDaLoja) {
+                                ProdutoService produtosDaLoja, br.com.agendz.interno.RegrasDaLoja regras) {
+        this.regras = regras;
         this.reconfiguracoes = reconfiguracoes;
         this.produtosDaLoja = produtosDaLoja;
         this.banco = banco;
@@ -144,8 +150,10 @@ public class OnboardingController {
         List<String> ja = c.servicos().stream().filter((s) -> nomes.contains(s.nome().toLowerCase(Locale.ROOT))).map(Item::chave).toList();
         Map<Integer, List<Faixa>> atual = banco.naLoja((jdbc) -> escalas.ler(jdbc, null));
         List<String> produtos = banco.naLoja(jdbc -> jdbc.queryForList("select nome from material where tipo = 'produto' and ativo order by lower(nome) limit 200", String.class));
+        boolean usaBox = br.com.agendz.tenant.Capacidades.usaRecursoFisico(loja);
+        List<String> boxesAtivos = usaBox ? banco.naLoja(jdbc -> jdbc.queryForList("select nome from box where ativo order by ordem, criado_em, id", String.class)) : List.of();
         return new Estado(loja.tipo(), l.passo(), l.concluido(), c.servicos(), ja, c.expediente(), EscalaService.temFaixa(atual) ? EscalaService.paraJson(atual) : null,
-                ComissaoGeralController.efetiva(banco), produtos);
+                ComissaoGeralController.efetiva(banco), produtos, usaBox, boxesAtivos);
     }
 
     @PostMapping("/api/onboarding/servicos")
@@ -225,8 +233,10 @@ public class OnboardingController {
         List<PessoaCriada> criadas = banco.naLoja(jdbc -> {
             UUID reconf = reconfiguracoes.autorizada(jdbc, quem);
             Set<String> logins = new HashSet<>(jdbc.queryForList("select identificador from usuario", String.class));
+            Integer ativos = jdbc.queryForObject("select count(*) from usuario where ativo and " + br.com.agendz.validacao.Reservados.OCULTOS_SQL, Integer.class);
             List<PessoaCriada> saida = new ArrayList<>();
             for (NovaPessoa p : corpo.pessoas()) {
+                regras.exigirVagaDeUsuario(loja.id(), (ativos == null ? 0 : ativos) + saida.size()); // limite de usuários da plataforma (Admin): o assistente não passa por cima
                 String nome = Texto.limpar(p.nome());
                 if (nome.isEmpty()) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe o nome");
                 br.com.agendz.validacao.Reservados.exigirLivre(nome);
@@ -292,6 +302,43 @@ public class OnboardingController {
         return new Resultado(contagem[0], contagem[1]);
     }
 
+    /**
+     * Boxes da estética (v120): sem box a agenda não aceita carro e o link do cliente fica sem horários. Aditivo: nome que já existe (sem diferenciar maiúsculas) não é
+     * recriado e nada é removido ou desativado; de 1 a 20 no total, respeitando o limite de agendas do Admin. Lista vazia só vale se a loja já tem box.
+     * | POST /api/onboarding/boxes | { nomes: ["Box 1", ...] } → { criados, jaExistiam }
+     */
+    @PostMapping("/api/onboarding/boxes")
+    public Resultado boxes(@Valid @RequestBody CorpoBoxes corpo, @AuthenticationPrincipal Jwt jwt) {
+        Loja loja = LojaContext.exigir();
+        linha();
+        UUID quem = UUID.fromString(jwt.getSubject());
+        if (!br.com.agendz.tenant.Capacidades.usaRecursoFisico(loja)) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Este tipo de estabelecimento não usa box.");
+        Map<String, String> nomes = new LinkedHashMap<>();
+        for (String bruto : corpo.nomes() == null ? List.<String>of() : corpo.nomes()) {
+            String n = bruto == null ? "" : Texto.limpar(bruto).trim().replaceAll("\\s+", " ");
+            if (n.isEmpty() || n.length() > 30) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Cada box precisa de um nome de até 30 letras.");
+            if (nomes.putIfAbsent(n.toLowerCase(Locale.ROOT), n) != null) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Dois boxes têm o mesmo nome.");
+        }
+        int[] contagem = banco.naLoja(jdbc -> {
+            reconfiguracoes.autorizada(jdbc, quem); // depois de concluído, só dentro de uma reconfiguração autorizada pela senha (v85)
+            List<String> atuais = jdbc.queryForList("select lower(nome) from box", String.class);
+            Integer ativos = jdbc.queryForObject("select count(*) from box where ativo", Integer.class);
+            int novos = 0;
+            int ja = 0;
+            for (String chave : nomes.keySet()) if (atuais.contains(chave)) ja++; else novos++;
+            if (atuais.isEmpty() && novos == 0) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe ao menos um box.");
+            if (atuais.size() + novos > BoxController.MAXIMO) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "No máximo " + BoxController.MAXIMO + " boxes.");
+            if (novos > 0) regras.exigirAgendas(loja.id(), (ativos == null ? 0 : ativos) + novos);
+            int ordem = atuais.size();
+            for (Map.Entry<String, String> e : nomes.entrySet()) {
+                if (atuais.contains(e.getKey())) continue;
+                jdbc.update("insert into box (loja_id, nome, ordem) values (?::uuid, ?, ?)", loja.id().toString(), e.getValue(), ordem++);
+            }
+            return new int[]{novos, ja};
+        });
+        return new Resultado(contagem[0], contagem[1]);
+    }
+
     @PostMapping("/api/onboarding/expediente")
     public Resultado expediente(@Valid @RequestBody Expediente corpo, @AuthenticationPrincipal Jwt jwt) {
         Loja loja = LojaContext.exigir();
@@ -322,12 +369,14 @@ public class OnboardingController {
                 if (boxes != null && boxes == 0) {
                     Integer atendem = jdbc.queryForObject("select count(*) from usuario where ativo and atende", Integer.class);
                     int n = Math.max(1, Math.min(20, atendem == null ? 1 : atendem));
+                    Integer limite = regras.ler(loja.id()).limiteAgendas(); // limite de agendas da plataforma (Admin): cria só as que cabem (nunca menos de 1)
+                    if (limite != null) n = Math.max(1, Math.min(n, limite));
                     for (int i = 1; i <= n; i++) jdbc.update("insert into box (loja_id, nome, ordem) values (?::uuid, ?, ?)", loja.id().toString(), "Box " + i, i - 1);
                 }
             }
             return jdbc.update("update onboarding set passo = 'pronto', concluido_em = coalesce(concluido_em, now()), atualizado_em = now()");
         });
-        return new Estado(loja.tipo(), "pronto", true, List.of(), List.of(), null, null, null, List.of());
+        return new Estado(loja.tipo(), "pronto", true, List.of(), List.of(), null, null, null, List.of(), false, List.of());
     }
 
     private Linha linha() {

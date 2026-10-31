@@ -16,7 +16,8 @@ const jpeg = () => b64(Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x
 const webp = () => b64(Buffer.from('RIFF\0\0\0\0WEBPVP8 abcdefgh', 'latin1'));
 const svg = () => b64(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'));
 const base = { assunto: 'Veja o erro', categoria: 'problema', texto: 'Segue o print.' };
-test.beforeEach(() => reiniciar());
+// v119: de fábrica só o proprietário abre chamados; estes testes liberam a seção Suporte para os profissionais e a atendente (a regra padrão tem teste próprio).
+test.beforeEach(() => { reiniciar(); for (const u of store.getState().usuarios) if (u.papel !== 'dono') u.permissoes = { ...(u.permissoes || {}), suporte: true }; });
 
 test('o tipo vem dos primeiros bytes: PNG, JPEG e WebP passam; SVG, GIF, HTML, PDF e vazio não', () => {
   assert.equal(tipoPorConteudo(Buffer.from(png(), 'base64')), 'image/png');

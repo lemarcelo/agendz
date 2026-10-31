@@ -3,7 +3,7 @@
 // mas NADA é gravado (nem na loja de exemplo). Os serviços de exemplo vêm da loja atual (domain/catalogo.js). Só roda em MODO_DEMO.
 import { store } from './api.js';
 import { catalogoDoTipo, expedienteDeEstado } from '../domain/catalogo.js';
-import { tipoDe } from '../domain/tipos.js';
+import { cap, tipoDe } from '../domain/tipos.js';
 import { criarEstadoInicial } from '../tipos/estetica_automotiva/seed.js';
 import { criarEstadoBarbearia } from '../tipos/barbearia/seed.js';
 
@@ -35,6 +35,7 @@ export function criarAdaptadorDemo({ reconfigurar = false } = {}) {
   const feitos = new Set(reconfigurar ? catalogo().filter((x) => nomesDaLoja().has(x.nome.toLowerCase())).map((x) => x.chave) : []);
   const nomesProdutos = () => new Set((atual().materiais || []).filter((m) => m.tipo === 'produto' && m.ativo !== false).map((m) => String(m.nome).toLowerCase()));
   const feitosProd = new Set(); let comissao = null; // pré-visualização: o que foi "criado" nesta página
+  const boxesFeitos = new Set(reconfigurar ? (atual().estabelecimento?.boxes || []).filter((b) => b && b.ativo !== false).map((b) => String(b.nome).toLowerCase()) : []); // nomes (minúsculos) dos boxes; nada é gravado
   const usados = new Set(); let expediente = reconfigurar ? expedienteDeEstado(atual()) : null;
   // Histórico só em memória (pré-visualização: nada é gravado). Em pré-visualização qualquer senha preenchida vale.
   let abertaId = null;
@@ -60,7 +61,8 @@ export function criarAdaptadorDemo({ reconfigurar = false } = {}) {
       const pc = Number(atual().estabelecimento?.comissaoPadrao);
       const geral = comissao ?? (reconfigurar && Number.isFinite(pc) ? pc : 50);
       return { ok: true, estado: { tipo: tipoDe(store.getState().estabelecimento), passo, concluido, servicos: catalogo(), jaCadastrados: [...feitos], expedienteSugerido: expedienteDeEstado(store.getState()), expediente,
-        comissaoPadrao: geral, produtosCadastrados: [...(reconfigurar ? [...nomesProdutos()] : []), ...feitosProd] } };
+        comissaoPadrao: geral, produtosCadastrados: [...(reconfigurar ? [...nomesProdutos()] : []), ...feitosProd],
+        usaBox: cap(store.getState().estabelecimento, 'usaRecursoFisico'), boxes: [...boxesFeitos] } };
     },
     async produtos(itens) {
       if (!Array.isArray(itens) || itens.length > 30) return { ok: false, erro: 'No máximo 30 produtos por vez' };
@@ -110,6 +112,17 @@ export function criarAdaptadorDemo({ reconfigurar = false } = {}) {
       passo = 'expediente';
       if (reconfigurar && saida.length) nova().pessoasCriadas += saida.length;
       return { ok: true, pessoas: saida };
+    },
+    async boxes(nomes) {
+      if (!Array.isArray(nomes) || nomes.length > 20) return { ok: false, erro: 'No máximo 20 boxes.' };
+      let criados = 0; let jaExistiam = 0;
+      for (const n of nomes) {
+        const nome = String(n || '').trim().replace(/\s+/g, ' ');
+        if (!nome || nome.length > 30) return { ok: false, erro: 'Cada box precisa de um nome de até 30 letras.' };
+        if (boxesFeitos.has(nome.toLowerCase())) jaExistiam++; else { boxesFeitos.add(nome.toLowerCase()); criados++; }
+      }
+      passo = 'expediente';
+      return { ok: true, resultado: { criados, jaExistiam } };
     },
     async expediente(semana) {
       const abertos = Object.values(semana || {}).filter((d) => d && d.aberto);

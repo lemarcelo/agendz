@@ -112,10 +112,17 @@ test('cancelar: o token vai no cabeçalho X-Acesso; id ou token ruim nem sai', a
   assert.equal((await publico.cancelar(AG, TOKEN)).erro, 'Esse horário não pode mais ser cancelado por aqui (faltam menos de 24 horas). Fale com a loja.');
 });
 
+test('linkAgendamento: pendências (o que falta para o cliente ver horários) só entram como texto curto, no máximo 5', async () => {
+  servidor({ ativo: true, diasMax: 30, disponivel: true, pendencias: ['Nenhum box ativo.', '', 7, null, { a: 1 }, 'x'.repeat(400), 'c', 'd', 'e', 'f'] });
+  const r = await linkAgendamento.obter();
+  assert.equal(r.link.pendencias.length, 5); assert.equal(r.link.pendencias[0], 'Nenhum box ativo.'); assert.ok(r.link.pendencias.every((x) => typeof x === 'string' && x.length <= 300));
+  servidor({ ativo: true, diasMax: 30, disponivel: true, pendencias: 'texto solto' });
+  assert.deepEqual((await linkAgendamento.obter()).link.pendencias, []);
+});
 test('linkAgendamento: GET e PUT do proprietário; dias fora de 1 a 60 nem saem', async () => {
   servidor({ ativo: false, diasMax: 14, disponivel: false });
   const r = await linkAgendamento.obter();
-  assert.deepEqual(r.link, { ativo: false, diasMax: 14, disponivel: false, telefoneObrigatorio: true }, 'telefone obrigatório de fábrica');
+  assert.deepEqual(r.link, { ativo: false, diasMax: 14, disponivel: false, telefoneObrigatorio: true, nomeObrigatorio: true, veiculoObrigatorio: ['placa', 'modelo', 'porte'], pendencias: [] }, 'telefone, nome e dados do veículo obrigatórios de fábrica');
   assert.deepEqual([chamadas[0].metodo, chamadas[0].url], ['GET', 'https://loja.teste/api/estabelecimento/link-agendamento']);
   servidor({ ativo: true, diasMax: 20, disponivel: true });
   const g = await linkAgendamento.gravar({ ativo: true, diasMax: 20 });
@@ -126,6 +133,17 @@ test('linkAgendamento: GET e PUT do proprietário; dias fora de 1 a 60 nem saem'
   assert.equal(t.link.telefoneObrigatorio, false); assert.deepEqual(chamadas[0].corpo, { telefoneObrigatorio: false });
   servidor({});
   for (const ruim of [0, 61, 1.5, '30', null]) assert.equal((await linkAgendamento.gravar({ diasMax: ruim })).ok, false);
+  assert.equal(chamadas.length, 0);
+});
+
+test('linkAgendamento: nome e dados do veículo opcionais saem no PUT; lista fora do conjunto nem sai', async () => {
+  servidor({ ativo: true, diasMax: 20, disponivel: true, nomeObrigatorio: false, veiculoObrigatorio: [] });
+  const g = await linkAgendamento.gravar({ nomeObrigatorio: false, veiculoObrigatorio: [] });
+  assert.equal(g.ok, true);
+  assert.deepEqual(chamadas[0].corpo, { nomeObrigatorio: false, veiculoObrigatorio: [] });
+  assert.equal(g.link.nomeObrigatorio, false); assert.deepEqual(g.link.veiculoObrigatorio, []);
+  servidor({});
+  for (const ruim of [{ nomeObrigatorio: 'nao' }, { veiculoObrigatorio: ['cor'] }, { veiculoObrigatorio: 'placa' }, { veiculoObrigatorio: ['placa', 'placa'] }]) assert.equal((await linkAgendamento.gravar(ruim)).ok, false);
   assert.equal(chamadas.length, 0);
 });
 
@@ -170,11 +188,14 @@ test('avisos do painel: lista com limite e leitura defensiva; marcar como lido p
 });
 
 test('estética (v104): portes e tabelas por porte lidos com defesa; porte na consulta; veículo no corpo do pedido', async () => {
-  servidor({ ativo: true, tipo: 'estetica_automotiva', portes: [{ id: 'pequeno', nome: 'Pequeno' }, { id: 'lixo', nome: 'x' }, { id: 'suv', nome: 'SUV' }],
-    servicos: [{ id: SRV, nome: 'Lavagem', duracao: 60, preco: 80, precos: { pequeno: 80, suv: 120, gigante: 1, medio: -5 }, duracoes: { pequeno: 60, suv: 90, grande: 'x' } }], profissionais: [] });
+  servidor({ ativo: true, tipo: 'estetica_automotiva', portes: [{ id: 'pequeno', nome: 'Pequeno' }, { id: 'Lixo!', nome: 'x' }, { id: 'suv', nome: 'SUV' }],
+    servicos: [{ id: SRV, nome: 'Lavagem', duracao: 60, preco: 80, precos: { pequeno: 80, suv: 120, 'GIGANTE!': 1, medio: -5 }, duracoes: { pequeno: 60, suv: 90, grande: 'x' } }], profissionais: [] });
   const p = (await publico.pagina()).pagina;
   assert.equal(p.tipo, 'estetica_automotiva'); assert.deepEqual(p.portes.map((x) => x.id), ['pequeno', 'suv']);
   assert.deepEqual(p.servicos[0].precos, { pequeno: 80, suv: 120 }); assert.deepEqual(p.servicos[0].duracoes, { pequeno: 60, suv: 90 });
+  servidor({ ativo: true, tipo: 'estetica_automotiva', portes: [{ id: 'medio', nome: 'Médio', exemplo: 'Ex.: Onix' }, { id: 'pt12', nome: 'Van', exemplo: 'Ex.: Sprinter' }], servicos: [], profissionais: [] });
+  const p2 = (await publico.pagina()).pagina;
+  assert.deepEqual(p2.portes, [{ id: 'medio', nome: 'Médio', exemplo: 'Ex.: Onix' }, { id: 'pt12', nome: 'Van', exemplo: 'Ex.: Sprinter' }], 'porte cadastrado pelo dono chega com id e exemplo');
   servidor(['2026-11-02']);
   await publico.dias({ de: '2026-11-01', dias: 5, servicoIds: [SRV], porte: 'suv' });
   assert.ok(chamadas[0].url.endsWith('&porte=suv'));
