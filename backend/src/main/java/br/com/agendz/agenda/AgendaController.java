@@ -295,6 +295,7 @@ public class AgendaController {
         }
         Ocupacao.Plano plano = ocupacao.planejar(jdbc, profissionalId, inicio, minutos, servicos.get(servicos.size() - 1).intervaloMin(), servicos.stream().anyMatch(ServicoLinha::multiDia));
         List<UUID> pendentes = conferirConflitos(ocupacao.conflitos(jdbc, profissionalId, new UUID(0, 0), plano), encaixe);
+        if (!encaixe) conferirFixoReservado(jdbc, loja, profissionalId, clienteId, plano); // horário fixo de assinante (v128): ninguém mais toma, só encaixe da equipe passa por cima
         UUID boxId = ocupacao.escolherBox(jdbc, loja, plano, boxPedido, null, new UUID(0, 0));
         UUID id = jdbc.queryForObject(
                 "insert into agendamento (loja_id, cliente_id, nome_avulso, profissional_id, inicio, fim_servico, fim_ocupado, status, encaixe, total, box_id, veiculo_id, porte, veiculo_placa, veiculo_marca, veiculo_modelo, veiculo_cor) "
@@ -308,6 +309,70 @@ public class AgendaController {
                 + (vei == null ? "" : " (" + vei.modelo() + " " + vei.placa() + ")") + " em " + dataHora(inicio));
         if (CONFIRMADO.equals(status)) cancelarPendentesQueCobrem(jdbc, loja.id(), profissionalId, id, plano);
         return buscar(jdbc, id, null).comAvisos(CONFIRMADO.equals(status) || pendentes.isEmpty() ? null : pendentes);
+    }
+
+    // ---------------------------------------------------------------- horários fixos de assinante (v128; src/domain/rules.js `fixoReservado`, assinaturas.js)
+
+    /**
+     * Ocupação de um horário fixo numa data (porte do veículo do assinante nos tipos com veículo). `null` = o profissional não atende nesse horário ou os serviços não existem.
+     * Usada pela confirmação do fixo (HorariosFixos) e pela reserva abaixo.
+     */
+    @PreAuthorize("permitAll()") // chamado pela automação (sem login) e por HorariosFixos; não tem rota HTTP, então a trava da classe não se aplica a ele
+    public Ocupacao.Plano planoDoFixo(JdbcTemplate jdbc, Loja loja, UUID profissionalId, Instant inicio, List<UUID> servicoIds, UUID clienteId, UUID veiculoId) {
+        try {
+            ClienteService.VeiculoDoAgendamento vei = clientes.resolverVeiculo(jdbc, loja, clienteId, veiculoId, null, Set.of());
+            List<ServicoLinha> servicos = carregarServicos(jdbc, servicoIds, vei == null ? null : vei.porte());
+            int minutos = 0;
+            for (ServicoLinha s : servicos) minutos += s.duracaoMin();
+            return ocupacao.planejar(jdbc, profissionalId, inicio, minutos, servicos.get(servicos.size() - 1).intervaloMin(), servicos.stream().anyMatch(ServicoLinha::multiDia));
+        } catch (ErroDeNegocio e) {
+            return null;
+        }
+    }
+
+    /**
+     * Quem não é o assinante nunca toma um horário fixo, nem antes de ele virar agendamento (só nasce 14 dias à frente). Fixo que já virou agendamento vale pelo próprio
+     * agendamento (conflito normal); dia em que o fixo foi cancelado fica livre. Só a equipe, marcando encaixe, passa por cima (quem chama só confere com `encaixe` falso).
+     */
+    private void conferirFixoReservado(JdbcTemplate jdbc, Loja loja, UUID profissionalId, UUID clienteId, Ocupacao.Plano plano) {
+        List<Map<String, Object>> fixos = jdbc.queryForList(
+                "select f.id, f.dia, f.hm, f.servicos, f.veiculo_id, a.cliente_id from assinatura_fixo f join assinatura a on a.id = f.assinatura_id "
+                        + "where a.status = 'ativa' and f.profissional_id = ? and a.cliente_id is distinct from ?::uuid", profissionalId, clienteId);
+        if (fixos.isEmpty()) return;
+        Instant agora = relogio.instant();
+        Set<java.time.LocalDate> dias = new HashSet<>();
+        for (Instant[] b : plano.doProfissional()) {
+            dias.add(b[0].atZone(br.com.agendz.escala.Fuso.BRASIL).toLocalDate());
+            dias.add(b[1].atZone(br.com.agendz.escala.Fuso.BRASIL).toLocalDate());
+        }
+        for (Map<String, Object> f : fixos) {
+            int diaSemana = ((Number) f.get("dia")).intValue();
+            for (java.time.LocalDate dia : dias) {
+                if (dia.getDayOfWeek().getValue() % 7 != diaSemana) continue; // domingo = 0
+                Instant t = dia.atTime(java.time.LocalTime.parse((String) f.get("hm"))).atZone(br.com.agendz.escala.Fuso.BRASIL).toInstant();
+                if (!t.isAfter(agora)) continue;
+                Integer feito = jdbc.queryForObject("select count(*) from agendamento where fixo_id = ? and fixo_data = ?", Integer.class, f.get("id"), java.sql.Date.valueOf(dia));
+                if (feito != null && feito > 0) continue;
+                List<UUID> servicoIds = new ArrayList<>();
+                for (String x : ((String) f.get("servicos")).split(",")) servicoIds.add(UUID.fromString(x.trim()));
+                Ocupacao.Plano dele = planoDoFixo(jdbc, loja, profissionalId, t, servicoIds, (UUID) f.get("cliente_id"), (UUID) f.get("veiculo_id"));
+                if (dele == null) continue;
+                for (Instant[] x : dele.doProfissional()) {
+                    for (Instant[] y : plano.doProfissional()) {
+                        if (x[0].isBefore(y[1]) && y[0].isBefore(x[1])) throw new ErroDeNegocio(HttpStatus.CONFLICT, "Esse horário é fixo de um cliente com plano. Escolha outro horário.");
+                    }
+                }
+            }
+        }
+    }
+
+    /** O agendamento de um horário fixo (confirmado, em nome do assinante, gastando 1 atendimento do plano), feito pelo próprio sistema. Recusa = ErroDeNegocio com o motivo. */
+    @PreAuthorize("permitAll()") // idem: só a automação e HorariosFixos chamam, nunca uma rota
+    public Agendamento criarDoFixo(JdbcTemplate jdbc, Loja loja, UUID clienteId, UUID profissionalId, List<UUID> servicoIds, Instant inicio, UUID veiculoId, UUID assinaturaId, UUID fixoId, java.time.LocalDate dia) {
+        Agendamento a = inserirAgendamento(jdbc, loja, null, clienteId, null, profissionalId, servicoIds, inicio, CONFIRMADO, false, veiculoId, null, null, assinaturaId, Set.of());
+        jdbc.update("update agendamento set fixo_id = ?, fixo_data = ? where id = ?", fixoId, java.sql.Date.valueOf(dia), a.id());
+        registrar(jdbc, loja.id(), a.id(), null, "horário fixo", null, "Criado pelo horário fixo do plano");
+        return a;
     }
 
     private void gravarServicos(JdbcTemplate jdbc, Loja loja, UUID agendamentoId, List<ServicoLinha> servicos) {
@@ -597,6 +662,7 @@ public class AgendaController {
             Instant fimServico = plano.fimServico();
             Instant fimOcupado = plano.fimOcupado();
             List<UUID> pendentes = conferirConflitos(ocupacao.conflitos(jdbc, alvo, id, plano), encaixe);
+            if (!encaixe) conferirFixoReservado(jdbc, loja, alvo, jdbc.queryForObject("select cliente_id from agendamento where id = ?", UUID.class, id), plano); // remarcar o próprio fixo não esbarra nele mesmo
             if (!CANCELADO.equals(novoStatus)) planos.conferirNovoHorario(jdbc, id, novoInicio, relogio.instant()); // plano: o mês novo também precisa ter corte
             // sem box pedido o carro continua no mesmo box se estiver livre (senão vai para o primeiro livre)
             UUID box = a.boxId() == null && d.boxId() == null && !usaBox(loja) ? null : ocupacao.escolherBox(jdbc, loja, plano, d.boxId(), a.boxId(), id);

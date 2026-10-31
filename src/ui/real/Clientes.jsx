@@ -9,7 +9,7 @@ import { formatarCpf, formatarTelefone, somenteDigitos } from '../../domain/rule
 import { LIMITE_VEICULOS, ROTULO_PORTE, placaValida, portesParaEscolher, rotuloVeiculo } from '../../domain/veiculos.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
 import { BlocoPlanoReal, FormEscolherPlanoReal } from './PlanoDoCliente.jsx';
-import { FormEncerrar, FormMensalidade } from './Planos.jsx';
+import { FormEncerrar, FormFixosReal, FormMensalidade } from './Planos.jsx';
 
 // 5553999000001 → (53) 99900-0001
 const telNacional = (t) => { const d = somenteDigitos(t); return d.startsWith('55') && d.length >= 12 ? d.slice(2) : d; };
@@ -127,6 +127,7 @@ export default function Clientes({ podePlanos = false, aoIr = null }) {
         </div>
         {planoModo && (planoModo.tipo === 'pagar' ? <FormMensalidade a={planoModo.a} mesInicial={planoModo.mes} aoCancelar={fecharPlano} aoFeito={feito} />
           : planoModo.tipo === 'encerrar' ? <FormEncerrar a={planoModo.a} aoCancelar={fecharPlano} aoFeito={feito} />
+            : planoModo.tipo === 'fixos' ? <FormFixosReal a={planoModo.a} aoCancelar={fecharPlano} aoFeito={feito} />
             : <FormEscolherPlanoReal modo={planoModo} cliente={ficha} aoCancelar={fecharPlano} aoFeito={feito} />)}
       </>
     );
