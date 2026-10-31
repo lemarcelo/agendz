@@ -69,10 +69,11 @@ Regra de uso: toda funcionalidade nova pedida "para outro momento" entra aqui co
 **Dúvidas decididas por mim (avisar):** abandono = visita que passou da abertura e não confirmou em 30 min; "link enviado" conta o uso do botão, não a mensagem entregue.
 **Onde mexe: os dois.** Agendz grava (junto da 5e, link do cliente real) e expõe o agregado; Admin mostra. Depende de **A3** e da **5e**; módulos novos já devem nascer gravando evento (junto do log B2).
 
-## B6. "Dono" vira "proprietário" e pode haver mais de um (pedido de 30/10 23:35 — só registrado, não implementado)
+## B6. "Dono" vira "proprietário" e pode haver mais de um — **CONFIRMADO por escrito em 31/10 08:24; entra na fila depois da Estrela**
 - **Texto:** trocar "dono" por **proprietário** em tudo que o usuário vê (Artifact, site real, Admin); o identificador interno `papel: 'dono'` pode ficar (decidir na hora; mudar o valor mexe em banco, JWT e testes).
-- **Vários proprietários:** hoje o Admin recusa mudar o perfil do proprietário ("a loja precisa ter um proprietário", 409). Passa a valer: pode haver mais de um; o painel deixa promover alguém a proprietário e rebaixar um proprietário **desde que reste ao menos um** (nunca deixar a loja sem proprietário; motivo e linha do tempo). Revisar o que hoje assume "um dono só" (comissão 100% do dono, `ehDono`, assistente de primeiro acesso, recuperação de senha, limite de usuários do Admin).
-- **Junto:** ação "Transferir propriedade" no Admin e, no site real, o proprietário poder nomear outro (com senha de novo).
+- **Vários proprietários:** hoje o Admin recusa mudar o perfil do proprietário ("a loja precisa ter um proprietário", 409). Passa a valer: pode haver mais de um; o painel deixa promover alguém a proprietário e rebaixar um proprietário **desde que reste ao menos um** (nunca deixar a loja sem proprietário; motivo e linha do tempo). Revisar o que hoje assume "um dono só" (comissão 100% do dono, onde o código procura "o" dono, avisos, Admin).
+- **Fora (decidido por Marcelo em 31/10 08:24):** **não precisa** da ação "Transferir propriedade". Basta poder ter mais de um proprietário.
+- **Junto (sobra do B8):** pedir a senha de novo em ação sensível do proprietário.
 
 ## B7. Link do cliente gerado no Artifact abre a loja errada (relato de 30/10 23:14 — investigando)
 - Local (3 lojas) o link sai `#agendar@loja` e abre a loja certa (`tests/e2e34.mjs`). Falta o texto exato do link, a loja de origem e a loja vista pelo cliente; o endereço do Artifact publicado pede login (privado) quando aberto sem sessão.
