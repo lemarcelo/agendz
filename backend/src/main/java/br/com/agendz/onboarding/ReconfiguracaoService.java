@@ -79,6 +79,31 @@ public class ReconfiguracaoService {
         if (reconfiguracao != null) jdbc.update("update reconfiguracao set expediente_trocado = true where id = ?", reconfiguracao);
     }
 
+    /** B9a: guarda a configuração do link de antes (só na primeira troca da sessão) e a nova. */
+    public void anotarLink(JdbcTemplate jdbc, UUID reconfiguracao, br.com.agendz.configuracao.LinkAgendamento.Config antes, br.com.agendz.configuracao.LinkAgendamento.Config depois) {
+        if (reconfiguracao != null) {
+            jdbc.update("update reconfiguracao set link_antes = case when link_trocado then link_antes else cast(? as jsonb) end, link_depois = cast(? as jsonb), link_trocado = true where id = ?",
+                    escrever(antes), escrever(depois), reconfiguracao);
+        }
+    }
+
+    /** Configuração atual do link em JSON (para o "antes" do Refazer). */
+    public String linkAtual(JdbcTemplate jdbc) {
+        return escrever(br.com.agendz.configuracao.LinkAgendamento.ler(jdbc));
+    }
+
+    /** Grava de volta uma configuração do link guardada (passa pela mesma conferência de campos do veículo). */
+    public void restaurarLink(JdbcTemplate jdbc, UUID lojaId, String guardado) {
+        if (guardado == null) return;
+        try {
+            br.com.agendz.configuracao.LinkAgendamento.Config c = json.readValue(guardado, br.com.agendz.configuracao.LinkAgendamento.Config.class);
+            br.com.agendz.configuracao.LinkAgendamento.conferirVeiculo(c.veiculoObrigatorio());
+            br.com.agendz.configuracao.LinkAgendamento.gravarConfig(jdbc, lojaId, c);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
     /** Expediente da loja em JSON (null = loja sem expediente). */
     public String expedienteAtual(JdbcTemplate jdbc) {
         Map<Integer, List<Faixa>> m = escalas.ler(jdbc, null);

@@ -364,6 +364,22 @@ export const onboarding = {
     const r = await chamar('POST', '/api/onboarding/expediente', { semana: semana && typeof semana === 'object' ? semana : {} });
     return r.ok ? { ok: true } : r;
   },
+  // GET /api/estabelecimento/link-agendamento  (B9a: o passo "Link do cliente" mostra o que já vale)
+  async linkObter() { return linkAgendamento.obter(); },
+  // POST /api/onboarding/link  { nomeObrigatorio?, telefoneObrigatorio?, veiculoObrigatorio?: ['placa','modelo','porte'] }  (B9a; depois de concluído só dentro de uma reconfiguração)
+  async link(d) {
+    d = d && typeof d === 'object' ? d : {};
+    const corpo = {};
+    if (d.nomeObrigatorio !== undefined) { if (typeof d.nomeObrigatorio !== 'boolean') return { ok: false, status: 0, erro: 'Valor inválido.' }; corpo.nomeObrigatorio = d.nomeObrigatorio; }
+    if (d.telefoneObrigatorio !== undefined) { if (typeof d.telefoneObrigatorio !== 'boolean') return { ok: false, status: 0, erro: 'Valor inválido.' }; corpo.telefoneObrigatorio = d.telefoneObrigatorio; }
+    if (d.veiculoObrigatorio !== undefined) {
+      const v = d.veiculoObrigatorio;
+      if (!Array.isArray(v) || v.length > 3 || new Set(v).size !== v.length || !v.every((x) => ['placa', 'modelo', 'porte'].includes(x))) return { ok: false, status: 0, erro: 'Dados do veículo inválidos.' };
+      corpo.veiculoObrigatorio = [...v];
+    }
+    const r = await chamar('POST', '/api/onboarding/link', corpo);
+    return r.ok ? { ok: true } : r;
+  },
   // POST /api/onboarding/concluir
   async concluir() { const r = await chamar('POST', '/api/onboarding/concluir', {}); return r.ok ? { ok: true } : r; },
   // Reconfigurar com senha e desfazer (só o dono; o servidor confere tudo). Senha errada é 403 "Senha incorreta"; 5 erros bloqueiam (429).
@@ -378,7 +394,7 @@ export const onboarding = {
 };
 const lerHistorico = (d) => listaDe(d && d.itens, 20).map((i) => ({
   id: texto(i && i.id, 40), criadaEm: texto(i && i.criadaEm, 40), por: texto(i && i.por, 120), servicosCriados: Number(i && i.servicosCriados) || 0, pessoasCriadas: Number(i && i.pessoasCriadas) || 0, produtosCriados: Number(i && i.produtosCriados) || 0,
-  expedienteTrocado: !!(i && i.expedienteTrocado === true), comissaoTrocada: !!(i && i.comissaoTrocada === true), desfeitaEm: i && i.desfeitaEm ? texto(i.desfeitaEm, 40) : '', podeDesfazer: !!(i && i.podeDesfazer === true), podeRefazer: !!(i && i.podeRefazer === true),
+  expedienteTrocado: !!(i && i.expedienteTrocado === true), linkTrocado: !!(i && i.linkTrocado === true), comissaoTrocada: !!(i && i.comissaoTrocada === true), desfeitaEm: i && i.desfeitaEm ? texto(i.desfeitaEm, 40) : '', podeDesfazer: !!(i && i.podeDesfazer === true), podeRefazer: !!(i && i.podeRefazer === true),
 }));
 async function trocarReconfiguracao(id, acao, senha) {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id))) return { ok: false, erro: 'Reconfiguração inválida' };

@@ -72,3 +72,22 @@ test('boxes (v120): manda só os nomes (máx. 20, 30 letras); estado traz usaBox
   servidor({ mensagem: 'O limite de 3 agendas deste estabelecimento foi atingido.' }, 409);
   assert.equal((await onboarding.boxes(['A'])).ok, false);
 });
+
+test('link do cliente (B9a): manda só os campos informados; veículo repetido/desconhecido nem sai; histórico traz linkTrocado', async () => {
+  servidor({ criados: 1, jaExistiam: 0 });
+  assert.deepEqual(await onboarding.link({ nomeObrigatorio: false, telefoneObrigatorio: true, veiculoObrigatorio: ['placa', 'porte'], senha: 'não vai' }), { ok: true });
+  assert.equal(chamadas[0].url, 'https://loja.teste/api/onboarding/link');
+  assert.deepEqual(chamadas[0].corpo, { nomeObrigatorio: false, telefoneObrigatorio: true, veiculoObrigatorio: ['placa', 'porte'] });
+  assert.deepEqual((await onboarding.link({})).ok, true);
+  assert.deepEqual(chamadas[1].corpo, {}, 'sem campos = nada muda');
+  const antes = chamadas.length;
+  for (const mau of [{ nomeObrigatorio: 'sim' }, { telefoneObrigatorio: 1 }, { veiculoObrigatorio: ['placa', 'placa'] }, { veiculoObrigatorio: ['cor'] }, { veiculoObrigatorio: 'placa' }, { veiculoObrigatorio: ['placa', 'modelo', 'porte', 'x'] }]) {
+    assert.equal((await onboarding.link(mau)).ok, false);
+  }
+  assert.equal(chamadas.length, antes, 'nada disso chega à rede');
+  servidor({ itens: [{ id: '00000000-0000-4000-8000-000000000001', criadaEm: '2026-10-28T12:00:00Z', por: 'Alan', servicosCriados: 0, pessoasCriadas: 0, produtosCriados: 0, expedienteTrocado: false, comissaoTrocada: false, linkTrocado: true, podeDesfazer: true, podeRefazer: false }] });
+  const h = await onboarding.historico();
+  assert.equal(h.itens[0].linkTrocado, true);
+  servidor({ itens: [{ id: '00000000-0000-4000-8000-000000000001', criadaEm: '2026-10-28T12:00:00Z', por: 'Alan', linkTrocado: 'sim' }] });
+  assert.equal((await onboarding.historico()).itens[0].linkTrocado, false, 'só true de verdade conta');
+});

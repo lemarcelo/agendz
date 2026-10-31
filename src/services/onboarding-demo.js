@@ -23,7 +23,7 @@ const loginDe = (nome, usados) => {
 // (apagou um serviço? ele volta a aparecer para marcar); o expediente atual é o da loja. Continua sem gravar nada.
 // Histórico da pré-visualização (vive só nesta página). Só a mais recente com mudança se desfaz; refazer só se nada mais novo mudou.
 const HIST = [];
-const mudou = (h) => h.servicosCriados + h.pessoasCriadas + h.produtosCriados > 0 || h.expedienteTrocado || h.comissaoTrocada;
+const mudou = (h) => h.servicosCriados + h.pessoasCriadas + h.produtosCriados > 0 || h.expedienteTrocado || h.comissaoTrocada || h.linkTrocado;
 const visiveis = () => HIST.filter(mudou).map((h, i, l) => ({
   ...h, podeDesfazer: !h.desfeitaEm && !l.slice(0, i).some((n) => !n.desfeitaEm), podeRefazer: !!h.desfeitaEm && i === 0,
 }));
@@ -39,7 +39,8 @@ export function criarAdaptadorDemo({ reconfigurar = false } = {}) {
   const usados = new Set(); let expediente = reconfigurar ? expedienteDeEstado(atual()) : null;
   // Histórico só em memória (pré-visualização: nada é gravado). Em pré-visualização qualquer senha preenchida vale.
   let abertaId = null;
-  const nova = () => { if (!abertaId) { abertaId = 'r-' + (HIST.length + 1); HIST.unshift({ id: abertaId, criadaEm: new Date().toISOString(), por: 'Você', servicosCriados: 0, pessoasCriadas: 0, produtosCriados: 0, expedienteTrocado: false, comissaoTrocada: false, desfeitaEm: '' }); } return HIST.find((h) => h.id === abertaId); };
+  const linkDemo = { telefoneObrigatorio: true, nomeObrigatorio: true, veiculoObrigatorio: ['placa', 'modelo', 'porte'] };
+  const nova = () => { if (!abertaId) { abertaId = 'r-' + (HIST.length + 1); HIST.unshift({ id: abertaId, criadaEm: new Date().toISOString(), por: 'Você', servicosCriados: 0, pessoasCriadas: 0, produtosCriados: 0, expedienteTrocado: false, linkTrocado: false, comissaoTrocada: false, desfeitaEm: '' }); } return HIST.find((h) => h.id === abertaId); };
   return {
     async confirmarSenha(senha) { if (typeof senha !== 'string' || !senha) return { ok: false, erro: 'Senha incorreta' }; abertaId = null; return { ok: true }; },
     async historico() { return { ok: true, itens: visiveis() }; },
@@ -128,6 +129,16 @@ export function criarAdaptadorDemo({ reconfigurar = false } = {}) {
       const abertos = Object.values(semana || {}).filter((d) => d && d.aberto);
       if (abertos.length) { expediente = { semana }; if (reconfigurar) nova().expedienteTrocado = true; }
       passo = 'pronto';
+      return { ok: true };
+    },
+    // B9a: Link do cliente (pré-visualização: guarda só nesta página; o padrão de fábrica do link é exigir tudo)
+    async linkObter() { return { ok: true, link: { ...linkDemo } }; },
+    async link(d) {
+      d = d || {};
+      if (typeof d.nomeObrigatorio === 'boolean') linkDemo.nomeObrigatorio = d.nomeObrigatorio;
+      if (typeof d.telefoneObrigatorio === 'boolean') linkDemo.telefoneObrigatorio = d.telefoneObrigatorio;
+      if (Array.isArray(d.veiculoObrigatorio)) linkDemo.veiculoObrigatorio = d.veiculoObrigatorio.filter((x) => ['placa', 'modelo', 'porte'].includes(x));
+      if (reconfigurar) nova().linkTrocado = true;
       return { ok: true };
     },
     async concluir() { passo = 'pronto'; concluido = true; return { ok: true }; },

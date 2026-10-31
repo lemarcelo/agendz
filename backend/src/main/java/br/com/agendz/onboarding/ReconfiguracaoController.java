@@ -49,7 +49,7 @@ public class ReconfiguracaoController {
     public record Autorizacao(String id, Instant autorizadaAte) {
     }
 
-    public record Item(String id, Instant criadaEm, String por, int servicosCriados, int pessoasCriadas, int produtosCriados, boolean expedienteTrocado, boolean comissaoTrocada,
+    public record Item(String id, Instant criadaEm, String por, int servicosCriados, int pessoasCriadas, int produtosCriados, boolean expedienteTrocado, boolean comissaoTrocada, boolean linkTrocado,
                        Instant desfeitaEm, boolean podeDesfazer, boolean podeRefazer) {
     }
 
@@ -59,7 +59,7 @@ public class ReconfiguracaoController {
     /** O que conta como "esta reconfiguração mudou algo". */
     private static String mudou(String t) {
         return "(jsonb_array_length(" + t + ".servicos_criados) + jsonb_array_length(" + t + ".usuarios_criados) + jsonb_array_length(" + t + ".produtos_criados) > 0 or "
-                + t + ".expediente_trocado or " + t + ".comissao_trocada)";
+                + t + ".expediente_trocado or " + t + ".comissao_trocada or " + t + ".link_trocado)";
     }
 
     private final LojaJdbc banco;
@@ -121,7 +121,7 @@ public class ReconfiguracaoController {
     public Lista listar() {
         List<Item> itens = banco.naLoja(jdbc -> jdbc.query(
                 "select r.id, r.criada_em, u.nome, jsonb_array_length(r.servicos_criados) as sc, jsonb_array_length(r.usuarios_criados) as uc, jsonb_array_length(r.produtos_criados) as pc, "
-                        + "r.expediente_trocado, r.comissao_trocada, r.desfeita_em, "
+                        + "r.expediente_trocado, r.comissao_trocada, r.link_trocado, r.desfeita_em, "
                         + "(select count(*) from reconfiguracao n where n.criada_em > r.criada_em and n.desfeita_em is null and " + mudou("n") + ") as novas_ativas, "
                         + "(select count(*) from reconfiguracao n where n.criada_em > r.criada_em and " + mudou("n") + ") as novas "
                         + "from reconfiguracao r left join usuario u on u.id = r.usuario_id "
@@ -134,7 +134,7 @@ public class ReconfiguracaoController {
                     long ativasNovas = rs.getLong("novas_ativas");
                     long novas = rs.getLong("novas");
                     return new Item(rs.getObject("id", UUID.class).toString(), criada, rs.getString("nome"), rs.getInt("sc"), rs.getInt("uc"), rs.getInt("pc"), rs.getBoolean("expediente_trocado"),
-                            rs.getBoolean("comissao_trocada"), desfeita == null ? null : desfeita.toInstant(), noPrazo && desfeita == null && ativasNovas == 0, noPrazo && desfeita != null && novas == 0);
+                            rs.getBoolean("comissao_trocada"), rs.getBoolean("link_trocado"), desfeita == null ? null : desfeita.toInstant(), noPrazo && desfeita == null && ativasNovas == 0, noPrazo && desfeita != null && novas == 0);
                 }));
         return new Lista(itens);
     }
@@ -159,9 +159,9 @@ public class ReconfiguracaoController {
             List<Item> estado = listar().itens();
             Item item = estado.stream().filter((x) -> x.id().equals(id.toString())).findFirst().orElse(null);
             List<String[]> dados = jdbc.query("select servicos_criados::text, usuarios_criados::text, expediente_antes::text, expediente_depois::text, expediente_trocado, desfeita_em is not null, "
-                            + "produtos_criados::text, comissao_trocada, comissao_antes, comissao_depois from reconfiguracao where id = ?",
+                            + "produtos_criados::text, comissao_trocada, comissao_antes, comissao_depois, link_trocado, link_antes::text, link_depois::text from reconfiguracao where id = ?",
                     (rs, i) -> new String[]{rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5), rs.getString(6), rs.getString(7), rs.getString(8),
-                            rs.getString(9), rs.getString(10)}, id);
+                            rs.getString(9), rs.getString(10), rs.getString(11), rs.getString(12), rs.getString(13)}, id);
             if (dados.isEmpty()) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, "Reconfiguração não encontrada");
             String[] d = dados.get(0);
             boolean jaDesfeita = "t".equals(d[5]) || "true".equals(d[5]);
@@ -184,6 +184,12 @@ public class ReconfiguracaoController {
             if ("t".equals(d[7]) || "true".equals(d[7])) {
                 String valor = desfazer ? d[8] : d[9];
                 servico.gravarComissaoGeral(jdbc, loja.id(), valor == null ? null : new java.math.BigDecimal(valor));
+            }
+            // B9a: campos do link. Desfazer devolve a configuração de antes; refazer põe de novo a que a sessão tinha gravado.
+            if ("t".equals(d[10]) || "true".equals(d[10])) {
+                String atualLink = servico.linkAtual(jdbc);
+                servico.restaurarLink(jdbc, loja.id(), desfazer ? d[11] : d[12]);
+                if (desfazer) jdbc.update("update reconfiguracao set link_depois = cast(? as jsonb) where id = ?", atualLink, id);
             }
             for (String p : lista(d[6])) jdbc.update("update material set ativo = ? where id = ?::uuid and tipo = 'produto'", !desfazer, p);
             for (String s : servicos) jdbc.update("update servico set ativo = ? where id = ?::uuid", !desfazer, s);
