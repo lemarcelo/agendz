@@ -209,3 +209,9 @@ Lista simples. Cada item está no histórico do `prompt-agendz-regras.md` (v84 a
 - Decisão sem confirmação: **o padrão é a ordem de hoje de cada tela** (site real: Cliente → Veículo → Serviços → Quando → Produtos; demonstração: Serviços → Quando → Produtos → Cliente → Veículo). Por isso há dois padrões no front; o servidor guarda só o que o dono escolheu e usa o do site real quando nada foi escolhido.
 - Decisão sem confirmação: o porte antes do serviço **não vira regra fixa**: é o botão "Usar a ordem da página do cliente" (Veículo com porte primeiro → Serviços → Quando → Cliente → Produtos). Quem quiser outra ordem ajusta com as setas.
 - Decisão sem confirmação: continua uma tela só (sem passo a passo); a ordem vale para os dois tipos de loja (a etapa Veículo só aparece onde há veículo). Lista parcial ou com lixo é completada pelo saneamento (nada some). Passo a passo com "Continuar" como no link fica como possível segunda fatia.
+
+## v134 (31/10): estrela do cartão com nota e cor
+- Pedido (08:09): ver a nota no próprio cartão da agenda. Feito: número dentro da estrela, estrela maior e na cor da nota (1 vermelho … 5 verde); tocar mostra as estrelas, a data e o comentário.
+- Decisão sem confirmação (privacidade): **anônima sem a regra do Admin e oculta (para quem não é o proprietário) não mostram nota nem texto no cartão**, só "Cliente já avaliou", porque o cartão traz o nome do cliente e a nota o identificaria. No site real o servidor já não envia o agendamento dessas avaliações.
+- Decisão sem confirmação: sem permissão para ver avaliações (403) ou erro de rede, a estrela fica como antes (pedir avaliação); avaliado nunca oferece "pedir de novo" quando a nota está à vista.
+

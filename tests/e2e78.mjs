@@ -148,6 +148,18 @@ for (const loja of ['apex', 'dalforno', 'offbox']) {
       await T('agenda-topo').waitFor();
       await card.getByTestId('cartao-avaliado').waitFor();
       assert.equal(await card.getByTestId('cartao-avaliacao-pedida').count(), 0);
+      // v134: a estrela do cartão mostra a nota (e o comentário ao tocar); anônimo sem a regra do Admin mostra só "avaliado", sem nota nem texto
+      if (!anonimo) {
+        assert.equal((await card.getByTestId('cartao-avaliar-nota').innerText()).trim(), '4', `${rot}: o número da nota dentro da estrela`);
+        await card.getByTestId('cartao-avaliar').click();
+        assert.equal(await T('avaliacao-estrelas').getAttribute('data-nota'), '4');
+        assert.equal(await T('avaliacao-comentario').innerText(), 'Atendimento <b>ótimo</b> e rápido', `${rot}: comentário entra só como texto`);
+        await semRolagem(p, `${rot} nota do cartão`);
+        await T('avaliar-ok').click(); await T('avaliacao-estrelas').waitFor({ state: 'detached' });
+      } else {
+        assert.equal(await card.getByTestId('cartao-avaliar-nota').count(), 0, `${rot}: anônimo não mostra a nota no cartão`);
+        assert.equal((await p.locator('#raiz').innerHTML()).includes('ótimo'), false, `${rot}: nem o comentário`);
+      }
       // painel
       await T('nav-avaliacoes').click(); await T('tela-avaliacoes').waitFor();
       assert.equal((await T('av-media').innerText()).trim(), '4'); assert.equal(await T('av-total').innerText(), '1 avaliação');

@@ -1,7 +1,7 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:be6aa6cbf4 */
 :root {
   /* Agendz: tema escuro por padrão (preto + verde→lima da logo). O claro é opcional e entra por data-theme="light"; não segue o sistema. */
-  --nota-1: #ff6b6b; --nota-2: #ff9a3c; --nota-3: #ffd23f; --nota-4: #a5d94a; --nota-5: #4ade80; --nota-fg: #141414; /* cor da estrela do cartão por nota (v131); texto do número com contraste ≥ 4,5 (tests/estrela-nota.test.mjs) */
+  --nota-1: #ff6b6b; --nota-2: #ff9a3c; --nota-3: #ffd23f; --nota-4: #a5d94a; --nota-5: #4ade80; --nota-fg: #141414; /* cor da estrela do cartão por nota (v134); texto do número com contraste ≥ 4,5 (tests/estrela-nota.test.mjs) */
   --bg: #0d0f12; --surface: #15181c; --surface-2: #1c2025; --surface-3: #262b32;
   --fg: #e9edf2; --muted: #9aa4b1; --line: #272c33; --line-strong: #3b424b;
   --ink: #4ada54; --ink-fg: #0b1209; --acento: #a6e452; --focus: #d9e652;
@@ -1100,7 +1100,7 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
 .cartao-estrela.pedida { color: var(--amarelo); border-color: var(--amarelo); }
 .cartao-estrela.avaliada { color: var(--amarelo); border-color: var(--amarelo); background: var(--amarelo-bg); }
 .cartao-estrela.avaliada .ico, .cartao-estrela.pedida .ico { fill: currentColor; }
-/* v131: avaliada com nota mostra o número dentro da estrela e a cor da nota (1 a 5); sem nota (anônima/oculta) fica como "avaliada" */
+/* v134: avaliada com nota mostra o número dentro da estrela e a cor da nota (1 a 5); sem nota (anônima/oculta) fica como "avaliada" */
 .cartao-estrela.com-nota { position: absolute; }
 .cartao-estrela.com-nota .ico { fill: currentColor; width: 28px; height: 28px; }
 .cartao-estrela .estrela-num { position: absolute; inset: 0; display: grid; place-items: center; font-size: 11px; font-weight: 800; line-height: 1; color: var(--nota-fg); padding-top: 2px; pointer-events: none; }

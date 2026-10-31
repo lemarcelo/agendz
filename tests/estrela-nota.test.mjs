@@ -1,5 +1,5 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
-// Estrela do cartão com nota (v131): quando a nota aparece, quando fica escondida (anônima sem a regra do Admin; oculta para quem não é o dono) e o contraste
+// Estrela do cartão com nota (v134): quando a nota aparece, quando fica escondida (anônima sem a regra do Admin; oculta para quem não é o dono) e o contraste
 // do número dentro da estrela nas cores de cada nota, no tema escuro e no claro.
 import test from 'node:test';
 import assert from 'node:assert/strict';

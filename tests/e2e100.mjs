@@ -129,6 +129,31 @@ async function entrar(p) {
   await ctx.close();
 }
 
+// 1b) v134: a estrela do cartão mostra a nota (número dentro da estrela, na cor da nota) e, ao tocar, o comentário; só quando o servidor traz o agendamento da avaliação
+{
+  avs[0].agendamentoId = id(101); // nota 5, "Ótimo atendimento!" (o servidor omite o agendamento de avaliação anônima sem a regra do Admin: o cartão fica só com a estrela)
+  const { ctx, p } = await abrir();
+  await entrar(p);
+  await p.getByTestId('nav-agenda').click();
+  await p.getByTestId('agenda-dia').waitFor();
+  const c1 = p.locator(`[data-testid="cartao"][data-id="${id(101)}"]`);
+  const c2 = p.locator(`[data-testid="cartao"][data-id="${id(102)}"]`);
+  await c1.getByTestId('cartao-avaliar-nota').waitFor();
+  assert.equal((await c1.getByTestId('cartao-avaliar-nota').innerText()).trim(), '5');
+  assert.equal(await c2.getByTestId('cartao-avaliar-nota').count(), 0, 'sem avaliação visível: estrela comum');
+  await c1.getByTestId('cartao-avaliar').click();
+  await p.getByTestId('nota-av-real').waitFor();
+  assert.equal(await p.getByTestId('avaliacao-estrelas').getAttribute('data-nota'), '5');
+  assert.equal(await p.getByTestId('avaliacao-comentario').innerText(), 'Ótimo atendimento!');
+  assert.equal(await p.getByTestId('pedir-av-preparar').count(), 0, 'avaliado: não oferece pedir de novo');
+  assert.equal(await p.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), true, 'sem rolagem lateral');
+  await p.getByTestId('nota-av-fechar').click();
+  await p.getByTestId('nota-av-real').waitFor({ state: 'detached' });
+  delete avs[0].agendamentoId;
+  ok('estrela do cartão: nota dentro da estrela, comentário ao tocar, sem pedir de novo');
+  await ctx.close();
+}
+
 // 2) Menu Avaliações: resumo, filtro por profissional, ocultar/reexibir com motivo
 {
   const { ctx, p } = await abrir();

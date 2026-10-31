@@ -308,7 +308,7 @@ export default function Agenda({ ehProprio = false, ehDono = false, ehProprietar
       setLista((antes) => (antes && JSON.stringify(antes) === JSON.stringify(r.agendamentos) ? antes : r.agendamentos)); // igual: não redesenha
     })();
   }, [de, ate, versao]);
-  // v131: notas para a estrela do cartão. Avaliação nasce depois do atendimento, então basta pedir "a partir do início da lista"; sem permissão (403) ou erro, a estrela fica como antes.
+  // v134: notas para a estrela do cartão. Avaliação nasce depois do atendimento, então basta pedir "a partir do início da lista"; sem permissão (403) ou erro, a estrela fica como antes.
   useEffect(() => {
     let vivo = true;
     apiAv.listar({ de: ymd(de) }).then((r) => {

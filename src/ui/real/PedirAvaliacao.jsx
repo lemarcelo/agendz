@@ -16,7 +16,7 @@ const linkDe = (token) => montarLinkAvaliar({ base: `${globalThis.location.origi
 const TITULO_SEM = { sem_telefone: 'Cliente sem telefone', sem_cadastro: 'Atendimento sem cadastro', sem_mensagens: 'Cliente não quer mensagens', sem_servico: 'Atendimento sem serviço', nao_concluido: 'Atendimento não concluído' };
 
 // Botão de estrela do cartão (o painel abre logo abaixo do cartão). `avaliada` e `pedidaEm` vêm da lista da agenda quando o servidor os informa.
-// v131: com `avaliacao` ({ nota 1..5, texto }) o botão mostra o número dentro da estrela, na cor da nota, e o toque abre a nota e o comentário (não o pedido).
+// v134: com `avaliacao` ({ nota 1..5, texto }) o botão mostra o número dentro da estrela, na cor da nota, e o toque abre a nota e o comentário (não o pedido).
 export function EstrelaAvaliar({ aberto, aoAlternar, pedidaEm = null, avaliada = false, avaliacao = null }) {
   const nota = avaliacao && avaliacao.nota >= 1 && avaliacao.nota <= NOTA_MAX ? avaliacao.nota : 0;
   const rotulo = nota ? `Avaliado: ${rotuloDaNota(nota)}. Ver comentário` : avaliada ? 'Cliente já avaliou' : pedidaEm ? `Avaliação pedida em ${fmtDateShort(pedidaEm)}. Pedir de novo` : 'Pedir avaliação ao cliente';

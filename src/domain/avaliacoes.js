@@ -153,7 +153,7 @@ export function paraPainel(s, av, { verOculta = false } = {}) {
   return { ...base, clienteId: av.clienteId || null, agendamentoId: av.agendamentoId, cliente: c ? c.apelido || c.nome : 'Cliente', revelado: av.anonimo === true };
 }
 
-// ---------- a estrela do cartão (v131): nota e comentário à vista ----------
+// ---------- a estrela do cartão (v134): nota e comentário à vista ----------
 // O cartão mostra o número de estrelas (1 a 5; 0 = ainda sem avaliação) e, ao tocar, o comentário. Anônimo sem a regra do Admin e avaliação oculta (para quem não é o dono)
 // NUNCA mostram nota nem texto no cartão: o cartão tem o nome do cliente, então a nota o identificaria. Aí só se sabe que "foi avaliado" (nota 0, `escondida`).
 export function avaliacaoDoCartao(s, agendamentoId, { verOculta = false } = {}) {
