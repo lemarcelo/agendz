@@ -10,6 +10,7 @@ import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
 export default function LinkAgendamento() {
   const [link, setLink] = useState(null);
   const [dias, setDias] = useState('30');
+  const [limite, setLimite] = useState('3');
   const [erro, setErro] = useState('');
   const [ok, setOk] = useState('');
   const [salvando, setSalvando] = useState(false);
@@ -17,7 +18,7 @@ export default function LinkAgendamento() {
 
   useEffect(() => {
     let vivo = true;
-    api.obter().then((r) => { if (!vivo) return; if (r.ok) { setLink(r.link); setDias(String(r.link.diasMax)); } else setErro(r.erro); });
+    api.obter().then((r) => { if (!vivo) return; if (r.ok) { setLink(r.link); setDias(String(r.link.diasMax)); setLimite(String(r.link.limiteAbertos)); } else setErro(r.erro); });
     return () => { vivo = false; };
   }, []);
 
@@ -29,11 +30,13 @@ export default function LinkAgendamento() {
     if (salvando) return;
     const n = Number(dias);
     if (!Number.isInteger(n) || n < 1 || n > 60) { setErro('Informe de 1 a 60 dias.'); return; }
+    const lim = Number(limite);
+    if (!Number.isInteger(lim) || lim < 1 || lim > 20) { setErro('Informe de 1 a 20 horários por cliente.'); return; }
     setSalvando(true); setErro(''); setOk('');
-    const r = await api.gravar({ ativo: link.ativo, diasMax: n, telefoneObrigatorio: link.telefoneObrigatorio, nomeObrigatorio: link.nomeObrigatorio, ...(capAtiva('usaVeiculo') ? { veiculoObrigatorio: link.veiculoObrigatorio } : {}) });
+    const r = await api.gravar({ ativo: link.ativo, diasMax: n, limiteAbertos: lim, telefoneObrigatorio: link.telefoneObrigatorio, nomeObrigatorio: link.nomeObrigatorio, ...(capAtiva('usaVeiculo') ? { veiculoObrigatorio: link.veiculoObrigatorio } : {}) });
     setSalvando(false);
     if (!r.ok) { setErro(r.erro); return; }
-    setLink(r.link); setDias(String(r.link.diasMax)); setOk('Link salvo.');
+    setLink(r.link); setDias(String(r.link.diasMax)); setLimite(String(r.link.limiteAbertos)); setOk('Link salvo.');
   };
   const copiar = async () => {
     try { await globalThis.navigator.clipboard.writeText(endereco); setCopiado(true); } catch { setCopiado(false); } // sem permissão de copiar: o endereço continua na caixa para copiar à mão
@@ -69,6 +72,8 @@ export default function LinkAgendamento() {
         </fieldset>
       )}
       <Campo rotulo="Oferecer horários até quantos dias à frente (1 a 60)"><input inputMode="numeric" value={dias} onChange={(e) => { setOk(''); setErro(''); setDias(e.target.value.replace(/\D/g, '').slice(0, 2)); }} maxLength={2} data-testid="link-dias" /></Campo>
+      <Campo rotulo="Horários à frente que um mesmo cliente pode ter pelo link (1 a 20)" dica="Passou disso, o cliente recebe a mensagem de que já tem horários marcados."><input inputMode="numeric" value={limite} onChange={(e) => { setOk(''); setErro(''); setLimite(e.target.value.replace(/\D/g, '').slice(0, 2)); }} data-testid="link-limite" /></Campo>
+      <p className="muted" data-testid="link-barrados">{link.barrados.total === 0 ? 'Nenhum pedido barrado nos últimos 30 dias.' : `Pedidos barrados nos últimos 30 dias: ${link.barrados.total}${[['limite_cliente', 'acima do limite'], ['frequencia', 'pedidos demais'], ['isca', 'robô'], ['rapido', 'rápido demais'], ['selo_invalido', 'selo falso']].filter(([k]) => link.barrados.porMotivo[k] > 0).map(([k, r]) => ` · ${r}: ${link.barrados.porMotivo[k]}`).join('')}.`} O registro não guarda nome, telefone nem IP.</p>
       {erro && <Aviso tipo="erro" data-testid="link-erro">{erro}</Aviso>}
       {ok && <p className="msg-ok" role="status" data-testid="link-ok">{ok}</p>}
       <div className="acoes"><Btn variante="primario" type="submit" disabled={salvando} data-testid="link-salvar">{salvando ? 'Salvando…' : 'Salvar link'}</Btn></div>

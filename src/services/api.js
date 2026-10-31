@@ -1113,8 +1113,9 @@ export const estabelecimento = {
       if (!(l && typeof l === 'object' && typeof l.ativo === 'boolean' && Number.isInteger(l.diasMax) && l.diasMax >= 1 && l.diasMax <= 60)) return erro('Link de agendamento inválido: ligado ou desligado e de 1 a 60 dias à frente.');
       if ('telefoneObrigatorio' in l && typeof l.telefoneObrigatorio !== 'boolean') return erro('Link de agendamento inválido: telefone obrigatório é sim ou não.');
       if ('nomeObrigatorio' in l && typeof l.nomeObrigatorio !== 'boolean') return erro('Link de agendamento inválido: nome obrigatório é sim ou não.');
+      if ('limiteAbertos' in l && !(Number.isInteger(l.limiteAbertos) && l.limiteAbertos >= 1 && l.limiteAbertos <= PU.MAX_ABERTOS_LINK_TETO)) return erro(`Link de agendamento inválido: de 1 a ${PU.MAX_ABERTOS_LINK_TETO} horários por cliente.`);
       if ('veiculoObrigatorio' in l && !(Array.isArray(l.veiculoObrigatorio) && l.veiculoObrigatorio.length <= 4 && new Set(l.veiculoObrigatorio).size === l.veiculoObrigatorio.length && l.veiculoObrigatorio.every((x) => CAMPOS_VEICULO_EXIGIVEIS.includes(x)))) return erro('Link de agendamento inválido: dados do veículo obrigatórios.');
-      patch.linkAgendamento = { ativo: l.ativo, diasMax: l.diasMax, telefoneObrigatorio: l.telefoneObrigatorio !== false, nomeObrigatorio: l.nomeObrigatorio !== false, veiculoObrigatorio: Array.isArray(l.veiculoObrigatorio) ? [...l.veiculoObrigatorio] : [...PU.VEICULO_DE_FABRICA_NO_LINK] };
+      patch.linkAgendamento = { ativo: l.ativo, diasMax: l.diasMax, telefoneObrigatorio: l.telefoneObrigatorio !== false, nomeObrigatorio: l.nomeObrigatorio !== false, veiculoObrigatorio: Array.isArray(l.veiculoObrigatorio) ? [...l.veiculoObrigatorio] : [...PU.VEICULO_DE_FABRICA_NO_LINK], limiteAbertos: Number.isInteger(l.limiteAbertos) ? l.limiteAbertos : PU.MAX_ABERTOS_LINK };
     }
     if ('usaIntegracaoPix' in patch && typeof patch.usaIntegracaoPix !== 'boolean') return erro('Opção de integração Pix inválida.');
     if ('formaPagamentoPadrao' in patch && patch.formaPagamentoPadrao !== '' && !R.formaValida(patch.formaPagamentoPadrao)) return erro('Forma de pagamento padrão inválida.');

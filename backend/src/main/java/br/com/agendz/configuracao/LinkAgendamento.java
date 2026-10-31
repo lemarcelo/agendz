@@ -1,6 +1,7 @@
 package br.com.agendz.configuracao;
 
 import br.com.agendz.erro.ErroDeNegocio;
+import br.com.agendz.publico.BarradosDoLink;
 import br.com.agendz.escala.EscalaService;
 import br.com.agendz.tenant.Capacidades;
 import br.com.agendz.tenant.Loja;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Link de agendamento do cliente (espelho de `estabelecimento.linkAgendamento` na API simulada): a loja liga/desliga o link e escolhe até quantos dias à frente
  * ele oferece horário (1 a 60, padrão 30). GET/PUT /api/estabelecimento/link-agendamento, só o proprietário. Sem linha gravada vale o padrão (ligado).
+ * `limiteAbertos` (B10, de 1 a 20, padrão 3): quantos horários a confirmar/confirmados à frente um mesmo cliente (telefone) pode ter pelo link; `barrados` = pedidos barrados nos últimos 30 dias (só contagem).
  * `telefoneObrigatorio` (padrão sim) diz se o cliente precisa deixar telefone para pedir o horário. `disponivel` é falso só para um tipo que não agende pelo link (hoje todos agendam; a estética pede veículo e porte).
  */
 @RestController
@@ -25,17 +27,20 @@ public class LinkAgendamento {
 
     public static final int DIAS_PADRAO = 30;
     public static final int DIAS_MAXIMO = 60;
+    public static final int LIMITE_ABERTOS_PADRAO = 3;
+    public static final int LIMITE_ABERTOS_MAXIMO = 20;
 
     /** Campos do veículo que o link pode exigir (v121). Lista vazia = o cliente pode pedir sem dizer nada do veículo (vale o porte médio). */
     public static final List<String> VEICULO_DO_LINK = List.of("placa", "modelo", "porte");
 
-    public record Config(boolean ativo, int diasMax, boolean telefoneObrigatorio, boolean nomeObrigatorio, List<String> veiculoObrigatorio) {
+    public record Config(boolean ativo, int diasMax, boolean telefoneObrigatorio, boolean nomeObrigatorio, List<String> veiculoObrigatorio, int limiteAbertos) {
     }
 
-    public record Resposta(boolean ativo, int diasMax, boolean disponivel, boolean telefoneObrigatorio, boolean nomeObrigatorio, List<String> veiculoObrigatorio, List<String> pendencias) {
+    public record Resposta(boolean ativo, int diasMax, boolean disponivel, boolean telefoneObrigatorio, boolean nomeObrigatorio, List<String> veiculoObrigatorio, List<String> pendencias,
+                           int limiteAbertos, BarradosDoLink.Resumo barrados) {
     }
 
-    public record Corpo(Boolean ativo, Integer diasMax, Boolean telefoneObrigatorio, Boolean nomeObrigatorio, List<String> veiculoObrigatorio) {
+    public record Corpo(Boolean ativo, Integer diasMax, Boolean telefoneObrigatorio, Boolean nomeObrigatorio, List<String> veiculoObrigatorio, Integer limiteAbertos) {
     }
 
     private final LojaJdbc banco;
@@ -72,17 +77,17 @@ public class LinkAgendamento {
 
     /** Configuração gravada da loja atual (dentro de uma transação já aberta). */
     public static Config ler(JdbcTemplate jdbc) {
-        List<Config> l = jdbc.query("select link_ativo, link_dias_max, link_telefone_obrigatorio, link_nome_obrigatorio, link_veiculo_obrigatorio from configuracao_loja",
-                (rs, i) -> new Config(rs.getBoolean(1), rs.getInt(2), rs.getBoolean(3), rs.getBoolean(4), veiculoDe(rs.getString(5))));
-        return l.isEmpty() ? new Config(true, DIAS_PADRAO, true, true, VEICULO_DO_LINK) : l.get(0);
+        List<Config> l = jdbc.query("select link_ativo, link_dias_max, link_telefone_obrigatorio, link_nome_obrigatorio, link_veiculo_obrigatorio, link_limite_abertos from configuracao_loja",
+                (rs, i) -> new Config(rs.getBoolean(1), rs.getInt(2), rs.getBoolean(3), rs.getBoolean(4), veiculoDe(rs.getString(5)), rs.getInt(6)));
+        return l.isEmpty() ? new Config(true, DIAS_PADRAO, true, true, VEICULO_DO_LINK, LIMITE_ABERTOS_PADRAO) : l.get(0);
     }
 
     /** Grava a configuração do link da loja (cria a linha se não existir). Usado pelo PUT e pelo assistente/Reconfigurar (B9a). */
     public static void gravarConfig(JdbcTemplate jdbc, java.util.UUID lojaId, Config n) {
-        jdbc.update("insert into configuracao_loja (loja_id, link_ativo, link_dias_max, link_telefone_obrigatorio, link_nome_obrigatorio, link_veiculo_obrigatorio) values (?::uuid, ?, ?, ?, ?, ?) "
+        jdbc.update("insert into configuracao_loja (loja_id, link_ativo, link_dias_max, link_telefone_obrigatorio, link_nome_obrigatorio, link_veiculo_obrigatorio, link_limite_abertos) values (?::uuid, ?, ?, ?, ?, ?, ?) "
                         + "on conflict (loja_id) do update set link_ativo = excluded.link_ativo, link_dias_max = excluded.link_dias_max, link_telefone_obrigatorio = excluded.link_telefone_obrigatorio, "
-                        + "link_nome_obrigatorio = excluded.link_nome_obrigatorio, link_veiculo_obrigatorio = excluded.link_veiculo_obrigatorio, atualizado_em = now()",
-                lojaId.toString(), n.ativo(), n.diasMax(), n.telefoneObrigatorio(), n.nomeObrigatorio(), String.join(",", n.veiculoObrigatorio()));
+                        + "link_nome_obrigatorio = excluded.link_nome_obrigatorio, link_veiculo_obrigatorio = excluded.link_veiculo_obrigatorio, link_limite_abertos = excluded.link_limite_abertos, atualizado_em = now()",
+                lojaId.toString(), n.ativo(), n.diasMax(), n.telefoneObrigatorio(), n.nomeObrigatorio(), String.join(",", n.veiculoObrigatorio()), n.limiteAbertos());
     }
 
     /** Mesma conferência do PUT: lista de campos do veículo sem repetição e só com os campos conhecidos. */
@@ -98,7 +103,7 @@ public class LinkAgendamento {
         Loja loja = LojaContext.exigir();
         return banco.naLoja(jdbc -> {
             Config c = ler(jdbc);
-            return new Resposta(c.ativo(), c.diasMax(), tipoSuportado(loja), c.telefoneObrigatorio(), c.nomeObrigatorio(), c.veiculoObrigatorio(), pendencias(jdbc, loja));
+            return new Resposta(c.ativo(), c.diasMax(), tipoSuportado(loja), c.telefoneObrigatorio(), c.nomeObrigatorio(), c.veiculoObrigatorio(), pendencias(jdbc, loja), c.limiteAbertos(), BarradosDoLink.resumo(jdbc));
         });
     }
 
@@ -108,6 +113,7 @@ public class LinkAgendamento {
         Loja loja = LojaContext.exigir();
         if (c == null) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe a configuração do link.");
         if (c.diasMax() != null && (c.diasMax() < 1 || c.diasMax() > DIAS_MAXIMO)) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe de 1 a " + DIAS_MAXIMO + " dias.");
+        if (c.limiteAbertos() != null && (c.limiteAbertos() < 1 || c.limiteAbertos() > LIMITE_ABERTOS_MAXIMO)) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe de 1 a " + LIMITE_ABERTOS_MAXIMO + " horários por cliente.");
         if (c.veiculoObrigatorio() != null && (c.veiculoObrigatorio().size() > VEICULO_DO_LINK.size() || new java.util.HashSet<>(c.veiculoObrigatorio()).size() != c.veiculoObrigatorio().size()
                 || !VEICULO_DO_LINK.containsAll(c.veiculoObrigatorio()))) {
             throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Dados do veículo obrigatórios inválidos.");
@@ -117,9 +123,10 @@ public class LinkAgendamento {
             Config n = new Config(c.ativo() == null ? atual.ativo() : c.ativo(), c.diasMax() == null ? atual.diasMax() : c.diasMax(),
                     c.telefoneObrigatorio() == null ? atual.telefoneObrigatorio() : c.telefoneObrigatorio(),
                     c.nomeObrigatorio() == null ? atual.nomeObrigatorio() : c.nomeObrigatorio(),
-                    c.veiculoObrigatorio() == null ? atual.veiculoObrigatorio() : List.copyOf(c.veiculoObrigatorio()));
+                    c.veiculoObrigatorio() == null ? atual.veiculoObrigatorio() : List.copyOf(c.veiculoObrigatorio()),
+                    c.limiteAbertos() == null ? atual.limiteAbertos() : c.limiteAbertos());
             gravarConfig(jdbc, loja.id(), n);
-            return new Resposta(n.ativo(), n.diasMax(), tipoSuportado(loja), n.telefoneObrigatorio(), n.nomeObrigatorio(), n.veiculoObrigatorio(), pendencias(jdbc, loja));
+            return new Resposta(n.ativo(), n.diasMax(), tipoSuportado(loja), n.telefoneObrigatorio(), n.nomeObrigatorio(), n.veiculoObrigatorio(), pendencias(jdbc, loja), n.limiteAbertos(), BarradosDoLink.resumo(jdbc));
         });
     }
 }

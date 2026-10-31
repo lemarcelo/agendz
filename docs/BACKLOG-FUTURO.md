@@ -91,7 +91,7 @@ Regra de uso: toda funcionalidade nova pedida "para outro momento" entra aqui co
 - **Fora:** nada de consultório (nem campos de saúde, convênio ou prontuário).
 - **A decidir na hora (sem perguntar):** campo extra por tipo só entra por `vocab`/capacidade, nunca `if (tipo === …)`; padrão do link continua "exige tudo"; a escolha automática nasce nos dois lados (`api.js` e servidor) com casos em `equivalencia/`.
 
-## B10. Limite de agendamentos pelo link por loja e proteção contra robô (conversa de 31/10 13:28 — **só conversa, nada implementado; aguarda decisão do Marcelo**)
+## B10. Limite de agendamentos pelo link por loja e proteção contra robô (conversa de 31/10 13:28 — **parte A feita (v137): limite configurável, sucesso sem gravar para robô, registro mínimo e contagem; parte B (reCAPTCHA) a fazer**)
 - Ideia: em Estabelecimento, o proprietário define quantos agendamentos externos (pelo link) cabem; passou do limite o cliente recebe "sucesso" mas nada é salvo nem registrado.
 - Minha recomendação: cliente comum que passou do limite recebe mensagem honesta; "sucesso silencioso" só para sinais claros de robô; sempre um registro mínimo (data, loja, hash do telefone/IP, motivo; sem dado pessoal; apagado em 30 dias) e um contador para o proprietário.
 - Hoje já existe: freio por telefone (5/min), IP (20/10 min) e loja (120/10 min) em `LimitePublico`, máximo de 3 horários abertos por telefone. Falta: limite configurável, contador que sobrevive a reinício (hoje em memória), registro das tentativas barradas, campo escondido/tempo mínimo e conferir o IP real atrás do Caddy. reCAPTCHA segue em B4 (aguarda confirmação por escrito).

@@ -79,6 +79,25 @@ test('entradas inválidas: DDD, telefone, nome, serviço, isca, data, link desli
   assert.equal(estabelecimento.salvar({ linkAgendamento: { ativo: 'sim', diasMax: 99 } }).ok, false);
 });
 
+test('limite de horários por cliente é escolha da loja (B10): de 1 a 20, padrão 3, só o dono muda', () => {
+  const base = { ativo: true, diasMax: 30 };
+  for (const ruim of [0, 21, -1, 1.5, '3', null]) assert.equal(estabelecimento.salvar({ linkAgendamento: { ...base, limiteAbertos: ruim } }).ok, false, `limite ${ruim} é recusado`);
+  assert.ok(estabelecimento.salvar({ linkAgendamento: { ...base, limiteAbertos: 1 } }).ok);
+  assert.equal(st().estabelecimento.linkAgendamento.limiteAbertos, 1);
+  const hs = slots();
+  assert.ok(pedir(1, hs[0].inicio).ok);
+  const r = pedir(1, hs[3].inicio);
+  assert.equal(r.ok, false); assert.match(r.erros[0], /Você já tem 1 horário marcado\./, 'singular com limite 1');
+  assert.ok(estabelecimento.salvar({ linkAgendamento: { ...base, limiteAbertos: 2 } }).ok);
+  assert.ok(pedir(1, hs[3].inicio).ok);
+  assert.match(pedir(1, hs[6].inicio).erros[0], /Você já tem 2 horários marcados\./);
+  // salvar o link sem mandar o limite não perde o que a loja escolheu? Sem o campo volta ao padrão: a tela sempre manda o limite junto
+  assert.ok(estabelecimento.salvar({ linkAgendamento: base }).ok);
+  assert.equal(st().estabelecimento.linkAgendamento.limiteAbertos, 3);
+  como('pablo');
+  assert.equal(estabelecimento.salvar({ linkAgendamento: { ...base, limiteAbertos: 5 } }).ok, false, 'quem não é dono não muda');
+});
+
 test('limites: 3 horários em aberto por cliente e 5 pedidos por minuto por telefone', () => {
   const hs = slots();
   for (let i = 0; i < 3; i++) assert.ok(pedir(1, hs[i * 3].inicio).ok, 'pedido ' + i);

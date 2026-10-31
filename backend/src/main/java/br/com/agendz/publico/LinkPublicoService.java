@@ -1,5 +1,6 @@
 package br.com.agendz.publico;
 
+import br.com.agendz.cifra.Cifra;
 import br.com.agendz.clientes.ClienteService;
 import br.com.agendz.comissao.ComissaoService;
 import br.com.agendz.configuracao.LinkAgendamento;
@@ -66,7 +67,9 @@ import org.springframework.stereotype.Service;
 public class LinkPublicoService {
 
     public static final int PASSO_MIN = 30;
-    public static final int MAX_ABERTOS = 3;
+    public static final int MAX_ABERTOS = LinkAgendamento.LIMITE_ABERTOS_PADRAO; // de fábrica; cada loja escolhe o seu (1 a 20) em Estabelecimento > Link
+    /** Menos que isso entre abrir a página e pedir não é gente: é robô (B10). */
+    static final Duration TEMPO_MINIMO = Duration.ofSeconds(2);
     public static final int MAX_SERVICOS = 5;
     public static final int TOKEN_DIAS = 90;
     public static final int MAX_DIAS_CONSULTA = 31;
@@ -92,7 +95,7 @@ public class LinkPublicoService {
 
     /** `endereco` e `mapaUrl` só vêm quando o proprietário ligou "mostrar o endereço no link" e há endereço gravado. */
     public record Pagina(boolean ativo, String aviso, int diasMax, boolean exigeTelefone, boolean exigeNome, List<String> exigeVeiculo, List<ServicoPublico> servicos, List<ProfissionalPublico> profissionais, String endereco, String mapaUrl,
-                         String tipo, List<PortePublico> portes, boolean profissionalAutomatico) {
+                         String tipo, List<PortePublico> portes, boolean profissionalAutomatico, String selo) {
     }
 
     public record Horario(Instant inicio, UUID profissionalId) {
@@ -113,7 +116,8 @@ public class LinkPublicoService {
             UUID profissionalId,
             @Size(max = 40) String cupomChave,
             @Size(max = 100) String site,
-            @Valid VeiculoEntrada veiculo) {
+            @Valid VeiculoEntrada veiculo,
+            @Size(max = 120) String selo) {
     }
 
     public record Resumo(UUID id, Instant inicio, Instant fim, String status, String rotulo, List<String> servicos, int duracao, BigDecimal total, BigDecimal desconto,
@@ -148,9 +152,11 @@ public class LinkPublicoService {
     private final LimitePublico limite;
     private final Ocupacao ocupacao;
     private final PlanoService planos;
+    private final Cifra cifra;
+    private final BarradosDoLink barrados;
     private static final ObjectMapper JSON = new ObjectMapper();
 
-    public LinkPublicoService(LojaJdbc banco, Clock relogio, EscalaService escalas, ClienteService clientes, CupomService cupons, ComissaoService comissoes, LimitePublico limite, Ocupacao ocupacao, PlanoService planos) {
+    public LinkPublicoService(LojaJdbc banco, Clock relogio, EscalaService escalas, ClienteService clientes, CupomService cupons, ComissaoService comissoes, LimitePublico limite, Ocupacao ocupacao, PlanoService planos, Cifra cifra, BarradosDoLink barrados) {
         this.banco = banco;
         this.relogio = relogio;
         this.escalas = escalas;
@@ -160,6 +166,8 @@ public class LinkPublicoService {
         this.limite = limite;
         this.ocupacao = ocupacao;
         this.planos = planos;
+        this.cifra = cifra;
+        this.barrados = barrados;
     }
 
     // ---------------------------------------------------------------- página (o que o cliente vê antes de escolher)
@@ -170,9 +178,9 @@ public class LinkPublicoService {
         return banco.naLoja(jdbc -> {
             LinkAgendamento.Config cfg = LinkAgendamento.ler(jdbc);
             boolean ativo = cfg.ativo() && LinkAgendamento.tipoSuportado(loja);
-            if (!ativo) return new Pagina(false, ERRO_DESLIGADO, cfg.diasMax(), cfg.telefoneObrigatorio(), cfg.nomeObrigatorio(), cfg.veiculoObrigatorio(), List.of(), List.of(), null, null, loja.tipo(), List.of(), false);
+            if (!ativo) return new Pagina(false, ERRO_DESLIGADO, cfg.diasMax(), cfg.telefoneObrigatorio(), cfg.nomeObrigatorio(), cfg.veiculoObrigatorio(), List.of(), List.of(), null, null, loja.tipo(), List.of(), false, null);
             if (Capacidades.usaRecursoFisico(loja) && Integer.valueOf(0).equals(jdbc.queryForObject("select count(*) from box where ativo", Integer.class))) {
-                return new Pagina(false, ERRO_SEM_BOX, cfg.diasMax(), cfg.telefoneObrigatorio(), cfg.nomeObrigatorio(), cfg.veiculoObrigatorio(), List.of(), List.of(), null, null, loja.tipo(), List.of(), false); // estética sem box: a agenda do cliente não abre (v120)
+                return new Pagina(false, ERRO_SEM_BOX, cfg.diasMax(), cfg.telefoneObrigatorio(), cfg.nomeObrigatorio(), cfg.veiculoObrigatorio(), List.of(), List.of(), null, null, loja.tipo(), List.of(), false, null); // estética sem box: a agenda do cliente não abre (v120)
             }
             boolean porPorte = Capacidades.precoPorPorte(loja);
             List<PorteController.Porte> listaPortes = porPorte ? PorteController.ler(jdbc) : List.of();
@@ -186,7 +194,7 @@ public class LinkPublicoService {
             LocalDaLoja.Local local = LocalDaLoja.ler(jdbc);
             boolean mostra = local.enderecoNoLink() && local.temEndereco();
             List<PortePublico> portes = listaPortes.stream().filter(PorteController.Porte::ativo).map(x -> new PortePublico(x.id(), x.nome(), x.exemplo())).toList();
-            return new Pagina(true, null, cfg.diasMax(), cfg.telefoneObrigatorio(), cfg.nomeObrigatorio(), cfg.veiculoObrigatorio(), servicos, profissionais, mostra ? local.enderecoTexto() : null, mostra ? local.mapaUrl() : null, loja.tipo(), portes, RegrasAtendimento.ler(jdbc).profissionalAutomatico());
+            return new Pagina(true, null, cfg.diasMax(), cfg.telefoneObrigatorio(), cfg.nomeObrigatorio(), cfg.veiculoObrigatorio(), servicos, profissionais, mostra ? local.enderecoTexto() : null, mostra ? local.mapaUrl() : null, loja.tipo(), portes, RegrasAtendimento.ler(jdbc).profissionalAutomatico(), selo(loja, relogio.instant()));
         });
     }
 
@@ -233,7 +241,7 @@ public class LinkPublicoService {
 
     private LinkAgendamento.Config config(JdbcTemplate jdbc, Loja loja) {
         LinkAgendamento.Config c = LinkAgendamento.ler(jdbc);
-        return new LinkAgendamento.Config(c.ativo() && LinkAgendamento.tipoSuportado(loja), c.diasMax(), c.telefoneObrigatorio(), c.nomeObrigatorio(), c.veiculoObrigatorio());
+        return new LinkAgendamento.Config(c.ativo() && LinkAgendamento.tipoSuportado(loja), c.diasMax(), c.telefoneObrigatorio(), c.nomeObrigatorio(), c.veiculoObrigatorio(), c.limiteAbertos());
     }
 
     private Base base(JdbcTemplate jdbc, Loja loja, UUID profissionalId) {
@@ -304,6 +312,51 @@ public class LinkPublicoService {
         return saida;
     }
 
+    // ---------------------------------------------------------------- contra robô (B10)
+
+    /** Selo da página: instante em que o cliente abriu a página + assinatura da loja. O pedido devolve o selo; menos de 2 s depois é robô. Não guarda nada no servidor. */
+    String selo(Loja loja, Instant agora) {
+        String ts = Long.toString(agora.getEpochSecond());
+        return ts + "." + cifra.hash(loja.id(), "selo", ts).substring(0, 32);
+    }
+
+    /** Sinal claro de robô (campo escondido preenchido, selo falso, pedido em menos de 2 s) ou null. Selo ausente (página antiga aberta) não é sinal. */
+    private BarradosDoLink.Motivo sinalDeRobo(Loja loja, Pedido p, Instant agora) {
+        if (p.site() != null && !p.site().isBlank()) return BarradosDoLink.Motivo.ISCA;
+        String selo = p.selo();
+        if (selo == null || selo.isBlank()) return null;
+        int ponto = selo.indexOf('.');
+        long ts;
+        try {
+            ts = Long.parseLong(ponto > 0 ? selo.substring(0, ponto) : "x");
+        } catch (NumberFormatException e) {
+            return BarradosDoLink.Motivo.SELO_INVALIDO;
+        }
+        String esperado = selo(loja, Instant.ofEpochSecond(ts));
+        if (!MessageDigest.isEqual(esperado.getBytes(StandardCharsets.UTF_8), selo.getBytes(StandardCharsets.UTF_8))) return BarradosDoLink.Motivo.SELO_INVALIDO;
+        Duration idade = Duration.between(Instant.ofEpochSecond(ts), agora);
+        if (idade.isNegative()) return BarradosDoLink.Motivo.SELO_INVALIDO;
+        return idade.compareTo(TEMPO_MINIMO) < 0 ? BarradosDoLink.Motivo.RAPIDO : null;
+    }
+
+    /**
+     * Resposta de sucesso que NÃO grava nada, só para sinal claro de robô: parece um pedido comum (serviços e profissional pedidos), mas o id e o token não existem.
+     * Cliente comum nunca recebe isto: passou do limite, ele ouve a verdade.
+     */
+    private Criado sucessoSemGravar(Pedido p) {
+        return banco.naLoja(jdbc -> {
+            List<String> nomes = new ArrayList<>();
+            for (UUID s : ids(p.servicoIds())) nomes.addAll(jdbc.queryForList("select nome from servico where id = ? and ativo", String.class, s));
+            String prof = "Equipe";
+            if (p.profissionalId() != null) {
+                List<String> n = jdbc.queryForList("select coalesce(nullif(apelido, ''), nome) from usuario where id = ? and ativo and atende", String.class, p.profissionalId());
+                if (!n.isEmpty()) prof = n.get(0);
+            }
+            Resumo r = new Resumo(UUID.randomUUID(), p.inicio(), p.inicio().plus(Duration.ofMinutes(30)), "a_confirmar", "Aguardando confirmação", nomes, 30, BigDecimal.ZERO, BigDecimal.ZERO, null, prof, true, false, null);
+            return new Criado(r, novoToken(), false);
+        });
+    }
+
     // ---------------------------------------------------------------- pedir um horário
 
     /**
@@ -313,7 +366,15 @@ public class LinkPublicoService {
      */
     public Criado agendar(String ip, Pedido p) {
         Loja loja = LojaContext.exigir();
-        if (p.site() != null && !p.site().isBlank()) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Não foi possível agendar. Tente de novo."); // campo isca: robô
+        String ipHash = cifra.hash(loja.id(), "ip", ip);
+        String telPedido = p.telefone() == null ? null : Documentos.telefone(p.telefone());
+        String telHash = telPedido == null ? null : cifra.hash(loja.id(), "tel", telPedido);
+        // sinal claro de robô (campo escondido, selo falso, pedido em menos de 2 s): "sucesso" sem gravar nada, só com o registro mínimo do barrado (B10)
+        BarradosDoLink.Motivo sinal = sinalDeRobo(loja, p, relogio.instant());
+        if (sinal != null) {
+            barrados.registrar(loja.id(), sinal, ipHash, telHash);
+            return sucessoSemGravar(p);
+        }
         String nome = p.nome() == null ? "" : Texto.limpar(p.nome()).trim();
         // nome em branco só vale se o dono tirou a obrigatoriedade (conferido de novo dentro da transação); uma letra só nunca vale
         if (nome.length() == 1) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe o seu nome.");
@@ -328,7 +389,10 @@ public class LinkPublicoService {
                 && limite.liberar("agendar-ip:" + loja.id() + ":" + ip, 20, Duration.ofMinutes(10))
                 && limite.liberar("agendar-loja:" + loja.id(), 120, Duration.ofMinutes(10))
                 && (!comCupom || limite.liberar("cupom-loja:" + loja.id(), 30, Duration.ofMinutes(15)));
-        if (!liberado) throw new ErroDeNegocio(HttpStatus.TOO_MANY_REQUESTS, ERRO_MUITOS);
+        if (!liberado) {
+            barrados.registrar(loja.id(), BarradosDoLink.Motivo.FREQUENCIA, ipHash, telHash);
+            throw new ErroDeNegocio(HttpStatus.TOO_MANY_REQUESTS, ERRO_MUITOS);
+        }
         return banco.naLoja(jdbc -> {
             Instant agora = relogio.instant();
             LinkAgendamento.Config cfg = config(jdbc, loja);
@@ -381,8 +445,9 @@ public class LinkPublicoService {
             UUID clienteId = cli == null ? null : cli.clienteId();
             if (cli != null) {
                 Integer abertos = jdbc.queryForObject("select count(*) from agendamento where cliente_id = ? and status in ('a_confirmar', 'confirmado') and inicio > ?", Integer.class, cli.clienteId(), utc(agora));
-                if (abertos != null && abertos >= MAX_ABERTOS) {
-                    throw new ErroDeNegocio(HttpStatus.CONFLICT, "Você já tem " + MAX_ABERTOS + " horários marcados. Cancele um deles para agendar outro.");
+                if (abertos != null && abertos >= cfg.limiteAbertos()) {
+                    barrados.registrar(loja.id(), BarradosDoLink.Motivo.LIMITE_CLIENTE, ipHash, telHash); // o cliente ouve a verdade; o registro fica para o proprietário
+                    throw new ErroDeNegocio(HttpStatus.CONFLICT, "Você já tem " + cfg.limiteAbertos() + (cfg.limiteAbertos() == 1 ? " horário marcado" : " horários marcados") + ". Cancele um deles para agendar outro.");
                 }
             }
             UUID id = jdbc.queryForObject(

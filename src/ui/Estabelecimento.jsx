@@ -413,6 +413,11 @@ function LinkAgendamentoRegras({ e }) {
           <small className="muted">Sem porte, vale o preço e a duração do porte médio.</small>
         </fieldset>
       )}
+      <Campo rotulo="Horários à frente que um mesmo cliente pode ter pelo link" dica="De 1 a 20 (padrão 3). Passou disso, o cliente recebe a mensagem de que já tem horários marcados.">
+        <select value={cfg.limiteAbertos} onChange={(x) => salvar({ limiteAbertos: Number(x.target.value) }, 'Limite salvo.')} data-testid="link-limite">
+          {[1, 2, 3, 4, 5, 8, 10, 15, 20].map((d) => <option key={d} value={d}>{d} {d === 1 ? 'horário' : 'horários'}</option>)}
+        </select>
+      </Campo>
       <Campo rotulo="Até quantos dias à frente o cliente pode marcar" dica="De 1 a 60. A antecedência mínima de cada serviço continua valendo.">
         <select value={cfg.diasMax} onChange={(x) => salvar({ diasMax: Number(x.target.value) }, 'Prazo salvo.')} data-testid="link-dias-max">
           {[7, 14, 30, 45, 60].map((d) => <option key={d} value={d}>{d} dias</option>)}

@@ -1223,17 +1223,31 @@ const lerLink = (d) => {
   const dm = Number.isInteger(d.diasMax) ? Math.min(60, Math.max(1, d.diasMax)) : 30;
   return { ativo: d.ativo !== false, diasMax: dm, disponivel: d.disponivel !== false, telefoneObrigatorio: d.telefoneObrigatorio !== false,
     nomeObrigatorio: d.nomeObrigatorio !== false, veiculoObrigatorio: Array.isArray(d.veiculoObrigatorio) ? d.veiculoObrigatorio.filter((x) => ['placa', 'modelo', 'porte'].includes(x)) : ['placa', 'modelo', 'porte'],
-    pendencias: Array.isArray(d.pendencias) ? d.pendencias.filter((x) => typeof x === 'string' && x).slice(0, 5).map((x) => x.slice(0, 300)) : [] }; // v119: o que falta cadastrar para o cliente ver horários
+    pendencias: Array.isArray(d.pendencias) ? d.pendencias.filter((x) => typeof x === 'string' && x).slice(0, 5).map((x) => x.slice(0, 300)) : [], // v119: o que falta cadastrar para o cliente ver horários
+    limiteAbertos: Number.isInteger(d.limiteAbertos) ? Math.min(20, Math.max(1, d.limiteAbertos)) : 3, // B10: horários à frente que um mesmo cliente pode ter pelo link
+    barrados: lerBarrados(d.barrados) };
 };
+// B10: só contagens dos pedidos que o link barrou nos últimos 30 dias (nunca IP, telefone ou hash)
+const MOTIVOS_BARRADO = ['limite_cliente', 'isca', 'rapido', 'selo_invalido', 'frequencia'];
+function lerBarrados(b) {
+  b = b && typeof b === 'object' ? b : {};
+  const por = b.porMotivo && typeof b.porMotivo === 'object' ? b.porMotivo : {};
+  const n = (v) => (Number.isInteger(v) && v >= 0 ? Math.min(v, 1e9) : 0);
+  return { total: n(b.total), porMotivo: Object.fromEntries(MOTIVOS_BARRADO.map((k) => [k, n(por[k])])) };
+}
 export const linkAgendamento = {
   // GET /api/estabelecimento/link-agendamento
   async obter() {
     const r = await chamar('GET', '/api/estabelecimento/link-agendamento');
     return r.ok ? { ok: true, link: lerLink(r.dados) } : r;
   },
-  // PUT /api/estabelecimento/link-agendamento  { ativo?, diasMax?, telefoneObrigatorio?, nomeObrigatorio?, veiculoObrigatorio?: ['placa','modelo','porte'] }
-  async gravar({ ativo, diasMax, telefoneObrigatorio, nomeObrigatorio, veiculoObrigatorio } = {}) {
+  // PUT /api/estabelecimento/link-agendamento  { ativo?, diasMax?, telefoneObrigatorio?, nomeObrigatorio?, veiculoObrigatorio?: ['placa','modelo','porte'], limiteAbertos?: 1..20 }
+  async gravar({ ativo, diasMax, telefoneObrigatorio, nomeObrigatorio, veiculoObrigatorio, limiteAbertos } = {}) {
     const corpo = {};
+    if (limiteAbertos !== undefined) {
+      if (!Number.isInteger(limiteAbertos) || limiteAbertos < 1 || limiteAbertos > 20) return { ok: false, status: 0, erro: 'Informe de 1 a 20 horários por cliente.' };
+      corpo.limiteAbertos = limiteAbertos;
+    }
     if (nomeObrigatorio !== undefined) {
       if (typeof nomeObrigatorio !== 'boolean') return { ok: false, status: 0, erro: 'Valor inválido.' };
       corpo.nomeObrigatorio = nomeObrigatorio;
@@ -1357,6 +1371,7 @@ function lerPaginaPublica(d) {
     endereco: opcional(d.endereco, 300), mapaUrl: httpsOuVazio(d.mapaUrl),
     ativo: d.ativo === true, aviso: texto(d.aviso, 200), diasMax: Number.isInteger(d.diasMax) ? Math.min(60, Math.max(1, d.diasMax)) : 30,
     profissionalAutomatico: d.profissionalAutomatico === true, // B9c: a página não pergunta "com quem?"; o servidor escolhe o mais livre
+    selo: typeof d.selo === 'string' && /^\d{1,12}\.[0-9a-f]{32}$/.test(d.selo) ? d.selo : '', // B10: prova de que a página foi aberta há pelo menos 2 s (volta no pedido)
     tipo: texto(d.tipo, 40), exigeTelefone: d.exigeTelefone !== false, exigeNome: d.exigeNome !== false, // tudo obrigatório de fábrica; o dono tira em Estabelecimento
     exigeVeiculo: Array.isArray(d.exigeVeiculo) ? d.exigeVeiculo.filter((x) => ['placa', 'modelo', 'porte'].includes(x)) : ['placa', 'modelo', 'porte'],
     portes: listaDe(d.portes, 12).filter((x) => x && porteDoPublico(x.id)).map((x) => ({ id: x.id, nome: texto(x.nome, 20), exemplo: texto(x.exemplo || '', 60) })),
@@ -1398,12 +1413,13 @@ export const publico = {
     return r.ok ? { ok: true, horarios: listaDe(r.dados, 100).filter((x) => x && instante(x.inicio) !== null && IDV(x.profissionalId)).map((x) => ({ inicio: instante(x.inicio), profissionalId: x.profissionalId })) } : r;
   },
   // POST /api/publico/agendamentos  { nome, telefone, servicoIds, inicio, profissionalId?, cupomChave?, veiculo?, site }  → { agendamento, token, usouPlano }
-  async agendar({ nome, telefone, servicoIds, inicio, profissionalId, cupomChave, veiculo, site }) {
+  async agendar({ nome, telefone, servicoIds, inicio, profissionalId, cupomChave, veiculo, site, selo }) {
     if (!Number.isFinite(inicio)) return { ok: false, status: 0, erro: 'Escolha um dia e um horário.' };
     const corpo = { nome: texto(nome, 100), telefone: texto(telefone, 30), servicoIds: Array.isArray(servicoIds) ? servicoIds.filter((x) => ID.test(String(x))).slice(0, 10) : [], inicio: new Date(inicio).toISOString() };
     if (ID.test(String(profissionalId))) corpo.profissionalId = profissionalId;
     if (typeof cupomChave === 'string' && cupomChave.trim()) corpo.cupomChave = texto(cupomChave.trim(), 40);
     if (typeof site === 'string' && site) corpo.site = texto(site, 100);
+    if (typeof selo === 'string' && /^\d{1,12}\.[0-9a-f]{32}$/.test(selo)) corpo.selo = selo;
     if (veiculo && typeof veiculo === 'object') {
       corpo.veiculo = { placa: texto(veiculo.placa, 20), modelo: texto(veiculo.modelo, 60), porte: porteDoPublico(veiculo.porte) ? veiculo.porte : '' }; // campo vazio vai vazio: o servidor trata como "não informado"
       if (typeof veiculo.marca === 'string' && veiculo.marca.trim()) corpo.veiculo.marca = texto(veiculo.marca, 60);

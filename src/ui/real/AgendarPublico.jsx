@@ -168,7 +168,7 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
   const enviar = async () => {
     if (enviando) return;
     setErro(''); setEnviando(true);
-    const r = await publico.agendar({ nome, telefone: tel, servicoIds: srv, profissionalId: escolha?.profissionalId || barb, inicio: escolha?.inicio, cupomChave: cupom, site: isca, ...(usaVeiculo ? { veiculo: { placa, marca, modelo, cor, porte } } : {}) });
+    const r = await publico.agendar({ nome, telefone: tel, servicoIds: srv, profissionalId: escolha?.profissionalId || barb, inicio: escolha?.inicio, cupomChave: cupom, site: isca, selo: pagina.selo, ...(usaVeiculo ? { veiculo: { placa, marca, modelo, cor, porte } } : {}) });
     setEnviando(false);
     if (!r.ok) {
       setErro(r.erro);

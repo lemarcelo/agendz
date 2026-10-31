@@ -12,7 +12,8 @@ import { servicosNaOrdemDaLoja } from './ordem-servicos.js';
 import { limitesDoDia, ordemPorFolga, profissionalAutomatico } from './profissional-auto.js';
 
 export const PASSO_PUBLICO_MIN = 30; // os horários do link saem de 30 em 30 minutos
-export const MAX_ABERTOS_LINK = 3; // agendamentos futuros em aberto por cliente
+export const MAX_ABERTOS_LINK = 3; // de fábrica: agendamentos futuros em aberto por cliente; cada loja escolhe o seu de 1 a 20 (`linkAgendamento.limiteAbertos`, B10)
+export const MAX_ABERTOS_LINK_TETO = 20;
 export const TOKEN_DIAS = 90;
 export const MAX_TOKENS_CLIENTE = 5;
 export const CODIGO_VALE_MIN = 30;
@@ -29,7 +30,8 @@ export function configLink(s) {
   const d = Number.isInteger(c.diasMax) ? Math.min(60, Math.max(1, c.diasMax)) : DIAS_MAX_PADRAO;
   // Tudo obrigatório de fábrica (nome, telefone e, na estética, placa, modelo e porte); o dono pode tirar cada um em Estabelecimento (v121).
   const vei = Array.isArray(c.veiculoObrigatorio) ? c.veiculoObrigatorio.filter((k) => CAMPOS_VEICULO_EXIGIVEIS.includes(k)) : VEICULO_DE_FABRICA_NO_LINK;
-  return { ativo: c.ativo !== false, diasMax: d, telefoneObrigatorio: c.telefoneObrigatorio !== false, nomeObrigatorio: c.nomeObrigatorio !== false, veiculoObrigatorio: [...vei] };
+  const lim = Number.isInteger(c.limiteAbertos) ? Math.min(MAX_ABERTOS_LINK_TETO, Math.max(1, c.limiteAbertos)) : MAX_ABERTOS_LINK;
+  return { ativo: c.ativo !== false, diasMax: d, telefoneObrigatorio: c.telefoneObrigatorio !== false, nomeObrigatorio: c.nomeObrigatorio !== false, veiculoObrigatorio: [...vei], limiteAbertos: lim };
 }
 
 // Livre = sem erro de escala/antecedência e sem NENHUM agendamento ativo na janela (pendente também ocupa: o cliente nunca disputa horário).
@@ -185,7 +187,7 @@ export function agendarPorLink(s, d, agora) {
   if (!r0.ok || !r0.cliente) return { ok: false, erros: r0.erros || ['Informe o nome e o telefone.'] };
   const c = r0.cliente;
   if (r0.criado) c.origemCadastro = 'link';
-  if (abertos(c) >= MAX_ABERTOS_LINK) return { ok: false, erros: [`Você já tem ${MAX_ABERTOS_LINK} horários marcados. Cancele ou remarque um deles para agendar outro.`] };
+  if (abertos(c) >= cfg.limiteAbertos) return { ok: false, erros: [`Você já tem ${cfg.limiteAbertos} ${cfg.limiteAbertos === 1 ? 'horário marcado' : 'horários marcados'}. Cancele ou remarque um deles para agendar outro.`] };
   const r = E.criarAgendamento(s, { clienteId: c.id, profissionalId: profissional.id, servicoIds: d.servicoIds, inicio: d.inicio, origem: 'link', exigirVeiculo: cfg.veiculoObrigatorio, ...(usaVeiculo ? { veiculo: lv.veiculo } : {}) }, E.AUTOR_CLIENTE(c), agora);
   if (!r.ok) return { ok: false, erros: r.erros };
   const a = r.agendamento;

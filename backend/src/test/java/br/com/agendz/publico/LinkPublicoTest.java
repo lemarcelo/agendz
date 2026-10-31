@@ -61,6 +61,8 @@ class LinkPublicoTest extends BaseApi {
 
     @Autowired
     private LimitePublico limitePublico;
+    @Autowired
+    br.com.agendz.cifra.Cifra cifra;
 
     @BeforeEach
     void preparar() throws Exception {
@@ -83,6 +85,7 @@ class LinkPublicoTest extends BaseApi {
 
     @AfterEach
     void limpar() {
+        jdbc.update("delete from link_barrado");
         jdbc.update("delete from aviso_painel");
         jdbc.update("delete from acesso_publico");
         jdbc.update("delete from idempotencia");
@@ -283,8 +286,11 @@ class LinkPublicoTest extends BaseApi {
         Instant bom = as(dia, 9, 0);
         pedir(OFFBOX, corpo("A", novoTelefone(), s, bom, "")).andExpect(status().isBadRequest()).andExpect(jsonPath("$.mensagem").value("Informe o seu nome."));
         pedir(OFFBOX, corpo("Ana Lima", "12345", s, bom, "")).andExpect(status().isBadRequest()).andExpect(jsonPath("$.mensagem").value("Informe o telefone com DDD."));
-        pedir(OFFBOX, corpo("Ana Lima", novoTelefone(), s, bom, ",\"site\":\"http://spam\"")).andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.mensagem").value("Não foi possível agendar. Tente de novo."));
+        // campo isca preenchido = robô: "sucesso" que não grava nada (B10); o registro mínimo do barrado fica
+        int antes = contar("select count(*) from agendamento");
+        pedir(OFFBOX, corpo("Ana Lima", novoTelefone(), s, bom, ",\"site\":\"http://spam\"")).andExpect(status().isCreated());
+        assertEquals(antes, contar("select count(*) from agendamento"));
+        assertEquals(1, contar("select count(*) from link_barrado where motivo = 'isca'"));
         pedir(OFFBOX, corpo("Ana Lima", novoTelefone(), "", bom, "")).andExpect(status().isBadRequest()).andExpect(jsonPath("$.mensagem").value("Escolha ao menos um serviço."));
         pedir(OFFBOX, corpo("Ana Lima", novoTelefone(), s + "," + s, bom, "")).andExpect(status().isBadRequest()).andExpect(jsonPath("$.mensagem").value("O mesmo serviço aparece duas vezes."));
         pedir(OFFBOX, corpo("Ana Lima", novoTelefone(), "\"" + UUID.randomUUID() + "\"", bom, "")).andExpect(status().isBadRequest());
@@ -321,6 +327,94 @@ class LinkPublicoTest extends BaseApi {
         assertEquals("Maria Souza", jdbc.queryForObject("select nome from cliente", String.class), "quem digita no link não renomeia o cadastro");
         assertEquals("painel", jdbc.queryForObject("select origem_cadastro from cliente", String.class));
         assertEquals(existente, jdbc.queryForObject("select cliente_id::text from agendamento", String.class));
+    }
+
+    // ---------------------------------------------------------------- B10: limite por loja, robô e registro dos barrados
+
+    private String seloDe(long segundosAtras) {
+        String ts = Long.toString(Instant.now().getEpochSecond() - segundosAtras);
+        return ts + "." + cifra.hash(UUID.fromString(LOJA_OFFBOX), "selo", ts).substring(0, 32);
+    }
+
+    private void limite(int n) throws Exception {
+        mvc.perform(put("/api/estabelecimento/link-agendamento").with(host(OFFBOX)).header(HttpHeaders.AUTHORIZATION, bearer(dono)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"limiteAbertos\":" + n + "}")).andExpect(status().isOk());
+    }
+
+    @Test
+    void oProprietarioEscolheOLimiteDeHorariosPorClienteEOClienteOuveAVerdade() throws Exception {
+        String s = "\"" + corte + "\"";
+        // de fábrica 3; só o proprietário muda; de 1 a 20
+        mvc.perform(get("/api/estabelecimento/link-agendamento").with(host(OFFBOX)).header(HttpHeaders.AUTHORIZATION, bearer(dono))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.limiteAbertos").value(3)).andExpect(jsonPath("$.barrados.total").value(0));
+        mvc.perform(put("/api/estabelecimento/link-agendamento").with(host(OFFBOX)).header(HttpHeaders.AUTHORIZATION, bearer(colaborador)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"limiteAbertos\":5}")).andExpect(status().isForbidden());
+        for (String ruim : new String[]{"0", "21", "-1"}) {
+            mvc.perform(put("/api/estabelecimento/link-agendamento").with(host(OFFBOX)).header(HttpHeaders.AUTHORIZATION, bearer(dono)).contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"limiteAbertos\":" + ruim + "}")).andExpect(status().isBadRequest());
+        }
+        limite(1);
+        String tel = novoTelefone();
+        pedir(OFFBOX, corpo("Ana Lima", tel, s, as(dia, 9, 0), "")).andExpect(status().isCreated());
+        // acima do limite: mensagem honesta (nunca "sucesso" falso para cliente comum) e nada novo gravado
+        pedir(OFFBOX, corpo("Ana Lima", tel, s, as(dia, 10, 0), "")).andExpect(status().isConflict()).andExpect(jsonPath("$.mensagem").value("Você já tem 1 horário marcado. Cancele um deles para agendar outro."));
+        assertEquals(1, contar("select count(*) from agendamento"));
+        // o registro é mínimo: hash do IP e do telefone, nunca o dado
+        assertEquals(1, contar("select count(*) from link_barrado where motivo = 'limite_cliente' and ip_hash ~ '^[0-9a-f]{64}$' and tel_hash ~ '^[0-9a-f]{64}$' and ip_hash <> ? and tel_hash <> ?", ip, tel));
+        // o contador do proprietário mostra o barrado
+        mvc.perform(get("/api/estabelecimento/link-agendamento").with(host(OFFBOX)).header(HttpHeaders.AUTHORIZATION, bearer(dono))).andExpect(jsonPath("$.limiteAbertos").value(1))
+                .andExpect(jsonPath("$.barrados.total").value(1)).andExpect(jsonPath("$.barrados.porMotivo.limite_cliente").value(1)).andExpect(jsonPath("$.barrados.porMotivo.isca").value(0))
+                .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("ip_hash"))));
+        // subir o limite libera de novo
+        limite(2);
+        pedir(OFFBOX, corpo("Ana Lima", tel, s, as(dia, 10, 0), "")).andExpect(status().isCreated());
+        assertEquals(2, contar("select count(*) from agendamento"));
+    }
+
+    @Test
+    void robosRecebemSucessoQueNaoGravaNadaEFicaUmRegistroMinimo() throws Exception {
+        String s = "\"" + corte + "\"";
+        int clientes = contar("select count(*) from cliente");
+        String tel = novoTelefone();
+        // a página entrega o selo; pedir logo em seguida (menos de 2 s) é robô: sucesso de mentira, nada gravado, nenhum cliente criado
+        String selo = texto(mvc.perform(doCliente(get("/api/publico/agendar")).with(host(OFFBOX))).andReturn().getResponse().getContentAsString(), "selo");
+        String r = pedir(OFFBOX, corpo("Rob Ot", tel, s, as(dia, 9, 0), ",\"selo\":\"" + selo + "\"")).andExpect(status().isCreated()).andExpect(jsonPath("$.agendamento.status").value("a_confirmar"))
+                .andReturn().getResponse().getContentAsString();
+        assertTrue(TOKEN.matcher(texto(r, "token")).matches());
+        assertEquals(0, contar("select count(*) from agendamento"));
+        assertEquals(clientes, contar("select count(*) from cliente"));
+        assertEquals(0, contar("select count(*) from acesso_publico"));
+        assertEquals(0, contar("select count(*) from aviso_painel"), "o proprietário não é incomodado por robô");
+        assertEquals(1, contar("select count(*) from link_barrado where motivo = 'rapido'"));
+        // o token de mentira não abre nada
+        meus(OFFBOX, texto(r, "token")).andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(0)));
+        // selo falso, de outra assinatura ou número solto: robô; selo ausente (página antiga) ou com mais de 2 s: pedido de verdade
+        limitePublico.reiniciar();
+        pedir(OFFBOX, corpo("Rob Ot", novoTelefone(), s, as(dia, 9, 0), ",\"selo\":\"1.abcdef\"")).andExpect(status().isCreated());
+        pedir(OFFBOX, corpo("Rob Ot", novoTelefone(), s, as(dia, 9, 30), ",\"selo\":\"lixo\"")).andExpect(status().isCreated());
+        assertEquals(0, contar("select count(*) from agendamento"));
+        assertEquals(1, contar("select count(*) from link_barrado where motivo = 'selo_invalido'"), "mesmo IP e motivo no mesmo minuto: uma linha só");
+        limitePublico.reiniciar();
+        pedir(OFFBOX, corpo("Ana Lima", novoTelefone(), s, as(dia, 9, 0), ",\"selo\":\"" + seloDe(30) + "\"")).andExpect(status().isCreated());
+        pedir(OFFBOX, corpo("Bia Lima", novoTelefone(), s, as(dia, 9, 30), "")).andExpect(status().isCreated());
+        assertEquals(2, contar("select count(*) from agendamento"));
+    }
+
+    @Test
+    void oRegistroDosBarradosNaoEnchePorIpMotivoEApagaDepoisDeTrintaDias() throws Exception {
+        String s = "\"" + corte + "\"";
+        for (int i = 0; i < 5; i++) pedir(OFFBOX, corpo("Rob Ot", novoTelefone(), s, as(dia, 9, 0), ",\"site\":\"x\"")).andExpect(status().isCreated());
+        assertEquals(1, contar("select count(*) from link_barrado where motivo = 'isca'"), "mesmo IP e motivo: no máximo 1 linha por minuto");
+        // 6 pedidos do mesmo telefone num minuto: o 6º leva 429 e fica registrado como frequência
+        String tel = novoTelefone();
+        for (int i = 0; i < 5; i++) pedir(OFFBOX, corpo("Ana Lima", tel, s, as(dia, 9, 0).plusSeconds(i * 1800L), "")).andExpect(i < 3 ? status().isCreated() : status().isConflict());
+        pedir(OFFBOX, corpo("Ana Lima", tel, s, as(dia, 11, 30), "")).andExpect(status().isTooManyRequests());
+        assertEquals(1, contar("select count(*) from link_barrado where motivo = 'frequencia'"));
+        // linha com mais de 30 dias some no próximo registro
+        jdbc.update("update link_barrado set em = now() - interval '31 days' where motivo = 'isca'");
+        limitePublico.reiniciar();
+        pedir(OFFBOX, corpo("Rob Ot", novoTelefone(), s, as(dia, 9, 0), ",\"site\":\"x\"")).andExpect(status().isCreated());
+        assertEquals(1, contar("select count(*) from link_barrado where motivo = 'isca'"), "a antiga saiu, a nova entrou");
     }
 
     @Test

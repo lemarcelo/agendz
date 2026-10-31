@@ -29,6 +29,23 @@ test('pagina: GET sem login; lê só o necessário e descarta lixo', async () =>
   assert.equal(r.pagina.profissionais[0].foto, null, 'só data:image/ vira foto'); assert.ok(!('senha' in r.pagina.profissionais[0]));
   servidor({});
   assert.equal((await publico.pagina()).pagina.ativo, false, 'resposta vazia nunca liga o link');
+  const SELO = '1730000000.' + 'a'.repeat(32);
+  servidor({ ativo: true, diasMax: 10, servicos: [], profissionais: [], selo: SELO });
+  assert.equal((await publico.pagina()).pagina.selo, SELO, 'B10: o selo da página volta para o pedido');
+  servidor({ ativo: true, diasMax: 10, servicos: [], profissionais: [], selo: '<script>' });
+  assert.equal((await publico.pagina()).pagina.selo, '', 'selo fora do formato é descartado');
+});
+
+test('agendar: o selo da página vai no corpo só no formato certo (B10)', async () => {
+  const SELO = '1730000000.' + 'b'.repeat(32);
+  const resumo = { id: AG, inicio: '2026-11-02T12:00:00Z', fim: '2026-11-02T12:30:00Z', status: 'a_confirmar', rotulo: 'x', servicos: ['Corte'], duracao: 30, total: 40, profissional: 'Ana', ativo: true, podeCancelar: true };
+  const inicio = Date.parse('2026-11-02T12:00:00Z');
+  servidor({ agendamento: resumo, token: TOKEN }, 201);
+  await publico.agendar({ nome: 'Maria', telefone: '53999000001', servicoIds: [SRV], inicio, selo: SELO });
+  assert.equal(chamadas[0].corpo.selo, SELO);
+  servidor({ agendamento: resumo, token: TOKEN }, 201);
+  await publico.agendar({ nome: 'Maria', telefone: '53999000001', servicoIds: [SRV], inicio, selo: 'lixo' });
+  assert.ok(!('selo' in chamadas[0].corpo), 'selo fora do formato nunca vai');
 });
 
 test('rota pública nunca leva o token do painel, mesmo com o painel aberto', async () => {
@@ -126,7 +143,7 @@ test('linkAgendamento: pendências (o que falta para o cliente ver horários) s�
 test('linkAgendamento: GET e PUT do proprietário; dias fora de 1 a 60 nem saem', async () => {
   servidor({ ativo: false, diasMax: 14, disponivel: false });
   const r = await linkAgendamento.obter();
-  assert.deepEqual(r.link, { ativo: false, diasMax: 14, disponivel: false, telefoneObrigatorio: true, nomeObrigatorio: true, veiculoObrigatorio: ['placa', 'modelo', 'porte'], pendencias: [] }, 'telefone, nome e dados do veículo obrigatórios de fábrica');
+  assert.deepEqual(r.link, { ativo: false, diasMax: 14, disponivel: false, telefoneObrigatorio: true, nomeObrigatorio: true, veiculoObrigatorio: ['placa', 'modelo', 'porte'], pendencias: [], limiteAbertos: 3, barrados: { total: 0, porMotivo: { limite_cliente: 0, isca: 0, rapido: 0, selo_invalido: 0, frequencia: 0 } } }, 'telefone, nome e dados do veículo obrigatórios de fábrica; limite 3 e contagem de barrados');
   assert.deepEqual([chamadas[0].metodo, chamadas[0].url], ['GET', 'https://loja.teste/api/estabelecimento/link-agendamento']);
   servidor({ ativo: true, diasMax: 20, disponivel: true });
   const g = await linkAgendamento.gravar({ ativo: true, diasMax: 20 });
@@ -137,6 +154,12 @@ test('linkAgendamento: GET e PUT do proprietário; dias fora de 1 a 60 nem saem'
   assert.equal(t.link.telefoneObrigatorio, false); assert.deepEqual(chamadas[0].corpo, { telefoneObrigatorio: false });
   servidor({});
   for (const ruim of [0, 61, 1.5, '30', null]) assert.equal((await linkAgendamento.gravar({ diasMax: ruim })).ok, false);
+  assert.equal(chamadas.length, 0);
+  servidor({ ativo: true, diasMax: 20, disponivel: true, limiteAbertos: 5 });
+  const l = await linkAgendamento.gravar({ limiteAbertos: 5 });
+  assert.equal(l.link.limiteAbertos, 5); assert.deepEqual(chamadas[0].corpo, { limiteAbertos: 5 });
+  servidor({});
+  for (const ruim of [0, 21, 1.5, '3', null]) assert.equal((await linkAgendamento.gravar({ limiteAbertos: ruim })).ok, false);
   assert.equal(chamadas.length, 0);
 });
 
