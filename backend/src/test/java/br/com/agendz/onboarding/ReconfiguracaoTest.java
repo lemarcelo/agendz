@@ -195,6 +195,46 @@ class ReconfiguracaoTest extends BaseApi {
     }
 
     @Test
+    void camposDoLinkDesfazemERefazemEExigemSenha() throws Exception {
+        String t = lojaConcluida();
+        // concluído e sem a senha confirmada: nada muda
+        enviar(DALFORNO, t, "/api/onboarding/link", "{\"nomeObrigatorio\":false}").andExpect(status().isForbidden());
+        assertEquals(0, contar("select count(*) from configuracao_loja where link_nome_obrigatorio = false"));
+
+        String id = abrir(t);
+        enviar(DALFORNO, t, "/api/onboarding/link", "{\"veiculoObrigatorio\":[\"cor\"]}").andExpect(status().isBadRequest());
+        enviar(DALFORNO, t, "/api/onboarding/link", "{\"veiculoObrigatorio\":[\"placa\",\"placa\"]}").andExpect(status().isBadRequest());
+        enviar(DALFORNO, t, "/api/onboarding/link", "{\"nomeObrigatorio\":false,\"veiculoObrigatorio\":[\"placa\"]}").andExpect(status().isOk());
+        enviar(DALFORNO, t, "/api/onboarding/link", "{\"telefoneObrigatorio\":false}").andExpect(status().isOk()); // segunda troca da mesma sessão: o "antes" continua sendo o padrão de fábrica
+        pegar(DALFORNO, t, "/api/estabelecimento/link-agendamento").andExpect(status().isOk()).andExpect(jsonPath("$.nomeObrigatorio").value(false)).andExpect(jsonPath("$.telefoneObrigatorio").value(false))
+                .andExpect(jsonPath("$.veiculoObrigatorio[0]").value("placa")).andExpect(jsonPath("$.veiculoObrigatorio.length()").value(1)).andExpect(jsonPath("$.ativo").value(true));
+        pegar(DALFORNO, t, "/api/onboarding/reconfiguracoes").andExpect(jsonPath("$.itens[0].linkTrocado").value(true)).andExpect(jsonPath("$.itens[0].servicosCriados").value(0)).andExpect(jsonPath("$.itens[0].podeDesfazer").value(true));
+
+        enviar(DALFORNO, t, "/api/onboarding/reconfiguracoes/" + id + "/desfazer", "{\"senha\":\"errada\"}").andExpect(status().isForbidden());
+        pegar(DALFORNO, t, "/api/estabelecimento/link-agendamento").andExpect(jsonPath("$.nomeObrigatorio").value(false));
+        enviar(DALFORNO, t, "/api/onboarding/reconfiguracoes/" + id + "/desfazer", SENHA).andExpect(status().isOk()).andExpect(jsonPath("$.itens[0].podeRefazer").value(true));
+        pegar(DALFORNO, t, "/api/estabelecimento/link-agendamento").andExpect(jsonPath("$.nomeObrigatorio").value(true)).andExpect(jsonPath("$.telefoneObrigatorio").value(true))
+                .andExpect(jsonPath("$.veiculoObrigatorio.length()").value(3));
+
+        enviar(DALFORNO, t, "/api/onboarding/reconfiguracoes/" + id + "/refazer", SENHA).andExpect(status().isOk());
+        pegar(DALFORNO, t, "/api/estabelecimento/link-agendamento").andExpect(jsonPath("$.nomeObrigatorio").value(false)).andExpect(jsonPath("$.telefoneObrigatorio").value(false))
+                .andExpect(jsonPath("$.veiculoObrigatorio.length()").value(1));
+    }
+
+    @Test
+    void camposDoLinkNoPrimeiroAcessoGravamSemSenhaEOutraLojaNaoAlcanca() throws Exception {
+        // assistente ainda não concluído: não há o que confirmar (a senha acabou de ser trocada)
+        String t = token(DALFORNO, "alan");
+        enviar(DALFORNO, t, "/api/onboarding/link", "{\"nomeObrigatorio\":false}").andExpect(status().isOk());
+        pegar(DALFORNO, t, "/api/estabelecimento/link-agendamento").andExpect(jsonPath("$.nomeObrigatorio").value(false));
+        assertEquals(0, contar("select count(*) from reconfiguracao"), "primeiro acesso não abre reconfiguração");
+        // outra loja (sem assistente) não é alcançada
+        enviar(OFFBOX, token(OFFBOX, "proprietario"), "/api/onboarding/link", "{\"nomeObrigatorio\":false}").andExpect(status().isNotFound());
+        // quem não é o dono não grava
+        enviar(APEX, token(APEX, "pablo"), "/api/onboarding/link", "{\"nomeObrigatorio\":false}").andExpect(status().isForbidden());
+    }
+
+    @Test
     void desfazerComissaoSemValorAnteriorVoltaAoPadraoDe50() throws Exception {
         String t = lojaConcluida();
         String id = abrir(t);

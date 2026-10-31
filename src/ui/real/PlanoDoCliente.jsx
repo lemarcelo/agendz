@@ -1,7 +1,7 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
 // Bloco "Plano" da ficha do cliente no site real, para quem tem a seção Planos (quem não tem nem monta o bloco, então nem chama a API): plano em andamento
 // (saldo, vencimento), histórico curto, "Sem plano" com Adicionar plano, Editar (trocar de plano, registrar mensalidade) e Encerrar. Só usa `planos.*` de api-real.js
-// (as rotas de V32 que a aba Planos já usa); o saldo e a dívida vêm do servidor, derivados dos atendimentos. Horários fixos ainda não existem no servidor.
+// (as rotas de V32 que a aba Planos já usa); o saldo e a dívida vêm do servidor, derivados dos atendimentos.
 // O aviso, a recarga e o formulário aberto moram na tela pai (Clientes): este bloco recarrega sem perder nada.
 // Não importa `api.js`, `hooks.js` nem `common.jsx` (tests/estatico.test.mjs). Classes de CSS próprias terminam em `-real`.
 import React, { useEffect, useState } from 'react';
@@ -10,7 +10,7 @@ import { SITUACAO, rotuloMes, somaMeses } from '../../domain/planos.js';
 import { avisoTrocaParcial, motivoValido, resumoDoCliente, textoVencimento } from '../../domain/plano-cliente.js';
 import { fmtDate, fmtMoney } from '../../domain/time.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
-import { Rodape, usarEnvio } from './Planos.jsx';
+import { Rodape, resumoFixos, usarEnvio } from './Planos.jsx';
 
 const plural = (n, um, varios) => (n === 1 ? um : varios);
 const opcaoDoPlano = (p) => `${p.nome} · ${fmtMoney(p.preco)}/mês · ${p.cortes} ${plural(p.cortes, 'atendimento', 'atendimentos')}`;
@@ -46,6 +46,7 @@ export function BlocoPlanoReal({ cliente, aviso, versao, aoAbrir, aoFeito, aoIr 
         <div data-testid="plano-cli-ativo">
           <p><b data-testid="plano-cli-nome">{a.plano.nome}</b> <span className="chip chip-p" data-testid="plano-cli-situacao">{a.status === 'pendente' ? SITUACAO.pendente : a.saldo.atrasado ? 'Mensalidade atrasada' : SITUACAO.ativa}</span> <small className="muted">{fmtMoney(a.plano.preco)}/mês</small></p>
           {a.status === 'ativa' && <p data-testid="plano-cli-saldo">Atendimentos que restam: <b>{a.saldo.restantes}</b> de {a.plano.cortes}{a.saldo.maisPermitidos > 0 ? <small className="muted"> (+{a.saldo.maisPermitidos} adiantável)</small> : null}</p>}
+          <p className="muted" data-testid="plano-cli-fixos">Horários fixos: {resumoFixos(a)}</p>
           <p className="muted" data-testid="plano-cli-venc">{textoVencimento(a, { emAberto: r.emAberto, mes: dados.mes })}</p>
           <div className="acoes">
             <Btn tamanho="sm" onClick={() => setEditando(!editando)} aria-expanded={editando} data-testid="plano-cli-editar"><Icone n="edit" size={15} /> Editar plano</Btn>
@@ -54,6 +55,7 @@ export function BlocoPlanoReal({ cliente, aviso, versao, aoAbrir, aoFeito, aoIr 
           {editando && (
             <div className="acoes" data-testid="plano-cli-editar-acoes">
               <Btn tamanho="sm" onClick={() => aoAbrir({ tipo: 'trocar', a, planos: dados.planos, mes: dados.mes })} disabled={r.dividaPrevista > 0 || !r.catalogo.some((p) => p.id !== a.planoId)} data-testid="plano-cli-trocar">Trocar de plano</Btn>
+              <Btn tamanho="sm" onClick={() => aoAbrir({ tipo: 'fixos', a })} data-testid="plano-cli-fixos-btn">Horários fixos</Btn>
               <Btn tamanho="sm" onClick={() => aoAbrir({ tipo: 'pagar', a, mes: dados.mes })} data-testid="plano-cli-mensalidade">Registrar mensalidade</Btn>
             </div>
           )}

@@ -3,6 +3,7 @@
 // obrigatórios no Início; o Atender usa o padrão, marca os obrigatórios com *, manda a forma só no atendimento feito, barra "sem padrão" na tela e mostra a
 // mensagem do servidor; 390 px com fonte larga sem rolagem lateral.
 import { chromium } from 'playwright';
+import { PADRAO_PAINEL } from '../src/domain/ordem-atender.js';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { readFileSync } from 'node:fs';
@@ -49,6 +50,8 @@ const servidor = http.createServer((req, res) => {
         regras = { ...regras, futuro: k.futuro, local: k.local };
       }
       if (f !== undefined) regras = { ...regras, formaPagamentoPadrao: f };
+      if (c.profissionalAutomatico !== undefined) regras = { ...regras, profissionalAutomatico: c.profissionalAutomatico === true };
+      if (c.ordemAtender !== undefined) regras = { ...regras, ordemAtender: c.ordemAtender };
       if (c.ordemServicos !== undefined) { if (!['uso', 'manual'].includes(c.ordemServicos)) return json(400, { mensagem: 'Ordem dos serviços inválida.' }); regras = { ...regras, ordemServicos: c.ordemServicos }; }
       return json(200, regras);
     }
@@ -106,9 +109,29 @@ const abrirAtender = async (p) => { await p.getByTestId('nav-agenda').click(); a
   await p.getByTestId('regras-salvar').click();
   await p.getByTestId('regras-ok').waitFor();
   const put = chamadas.filter((c) => c.m === 'PUT' && c.u === '/api/estabelecimento/regras-atendimento').at(-1).corpo;
-  assert.deepEqual(put, { formaPagamentoPadrao: 'dinheiro', camposObrigatorios: { futuro: ['nome'], local: ['telefone', 'formaPagamento'] }, ordemServicos: 'manual' });
-  assert.deepEqual(regras, { formaPagamentoPadrao: 'dinheiro', futuro: ['nome'], local: ['telefone', 'formaPagamento'], ordemServicos: 'manual' });
+  assert.deepEqual(put, { formaPagamentoPadrao: 'dinheiro', camposObrigatorios: { futuro: ['nome'], local: ['telefone', 'formaPagamento'] }, ordemServicos: 'manual', profissionalAutomatico: false, ordemAtender: PADRAO_PAINEL });
+  assert.deepEqual(regras, { formaPagamentoPadrao: 'dinheiro', futuro: ['nome'], local: ['telefone', 'formaPagamento'], ordemServicos: 'manual', profissionalAutomatico: false, ordemAtender: PADRAO_PAINEL });
   ok('Início do dono: muda forma padrão e campos obrigatórios; corpo certo, servidor guardou');
+  await ctx.close();
+}
+
+// 1b. (v133) ordem da tela Atender: o proprietário sobe Serviços no atendimento feito, salva; o corpo leva a lista completa e o Atender mostra Serviços antes de Cliente
+{
+  regras = { formaPagamentoPadrao: 'pix', futuro: ['nome'], local: [], ordemServicos: 'uso', profissionalAutomatico: false };
+  const { ctx, p } = await entrar();
+  await p.getByTestId('regras-real').waitFor();
+  await p.getByTestId('ordem-atender').waitFor();
+  assert.equal(await p.getByTestId('ordem-local-veiculo').count(), 0, 'barbearia não tem campos de veículo');
+  await p.getByTestId('ordem-local-etapas-sobe-servicos').click();
+  await p.getByTestId('regras-salvar').click();
+  await p.getByTestId('regras-ok').waitFor();
+  const put = chamadas.filter((c) => c.m === 'PUT' && c.u === '/api/estabelecimento/regras-atendimento').at(-1).corpo;
+  assert.deepEqual(put.ordemAtender.local.etapas, ['servicos', 'cliente', 'quando', 'produtos', 'veiculo']);
+  assert.deepEqual(put.ordemAtender.futuro.etapas, PADRAO_PAINEL.futuro.etapas, 'o agendamento futuro não mudou');
+  await abrirAtender(p);
+  const y = async (rotulo) => (await p.locator('.atender-real legend', { hasText: rotulo }).first().boundingBox()).y;
+  assert.ok(await y('Serviços') < await y('Cliente'), 'Serviços antes de Cliente no atendimento feito');
+  ok('ordem do Atender: mover no cartão, corpo completo, o Atender segue a ordem salva');
   await ctx.close();
 }
 

@@ -115,3 +115,23 @@ test('planosPublico: nunca leva o token do painel, o pedido leva a isca e o sald
   assert.equal(chamadas[0].url, `https://loja.teste/api/publico/planos/saldo?telefone=${encodeURIComponent('(53) 99900-0001')}`);
   assert.equal(s.planos[0].restantes, 1);
 });
+
+test('horários fixos (v128): POST /api/assinaturas/{id}/fixos com a lista inteira; lê fixos e apagados; id ou lista ruins nem saem', async () => {
+  const VEI = '00000000-0000-4000-8000-000000000090';
+  const fixo = { id: ID, dia: 1, hm: '18:00', profissionalId: CLI, servicoIds: [SRV, 'lixo'], veiculoId: VEI };
+  servidor({ assinatura: { id: ID, status: 'ativa', fixos: [fixo, { dia: 9, hm: '99:99', profissionalId: CLI, servicoIds: [SRV] }] }, apagados: 2 });
+  const r = await planos.definirFixos(ID, { fixos: [{ dia: 1, hm: '18:00', profissionalId: CLI, servicoIds: [SRV, 'lixo'], veiculoId: VEI, extra: 'x' }] });
+  assert.deepEqual([chamadas[0].metodo, chamadas[0].url], ['POST', `https://loja.teste/api/assinaturas/${ID}/fixos`]);
+  assert.deepEqual(chamadas[0].corpo, { fixos: [{ dia: 1, hm: '18:00', profissionalId: CLI, servicoIds: [SRV], veiculoId: VEI }] });
+  assert.equal(r.ok, true); assert.equal(r.apagados, 2);
+  assert.deepEqual(r.assinatura.fixos[0], { id: ID, dia: 1, hm: '18:00', profissionalId: CLI, servicoIds: [SRV], veiculoId: VEI });
+  assert.equal(r.assinatura.fixos[1].dia, 0, 'dia fora de 0 a 6 nunca passa'); assert.equal(r.assinatura.fixos[1].hm, '00:00');
+  chamadas.length = 0;
+  assert.equal((await planos.definirFixos('ruim', { fixos: [] })).ok, false);
+  assert.equal((await planos.definirFixos(ID, { fixos: [1, 2, 3, 4].map(() => ({ dia: 1, hm: '18:00' })) })).ok, false, 'no máximo 3');
+  assert.equal((await planos.definirFixos(ID, {})).ok, false);
+  assert.equal(chamadas.length, 0);
+  servidor({ mensagem: 'Esse horário é fixo de um cliente com plano. Escolha outro horário.' }, 409);
+  const e = await planos.definirFixos(ID, { fixos: [] });
+  assert.equal(e.ok, false); assert.equal(chamadas[0].corpo.fixos.length, 0, 'lista vazia é válida: tira os fixos');
+});

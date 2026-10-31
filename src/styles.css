@@ -894,6 +894,18 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
 .atender-real-titulo { margin: 0; font-size: 16px; }
 .regras-real { display: grid; gap: 10px; margin-top: 12px; min-width: 0; }
 .regras-real > h3 { margin: 0; font-size: 15px; }
+/* v133: ordem da tela Atender (Estabelecimento > Regras e cartão de regras do site real) */
+.ordem-atender { display: grid; gap: 10px; min-width: 0; }
+.ordem-atender > h3 { margin: 0; font-size: 15px; }
+.ordem-atender > p { margin: 0; }
+.ordem-atender-grupo { display: grid; gap: 8px; min-width: 0; border: 1px solid var(--borda, rgba(128,128,128,.35)); border-radius: 12px; padding: 12px; margin: 0; }
+.ordem-atender-grupo legend { padding: 0 6px; font-weight: 600; }
+.ordem-atender-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; min-width: 0; }
+.ordem-atender-lista li { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.ordem-atender-lista li > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.ordem-atender-setas { display: inline-flex; gap: 6px; flex: none; }
+.ordem-atender .acoes { display: flex; flex-wrap: wrap; gap: 8px; }
+
 .avisos-real { display: grid; gap: 10px; margin-top: 12px; min-width: 0; }
 .avisos-real > h3 { margin: 0; font-size: 15px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .avisos-lista-real { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }

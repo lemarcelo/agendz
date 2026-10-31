@@ -174,6 +174,11 @@ Lista simples. Cada item está no histórico do `prompt-agendz-regras.md` (v84 a
 - **Hipótese:** o fragmento (`#`) se perde no caminho (redirecionamento ou quadro do claude.ai) e a página cai na loja padrão.
 - **Decisão sem confirmação:** reforçar com `?loja=<slug>` além do `#…@<slug>`; a Apex só aparece se nenhum dos dois chegar. **Em aberto:** se ainda abrir a Apex, preciso saber se o endereço aberto no navegador ainda tem `?loja=` e `#` (copie a barra de endereços da aba aberta).
 
+## v128 (31/10): horários fixos dos planos no servidor e no site real
+- Pedido do Marcelo (07:06, item 2 da fila). Mesmas regras do simulador (`assinaturas.js`/`fixos.js`), agora também no servidor: até 3 por assinante, 14 dias à frente, 1 atendimento do plano por ocorrência, reservado ao assinante, encerrar apaga os futuros.
+- Decisões sem confirmação: (1) cada ocorrência é criada numa transação própria e o par (fixo, data) é único no banco, então duas execuções da automação nunca duplicam; (2) o aviso de "não coube" é um por ocorrência (tabela `assinatura_fixo_aviso`), nunca a cada minuto; (3) tirar o fixo cancela com motivo `plano_fixo` só o agendamento que tem produto vendido, o resto é apagado; (4) na estética o fixo leva o único veículo do cliente (ou o escolhido, se tiver mais de um); (5) reserva do fixo vale também para a remarcação.
+- Dúvida: aviso de fixo ainda não leva a um cartão (não há agendamento); só texto no cartão de Avisos.
+
 ## v127 (31/10): Avaliações no servidor e no site real
 - Estrela do cartão fica num `div.cartao-bloco` (relativo) para ficar no canto do cartão mesmo com o painel aberto.
 - Pedir avaliação no site real tem dois toques (Preparar chama o servidor; Abrir no WhatsApp abre a aba sem `await` antes).
@@ -191,3 +196,16 @@ Lista simples. Cada item está no histórico do `prompt-agendz-regras.md` (v84 a
 - **Decisão:** "Desligar neste aparelho" reenvia a inscrição (mesmo endpoint = mesma linha) para descobrir o id e apagar no servidor; assim não precisa guardar nada no aparelho.
 - **Dúvida/limite:** a entrega real (Google, Apple, Mozilla) não dá para provar fora de produção; a primeira prova é o botão "Enviar teste". No iPhone só funciona com o site instalado na tela de início (o ícone é SVG; se o iOS pedir PNG, trocar).
 - **Para ligar em produção:** rodar `deploy/preparar-api.sh` na VPS (gera `VAPID_PUBLICA`/`VAPID_PRIVADA` no `.env`) e redeploy da API; sem isso o bloco mostra "ainda não está ligado neste servidor".
+## v132 (31/10): B9a campos do link no Reconfigurar e B9c escolha automática do profissional
+- B9c, regra: `estabelecimento.profissionalAutomatico` (simulada) e `configuracao_loja.profissional_automatico` (servidor, V42), padrão desligado = continua perguntando. Quem muda: proprietário (Estabelecimento > Regras; no site real, cartão Regras do atendimento).
+- Ordem do "mais livre": menos agendamentos não cancelados no dia; empate, menos nos 7 dias a partir do dia; empate, ordem da equipe (cadastro). Mesmos casos nos dois lados (`equivalencia/folga.json`).
+- Quem preencheu o profissional continua mandando; o profissional (papel) sempre atende como ele mesmo. O link com `profissionalInicial` (link de um profissional) continua indo para aquele profissional.
+- Atendimento de agora ou passado: o primeiro da ordem (não disputa horário). Futuro: o primeiro da ordem que cabe (expediente dele e sem conflito); ninguém livre = erro "Nenhum profissional está livre neste horário".
+- Decisão sem confirmação: no servidor a checagem de "cabe" usa a duração do porte médio; a conferência final (porte, box) continua em `inserirAgendamento`. Campo "profissional" obrigatório nas regras conta como preenchido quando a escolha é automática.
+- Em aberto: Java só roda no CI (`AtendimentoTest`, `FolgaEquivalenciaTest`). Falta B9b (Atender igual à tela do link).
+
+## v133 (31/10): ordem da tela Atender configurável (B9b)
+- Pedido (09:55–09:59): porte antes do serviço na estética; padrão = a ordem atual; o proprietário muda a ordem dos itens e das etapas, para cada tipo de atendimento. Feito: Estabelecimento > Regras (Artifact) e cartão de regras (site real) com setas por etapa e por campo, separado para **agendamento** e **atendimento feito**.
+- Decisão sem confirmação: **o padrão é a ordem de hoje de cada tela** (site real: Cliente → Veículo → Serviços → Quando → Produtos; demonstração: Serviços → Quando → Produtos → Cliente → Veículo). Por isso há dois padrões no front; o servidor guarda só o que o dono escolheu e usa o do site real quando nada foi escolhido.
+- Decisão sem confirmação: o porte antes do serviço **não vira regra fixa**: é o botão "Usar a ordem da página do cliente" (Veículo com porte primeiro → Serviços → Quando → Cliente → Produtos). Quem quiser outra ordem ajusta com as setas.
+- Decisão sem confirmação: continua uma tela só (sem passo a passo); a ordem vale para os dois tipos de loja (a etapa Veículo só aparece onde há veículo). Lista parcial ou com lixo é completada pelo saneamento (nada some). Passo a passo com "Continuar" como no link fica como possível segunda fatia.

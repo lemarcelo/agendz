@@ -21,6 +21,8 @@ import { coordenadasDeTexto } from '../domain/localizacao.js';
 import { LIMITE_PORTES, PORTE_PADRAO, listaDePortes } from '../domain/veiculos.js';
 import { fatorDeTexto, fatorEmTexto } from '../domain/previa-portes.js';
 import PreviaPortes from './leve/PreviaPortes.jsx';
+import OrdemAtender from './leve/OrdemAtender.jsx';
+import { PADRAO_ARTIFACT, sanearOrdemAtender } from '../domain/ordem-atender.js';
 
 const ORDEM_SEMANA = [1, 2, 3, 4, 5, 6, 0];
 
@@ -251,6 +253,10 @@ export default function Estabelecimento({ user }) {
                 <option value="uso">Mais usados primeiro</option><option value="manual">Minha ordem</option>
               </select>
             </Campo>
+            <Interruptor checked={e.profissionalAutomatico === true} onChange={(v) => { const r = apiEst.salvar({ profissionalAutomatico: v }); if (r.ok) toast(v ? 'O app escolhe quem faz o serviço.' : 'Quem faz o serviço volta a ser escolhido na tela.'); else toast(r.erros[0], 'erro'); }}
+              rotulo={`Não perguntar quem vai fazer o serviço`} descricao={`Ligado, o campo do ${rot('profissional')} some do Atender e do link do cliente, e o app escolhe quem está com a agenda mais livre naquele dia (empate: quem tem menos horários na semana, depois a ordem da equipe). Respeita expediente, conflito${capAtiva('usaRecursoFisico') ? ', box' : ''} e horário fixo reservado. Desligado (padrão), a pessoa escolhe.`} testid="regras-profissional-auto" />
+            <OrdemAtender valor={sanearOrdemAtender(e.ordemAtender, PADRAO_ARTIFACT)} padrao={PADRAO_ARTIFACT} usaVeiculo={capAtiva('usaVeiculo')}
+              aoMudar={(v) => { const r = apiEst.salvar({ ordemAtender: v }); if (r.ok) toast('Ordem do Atender salva.'); else toast(r.erros[0], 'erro'); }} />
             <PagamentoRegras st={st} e={e} />
             {ehDono(user) && <Campo rotulo={`Comissão padrão do ${rot('profissional')} (%)`} dica={`Parte de cada ${rot('atendimento')} que fica com o ${rot('profissional')}. O restante é do estabelecimento. Pode ser mudada por serviço ou por ${rot('profissional')}. Só o proprietário altera e vê.`}>
               <ComissaoPadrao valor={e.comissaoPadrao ?? 50} />

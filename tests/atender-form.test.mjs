@@ -139,3 +139,11 @@ test('boxes: só os ativos entram no formulário; o editor barra vazio, repetido
   assert.match(erroDosBoxes(Array.from({ length: 21 }, (_, i) => ({ nome: `B${i}` }))), /20/);
   assert.equal(erroDosBoxes([{ nome: 'A' }, { nome: 'B', ativo: false }]), '');
 });
+
+// B9c: com a escolha automática ligada, "profissional" conta como preenchido (o servidor escolhe o mais livre).
+test('B9c: profissional obrigatório não falta quando a loja deixa o app escolher', () => {
+  const regras = { ...REGRAS_DE_FABRICA, futuro: ['profissional'], local: ['profissional'] };
+  assert.equal(camposFaltando('local', { profissionalId: '' }, regras).length, 1);
+  assert.equal(camposFaltando('local', { profissionalId: '' }, { ...regras, profissionalAutomatico: true }).length, 0);
+  assert.equal(camposFaltando('futuro', { profissionalId: '' }, { ...regras, profissionalAutomatico: true }).length, 0);
+});

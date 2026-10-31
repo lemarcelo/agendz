@@ -1,0 +1,13 @@
+{
+  "descricao": "B9c: ordem do mais livre para o menos livre. h = horas desde a meia-noite do dia do atendimento (negativo = antes do dia). Dia = [0, 24); janela = [0, 168).",
+  "casos": [
+    { "nome": "sem agendamentos segue a ordem da equipe", "ids": ["a", "b", "c"], "agendamentos": [], "esperado": ["a", "b", "c"] },
+    { "nome": "menos agendamentos no dia vem antes", "ids": ["a", "b", "c"], "agendamentos": [{ "p": "a", "h": 9 }, { "p": "a", "h": 10 }, { "p": "b", "h": 9 }], "esperado": ["c", "b", "a"] },
+    { "nome": "empate no dia: menos nos 7 dias seguintes", "ids": ["a", "b"], "agendamentos": [{ "p": "a", "h": 9 }, { "p": "b", "h": 9 }, { "p": "a", "h": 33 }, { "p": "a", "h": 57 }, { "p": "b", "h": 33 }], "esperado": ["b", "a"] },
+    { "nome": "empate total: ordem da equipe, qualquer que seja ela", "ids": ["b", "a"], "agendamentos": [{ "p": "a", "h": 9 }, { "p": "b", "h": 9 }], "esperado": ["b", "a"] },
+    { "nome": "cancelado não conta", "ids": ["a", "b"], "agendamentos": [{ "p": "a", "h": 9, "cancelado": true }, { "p": "a", "h": 10, "cancelado": true }, { "p": "b", "h": 9 }], "esperado": ["a", "b"] },
+    { "nome": "antes do dia e depois da janela não contam", "ids": ["b", "a"], "agendamentos": [{ "p": "a", "h": -30 }, { "p": "a", "h": 200 }, { "p": "b", "h": 9 }], "esperado": ["a", "b"] },
+    { "nome": "o limite do dia é aberto no fim: meia-noite seguinte conta só na janela", "ids": ["a", "b"], "agendamentos": [{ "p": "a", "h": 24 }, { "p": "b", "h": 23 }], "esperado": ["a", "b"] },
+    { "nome": "quem não está na lista é ignorado", "ids": ["a", "b"], "agendamentos": [{ "p": "zzz", "h": 9 }, { "p": "a", "h": 9 }], "esperado": ["b", "a"] }
+  ]
+}

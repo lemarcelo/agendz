@@ -4,9 +4,11 @@
 // Toda regra (um plano por cliente, cota, adiantamento, estorno sem deixar horário descoberto, dívida) é do servidor; a tela mostra a mensagem dele.
 // Não importa `api.js`, `hooks.js` nem `common.jsx` (tests/estatico.test.mjs). Classes de CSS próprias terminam em `-real`.
 import React, { useEffect, useState } from 'react';
-import { planos as api, clientes as apiClientes, servicos as apiServicos } from '../../services/api-real.js';
+import { planos as api, clientes as apiClientes, profissionais as apiProfissionais, servicos as apiServicos } from '../../services/api-real.js';
 import { ADIANTA_MAX, ACUMULO_MAX, INTERVALO_MAX, CORTES_MAX, SITUACAO, rotuloMes, somaMeses } from '../../domain/planos.js';
-import { fmtMoney } from '../../domain/time.js';
+import { fmtMoney, DIAS_SEMANA, DIAS_CURTOS } from '../../domain/time.js';
+import { DIAS_FIXOS_A_FRENTE, MAX_FIXOS } from '../../domain/planos.js';
+import { Rot, capAtiva } from '../../domain/tipos.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
 
 const FORMAS = { pix: 'Pix', dinheiro: 'Dinheiro', cartao: 'Cartão' };
@@ -141,6 +143,59 @@ export function FormEncerrar({ a, aoCancelar, aoFeito }) {
   );
 }
 
+export const resumoFixos = (a) => ((a.fixos || []).length ? a.fixos.map((f) => `${DIAS_CURTOS[f.dia]} ${f.hm}`).join(' · ') : 'nenhum');
+
+// Até MAX_FIXOS horários por semana do assinante (v128). Quem cria o agendamento de cada um, DIAS_FIXOS_A_FRENTE dias antes, e confere tudo (conflito, escala, box, cota) é o servidor;
+// aqui só se escolhe dia, hora, profissional e serviço do plano (e o veículo, na estética, quando o cliente tem mais de um). A mensagem de erro é a dele.
+export function FormFixosReal({ a, aoCancelar, aoFeito }) {
+  const [profs, setProfs] = useState(null);
+  const [servs, setServs] = useState([]);
+  const [veiculos, setVeiculos] = useState([]);
+  const comVeiculo = capAtiva('usaVeiculo');
+  const [linhas, setLinhas] = useState(() => (a.fixos || []).map((f) => ({ dia: f.dia, hm: f.hm, profissionalId: f.profissionalId, servicoId: f.servicoIds[0] || '', veiculoId: f.veiculoId || '' })));
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      const [p, s, c] = await Promise.all([apiProfissionais.listar(), apiServicos.listar(), comVeiculo ? apiClientes.obter(a.clienteId) : Promise.resolve(null)]);
+      if (!vivo) return;
+      setProfs(p.ok ? p.profissionais.filter((u) => u.atende !== false) : []);
+      setServs(s.ok ? a.plano.servicoIds.map((id) => s.servicos.find((x) => x.id === id)).filter(Boolean) : []);
+      setVeiculos(c && c.ok ? c.cliente.veiculos : []);
+    })();
+    return () => { vivo = false; };
+  }, [a.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const muda = (i, k, v) => setLinhas(linhas.map((l, j) => (j === i ? { ...l, [k]: v } : l)));
+  const novo = () => ({ dia: 1, hm: '18:00', profissionalId: profs[0] ? profs[0].id : '', servicoId: servs[0] ? servs[0].id : '', veiculoId: veiculos.length === 1 ? veiculos[0].id : '' });
+  const { erro, enviando, enviar } = usarEnvio(() => api.definirFixos(a.id, { fixos: linhas.map((l) => ({ dia: Number(l.dia), hm: l.hm, profissionalId: l.profissionalId, servicoIds: l.servicoId ? [l.servicoId] : [],
+    ...(comVeiculo && l.veiculoId ? { veiculoId: l.veiculoId } : {}) })) }),
+  (r) => aoFeito(r.apagados ? `Horários fixos salvos. ${r.apagados} ${plural(r.apagados, 'agendamento que não vale mais saiu', 'agendamentos que não valem mais saíram')} da agenda.` : 'Horários fixos salvos.'));
+  if (profs === null) return <section className="tela" data-testid="fixos-form"><p className="muted" role="status">Carregando…</p></section>;
+  return (
+    <section className="tela" data-testid="fixos-form">
+      <header className="tela-topo"><h1>Horários fixos · {nomeDe(a.cliente)}</h1></header>
+      <form onSubmit={enviar} className="form-grade um">
+        <p className="muted">{a.plano.nome}. Até {MAX_FIXOS} por semana. Cada um vira agendamento {DIAS_FIXOS_A_FRENTE} dias antes, gasta 1 atendimento do plano e fica reservado: ninguém mais consegue marcar esse horário.</p>
+        {linhas.length === 0 && <p className="muted" data-testid="fixos-vazio">Nenhum horário fixo.</p>}
+        {linhas.map((l, i) => (
+          <div key={i} className="subcartao" data-testid={`fixo-linha-${i}`}>
+            <div className="form-grade">
+              <Campo rotulo="Dia da semana"><select value={l.dia} onChange={(e) => muda(i, 'dia', Number(e.target.value))} data-testid={`fixo-dia-${i}`}>{DIAS_SEMANA.map((d, n) => <option key={n} value={n}>{d}</option>)}</select></Campo>
+              <Campo rotulo="Hora"><input type="time" value={l.hm} onChange={(e) => muda(i, 'hm', e.target.value)} data-testid={`fixo-hm-${i}`} /></Campo>
+              <Campo rotulo={Rot('profissional')}><select value={l.profissionalId} onChange={(e) => muda(i, 'profissionalId', e.target.value)} data-testid={`fixo-prof-${i}`}>{profs.map((u) => <option key={u.id} value={u.id}>{u.apelido || u.nome}</option>)}</select></Campo>
+              {comVeiculo && veiculos.length > 1 && <Campo rotulo="Veículo"><select value={l.veiculoId} onChange={(e) => muda(i, 'veiculoId', e.target.value)} data-testid={`fixo-veiculo-${i}`}><option value="">Escolha</option>{veiculos.map((v) => <option key={v.id} value={v.id}>{v.modelo} · {v.placa}</option>)}</select></Campo>}
+              <Campo rotulo="Serviço do plano"><select value={l.servicoId} onChange={(e) => muda(i, 'servicoId', e.target.value)} data-testid={`fixo-srv-${i}`}>{servs.map((x) => <option key={x.id} value={x.id}>{x.nome}</option>)}</select></Campo>
+            </div>
+            <div className="acoes"><Btn tamanho="sm" variante="perigo" onClick={() => setLinhas(linhas.filter((_, j) => j !== i))} data-testid={`fixo-remover-${i}`}>Remover</Btn></div>
+          </div>
+        ))}
+        {linhas.length < MAX_FIXOS && <Btn onClick={() => setLinhas([...linhas, novo()])} disabled={!profs.length || !servs.length} data-testid="fixo-add"><Icone n="plus" size={16} /> Adicionar horário fixo</Btn>}
+        {linhas.length > 0 && <p className="muted">{linhas.length} por semana usam cerca de {linhas.length * 4} atendimentos por mês; o plano dá {a.plano.cortes}. O que passar do saldo não é criado e o aviso chega a você.</p>}
+        <Rodape erro={erro} enviando={enviando} aoCancelar={aoCancelar} rotuloSalvar="Salvar" testid="salvar-fixos" />
+      </form>
+    </section>
+  );
+}
+
 function Extrato({ a, aoFechar, aoFeito }) {
   const [estornar, setEstornar] = useState('');
   const [motivo, setMotivo] = useState('');
@@ -238,9 +293,11 @@ function Assinaturas({ dados, aoAbrir, aoQuitar }) {
                 <span className="cliente-linha">{a.plano.nome} · {fmtMoney(a.plano.preco)}/mês</span>
                 {a.status === 'ativa' && <span className="cliente-linha" data-testid={`saldo-${a.id}`}>Cortes que restam: <b>{a.saldo.restantes}</b> de {a.plano.cortes}{a.saldo.maisPermitidos > 0 ? ` (+${a.saldo.maisPermitidos} adiantável)` : ''}</span>}
                 <span className="cliente-linha muted">Pago até: {a.saldo.pagoAte ? rotuloMes(a.saldo.pagoAte) : '—'}</span>
+                {a.status !== 'cancelada' && <span className="cliente-linha muted" data-testid={`fixos-resumo-${a.id}`}>Horários fixos: {resumoFixos(a)}</span>}
               </div>
               <div className="acoes">
                 {a.status !== 'cancelada' && <Btn tamanho="sm" onClick={() => aoAbrir({ tipo: 'pagar', a, mes: dados.mes })} data-testid={`pagar-${a.id}`}>Mensalidade</Btn>}
+                {a.status !== 'cancelada' && <Btn tamanho="sm" onClick={() => aoAbrir({ tipo: 'fixos', a })} data-testid={`fixos-${a.id}`}>Horários fixos</Btn>}
                 <Btn tamanho="sm" onClick={() => aoAbrir({ tipo: 'extrato', a })} data-testid={`extrato-${a.id}`}>Extrato</Btn>
                 {a.status !== 'cancelada' && <Btn tamanho="sm" variante="perigo" onClick={() => aoAbrir({ tipo: 'encerrar', a })} data-testid={`encerrar-${a.id}`}>Encerrar</Btn>}
                 {a.status === 'cancelada' && a.divida > 0 && !a.dividaQuitada && <Btn tamanho="sm" onClick={() => aoQuitar(a)} data-testid={`quitar-${a.id}`}>Quitar dívida</Btn>}
@@ -335,6 +392,7 @@ export default function Planos() {
   if (modo && modo.tipo === 'assinar') return <FormAssinatura planos={dados.planos} mes={dados.mes} aoCancelar={() => setModo(null)} aoFeito={feito} />;
   if (modo && modo.tipo === 'pagar') return <FormMensalidade a={modo.a} mesInicial={modo.mes} aoCancelar={() => setModo(null)} aoFeito={feito} />;
   if (modo && modo.tipo === 'encerrar') return <FormEncerrar a={modo.a} aoCancelar={() => setModo(null)} aoFeito={feito} />;
+  if (modo && modo.tipo === 'fixos') return <FormFixosReal a={dados.assinaturas.find((x) => x.id === modo.a.id) || modo.a} aoCancelar={() => setModo(null)} aoFeito={feito} />;
   if (modo && modo.tipo === 'extrato') {
     const atual = dados.assinaturas.find((x) => x.id === modo.a.id) || modo.a;
     return <Extrato a={atual} aoFechar={() => setModo(null)} aoFeito={(m) => { setAviso(m); recarregar(); }} />;

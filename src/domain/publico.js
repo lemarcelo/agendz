@@ -9,6 +9,7 @@ import * as E from './engine.js';
 import { CAMPOS_VEICULO_EXIGIVEIS, limparVeiculoComRegras } from './veiculos.js';
 import { cap, rot, tipoDe } from './tipos.js';
 import { servicosNaOrdemDaLoja } from './ordem-servicos.js';
+import { limitesDoDia, ordemPorFolga, profissionalAutomatico } from './profissional-auto.js';
 
 export const PASSO_PUBLICO_MIN = 30; // os horários do link saem de 30 em 30 minutos
 export const MAX_ABERTOS_LINK = 3; // agendamentos futuros em aberto por cliente
@@ -39,6 +40,14 @@ export function horarioLivre(s, { profissionalId, inicio, servicoIds, porte, ago
   return !acharConflitos(s, { profissionalId, ocup: v.ocup, ignoreId }).length;
 }
 
+// B9c: com a escolha automática ligada (e o cliente sem escolher quem), a ordem de quem tenta o horário primeiro é a do mais livre no dia (domain/profissional-auto.js).
+function candidatosDoLink(s, profissionalId, dayTs) {
+  const lista = s.usuarios.filter((u) => u.atende && (!profissionalId || u.id === profissionalId));
+  if (profissionalId || !profissionalAutomatico(s)) return lista;
+  const ordem = ordemPorFolga(s.agendamentos, lista.map((u) => u.id), limitesDoDia(dayTs));
+  return ordem.map((id) => lista.find((u) => u.id === id));
+}
+
 // Só [{ inicio, profissionalId }] — nunca quem ocupa os outros horários nem qual box. `profissionalId` vazio = qualquer profissional (o primeiro livre).
 // O porte do veículo define a duração; sem ele não há horário para mostrar. Um horário só aparece se houver profissional E box livres.
 export function horariosPublicos(s, { profissionalId, servicoIds, porte, dayTs, agora, ignoreId, boxPreferido, limite = Infinity }) {
@@ -46,7 +55,7 @@ export function horariosPublicos(s, { profissionalId, servicoIds, porte, dayTs, 
   if (!cfg.ativo || semBoxAtivo(s) || (cap(s.estabelecimento, 'precoPorPorte') && !porteAtivo(porte || PORTE_PADRAO)) || errosServicoIds(s, servicoIds, { ativos: true }) || !Number.isFinite(dayTs)) return [];
   const dia = startOfDay(dayTs);
   if (dia > agora + cfg.diasMax * DIA) return [];
-  const barbs = s.usuarios.filter((u) => u.atende && (!profissionalId || u.id === profissionalId));
+  const barbs = candidatosDoLink(s, profissionalId, dia);
   const achados = new Map();
   for (const b of barbs) {
     for (const [ini, fim] of faixasDoProfissional(s.estabelecimento, b, dia)) {
@@ -88,6 +97,7 @@ export function configPublica(s) {
       ? { id: x.id, nome: x.nome, precos: Object.fromEntries(portesAtivos().map((p) => [p.id, precoNoPorte(x.preco, x.precos?.[p.id], p.id)])), duracoes: Object.fromEntries(portesAtivos().map((p) => [p.id, Number(x.duracoes?.[p.id]) > 0 ? Number(x.duracoes[p.id]) : x.duracao])), combo: !!x.combo, multiDia: !!x.multiDia, categoria: x.categoria || '' }
       : { id: x.id, nome: x.nome, duracao: x.duracao, preco: x.preco })),
     profissionais: s.usuarios.filter((u) => u.atende).map((u) => ({ id: u.id, nome: u.apelido || u.nome, foto: u.foto || null })),
+    profissionalAutomatico: profissionalAutomatico(s), // B9c: a página não pergunta "com quem?"; o app escolhe o mais livre (a não ser que o link seja de um profissional)
   };
 }
 
@@ -158,7 +168,7 @@ export function agendarPorLink(s, d, agora) {
   if (lv.veiculo?.porte && !porteAtivo(lv.veiculo.porte)) return { ok: false, erros: ['Escolha o porte do veículo.'] };
   { const e = errosServicoIds(s, d.servicoIds, { ativos: true }); if (e) return { ok: false, erros: [e] }; }
   if (!Number.isInteger(d.inicio) || d.inicio > agora + cfg.diasMax * DIA) return { ok: false, erros: ['Escolha um dia e um horário.'] };
-  const candidatos = s.usuarios.filter((u) => u.atende && (!d.profissionalId || u.id === d.profissionalId));
+  const candidatos = candidatosDoLink(s, d.profissionalId, d.inicio);
   const profissional = candidatos.find((u) => horarioLivre(s, { profissionalId: u.id, inicio: d.inicio, servicoIds: d.servicoIds, porte: lv.veiculo?.porte, agora }));
   if (!profissional) return { ok: false, erros: [ERRO_HORARIO] };
   if (semTelefone) {
