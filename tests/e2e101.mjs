@@ -80,6 +80,7 @@ async function cenario(loja, vp, modo) {
   assert.match(await T('planos-aviso').innerText(), /Horários fixos salvos\./);
   const corpo = srv.chamadas.filter((c) => c.m === 'POST' && c.u === `/api/assinaturas/${ASS}/fixos`).at(-1).corpo;
   assert.deepEqual(corpo.fixos, [{ dia: 3, hm: '18:00', profissionalId: KIKO, servicoIds: [SRV] }]);
+  await p.waitForFunction(([t]) => /qua 18:00/.test(document.querySelector(`[data-testid="${t}"]`)?.innerText || ''), [`fixos-resumo-${ASS}`]); // o resumo chega com a recarga da lista (corrida intermitente)
   assert.match(await T(`fixos-resumo-${ASS}`).innerText(), /qua 18:00/);
   ok(`${rotulo}: aba Planos (limite de 3, erro do servidor, salvar)`);
 
@@ -91,6 +92,7 @@ async function cenario(loja, vp, modo) {
   await T('salvar-fixos').click();
   await T('planos-aviso').waitFor();
   assert.match(await T('planos-aviso').innerText(), /2 agendamentos que não valem mais saíram da agenda/);
+  await p.waitForFunction(([t]) => /nenhum/.test(document.querySelector(`[data-testid="${t}"]`)?.innerText || ''), [`fixos-resumo-${ASS}`]);
   assert.match(await T(`fixos-resumo-${ASS}`).innerText(), /nenhum/);
 
   // 6. na ficha do cliente: resumo, botão em Editar plano e volta à ficha sem perder o que foi digitado
@@ -106,6 +108,7 @@ async function cenario(loja, vp, modo) {
   await T('fixo-add').click();
   await T('salvar-fixos').click();
   await T('plano-cli-aviso').waitFor();
+  await p.waitForFunction(() => /seg 18:00/.test(document.querySelector('[data-testid="plano-cli-fixos"]')?.innerText || '')); // chega com a recarga (corrida intermitente)
   assert.match(await T('plano-cli-fixos').innerText(), /seg 18:00/);
   assert.equal(await T('cli-apelido').inputValue(), 'Bruzão', `${rotulo}: a ficha não perdeu o que foi digitado`);
   await semRolagem('ficha com horário fixo');
