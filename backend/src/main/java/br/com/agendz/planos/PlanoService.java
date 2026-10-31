@@ -72,7 +72,7 @@ public class PlanoService {
     }
 
     public record AssinaturaDto(UUID id, UUID clienteId, ClienteMini cliente, UUID planoId, Foto plano, String status, String inicioMes, int diaCobranca, List<PagamentoDto> pagamentos,
-                                int divida, boolean dividaQuitada, Instant criadoEm, Instant encerradoEm, List<EventoDto> log, Saldo saldo, List<Linha> extrato) {
+                                int divida, boolean dividaQuitada, Instant criadoEm, Instant encerradoEm, List<EventoDto> log, Saldo saldo, List<Linha> extrato, List<FixosDoPlano.Fixo> fixos) {
     }
 
     public record PedidoDto(UUID id, String nome, String telefone, UUID planoId, String planoNome, String status, Instant criadoEm) {
@@ -311,6 +311,7 @@ public class PlanoService {
                     eventos.computeIfAbsent(rs.getObject("assinatura_id", UUID.class), k -> new ArrayList<>()).add(new EventoDto(instante(rs, "em"),
                             new Autor(rs.getObject("autor_id", UUID.class), rs.getString("autor_nome")), rs.getString("acao"), rs.getString("detalhe")));
                 }, filtro == null ? new Object[0] : new Object[]{filtro});
+        Map<UUID, List<FixosDoPlano.Fixo>> fixos = FixosDoPlano.todos(jdbc, filtro);
         List<AssinaturaDto> saida = new ArrayList<>();
         String mes = PlanoRegras.mesDe(agora);
         for (Cab c : cabs) {
@@ -320,7 +321,7 @@ public class PlanoService {
             Saldo saldo = PlanoRegras.saldoAtual(c.foto(), c.status(), c.inicioMes(), validos, us, agora);
             Extrato ex = PlanoRegras.extrato(c.foto(), c.inicioMes(), validos, us, mes, List.of());
             saida.add(new AssinaturaDto(c.id(), c.clienteId(), new ClienteMini(c.clienteId(), c.clienteNome(), c.clienteApelido() == null ? "" : c.clienteApelido()), c.planoId(), c.foto(), c.status(),
-                    c.inicioMes(), c.dia(), pags, c.divida(), c.quitada(), c.criadoEm(), c.encerradoEm(), eventos.getOrDefault(c.id(), List.of()), saldo, ex.linhas()));
+                    c.inicioMes(), c.dia(), pags, c.divida(), c.quitada(), c.criadoEm(), c.encerradoEm(), eventos.getOrDefault(c.id(), List.of()), saldo, ex.linhas(), fixos.getOrDefault(c.id(), List.of())));
         }
         return saida;
     }
@@ -343,6 +344,20 @@ public class PlanoService {
     }
 
     // ---------------------------------------------------------------- assinatura
+
+    /** A assinatura montada (saldo, extrato e horários fixos) para quem acabou de mudar algo nela. */
+    public AssinaturaDto assinatura(UUID assinaturaId, Instant agora) {
+        return banco.naLoja(jdbc -> {
+            List<AssinaturaDto> l = montar(jdbc, assinaturaId, agora);
+            if (l.isEmpty()) throw naoAchou("Assinatura não encontrada.");
+            return l.get(0);
+        });
+    }
+
+    /** Anotação no histórico da assinatura (quem, quando, o quê). `autor` nulo = o sistema. */
+    public void anotar(JdbcTemplate jdbc, UUID lojaId, UUID assinaturaId, Autor autor, String acao, String detalhe, Instant agora) {
+        nota(jdbc, lojaId, assinaturaId, autor, acao, detalhe, agora);
+    }
 
     private void nota(JdbcTemplate jdbc, UUID lojaId, UUID assinaturaId, Autor autor, String acao, String detalhe, Instant agora) {
         String d = Texto.limpar(detalhe == null ? "" : detalhe);
@@ -462,9 +477,11 @@ public class PlanoService {
             if ("cancelada".equals(t.status())) throw conflito("Essa assinatura já foi encerrada.");
             String motivo = motivoBruto == null ? "" : Texto.limpar(motivoBruto);
             if (motivo.length() < 5 || motivo.length() > 200) throw recusa("Diga o motivo (5 a 200 letras).");
+            FixosDoPlano.apagarFuturos(jdbc, assinaturaId, null, agora); // os fixos que ainda não aconteceram saem da agenda e devolvem o atendimento, antes da conta da dívida
             Extrato ex = PlanoRegras.extrato(t.foto(), t.inicioMes(), pagos(jdbc, assinaturaId), usos(jdbc, assinaturaId, null), PlanoRegras.mesDe(agora), List.of());
             int divida = PlanoRegras.dividaAoEncerrar(ex);
             jdbc.update("update assinatura set status = 'cancelada', encerrado_em = ?, divida = ?, divida_quitada = ? where id = ?", utc(agora), divida, divida == 0, assinaturaId);
+            jdbc.update("delete from assinatura_fixo where assinatura_id = ?", assinaturaId);
             nota(jdbc, lojaId, assinaturaId, autor, "encerrou", motivo + (divida > 0 ? " · " + divida + " corte" + (divida > 1 ? "s" : "") + " adiantado" + (divida > 1 ? "s" : "") + " sem pagar" : ""), agora);
             return montar(jdbc, assinaturaId, agora).get(0);
         });

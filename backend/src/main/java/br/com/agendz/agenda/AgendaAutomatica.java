@@ -33,9 +33,11 @@ public class AgendaAutomatica {
     private final Clock relogio;
     private final boolean ativa;
     private final EstoqueDaVenda estoque;
+    private final HorariosFixos fixos;
 
-    public AgendaAutomatica(JdbcTemplate dono, LojaJdbc banco, Clock relogio, @Value("${agendz.automacao.ativa:true}") boolean ativa, EstoqueDaVenda estoque) {
+    public AgendaAutomatica(JdbcTemplate dono, LojaJdbc banco, Clock relogio, @Value("${agendz.automacao.ativa:true}") boolean ativa, EstoqueDaVenda estoque, HorariosFixos fixos) {
         this.estoque = estoque;
+        this.fixos = fixos;
         this.dono = dono;
         this.banco = banco;
         this.relogio = relogio;
@@ -59,6 +61,7 @@ public class AgendaAutomatica {
         for (UUID loja : lojas) {
             try {
                 mudou += banco.naLoja(loja, jdbc -> daLoja(jdbc, loja, agora));
+                mudou += fixos.materializar(loja, agora); // horários fixos de assinantes (v128): cria o que falta dos próximos 14 dias, cada ocorrência na sua transação
             } catch (RuntimeException e) {
                 LOG.warn("Automação da agenda falhou na loja {}: {}", loja, e.getMessage()); // uma loja com problema não trava as outras
             }

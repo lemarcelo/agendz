@@ -62,6 +62,8 @@ class PlanosTest extends BaseApi {
     LimitePublico limitePublico;
     @Autowired
     br.com.agendz.auth.LimiteDeLogin limiteLogin;
+    @Autowired
+    br.com.agendz.agenda.HorariosFixos horariosFixos;
 
     String dono, colaborador, alan;
     UUID colaboradorId;
@@ -101,6 +103,8 @@ class PlanosTest extends BaseApi {
         jdbc.update("delete from agendamento_servico");
         jdbc.update("delete from agendamento_produto");
         jdbc.update("delete from agendamento");
+        jdbc.update("delete from assinatura_fixo_aviso");
+        jdbc.update("delete from assinatura_fixo");
         jdbc.update("delete from assinatura_evento");
         jdbc.update("delete from assinatura_pagamento");
         jdbc.update("delete from assinatura");
@@ -555,5 +559,75 @@ class PlanosTest extends BaseApi {
         }
         assertTrue(recusou, "assinatura com cliente de outra loja");
         assertTrue(a[0].length() > 0);
+    }
+
+    // ---------------------------------------------------------------- horários fixos do assinante (v128)
+
+    private String corpoFixo(int dow, String hm, String... servicos) {
+        StringBuilder s = new StringBuilder();
+        for (String x : servicos) s.append(s.length() == 0 ? "" : ",").append("\"").append(x).append("\"");
+        return "{\"fixos\":[{\"dia\":" + dow + ",\"hm\":\"" + hm + "\",\"profissionalId\":\"" + colaboradorId + "\",\"servicoIds\":[" + s + "]}]}";
+    }
+
+    private ResultActions fixos(String token, String assinatura, String corpo) throws Exception {
+        return escrever(post("/api/assinaturas/" + assinatura + "/fixos"), token, corpo);
+    }
+
+    private static int dow(LocalDate d) {
+        return d.getDayOfWeek().getValue() % 7; // domingo = 0
+    }
+
+    @Test
+    void horarioFixoValidaPermiteSoComASecaoECriaPelaAutomacaoSemDuplicar() throws Exception {
+        String[] a = assinaturaAtiva(true);
+        LocalDate dia = m1.withDayOfMonth(5);
+        String corpo = corpoFixo(dow(dia), "09:00", corte);
+        // sem login 401; sem a seção planos 403
+        mvc.perform(post("/api/assinaturas/" + a[0] + "/fixos").with(host(OFFBOX)).contentType(MediaType.APPLICATION_JSON).content(corpo)).andExpect(status().isUnauthorized());
+        fixos(colaborador, a[0], corpo).andExpect(status().isForbidden());
+        // entradas ruins: nada é gravado
+        fixos(dono, a[0], corpoFixo(7, "09:00", corte)).andExpect(status().isBadRequest());
+        fixos(dono, a[0], corpoFixo(dow(dia), "9:00", corte)).andExpect(status().isBadRequest());
+        fixos(dono, a[0], corpoFixo(dow(dia), "09:00", barba)).andExpect(status().isBadRequest());   // serviço fora do plano
+        fixos(dono, a[0], corpoFixo(dow(dia), "09:00")).andExpect(status().isBadRequest());           // sem serviço
+        fixos(dono, UUID.randomUUID().toString(), corpo).andExpect(status().isNotFound());
+        assertEquals(0, contar("select count(*) from assinatura_fixo"));
+        // ok: aparece na assinatura e na lista de planos
+        fixos(dono, a[0], corpo).andExpect(status().isOk()).andExpect(jsonPath("$.assinatura.fixos", hasSize(1))).andExpect(jsonPath("$.apagados").value(0));
+        ler("/api/planos", dono).andExpect(jsonPath("$.assinaturas[0].fixos", hasSize(1))).andExpect(jsonPath("$.assinaturas[0].fixos[0].hm").value("09:00"));
+        assertEquals(1, contar("select count(*) from assinatura_evento where assinatura_id = ?::uuid and acao = 'horários fixos'", a[0]));
+        // a automação cria o dia 5 e o dia 12 (14 dias à frente de 6 dias antes do dia 5), confirmados, gastando o corte do plano, e a segunda rodada não duplica
+        Instant agora = as(dia.minusDays(6), 8);
+        assertEquals(2, horariosFixos.materializar(UUID.fromString(LOJA_OFFBOX), agora));
+        assertEquals(2, contar("select count(*) from agendamento where fixo_id is not null and status = 'confirmado' and plano_assinatura_id = ?::uuid", a[0]));
+        assertEquals(0, horariosFixos.materializar(UUID.fromString(LOJA_OFFBOX), agora));
+        assertEquals(2, contar("select count(*) from agendamento where fixo_id is not null"));
+        // o horário fixo é reservado: outro cliente não toma o dia 19 (ainda sem agendamento), mas o próprio assinante pode
+        atender(novoTelefone(), "\"" + corte + "\"", 19, 9, null).andExpect(status().isConflict()).andExpect(jsonPath("$.mensagem").value("Esse horário é fixo de um cliente com plano. Escolha outro horário."));
+        atender(novoTelefone(), "\"" + corte + "\"", 19, 10, null).andExpect(status().isCreated());   // outro horário do mesmo dia segue livre
+        // trocar a lista (tirar o fixo) leva embora os agendamentos futuros ainda não realizados
+        fixos(dono, a[0], "{\"fixos\":[]}").andExpect(status().isOk()).andExpect(jsonPath("$.apagados").value(2)).andExpect(jsonPath("$.assinatura.fixos", hasSize(0)));
+        assertEquals(0, contar("select count(*) from agendamento where fixo_id is not null"));
+        atender(novoTelefone(), "\"" + corte + "\"", 19, 9, null).andExpect(status().isCreated());       // reserva solta com o fixo
+    }
+
+    @Test
+    void horarioFixoOcupadoPorOutroNaoCriaEAvisaUmaVezSoEEncerrarApagaOsFuturos() throws Exception {
+        String[] a = assinaturaAtiva(true);
+        LocalDate dia = m1.withDayOfMonth(5);
+        // outro cliente já está confirmado no dia 5 às 09:00
+        atender(novoTelefone(), "\"" + corte + "\"", 5, 9, null).andExpect(status().isCreated());
+        fixos(dono, a[0], corpoFixo(dow(dia), "09:00", corte)).andExpect(status().isOk());
+        Instant agora = as(dia.minusDays(6), 8);
+        assertEquals(1, horariosFixos.materializar(UUID.fromString(LOJA_OFFBOX), agora));   // só o dia 12
+        assertEquals(1, contar("select count(*) from aviso_painel where tipo = 'fixo'"));
+        assertEquals(0, horariosFixos.materializar(UUID.fromString(LOJA_OFFBOX), agora));
+        assertEquals(1, contar("select count(*) from aviso_painel where tipo = 'fixo'"), "o aviso é um por ocorrência, nunca repetido a cada minuto");
+        ler("/api/avisos", dono).andExpect(status().isOk()).andExpect(jsonPath("$[?(@.tipo=='fixo')]").exists());
+        // encerrar o plano tira da agenda o fixo que ainda não aconteceu e apaga a lista de fixos
+        escrever(post("/api/assinaturas/" + a[0] + "/encerrar"), dono, "{\"motivo\":\"mudou de cidade\"}").andExpect(status().isOk());
+        assertEquals(0, contar("select count(*) from agendamento where fixo_id is not null"));
+        assertEquals(0, contar("select count(*) from assinatura_fixo"));
+        fixos(dono, a[0], corpoFixo(dow(dia), "09:00", corte)).andExpect(status().isConflict());   // assinatura encerrada não aceita fixo
     }
 }
