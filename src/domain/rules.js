@@ -5,7 +5,7 @@ import { ehDoFixo } from './fixos.js';
 import { blocosDeTrabalho, cabeEm, faixasDoProfissional, proximaAbertura } from './schedule.js';
 import { cpfValido } from './pix.js';
 import { limparTexto } from './texto.js';
-import { PORTE_PADRAO, porteValido } from './veiculos.js';
+import { PORTE_PADRAO, porteValido, precoNoPorte } from './veiculos.js';
 import { Rot, rot, capAtiva, cap } from './tipos.js';
 
 export const STATUS = {
@@ -39,9 +39,9 @@ export function errosServicoIds(state, ids, { ativos = false } = {}) {
 export function servicoNoPorte(sv, porte) {
   if (!capAtiva('precoPorPorte')) return sv; // tipo sem preço por porte (barbearia): preço e duração são os do serviço
   const p = porteValido(porte) ? porte : PORTE_PADRAO;
-  const preco = sv.precos ? Number(sv.precos[p]) : NaN;
   const duracao = sv.duracoes ? Number(sv.duracoes[p]) : NaN;
-  return { ...sv, preco: Number.isFinite(preco) && preco >= 0 ? preco : sv.preco, duracao: Number.isFinite(duracao) && duracao > 0 ? duracao : sv.duracao, porte: p };
+  // v124: preço específico do porte (se o dono definiu) ou preço base × fator do porte
+  return { ...sv, preco: precoNoPorte(sv.preco, sv.precos ? sv.precos[p] : undefined, p), duracao: Number.isFinite(duracao) && duracao > 0 ? duracao : sv.duracao, porte: p };
 }
 export const servicosPorIds = (state, ids, porte) => ids.map((id) => state.servicos.find((s) => s.id === id)).filter(Boolean).map((s) => servicoNoPorte(s, porte));
 // Os serviços de um agendamento, com o preço e a duração do porte do veículo dele.

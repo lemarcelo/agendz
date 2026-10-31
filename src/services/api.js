@@ -16,7 +16,7 @@ import { capAtiva, definirTipoAtivo, exemploAtivo, rot, Rot, TIPO_PADRAO, tipoDe
 import { fotoValida, proximoSlot } from '../domain/foto.js';
 import { diasDaExcecao } from '../domain/schedule.js';
 import { aplicarOrdemManual, modoOrdemValido } from '../domain/ordem-servicos.js';
-import { CAMPOS_VEICULO_EXIGIVEIS, LIMITE_VEICULOS, PORTES, PORTES_DE_FABRICA, ROTULO_PORTE, chavePlaca, definirPortes, limparVeiculo, porteValido, portesAtivos, sanearPortes } from '../domain/veiculos.js';
+import { CAMPOS_VEICULO_EXIGIVEIS, LIMITE_VEICULOS, PORTES, PORTES_DE_FABRICA, PORTE_PADRAO, ROTULO_PORTE, chavePlaca, definirPortes, limparVeiculo, porteValido, portesAtivos, sanearPortes } from '../domain/veiculos.js';
 import { validarModelo } from '../domain/templates.js';
 import { addDays, fromYmd, startOfDay, ymd } from '../domain/time.js';
 import { itensDoAgendamento } from '../domain/reports.js';
@@ -554,11 +554,12 @@ export const servicos = {
       // Preço e duração por porte. Sem tabela, vale o preço/duração único para todos os portes (compatível com o cadastro simples); com tabela, os 5 portes são obrigatórios.
       const tabela = (bruto, unico, rotulo, ok, plural) => {
         // Valor único: vale para os 5 portes, mas também passa pelo teto (duração sem "vários dias" = no máximo 24 h).
-        if (bruto === undefined || bruto === null) return finito(unico) ? (ok(Number(unico)) ? { v: Object.fromEntries(PORTES.map((p) => [p, Number(unico)])) } : { erro: `Informe ${rotulo}.`, final: true }) : { erro: `Informe ${rotulo}.`, ausente: true };
+        if (bruto === undefined || bruto === null) return finito(unico) ? (ok(Number(unico)) ? { v: { [PORTE_PADRAO]: Number(unico) } } : { erro: `Informe ${rotulo}.`, final: true }) : { erro: `Informe ${rotulo}.`, ausente: true };
         if (typeof bruto !== 'object' || Array.isArray(bruto) || Object.keys(bruto).some((k) => !PORTES.includes(k))) return { erro: `Tabela de ${plural} inválida.` };
         const v = {};
-        const ativos = portesAtivos().map((x) => x.id).filter((id) => PORTES_DE_FABRICA.some((f) => f.id === id));
-        // Os portes de fábrica ativos precisam de valor; porte cadastrado pelo dono e porte desativado podem ficar sem valor (vale o do Médio).
+        // v124: só o Médio (valor base) é obrigatório; nos demais portes o preço sai do fator do porte e a duração é a base, a não ser que o dono defina o valor específico.
+        const ativos = [PORTE_PADRAO];
+        if ((bruto[PORTE_PADRAO] === undefined || bruto[PORTE_PADRAO] === null || bruto[PORTE_PADRAO] === '') && finito(unico)) bruto = { ...bruto, [PORTE_PADRAO]: unico };
         for (const p of PORTES) {
           const dado = bruto[p] !== undefined && bruto[p] !== null && bruto[p] !== '';
           if (!dado && !ativos.includes(p)) continue;

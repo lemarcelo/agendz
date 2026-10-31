@@ -5,14 +5,29 @@ import assert from 'node:assert/strict';
 import { aplicarOrdemManual, ordenarServicos, porOrdemManual, usoDosServicos } from '../src/domain/ordem-servicos.js';
 
 const S = (id, ordem, nome = id) => ({ id, nome, ordem });
+const AGORA = new Date('2026-10-12T10:00:00-03:00').getTime();
+const DIA = 24 * 60 * 60 * 1000;
 const ags = [
-  { status: 'concluido', servicoIds: ['b'] }, { status: 'confirmado', servicoIds: ['b', 'c'] }, { status: 'cancelado', servicoIds: ['a', 'a'] }, { status: 'a_confirmar', servicoIds: ['c'] }, { status: 'concluido', servicoIds: ['b'] },
+  { inicio: AGORA - 2 * DIA, status: 'concluido', servicoIds: ['b'] }, { inicio: AGORA - 2 * DIA, status: 'confirmado', servicoIds: ['b', 'c'] }, { inicio: AGORA - 2 * DIA, status: 'cancelado', servicoIds: ['a', 'a'] }, { inicio: AGORA - 2 * DIA, status: 'a_confirmar', servicoIds: ['c'] }, { inicio: AGORA - 2 * DIA, status: 'concluido', servicoIds: ['b'] },
 ];
 
 test('uso: conta só agendamentos não cancelados', () => {
-  const u = usoDosServicos(ags);
+  const u = usoDosServicos(ags, AGORA);
   assert.deepEqual([u.get('a') || 0, u.get('b'), u.get('c')], [0, 3, 2]);
   assert.equal(usoDosServicos(null).size, 0);
+});
+
+test('uso: só os últimos 90 dias contam (v124); o limite é inclusivo e o futuro conta', () => {
+  const lista = [
+    { inicio: AGORA - 89 * DIA, status: 'concluido', servicoIds: ['a'] },
+    { inicio: AGORA - 90 * DIA, status: 'concluido', servicoIds: ['a'] },
+    { inicio: AGORA - 90 * DIA - 1, status: 'concluido', servicoIds: ['a', 'b'] },
+    { inicio: AGORA - 200 * DIA, status: 'concluido', servicoIds: ['b', 'b', 'b'] },
+    { inicio: AGORA + 3 * DIA, status: 'confirmado', servicoIds: ['b'] },
+    { status: 'concluido', servicoIds: ['c'] },
+  ];
+  const u = usoDosServicos(lista, AGORA);
+  assert.deepEqual([u.get('a'), u.get('b'), u.get('c')], [2, 1, undefined]);
 });
 
 test('ordem manual: ordem crescente, sem ordem depois, empate pela posição', () => {
@@ -21,7 +36,7 @@ test('ordem manual: ordem crescente, sem ordem depois, empate pela posição', (
 
 test('modo uso: mais usados em cima; empate segue a ordem manual; modo manual ignora o uso', () => {
   const l = [S('a', 1), S('b', 2), S('c', 3), S('d', 4)];
-  const u = usoDosServicos(ags);
+  const u = usoDosServicos(ags, AGORA);
   assert.deepEqual(ordenarServicos(l, 'uso', u).map((s) => s.id), ['b', 'c', 'a', 'd']);
   assert.deepEqual(ordenarServicos(l, 'manual', u).map((s) => s.id), ['a', 'b', 'c', 'd']);
   assert.deepEqual(ordenarServicos(l, 'uso', new Map()).map((s) => s.id), ['a', 'b', 'c', 'd'], 'sem uso cai na ordem manual');

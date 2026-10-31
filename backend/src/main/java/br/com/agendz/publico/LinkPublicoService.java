@@ -174,7 +174,7 @@ public class LinkPublicoService {
             List<ServicoPublico> servicos = jdbc.query(
                     "select id, nome, preco, duracao_min, antecedencia_h, precos::text as precos, duracoes::text as duracoes from servico where ativo and not multi_dia order by " + OrdemDosServicos.sql(jdbc),
                     (rs, i) -> new ServicoPublico(rs.getObject("id", UUID.class), rs.getString("nome"), rs.getInt("duracao_min"), rs.getBigDecimal("preco"), rs.getInt("antecedencia_h"),
-                            porPorte ? tabelaPrecos(listaPortes, rs.getString("precos")) : null, porPorte ? tabelaDuracoes(listaPortes, rs.getString("duracoes")) : null));
+                            porPorte ? tabelaPrecos(listaPortes, rs.getBigDecimal("preco"), rs.getString("precos")) : null, porPorte ? tabelaDuracoes(listaPortes, rs.getString("duracoes")) : null));
             List<ProfissionalPublico> profissionais = jdbc.query(
                     "select id, coalesce(nullif(apelido, ''), nome) as n, foto from usuario where ativo and atende order by lower(coalesce(nullif(apelido, ''), nome)), id",
                     (rs, i) -> new ProfissionalPublico(rs.getObject("id", UUID.class), rs.getString("n"), rs.getString("foto")));
@@ -621,14 +621,14 @@ public class LinkPublicoService {
     /** Serviços do pedido, na ordem escolhida. Só os que o link oferece: ativos e de um dia só. */
     private List<Svc> servicosDoLink(JdbcTemplate jdbc, List<UUID> ids, String porte) {
         String marcas = String.join(",", ids.stream().map(x -> "?").toList());
+        List<PorteController.Porte> portesDaLoja = porte == null ? List.of() : PorteController.ler(jdbc);
         List<Object[]> achados = jdbc.query("select id, nome, preco, duracao_min, intervalo_min, antecedencia_h, ativo, multi_dia, precos::text as precos, duracoes::text as duracoes from servico where id in (" + marcas + ")",
                 (rs, i) -> {
                     BigDecimal preco = rs.getBigDecimal("preco");
                     int duracao = rs.getInt("duracao_min");
                     if (porte != null) { // preço e duração do porte do veículo
-                        BigDecimal pp = valorDoPorte(rs.getString("precos"), porte);
                         BigDecimal dd = valorDoPorte(rs.getString("duracoes"), porte);
-                        if (pp != null && pp.signum() >= 0) preco = pp.setScale(2, java.math.RoundingMode.HALF_UP);
+                        preco = PorteController.precoNoPorte(preco, valorDoPorte(rs.getString("precos"), porte), portesDaLoja, porte); // v124: específico ou base × fator
                         if (dd != null && dd.signum() > 0) duracao = dd.intValue();
                     }
                     return new Object[]{rs.getObject("id", UUID.class), rs.getString("nome"), preco, duracao, rs.getInt("intervalo_min"),
@@ -676,11 +676,12 @@ public class LinkPublicoService {
         }
     }
 
-    private static Map<String, BigDecimal> tabelaPrecos(List<PorteController.Porte> portes, String json) {
+    /** Preço de cada porte ativo para a página do cliente: o específico do serviço ou preço base × fator do porte (v124). */
+    private static Map<String, BigDecimal> tabelaPrecos(List<PorteController.Porte> portes, BigDecimal base, String json) {
         Map<String, BigDecimal> m = new LinkedHashMap<>();
         for (PorteController.Porte x : portes) {
             if (!x.ativo()) continue;
-            BigDecimal v = valorDoPorte(json, x.id());
+            BigDecimal v = PorteController.precoNoPorte(base, valorDoPorte(json, x.id()), portes, x.id());
             if (v != null) m.put(x.id(), v);
         }
         return m;

@@ -88,7 +88,7 @@ class PortesTest extends BaseApi {
     }
 
     @Test
-    void servicoSemValorNoPorteNovoUsaOMedioEPorteDesconhecidoNaTabelaEhRecusado() throws Exception {
+    void servicoSemValorNoPorteNovoUsaOFatorEPorteDesconhecidoNaTabelaEhRecusado() throws Exception {
         String r = gravar(FABRICA + ",{\"nome\":\"Van\"}").andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         String van = idDe(r, "Van");
         mvc.perform(post("/api/servicos").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON)
@@ -99,9 +99,13 @@ class PortesTest extends BaseApi {
         mvc.perform(post("/api/servicos").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"nome\":\"Outra\",\"precos\":{\"pequeno\":50,\"medio\":70,\"grande\":90,\"suv\":100,\"pickup\":110,\"fantasma\":1},\"duracoes\":{\"pequeno\":40,\"medio\":60,\"grande\":80,\"suv\":90,\"pickup\":100},\"intervaloMin\":0}"))
                 .andExpect(status().isBadRequest());
+        // v124: só o Médio é obrigatório; os outros portes saem do fator, e o preço específico vale no lugar dele
         mvc.perform(post("/api/servicos").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON)
-                .content("{\"nome\":\"Sem pickup\",\"precos\":{\"pequeno\":50,\"medio\":70,\"grande\":90,\"suv\":100},\"duracoes\":{\"pequeno\":40,\"medio\":60,\"grande\":80,\"suv\":90,\"pickup\":100},\"intervaloMin\":0}"))
-                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.mensagem", containsString("Pickup")));
+                .content("{\"nome\":\"Sem pickup\",\"precos\":{\"pequeno\":50,\"medio\":70,\"grande\":90,\"suv\":100},\"duracoes\":{\"medio\":60},\"intervaloMin\":0}"))
+                .andExpect(status().isCreated());
+        mvc.perform(post("/api/servicos").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"nome\":\"Sem medio\",\"precos\":{\"pequeno\":50},\"duracoes\":{\"medio\":60},\"intervaloMin\":0}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.mensagem", containsString("Médio")));
     }
 
     @Test
@@ -113,6 +117,40 @@ class PortesTest extends BaseApi {
         gravar(FABRICA).andExpect(status().isBadRequest()).andExpect(jsonPath("$.mensagem", containsString("desative")));
         gravar(FABRICA + ",{\"id\":\"" + van + "\",\"nome\":\"Van\",\"ativo\":false}").andExpect(status().isOk());
         listar().andExpect(jsonPath("$[5].ativo").value(false));
+    }
+
+    @Test
+    void fatorDeFabricaMedioFixoEmUmEFaixaDeUmDecimoADez() throws Exception {
+        listar().andExpect(jsonPath("$[0].fator").value(0.9)).andExpect(jsonPath("$[1].fator").value(1.0)).andExpect(jsonPath("$[2].fator").value(1.2))
+                .andExpect(jsonPath("$[3].fator").value(1.3)).andExpect(jsonPath("$[4].fator").value(1.4));
+        // Médio sempre 1, mesmo se vier outro valor; porte novo sem fator vale 1; duas casas
+        gravar("{\"id\":\"medio\",\"nome\":\"Médio\",\"fator\":3},{\"nome\":\"Van\"},{\"id\":\"suv\",\"nome\":\"SUV\",\"fator\":1.255}")
+                .andExpect(status().isOk()).andExpect(jsonPath("$[0].fator").value(1.0)).andExpect(jsonPath("$[1].fator").value(1.0)).andExpect(jsonPath("$[2].fator").value(1.26));
+        gravar("{\"id\":\"medio\",\"nome\":\"Médio\"},{\"nome\":\"Van\",\"fator\":0.09}").andExpect(status().isBadRequest()).andExpect(jsonPath("$.mensagem", containsString("0,10 a 10")));
+        gravar("{\"id\":\"medio\",\"nome\":\"Médio\"},{\"nome\":\"Van\",\"fator\":10.01}").andExpect(status().isBadRequest());
+        gravar("{\"id\":\"medio\",\"nome\":\"Médio\"},{\"nome\":\"Van\",\"fator\":0.1}").andExpect(status().isOk());
+        gravar("{\"id\":\"medio\",\"nome\":\"Médio\"},{\"nome\":\"Van\",\"fator\":10}").andExpect(status().isOk());
+    }
+
+    @Test
+    void gravacaoAntigaSemFatorCaiNoDeFabricaDoId() throws Exception {
+        jdbc.update("update configuracao_loja set portes = cast(? as jsonb)",
+                "[{\"id\":\"pequeno\",\"nome\":\"Pequeno\",\"exemplo\":\"\",\"ativo\":true},{\"id\":\"medio\",\"nome\":\"Médio\",\"exemplo\":\"\",\"ativo\":true},{\"id\":\"pt9\",\"nome\":\"Van\",\"exemplo\":\"\",\"ativo\":true}]");
+        listar().andExpect(jsonPath("$[0].fator").value(0.9)).andExpect(jsonPath("$[1].fator").value(1.0)).andExpect(jsonPath("$[2].fator").value(1.0));
+    }
+
+    @Test
+    void precoDoPorteSaiDoFatorEOEspecificoVale() throws Exception {
+        gravar(FABRICA).andExpect(status().isOk());
+        mvc.perform(post("/api/servicos").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"nome\":\"Cera\",\"preco\":100,\"duracaoMin\":60,\"intervaloMin\":0}")).andExpect(status().isCreated()).andExpect(jsonPath("$.precos.medio").value(100));
+        mvc.perform(get("/api/servicos?para=atender").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi))).andExpect(status().isOk());
+        org.junit.jupiter.api.Assertions.assertEquals(new java.math.BigDecimal("120.00"),
+                br.com.agendz.configuracao.PorteController.precoNoPorte(new java.math.BigDecimal("100"), null,
+                        java.util.List.of(new br.com.agendz.configuracao.PorteController.Porte("grande", "Grande", "", true, new java.math.BigDecimal("1.20"))), "grande"));
+        org.junit.jupiter.api.Assertions.assertEquals(new java.math.BigDecimal("77.00"),
+                br.com.agendz.configuracao.PorteController.precoNoPorte(new java.math.BigDecimal("100"), new java.math.BigDecimal("77"),
+                        java.util.List.of(new br.com.agendz.configuracao.PorteController.Porte("grande", "Grande", "", true, new java.math.BigDecimal("1.20"))), "grande"));
     }
 
     @Test

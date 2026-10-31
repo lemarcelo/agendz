@@ -2,7 +2,7 @@
 // Autoagendamento pelo link: o cliente (sem login) vê só horários livres, pede um horário e depois gerencia só os próprios agendamentos.
 // Tudo aqui é regra pura. A API pública (`publico.*` em api.js) acrescenta os limites de uso; nada daqui devolve dado de outro cliente.
 import { STATUS, acharConflitos, errosServicoIds, limparTexto, retiradaDe, semBoxAtivo, servicosDoAg, statusVisual, telefoneBrasileiro, telefoneNacional, validarHorario } from './rules.js';
-import { PORTE_PADRAO, porteAtivo, portesAtivos, resumoVeiculo } from './veiculos.js';
+import { PORTE_PADRAO, porteAtivo, portesAtivos, precoNoPorte, resumoVeiculo } from './veiculos.js';
 import { faixasDoProfissional } from './schedule.js';
 import { DIA, MIN, fmtDate, fmtHM, startOfDay } from './time.js';
 import * as E from './engine.js';
@@ -85,7 +85,7 @@ export function configPublica(s) {
     ...(cap(s.estabelecimento, 'precoPorPorte') ? { portes: portesAtivos().map((x) => ({ id: x.id, nome: x.nome, exemplo: x.exemplo })) } : {}),
     // preço e duração de cada serviço (por porte quando o tipo cobra por porte; a página mostra os do porte escolhido); nada de custo, material ou comissão
     servicos: servicosNaOrdemDaLoja(s, s.servicos.filter((x) => x.ativo !== false)).map((x) => (cap(s.estabelecimento, 'precoPorPorte')
-      ? { id: x.id, nome: x.nome, precos: { ...x.precos }, duracoes: { ...x.duracoes }, combo: !!x.combo, multiDia: !!x.multiDia, categoria: x.categoria || '' }
+      ? { id: x.id, nome: x.nome, precos: Object.fromEntries(portesAtivos().map((p) => [p.id, precoNoPorte(x.preco, x.precos?.[p.id], p.id)])), duracoes: Object.fromEntries(portesAtivos().map((p) => [p.id, Number(x.duracoes?.[p.id]) > 0 ? Number(x.duracoes[p.id]) : x.duracao])), combo: !!x.combo, multiDia: !!x.multiDia, categoria: x.categoria || '' }
       : { id: x.id, nome: x.nome, duracao: x.duracao, preco: x.preco })),
     profissionais: s.usuarios.filter((u) => u.atende).map((u) => ({ id: u.id, nome: u.apelido || u.nome, foto: u.foto || null })),
   };

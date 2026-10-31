@@ -2,6 +2,7 @@ package br.com.agendz.agenda;
 
 import br.com.agendz.clientes.ClienteService;
 import br.com.agendz.comissao.ComissaoService;
+import br.com.agendz.configuracao.PorteController;
 import br.com.agendz.configuracao.RegrasAtendimento;
 import br.com.agendz.cupom.CupomService;
 import br.com.agendz.erro.ErroDeNegocio;
@@ -666,15 +667,15 @@ public class AgendaController {
     private List<ServicoLinha> carregarServicos(JdbcTemplate jdbc, List<UUID> ids, String porte) {
         if (ids.isEmpty()) return List.of(); // venda só de produto
         String marcas = String.join(",", ids.stream().map(x -> "?").toList());
+        List<PorteController.Porte> portesDaLoja = porte == null ? List.of() : PorteController.ler(jdbc);
         List<ServicoLinha> achados = jdbc.query(
                 "select id, nome, preco, duracao_min, intervalo_min, multi_dia, ativo, precos::text as precos, duracoes::text as duracoes from servico where id in (" + marcas + ")",
                 (rs, i) -> {
                     BigDecimal preco = rs.getBigDecimal("preco");
                     int duracao = rs.getInt("duracao_min");
                     if (porte != null) {
-                        BigDecimal p = valorDoPorte(rs.getString("precos"), porte);
                         BigDecimal dur = valorDoPorte(rs.getString("duracoes"), porte);
-                        if (p != null && p.signum() >= 0) preco = p.setScale(2, java.math.RoundingMode.HALF_UP);
+                        preco = PorteController.precoNoPorte(preco, valorDoPorte(rs.getString("precos"), porte), portesDaLoja, porte); // v124: específico ou base × fator
                         if (dur != null && dur.signum() > 0) duracao = dur.intValue();
                     }
                     return new ServicoLinha(rs.getObject("id", UUID.class), rs.getString("nome"), preco, duracao, rs.getInt("intervalo_min"), rs.getBoolean("multi_dia"), rs.getBoolean("ativo"));

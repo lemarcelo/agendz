@@ -10,6 +10,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.constraints.Size;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -42,17 +43,45 @@ public class PorteController {
     private static final TypeReference<List<Porte>> LISTA = new TypeReference<>() {
     };
 
-    public record Porte(String id, String nome, String exemplo, boolean ativo) {
+    /** `fator` multiplica o preço base do serviço (o do Médio) neste porte; Médio = 1 sempre. Gravação antiga sem fator vale o de fábrica do id (ou 1). */
+    public record Porte(String id, String nome, String exemplo, boolean ativo, BigDecimal fator) {
+    }
+
+    public static final BigDecimal FATOR_MIN = new BigDecimal("0.10");
+    public static final BigDecimal FATOR_MAX = new BigDecimal("10.00");
+
+    private static BigDecimal fatorDeFabrica(String id) {
+        return switch (id) {
+            case "pequeno" -> new BigDecimal("0.90");
+            case "grande" -> new BigDecimal("1.20");
+            case "suv" -> new BigDecimal("1.30");
+            case "pickup" -> new BigDecimal("1.40");
+            default -> BigDecimal.ONE.setScale(2);
+        };
+    }
+
+    /** Fator do porte na lista (porte desconhecido ou sem fator: 1). */
+    public static BigDecimal fatorDe(List<Porte> portes, String id) {
+        for (Porte p : portes) if (p.id().equals(id)) return p.fator() == null ? fatorDeFabrica(id) : p.fator();
+        return BigDecimal.ONE;
+    }
+
+    /** Preço do serviço no porte: o específico (se o dono definiu), senão preço base × fator do porte, em 2 casas. */
+    public static BigDecimal precoNoPorte(BigDecimal base, BigDecimal especifico, List<Porte> portes, String porte) {
+        if (especifico != null && especifico.signum() >= 0) return especifico.setScale(2, java.math.RoundingMode.HALF_UP);
+        if (base == null) return null;
+        if (porte == null || PADRAO.equals(porte)) return base.setScale(2, java.math.RoundingMode.HALF_UP);
+        return base.multiply(fatorDe(portes, porte)).setScale(2, java.math.RoundingMode.HALF_UP);
     }
 
     public static final List<Porte> DE_FABRICA = List.of(
-            new Porte("pequeno", "Pequeno", "Ex.: Mobi, Kwid, Up", true),
-            new Porte("medio", "Médio", "Ex.: Onix, HB20, Corolla", true),
-            new Porte("grande", "Grande", "Ex.: Spin, Compass sedã grande, Van", true),
-            new Porte("suv", "SUV", "Ex.: Creta, T-Cross, Tracker", true),
-            new Porte("pickup", "Pickup", "Ex.: Strada, Hilux, S10", true));
+            new Porte("pequeno", "Pequeno", "Ex.: Mobi, Kwid, Up", true, new BigDecimal("0.90")),
+            new Porte("medio", "Médio", "Ex.: Onix, HB20, Corolla", true, new BigDecimal("1.00")),
+            new Porte("grande", "Grande", "Ex.: Spin, Compass sedã grande, Van", true, new BigDecimal("1.20")),
+            new Porte("suv", "SUV", "Ex.: Creta, T-Cross, Tracker", true, new BigDecimal("1.30")),
+            new Porte("pickup", "Pickup", "Ex.: Strada, Hilux, S10", true, new BigDecimal("1.40")));
 
-    public record EntradaPorte(@Size(max = 40) String id, @Size(max = 200) String nome, @Size(max = 300) String exemplo, Boolean ativo) {
+    public record EntradaPorte(@Size(max = 40) String id, @Size(max = 200) String nome, @Size(max = 300) String exemplo, Boolean ativo, BigDecimal fator) {
     }
 
     public record Corpo(@Size(max = 100) List<EntradaPorte> portes) {
@@ -70,7 +99,10 @@ public class PorteController {
         if (linhas.isEmpty()) return DE_FABRICA;
         try {
             List<Porte> l = JSON.readValue(linhas.get(0), LISTA);
-            return l == null || l.isEmpty() ? DE_FABRICA : l;
+            if (l == null || l.isEmpty()) return DE_FABRICA;
+            List<Porte> saida = new ArrayList<>();
+            for (Porte p : l) saida.add(p.fator() == null ? new Porte(p.id(), p.nome(), p.exemplo(), p.ativo(), PADRAO.equals(p.id()) ? new BigDecimal("1.00") : fatorDeFabrica(p.id())) : p); // gravação anterior à v124
+            return saida;
         } catch (JsonProcessingException e) {
             return DE_FABRICA;
         }
@@ -90,13 +122,9 @@ public class PorteController {
         return s;
     }
 
-    /** Portes de fábrica ativos: o preço e a duração deles são obrigatórios no serviço; os cadastrados pelo dono podem ficar sem valor (vale o do Médio). */
+    /** Só o Médio é obrigatório no serviço (preço e duração base); os outros portes usam o fator (preço) e a duração base, ou o valor específico do dono. */
     public static Set<String> obrigatoriosNoServico(List<Porte> portes) {
-        Set<String> fabrica = new HashSet<>();
-        for (Porte p : DE_FABRICA) fabrica.add(p.id());
-        Set<String> s = new LinkedHashSet<>();
-        for (Porte p : portes) if (p.ativo() && fabrica.contains(p.id())) s.add(p.id());
-        return s;
+        return new LinkedHashSet<>(List.of(PADRAO));
     }
 
     @GetMapping("/api/estabelecimento/portes")
@@ -128,7 +156,10 @@ public class PorteController {
             if (id != null && !ID.matcher(id).matches()) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Porte inválido.");
             if (id == null) id = "p" + UUID.randomUUID().toString().replace("-", "").substring(0, 8);
             if (!ids.add(id)) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Porte repetido.");
-            novos.add(new Porte(id, nome, exemplo, e.ativo() == null || e.ativo()));
+            BigDecimal fator = e.fator() == null ? (PADRAO.equals(id) ? new BigDecimal("1.00") : fatorDeFabrica(id)) : e.fator().setScale(2, java.math.RoundingMode.HALF_UP);
+            if (PADRAO.equals(id)) fator = new BigDecimal("1.00"); // o Médio é a base
+            if (fator.compareTo(FATOR_MIN) < 0 || fator.compareTo(FATOR_MAX) > 0) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "O fator do porte " + nome + " vai de 0,10 a 10.");
+            novos.add(new Porte(id, nome, exemplo, e.ativo() == null || e.ativo(), fator));
         }
         Porte medio = novos.stream().filter(p -> p.id().equals(PADRAO)).findFirst().orElse(null);
         if (medio == null) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "O porte padrão (Médio) não pode ser retirado; você pode mudar o nome dele.");

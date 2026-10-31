@@ -7,12 +7,18 @@ import { limparTexto } from './texto.js';
 // `ROTULO_PORTE` e `EXEMPLO_PORTE` são atualizados NO LUGAR por `definirPortes` (quem importou continua vendo a lista atual); `portesAtivos()` é o que se oferece para escolher.
 export const PORTE_PADRAO = 'medio'; // nunca sai nem desativa: é o porte de quem não escolheu e o preço de quem não tem preço no porte
 export const PORTES_DE_FABRICA = [
-  { id: 'pequeno', nome: 'Pequeno', exemplo: 'Ex.: Mobi, Kwid, Up', ativo: true },
-  { id: 'medio', nome: 'Médio', exemplo: 'Ex.: Onix, HB20, Corolla', ativo: true },
-  { id: 'grande', nome: 'Grande', exemplo: 'Ex.: Spin, Compass sedã grande, Van', ativo: true },
-  { id: 'suv', nome: 'SUV', exemplo: 'Ex.: Creta, T-Cross, Tracker', ativo: true },
-  { id: 'pickup', nome: 'Pickup', exemplo: 'Ex.: Strada, Hilux, S10', ativo: true },
+  { id: 'pequeno', nome: 'Pequeno', exemplo: 'Ex.: Mobi, Kwid, Up', ativo: true, fator: 0.9 },
+  { id: 'medio', nome: 'Médio', exemplo: 'Ex.: Onix, HB20, Corolla', ativo: true, fator: 1 },
+  { id: 'grande', nome: 'Grande', exemplo: 'Ex.: Spin, Compass sedã grande, Van', ativo: true, fator: 1.2 },
+  { id: 'suv', nome: 'SUV', exemplo: 'Ex.: Creta, T-Cross, Tracker', ativo: true, fator: 1.3 },
+  { id: 'pickup', nome: 'Pickup', exemplo: 'Ex.: Strada, Hilux, S10', ativo: true, fator: 1.4 },
 ];
+// v124: cada porte tem um FATOR que multiplica o preço base do serviço (o do Médio, fator 1 fixo). Gravação antiga sem fator vale o de fábrica do id (ou 1).
+export const FATOR_MIN = 0.1;
+export const FATOR_MAX = 10;
+const r2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
+const fatorPadrao = (id) => (id === PORTE_PADRAO ? 1 : PORTES_DE_FABRICA.find((f) => f.id === id)?.fator ?? 1);
+const fatorLido = (x) => (x.id === PORTE_PADRAO ? 1 : Number.isFinite(x.fator) && x.fator >= FATOR_MIN && x.fator <= FATOR_MAX ? r2(x.fator) : fatorPadrao(x.id));
 export const LIMITE_PORTES = 12;
 export const PORTES = [];
 export const ROTULO_PORTE = {};
@@ -20,7 +26,7 @@ export const EXEMPLO_PORTE = {};
 let listaPortes = [];
 export function definirPortes(lista) {
   const l = Array.isArray(lista) && lista.length ? lista : PORTES_DE_FABRICA;
-  listaPortes = l.map((x) => ({ id: x.id, nome: x.nome, exemplo: x.exemplo || '', ativo: x.ativo !== false }));
+  listaPortes = l.map((x) => ({ id: x.id, nome: x.nome, exemplo: x.exemplo || '', ativo: x.ativo !== false, fator: fatorLido(x) }));
   PORTES.length = 0; PORTES.push(...listaPortes.map((x) => x.id));
   for (const k of Object.keys(ROTULO_PORTE)) delete ROTULO_PORTE[k];
   for (const k of Object.keys(EXEMPLO_PORTE)) delete EXEMPLO_PORTE[k];
@@ -28,6 +34,15 @@ export function definirPortes(lista) {
 }
 definirPortes(null);
 export const listaDePortes = () => listaPortes.map((x) => ({ ...x }));
+export const fatorDoPorte = (porte) => listaPortes.find((x) => x.id === porte)?.fator ?? 1;
+// Preço do serviço no porte: o específico (definido no serviço) ou preço base × fator do porte, em 2 casas. `base` = preço do Médio.
+export function precoNoPorte(base, especifico, porte) {
+  const e = especifico === null || especifico === undefined || especifico === '' ? NaN : Number(especifico);
+  if (Number.isFinite(e) && e >= 0) return r2(e);
+  const b = Number(base);
+  if (!Number.isFinite(b)) return 0;
+  return r2(b * (porte === PORTE_PADRAO ? 1 : fatorDoPorte(porte)));
+}
 export const portesAtivos = () => listaPortes.filter((x) => x.ativo);
 export const porteValido = (p) => typeof p === 'string' && PORTES.includes(p); // conhecido (para ler o que já existe)
 // Portes para o campo de escolha: os ativos e, se o valor atual for de um porte já desativado, ele também (para não sumir da tela).
@@ -56,7 +71,11 @@ export function sanearPortes(entrada, novoId) {
     const id = x.id || novoId();
     if (ids.has(id)) return { ok: false, erro: 'Porte repetido.' };
     ids.add(id);
-    saida.push({ id, nome, exemplo: limparTexto(String(x.exemplo ?? ''), 60).trim(), ativo: x.ativo !== false });
+    if (x.fator !== undefined && x.fator !== null && (typeof x.fator !== 'number' || !Number.isFinite(x.fator))) return { ok: false, erro: 'Porte inválido.' };
+    let fator = x.fator === undefined || x.fator === null ? fatorPadrao(id) : r2(x.fator);
+    if (id === PORTE_PADRAO) fator = 1; // o Médio é a base
+    if (fator < FATOR_MIN || fator > FATOR_MAX) return { ok: false, erro: `O fator do porte ${nome} vai de 0,10 a 10.` };
+    saida.push({ id, nome, exemplo: limparTexto(String(x.exemplo ?? ''), 60).trim(), ativo: x.ativo !== false, fator });
   }
   const medio = saida.find((x) => x.id === PORTE_PADRAO);
   if (!medio) return { ok: false, erro: 'O porte padrão (Médio) não pode ser retirado; você pode mudar o nome dele.' };

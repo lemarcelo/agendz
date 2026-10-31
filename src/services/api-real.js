@@ -741,7 +741,7 @@ export const boxes = {
 // ---------- portes de veículo (v122; regras no servidor: PorteService; só o proprietário grava) ----------
 function lerPorte(d) {
   d = d || {};
-  return { id: texto(d.id, 24), nome: texto(d.nome, 20), exemplo: texto(d.exemplo || '', 60), ativo: d.ativo !== false };
+  return { id: texto(d.id, 24), nome: texto(d.nome, 20), exemplo: texto(d.exemplo || '', 60), ativo: d.ativo !== false, ...(typeof d.fator === 'number' && Number.isFinite(d.fator) ? { fator: d.fator } : {}) };
 }
 const lerPortes = (d) => listaDe(d, 12).map(lerPorte).filter((x) => /^[a-z0-9-]{2,24}$/.test(x.id) && x.nome);
 export const portes = {
@@ -754,7 +754,7 @@ export const portes = {
   async gravar(lista) {
     const itens = Array.isArray(lista) ? lista.slice(0, 12) : [];
     if (itens.length === 0) return { ok: false, status: 0, erro: 'Cadastre ao menos um porte.' };
-    const corpo = { portes: itens.map((x) => ({ ...(/^[a-z0-9-]{2,24}$/.test(String(x && x.id)) ? { id: x.id } : {}), nome: texto(x && x.nome, 20), exemplo: texto((x && x.exemplo) || '', 60), ativo: !(x && x.ativo === false) })) };
+    const corpo = { portes: itens.map((x) => ({ ...(/^[a-z0-9-]{2,24}$/.test(String(x && x.id)) ? { id: x.id } : {}), nome: texto(x && x.nome, 20), exemplo: texto((x && x.exemplo) || '', 60), ativo: !(x && x.ativo === false), ...(x && Number.isFinite(x.fator) ? { fator: Math.round(x.fator * 100) / 100 } : {}) })) };
     const r = await chamar('PUT', '/api/estabelecimento/portes', corpo);
     return r.ok ? { ok: true, portes: lerPortes(r.dados) } : r;
   },

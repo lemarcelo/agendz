@@ -260,13 +260,17 @@ public class ServicoService {
         if (v.duracaoMapa != null) for (Integer x : v.duracaoMapa.values()) if (x > DURACAO_DIA) throw ruim(MSG_DURACAO);
     }
 
-    /** Os portes de fábrica ativos precisam de preço; porte cadastrado pelo dono ou desativado pode ficar sem (vale o do Médio). */
+    /** v124: só o Médio (preço base) é obrigatório; os demais portes valem base × fator, a não ser que o dono tenha definido o preço específico (guardado aqui). */
     private static Map<String, BigDecimal> tabelaPrecos(List<PorteController.Porte> portes, Map<String, BigDecimal> bruto, BigDecimal unico) {
         Map<String, BigDecimal> v = new LinkedHashMap<>();
         if (bruto == null) {
             if (unico == null) throw ruim("Informe o preço.");
-            for (PorteController.Porte p : portes) v.put(p.id(), unico);
+            v.put(PorteController.PADRAO, unico);
             return v;
+        }
+        if (bruto.get(PorteController.PADRAO) == null && unico != null) {
+            bruto = new LinkedHashMap<>(bruto);
+            bruto.put(PorteController.PADRAO, unico);
         }
         java.util.Set<String> conhecidos = new java.util.HashSet<>();
         for (PorteController.Porte p : portes) conhecidos.add(p.id());
@@ -285,8 +289,12 @@ public class ServicoService {
         Map<String, Integer> v = new LinkedHashMap<>();
         if (bruto == null) {
             if (unico == null) throw ruim("Informe a duração.");
-            for (PorteController.Porte p : portes) v.put(p.id(), unico);
+            v.put(PorteController.PADRAO, unico);
             return v;
+        }
+        if (bruto.get(PorteController.PADRAO) == null && unico != null) {
+            bruto = new LinkedHashMap<>(bruto);
+            bruto.put(PorteController.PADRAO, unico);
         }
         String sufixo = multi ? "" : " " + MSG_DURACAO;
         java.util.Set<String> conhecidos = new java.util.HashSet<>();

@@ -1122,3 +1122,14 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
 .forma-opcoes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .forma-opcoes .btn { min-height: 48px; font-size: 15px; }
 .cartao, .cartao-real > .cartao { -webkit-touch-callout: none; }
+
+/* v124: prévia de preços ao definir o fator do porte e campo do fator */
+.previa-portes { display: grid; gap: 8px; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--surface); min-width: 0; }
+.previa-portes-titulo { margin: 0; font-size: 1rem; }
+.previa-portes-lista, .previa-portes-precos { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; min-width: 0; }
+.previa-portes-item { min-width: 0; overflow-wrap: anywhere; }
+.previa-portes-precos { padding-left: 10px; margin-top: 4px; }
+.porte-fator { max-width: 110px; }
+.preco-especifico-lista { display: grid; gap: 8px; }
+.preco-especifico-linha { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: flex-end; min-width: 0; }
+.preco-especifico-linha .campo { flex: 1 1 130px; min-width: 0; }

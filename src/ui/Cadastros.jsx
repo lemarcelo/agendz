@@ -7,7 +7,7 @@ import { SECOES, SECOES_LIBERAVEIS, ehGestor, formatarCpf, formatarTelefone, pap
 import { creditoDoCliente } from '../domain/financeiro.js';
 import { CATEGORIAS, renderizar, validarModelo, variaveisDoCorpo } from '../domain/templates.js';
 import { fmtDate, fmtDateTime, fmtDuration, fmtHM, fmtMoney } from '../domain/time.js';
-import { LIMITE_VEICULOS, PORTES, ROTULO_PORTE, placaValida, portesAtivos, portesParaEscolher, rotuloVeiculo } from '../domain/veiculos.js';
+import { LIMITE_VEICULOS, PORTES, PORTE_PADRAO, ROTULO_PORTE, placaValida, portesAtivos, portesParaEscolher, precoNoPorte, rotuloVeiculo } from '../domain/veiculos.js';
 import { Abas, Aviso, rolarAoErro, Avatar, Btn, Campo, Icon, Interruptor, Modal, Vazio } from './common.jsx';
 import { FotoCampo } from './Foto.jsx';
 import { fotoDeExemplo } from './imagem.js';
@@ -23,8 +23,8 @@ import { BlocoPlano, ModaisPlano } from './PlanoDoCliente.jsx';
 import { capAtiva, rot, Rot, rots, voc, Voc } from '../domain/tipos.js';
 
 const faixa = (obj, fmt) => { const v = PORTES.map((p) => obj?.[p]).filter((x) => Number.isFinite(x)); if (!v.length) return ''; const a = Math.min(...v), b = Math.max(...v); return a === b ? fmt(a) : `${fmt(a)} a ${fmt(b)}`; };
-const faixaPreco = (s) => faixa(s.precos, fmtMoney) || fmtMoney(s.preco);
-const faixaDuracao = (s) => (s.multiDia ? 'vários dias' : faixa(s.duracoes, fmtDuration) || fmtDuration(s.duracao));
+const faixaPreco = (s) => (capAtiva('precoPorPorte') ? faixa(Object.fromEntries(portesAtivos().map(({ id }) => [id, precoNoPorte(s.preco, s.precos?.[id], id)])), fmtMoney) : '') || fmtMoney(s.preco);
+const faixaDuracao = (s) => (s.multiDia ? 'vários dias' : (capAtiva('precoPorPorte') ? faixa(Object.fromEntries(portesAtivos().map(({ id }) => [id, Number(s.duracoes?.[id]) > 0 ? Number(s.duracoes[id]) : s.duracao])), fmtDuration) : '') || fmtDuration(s.duracao));
 const fmtNasc = (s) => (s ? fmtDate(new Date(`${s}T00:00`).getTime()) : '');
 
 // ---------- Clientes ----------
@@ -174,7 +174,7 @@ export function Servicos({ user }) {
     const r = apiSrv.reordenar(ids);
     if (!r.ok) toast(r.erros?.[0] || 'Não foi possível mudar a ordem.');
   };
-  const novo = !capAtiva('precoPorPorte') ? { nome: '', preco: 40, duracao: 40, intervalo: 10, antecedenciaH: 2, notificacoes: null, confirmacaoServico: null, combo: false, componentes: [] } : { nome: '', categoria: '', precos: { pequeno: 60, medio: 70, grande: 80, suv: 90, pickup: 95 }, duracoes: { pequeno: 40, medio: 45, grande: 50, suv: 55, pickup: 60 }, multiDia: false, combo: false, componentes: [], intervalo: 10, antecedenciaH: 2, notificacoes: null, confirmacaoServico: null };
+  const novo = !capAtiva('precoPorPorte') ? { nome: '', preco: 40, duracao: 40, intervalo: 10, antecedenciaH: 2, notificacoes: null, confirmacaoServico: null, combo: false, componentes: [] } : { nome: '', categoria: '', precos: { medio: 70 }, duracoes: { medio: 45 }, multiDia: false, combo: false, componentes: [], intervalo: 10, antecedenciaH: 2, notificacoes: null, confirmacaoServico: null };
   return (
     <section className="tela">
       <header className="tela-topo">
@@ -239,20 +239,24 @@ function FormServico({ s, user, onClose }) {
         {!capAtiva('precoPorPorte') ? <>
           <Campo rotulo="Preço (R$)"><input type="number" min="0" step="0.5" value={f.preco ?? ''} onChange={num('preco')} data-testid="srv-preco" /></Campo>
           <Campo rotulo="Duração (min)"><input type="number" min="5" step="5" value={f.duracao ?? ''} onChange={num('duracao')} data-testid="srv-dur" /></Campo>
-        </> : <div className="campo-largo">
-          <div className="tabela-portes" role="group" aria-labelledby="srv-portes-r" data-testid="srv-portes">
-            <span className="campo-rotulo" id="srv-portes-r">Preço e duração por porte do veículo</span>
-            <div className="porte-cab"><span>Porte</span><span>Preço (R$)</span><span>{f.multiDia ? 'Trabalho (min)' : 'Duração (min)'}</span></div>
-            {portesAtivos().map(({ id: p }) => (
-              <div className="porte-linha" key={p}>
-                <b>{ROTULO_PORTE[p]}</b>
-                <input type="number" min="0" step="0.5" value={f.precos?.[p] ?? ''} onChange={(e) => setF({ ...f, precos: { ...f.precos, [p]: e.target.value === '' ? '' : Number(e.target.value) } })} aria-label={`Preço, porte ${ROTULO_PORTE[p]}`} data-testid={`srv-preco-${p}`} />
-                <input type="number" min="5" step="5" value={f.duracoes?.[p] ?? ''} onChange={(e) => setF({ ...f, duracoes: { ...f.duracoes, [p]: e.target.value === '' ? '' : Number(e.target.value) } })} aria-label={`Duração, porte ${ROTULO_PORTE[p]}`} data-testid={`srv-dur-${p}`} />
+        </> : <>
+          <Campo rotulo="Preço base — Médio (R$)" dica="Os outros portes saem deste valor × o fator do porte (Estabelecimento > Portes)."><input type="number" min="0" step="0.5" value={f.precos?.[PORTE_PADRAO] ?? ''} onChange={(e) => setF({ ...f, precos: { ...f.precos, [PORTE_PADRAO]: e.target.value === '' ? '' : Number(e.target.value) } })} data-testid={`srv-preco-${PORTE_PADRAO}`} /></Campo>
+          <Campo rotulo={f.multiDia ? 'Trabalho — Médio (min)' : 'Duração — Médio (min)'} dica="Vale para todos os portes, a não ser que você defina um tempo específico abaixo."><input type="number" min="5" step="5" value={f.duracoes?.[PORTE_PADRAO] ?? ''} onChange={(e) => setF({ ...f, duracoes: { ...f.duracoes, [PORTE_PADRAO]: e.target.value === '' ? '' : Number(e.target.value) } })} data-testid={`srv-dur-${PORTE_PADRAO}`} /></Campo>
+          {portesAtivos().some((x) => x.id !== PORTE_PADRAO) && (
+            <fieldset className="campo-largo conj" data-testid="srv-especifico">
+              <legend>Preço específico por porte</legend>
+              <small className="muted">Opcional. O valor digitado vale no lugar de "preço base × fator". Em branco, o porte usa o fator.</small>
+              <div className="preco-especifico-lista">
+                {portesAtivos().filter((x) => x.id !== PORTE_PADRAO).map(({ id: p }) => (
+                  <div className="preco-especifico-linha" key={p} data-testid={`srv-esp-${p}`}>
+                    <Campo rotulo={`${ROTULO_PORTE[p]} — preço (R$)`}><input type="number" min="0" step="0.5" value={f.precos?.[p] ?? ''} placeholder={Number.isFinite(Number(f.precos?.[PORTE_PADRAO])) && f.precos?.[PORTE_PADRAO] !== '' ? `Fator: ${fmtMoney(precoNoPorte(Number(f.precos[PORTE_PADRAO]), undefined, p))}` : 'Fator do porte'} onChange={(e) => setF({ ...f, precos: { ...f.precos, [p]: e.target.value === '' ? '' : Number(e.target.value) } })} data-testid={`srv-preco-${p}`} /></Campo>
+                    <Campo rotulo={`${ROTULO_PORTE[p]} — ${f.multiDia ? 'trabalho' : 'duração'} (min)`}><input type="number" min="5" step="5" value={f.duracoes?.[p] ?? ''} placeholder="Igual ao Médio" onChange={(e) => setF({ ...f, duracoes: { ...f.duracoes, [p]: e.target.value === '' ? '' : Number(e.target.value) } })} data-testid={`srv-dur-${p}`} /></Campo>
+                  </div>
+                ))}
               </div>
-            ))}
-            <small className="muted">Porte que você cadastrou e deixou sem valor usa o preço e o tempo do Médio.</small>
-          </div>
-        </div>}
+            </fieldset>
+          )}
+        </>}
         {capAtiva('multiDia') && <div className="campo-largo"><Interruptor checked={!!f.multiDia} onChange={(v) => setF({ ...f, multiDia: v })} rotulo="Serviço de vários dias" descricao="O carro entra, fica no box e é retirado depois. A duração conta só o tempo de trabalho (ex.: 480 = um dia de 8 h); a retirada cai no último dia útil necessário." testid="srv-multidia" /></div>}
         <div className="campo-largo"><Interruptor checked={!!f.combo} onChange={(v) => setF({ ...f, combo: v, componentes: v ? f.componentes || [] : [] })} rotulo="Combo" descricao="Junta serviços comuns com preço e tempo próprios. Os materiais saem do estoque pelos serviços que o combo junta." testid="srv-combo" /></div>
         {f.combo && (

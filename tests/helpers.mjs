@@ -15,7 +15,9 @@ export function reiniciar() {
   assert(auth.login({ identificador: 'davi', senha: '1234' }).ok);
   for (const [id, v] of Object.entries(SIMPLES)) {
     const s = store.getState().servicos.find((x) => x.id === id);
-    const r = servicos.salvar({ id, nome: s.nome, codigo: s.codigo, ...v });
+    // v124: o preço vem do fator do porte; o catálogo "simples" fixa o mesmo preço em todos os portes (preço específico em cada um)
+    const tudo = (x) => Object.fromEntries(['pequeno', 'medio', 'grande', 'suv', 'pickup'].map((p) => [p, x]));
+    const r = servicos.salvar({ id, nome: s.nome, codigo: s.codigo, ...v, precos: tudo(v.preco), duracoes: tudo(v.duracao) });
     assert(r.ok, JSON.stringify(r));
   }
   auth.logout();

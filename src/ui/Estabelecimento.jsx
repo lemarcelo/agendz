@@ -19,6 +19,8 @@ import { toast, useStore } from './hooks.js';
 import { capAtiva, rot, tipoDe, TIPOS, voc, Voc } from '../domain/tipos.js';
 import { coordenadasDeTexto } from '../domain/localizacao.js';
 import { LIMITE_PORTES, PORTE_PADRAO, listaDePortes } from '../domain/veiculos.js';
+import { fatorDeTexto, fatorEmTexto } from '../domain/previa-portes.js';
+import PreviaPortes from './leve/PreviaPortes.jsx';
 
 const ORDEM_SEMANA = [1, 2, 3, 4, 5, 6, 0];
 
@@ -227,7 +229,7 @@ export default function Estabelecimento({ user }) {
         {aba === 'escala' && <PainelEscala escopo="estab" />}
         {aba === 'calendario' && <PainelCalendario />}
         {aba === 'boxes' && <PainelBoxes e={e} />}
-        {aba === 'portes' && <PainelPortes e={e} />}
+        {aba === 'portes' && <PainelPortes e={e} servicos={st.servicos} />}
         {aba === 'marca' && <PainelMarca />}
         {aba === 'cupons' && <Cupons />}
         {aba === 'reconfigurar' && ehDono(user) && <Reconfigurar st={st} />}
@@ -310,26 +312,30 @@ function PainelBoxes({ e }) {
 }
 
 // Portes (tamanhos de veículo): o preço e o tempo de cada serviço mudam com o porte. A ordem da lista é a ordem que o cliente vê. O Médio fica sempre (é o padrão de quem não escolhe).
-function PainelPortes({ e }) {
-  const atuais = () => listaDePortes().map((x) => ({ ...x }));
+function PainelPortes({ e, servicos = [] }) {
+  // `fator` fica como texto enquanto se digita (1,25); vira número ao salvar. O Médio é a base (fator 1, fixo).
+  const atuais = () => listaDePortes().map((x) => ({ ...x, fator: fatorEmTexto(x.fator) }));
   const [lista, setLista] = useState(atuais);
   const [erro, setErro] = useState('');
   const sujo = JSON.stringify(lista) !== JSON.stringify(atuais());
   const muda = (i, patch) => setLista(lista.map((y, j) => (j === i ? { ...y, ...patch } : y)));
   const move = (i, d) => { const j = i + d; if (j < 0 || j >= lista.length) return; const n = [...lista]; [n[i], n[j]] = [n[j], n[i]]; setLista(n); };
   const salvar = () => {
-    const r = apiEst.salvar({ portes: lista.map((x) => ({ id: x.id, nome: x.nome, exemplo: x.exemplo, ativo: x.ativo !== false })) });
+    const ruim = lista.find((x) => x.id !== PORTE_PADRAO && fatorDeTexto(x.fator) === null);
+    if (ruim) { setErro(`O fator do porte ${ruim.nome || 'novo'} vai de 0,10 a 10.`); return; }
+    const r = apiEst.salvar({ portes: lista.map((x) => ({ id: x.id, nome: x.nome, exemplo: x.exemplo, ativo: x.ativo !== false, fator: x.id === PORTE_PADRAO ? 1 : fatorDeTexto(x.fator) })) });
     if (!r.ok) { setErro(r.erros[0]); return; }
     setErro(''); setLista(atuais()); toast('Portes salvos.');
   };
   return (
     <div className="bloco-largo" data-testid="painel-portes">
-      <p>O porte do veículo define o preço e o tempo de cada serviço. Cadastre os tamanhos que a {rot('loja')} atende; depois informe o preço e o tempo de cada um em Serviços. Quem não escolhe o porte fica no <b>Médio</b>.</p>
+      <p>O porte do veículo muda o preço do serviço: <b>preço do serviço (Médio) × fator do porte</b>. Ex.: serviço de R$ 100 e fator 1,2 = R$ 120. Para um serviço ter um valor diferente num porte, use <b>Preço específico por porte</b> no cadastro do serviço. Quem não escolhe o porte fica no <b>Médio</b>.</p>
       <div className="boxes-lista">
         {lista.map((x, i) => (
           <div key={x.id || `novo-${i}`} className="box-linha" data-testid={`porte-${i}`}>
             <Campo rotulo={`Porte ${i + 1}`}><input value={x.nome} maxLength={20} onChange={(ev) => muda(i, { nome: ev.target.value })} data-testid={`porte-nome-${i}`} /></Campo>
             <Campo rotulo="Exemplos (opcional)"><input value={x.exemplo} maxLength={60} placeholder="Ex.: Onix, HB20" onChange={(ev) => muda(i, { exemplo: ev.target.value })} data-testid={`porte-exemplo-${i}`} /></Campo>
+            <Campo rotulo="Fator" dica={x.id === PORTE_PADRAO ? 'Médio é a base' : undefined}><input className="porte-fator" inputMode="decimal" value={x.id === PORTE_PADRAO ? '1' : x.fator ?? ''} disabled={x.id === PORTE_PADRAO} maxLength={5} onChange={(ev) => muda(i, { fator: ev.target.value })} data-testid={`porte-fator-${i}`} /></Campo>
             <label className="check-linha"><input type="checkbox" checked={x.ativo !== false} disabled={x.id === PORTE_PADRAO} onChange={(ev) => muda(i, { ativo: ev.target.checked })} data-testid={`porte-ativo-${i}`} /> Ativo</label>
             <button type="button" className="icone-btn" disabled={i === 0} onClick={() => move(i, -1)} aria-label={`Subir ${x.nome}`} data-testid={`porte-sobe-${i}`}><Icon n="up" size={16} /></button>
             <button type="button" className="icone-btn" disabled={i === lista.length - 1} onClick={() => move(i, 1)} aria-label={`Descer ${x.nome}`} data-testid={`porte-desce-${i}`}><Icon n="down" size={16} /></button>
@@ -339,10 +345,11 @@ function PainelPortes({ e }) {
       </div>
       {erro && <Aviso tipo="erro"><span data-testid="portes-erro">{erro}</span></Aviso>}
       <div className="acoes">
-        <Btn icone="plus" disabled={lista.length >= LIMITE_PORTES} onClick={() => setLista([...lista, { nome: '', exemplo: '', ativo: true }])} data-testid="porte-add">Adicionar porte</Btn>
+        <Btn icone="plus" disabled={lista.length >= LIMITE_PORTES} onClick={() => setLista([...lista, { nome: '', exemplo: '', ativo: true, fator: '1' }])} data-testid="porte-add">Adicionar porte</Btn>
         <Btn variante="primario" disabled={!sujo} onClick={salvar} data-testid="porte-salvar">Salvar portes</Btn>
       </div>
-      <small className="muted">Porte já usado em veículo ou atendimento não pode ser removido, só desativado. Serviços precisam de preço e tempo em todo porte ativo.</small>
+      <PreviaPortes servicos={servicos} portes={lista} />
+      <small className="muted">Porte já usado em veículo ou atendimento não pode ser removido, só desativado. O tempo do serviço é o mesmo em todo porte, a não ser que você defina um tempo específico no serviço.</small>
     </div>
   );
 }

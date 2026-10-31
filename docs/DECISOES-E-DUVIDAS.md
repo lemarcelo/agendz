@@ -142,11 +142,19 @@ Lista simples. Cada item está no histórico do `prompt-agendz-regras.md` (v84 a
 - **Decidi:** o Médio é fixo (nome editável, nunca sai nem desativa): é o porte de quem não informa e a base do preço.
 - **Decidi:** porte novo sem preço no serviço usa o preço e a duração do Médio, em vez de bloquear a gravação do serviço.
 - **Decidi:** porte usado (veículo de cliente ou agendamento) só desativa; desativar com agendamento futuro ativo é recusado.
-- **Dúvida:** o dono talvez queira definir o preço do porte novo por serviço na tela do serviço (hoje só os portes de fábrica têm campo de preço).
+- ~~Dúvida:~~ preço do porte novo por serviço: **resolvida na v124** (seção "Preço específico por porte" no serviço).
 
 ## v123 (30/10): ordem dos serviços
 - **Decidi:** padrão "mais usados primeiro" em toda loja; a ordem manual (setas) é o desempate e vale integral no modo "minha ordem".
 - **Decidi:** a contagem de uso é calculada na hora a partir dos agendamentos não cancelados (nunca guardada, nunca mostrada ao cliente).
 - **Decidi:** a lista de Serviços sempre mostra a ordem manual; "mais usados" só vale onde se escolhe serviço (Atender, agendamento, link).
-- **Dúvida:** talvez valha contar só os últimos 90 dias de uso, para serviço antigo não dominar para sempre.
+- ~~Dúvida:~~ janela de 90 dias: **aprovada pelo Marcelo e feita na v124**.
 
+## v124 (30/10): preço = base × fator do porte, preço específico e janela de 90 dias
+- **Decidi:** o preço que já estava gravado em cada porte vira **preço específico** (nada muda de valor sozinho); só quem não tem valor num porte passa a usar base × fator.
+- **Decidi:** fatores de fábrica: Pequeno 0,9 · Médio 1 · Grande 1,2 · SUV 1,3 · Pickup 1,4; porte novo nasce com 1; faixa 0,10 a 10 com duas casas; Médio fixo em 1.
+- **Decidi:** a **duração** não usa fator (é a base); tempo específico por porte continua opcional no serviço.
+- **Decidi:** preço específico 0 vale (porte grátis); campo em branco = usa o fator.
+- **Decidi:** a prévia no porte lista até 6 serviços ativos e comuns (combo fica de fora) e pesquisa por nome sem acento; mostra "preço específico" quando o serviço tem valor próprio no porte.
+- **Decidi:** os 90 dias contam do início do agendamento (o futuro também conta), iguais no Artifact e no servidor.
+- **Corrigi (sem relação):** teste de fila de avaliações usava data UTC e falhava depois das 21h (horário de Brasília).

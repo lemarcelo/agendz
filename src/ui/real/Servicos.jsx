@@ -6,7 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import { servicos as api } from '../../services/api-real.js';
 import { capAtiva } from '../../domain/tipos.js';
-import { PORTES, ROTULO_PORTE, portesAtivos } from '../../domain/veiculos.js';
+import { PORTES, PORTE_PADRAO, ROTULO_PORTE, portesAtivos, precoNoPorte } from '../../domain/veiculos.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
 
 const dinheiro = (v) => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -20,8 +20,9 @@ export function duracaoTexto(min) {
 }
 
 function precoDoCartao(s, porPorte) {
-  if (!porPorte || !s.precos) return dinheiro(s.preco);
-  const v = PORTES.map((p) => s.precos[p]).filter((x) => typeof x === 'number');
+  if (!porPorte) return dinheiro(s.preco);
+  // v124: preço no porte = específico ou base × fator
+  const v = portesAtivos().map(({ id }) => precoNoPorte(s.preco, s.precos ? s.precos[id] : undefined, id));
   if (!v.length) return dinheiro(s.preco);
   const a = Math.min(...v), b = Math.max(...v);
   return a === b ? dinheiro(a) : `${dinheiro(a)} a ${dinheiro(b)}`;
@@ -80,14 +81,25 @@ function FormServico({ ficha, todos, ehDono, aoSalvar, aoCancelar }) {
           <Campo rotulo="Categoria (opcional)"><input value={f.categoria} maxLength={30} onChange={mudar('categoria')} data-testid="srv-categoria" /></Campo>
           {porPorte ? (
             <div className="srv-portes" data-testid="srv-portes">
-              <p className="muted">Preço e duração (em minutos) para cada porte de veículo.</p>
-              {portesAtivos().map(({ id: p }) => (
-                <div key={p} className="srv-porte-linha">
-                  <b>{ROTULO_PORTE[p]}</b>
-                  <Campo rotulo="Preço (R$)"><input value={f.precos[p]} inputMode="decimal" onChange={mudarPorte('precos', p)} data-testid={`srv-preco-${p}`} /></Campo>
-                  <Campo rotulo="Duração (min)"><input value={f.duracoes[p]} inputMode="numeric" onChange={mudarPorte('duracoes', p)} data-testid={`srv-duracao-${p}`} /></Campo>
-                </div>
-              ))}
+              <Campo rotulo="Preço base — Médio (R$)"><input value={f.precos[PORTE_PADRAO]} inputMode="decimal" onChange={mudarPorte('precos', PORTE_PADRAO)} data-testid={`srv-preco-${PORTE_PADRAO}`} /></Campo>
+              <Campo rotulo="Duração — Médio (minutos)"><input value={f.duracoes[PORTE_PADRAO]} inputMode="numeric" onChange={mudarPorte('duracoes', PORTE_PADRAO)} data-testid={`srv-duracao-${PORTE_PADRAO}`} /></Campo>
+              <p className="muted">Os outros portes saem do preço base × o fator do porte (Estabelecimento &gt; Portes). O tempo é o mesmo, a não ser que você defina um específico.</p>
+              {portesAtivos().some((x) => x.id !== PORTE_PADRAO) && (
+                <fieldset className="conj" data-testid="srv-especifico">
+                  <legend>Preço específico por porte</legend>
+                  <p className="muted">Opcional. O valor vale no lugar de "preço base × fator". Em branco, o porte usa o fator.</p>
+                  {portesAtivos().filter((x) => x.id !== PORTE_PADRAO).map(({ id: p }) => {
+                    const base = num(f.precos[PORTE_PADRAO]);
+                    return (
+                      <div key={p} className="srv-porte-linha" data-testid={`srv-esp-${p}`}>
+                        <b>{ROTULO_PORTE[p]}</b>
+                        <Campo rotulo="Preço (R$)"><input value={f.precos[p]} inputMode="decimal" placeholder={base === null ? 'Fator do porte' : `Fator: ${dinheiro(precoNoPorte(base, undefined, p))}`} onChange={mudarPorte('precos', p)} data-testid={`srv-preco-${p}`} /></Campo>
+                        <Campo rotulo="Duração (min)"><input value={f.duracoes[p]} inputMode="numeric" placeholder="Igual ao Médio" onChange={mudarPorte('duracoes', p)} data-testid={`srv-duracao-${p}`} /></Campo>
+                      </div>
+                    );
+                  })}
+                </fieldset>
+              )}
             </div>
           ) : (
             <>

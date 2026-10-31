@@ -2,7 +2,7 @@
 // Regras puras do formulário Atender do site real (F2 parte 5c). A decisão de verdade é do servidor (POST /api/atendimentos); aqui só o que a tela
 // precisa saber antes de enviar: se é atendimento já feito ou agendamento, se o dia é anterior a hoje (pede motivo) e o resumo de serviços.
 import { startOfDay } from './time.js';
-import { EXIGE_TUDO_DO_VEICULO, PORTE_PADRAO, limparVeiculoComRegras, placaValida, porteValido } from './veiculos.js';
+import { EXIGE_TUDO_DO_VEICULO, PORTE_PADRAO, limparVeiculoComRegras, placaValida, porteValido, precoNoPorte } from './veiculos.js';
 
 const MARGEM_MS = 60000; // mesma tolerância do servidor: até 1 minuto à frente ainda é "agora"
 
@@ -51,9 +51,9 @@ export const exige = (regras, tipo, campo) => ((regras && regras[tipo]) || REGRA
 export function servicoNoPorte(s, porte) {
   if (!s.precos && !s.duracoes) return { preco: Number(s.preco) || 0, duracaoMin: Number(s.duracaoMin) || 0 };
   const p = porteValido(porte) ? porte : PORTE_PADRAO;
-  const preco = s.precos ? Number(s.precos[p]) : NaN;
   const dur = s.duracoes ? Number(s.duracoes[p]) : NaN;
-  return { preco: Number.isFinite(preco) && preco >= 0 ? preco : Number(s.preco) || 0, duracaoMin: Number.isFinite(dur) && dur > 0 ? dur : Number(s.duracaoMin) || 0 };
+  // v124: preço específico do porte ou preço base × fator do porte (o servidor recalcula e congela)
+  return { preco: precoNoPorte(Number(s.preco) || 0, s.precos ? s.precos[p] : undefined, p), duracaoMin: Number.isFinite(dur) && dur > 0 ? dur : Number(s.duracaoMin) || 0 };
 }
 
 // Soma de preço e minutos dos serviços marcados (só para mostrar; o servidor recalcula). `porte` só conta onde o serviço tem preço por porte.

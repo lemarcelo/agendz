@@ -1,6 +1,6 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
 // Ordem dos serviços no Atender e no link do cliente (v123). Dois modos, escolhidos pelo dono em Estabelecimento > Regras:
-//  - 'uso' (padrão): os mais usados em cima (contagem DERIVADA dos agendamentos não cancelados, nunca um contador guardado); empate cai na ordem manual.
+//  - 'uso' (padrão): os mais usados em cima (contagem DERIVADA dos agendamentos não cancelados dos últimos 90 dias, nunca um contador guardado); empate cai na ordem manual.
 //  - 'manual': a ordem que o dono montou na lista de Serviços (setas subir/descer; guardada em `servico.ordem`).
 // A ordem manual vale sempre como desempate. A contagem nunca vai ao cliente (o link recebe só a lista já ordenada).
 export const MODOS_ORDEM = ['uso', 'manual'];
@@ -13,11 +13,14 @@ export function porOrdemManual(servicos) {
   return servicos.map((s, i) => ({ s, i })).sort((a, b) => num(a.s) - num(b.s) || a.i - b.i || String(a.s.nome).localeCompare(String(b.s.nome), 'pt-BR')).map((o) => o.s);
 }
 
-// Quantas vezes cada serviço foi usado: agendamentos que não foram cancelados (feitos, confirmados ou a confirmar). Combo conta o combo (e não cada componente).
-export function usoDosServicos(agendamentos) {
+// Quantas vezes cada serviço foi usado NOS ÚLTIMOS 90 DIAS (v124): agendamentos que não foram cancelados (feitos, confirmados ou a confirmar) com início de 90 dias atrás em diante.
+// Combo conta o combo (e não cada componente). Mesma janela do servidor (OrdemDosServicos).
+export const JANELA_USO_DIAS = 90;
+export function usoDosServicos(agendamentos, agora = Date.now()) {
   const m = new Map();
+  const desde = agora - JANELA_USO_DIAS * 24 * 60 * 60 * 1000;
   for (const a of agendamentos || []) {
-    if (!a || a.status === 'cancelado') continue;
+    if (!a || a.status === 'cancelado' || !(a.inicio >= desde)) continue;
     for (const id of a.servicoIds || []) m.set(id, (m.get(id) || 0) + 1);
   }
   return m;

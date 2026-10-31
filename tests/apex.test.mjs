@@ -328,10 +328,13 @@ test('combo: 2 a 10 serviços comuns; combo dentro de combo e serviço inexisten
   assert.ok(r.ok && r.desativado);
 });
 
-test('tabela de preço e duração: os 5 portes são obrigatórios, valores válidos; sem tabela, vale o valor único', () => {
+test('tabela de preço e duração: só o Médio (base) é obrigatório, específicos válidos; sem tabela, vale o valor único no Médio', () => {
   const s = sv('s-lav-motor');
   const salva = (extra) => servicos.salvar({ ...s, ...extra });
-  assert.equal(salva({ precos: { pequeno: 1 } }).ok, false);
+  assert.equal(salva({ precos: { pequeno: 1 }, preco: undefined, duracao: undefined }).ok, false, 'sem o Médio nem preço base');
+  assert.ok(salva({ precos: { pequeno: 1 } }).ok, 'preço específico de um porte só: o Médio vem do preço base');
+  assert.equal(sv('s-lav-motor').precos.pequeno, 1);
+  assert.ok(salva({ precos: { ...sv('s-lav-motor').precos, pequeno: 40 } }).ok);
   assert.equal(salva({ precos: { ...s.precos, suv: -1 } }).ok, false);
   assert.equal(salva({ precos: { ...s.precos, suv: 'abc' } }).ok, false);
   assert.equal(salva({ precos: { ...s.precos, foguete: 5 } }).ok, false);
@@ -340,7 +343,7 @@ test('tabela de preço e duração: os 5 portes são obrigatórios, valores vál
   assert.ok(salva({ precos: { ...s.precos, suv: 95 }, duracoes: { ...s.duracoes, suv: 55 }, preco: 999, duracao: 999 }).ok, 'a tabela vale mais que o valor único');
   assert.deepEqual([sv('s-lav-motor').precos.suv, sv('s-lav-motor').duracoes.suv, sv('s-lav-motor').preco], [95, 55, 70], 'preco espelha o médio');
   assert.ok(salva({ precos: undefined, duracoes: undefined, preco: 50, duracao: 30 }).ok);
-  assert.deepEqual(Object.values(sv('s-lav-motor').precos), [50, 50, 50, 50, 50]);
+  assert.deepEqual(sv('s-lav-motor').precos, { medio: 50 }, 'sem tabela só o Médio fica salvo; os outros portes saem do fator');
   assert.equal(sv('s-lav-motor').categoria, 'Lavagem', 'editar o preço não apaga a categoria');
 });
 
