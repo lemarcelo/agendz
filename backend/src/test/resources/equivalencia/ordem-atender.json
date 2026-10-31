@@ -1,0 +1,752 @@
+{
+ "descricao": "B9b: saneamento e validação da ordem da tela Atender (src/domain/ordem-atender.js e OrdemDoAtender.java). 'esperado' é o resultado de sanear com a ordem de fábrica do site real.",
+ "casos": [
+  {
+   "nome": "ausente → fábrica",
+   "entrada": null,
+   "valida": false,
+   "esperado": {
+    "futuro": {
+     "etapas": [
+      "cliente",
+      "veiculo",
+      "servicos",
+      "quando",
+      "produtos"
+     ],
+     "veiculo": [
+      "placa",
+      "modelo",
+      "marca",
+      "cor",
+      "porte"
+     ],
+     "cliente": [
+      "nome",
+      "telefone"
+     ]
+    },
+    "local": {
+     "etapas": [
+      "cliente",
+      "veiculo",
+      "servicos",
+      "quando",
+      "produtos"
+     ],
+     "veiculo": [
+      "placa",
+      "modelo",
+      "marca",
+      "cor",
+      "porte"
+     ],
+     "cliente": [
+      "nome",
+      "telefone"
+     ]
+    }
+   }
+  },
+  {
+   "nome": "objeto vazio → fábrica",
+   "entrada": {},
+   "valida": true,
+   "esperado": {
+    "futuro": {
+     "etapas": [
+      "cliente",
+      "veiculo",
+      "servicos",
+      "quando",
+      "produtos"
+     ],
+     "veiculo": [
+      "placa",
+      "modelo",
+      "marca",
+      "cor",
+      "porte"
+     ],
+     "cliente": [
+      "nome",
+      "telefone"
+     ]
+    },
+    "local": {
+     "etapas": [
+      "cliente",
+      "veiculo",
+      "servicos",
+      "quando",
+      "produtos"
+     ],
+     "veiculo": [
+      "placa",
+      "modelo",
+      "marca",
+      "cor",
+      "porte"
+     ],
+     "cliente": [
+      "nome",
+      "telefone"
+     ]
+    }
+   }
+  },
+  {
+   "nome": "só o futuro, porte primeiro",
+   "entrada": {
+    "futuro": {
+     "veiculo": [
+      "porte"
+     ]
+    }
+   },
+   "valida": true,
+   "esperado": {
+    "futuro": {
+     "etapas": [
+      "cliente",
+      "veiculo",
+      "servicos",
+      "quando",
+      "produtos"
+     ],
+     "veiculo": [
+      "porte",
+      "placa",
+      "modelo",
+      "marca",
+      "cor"
+     ],
+     "cliente": [
+      "nome",
+      "telefone"
+     ]
+    },
+    "local": {
+     "etapas": [
+      "cliente",
+      "veiculo",
+      "servicos",
+      "quando",
+      "produtos"
+     ],
+     "veiculo": [
+      "placa",
+      "modelo",
+      "marca",
+      "cor",
+      "porte"
+     ],
+     "cliente": [
+      "nome",
+      "telefone"
+     ]
+    }
+   }
+  },
+  {
+   "nome": "etapas parciais completam no fim, na ordem de fábrica",
+   "entrada": {
+    "local": {
+     "etapas": [
+      "servicos",
+      "quando"
+     ]
+    }
+   },
+   "valida": true,
+   "esperado": {
+    "futuro": {
+     "etapas": [
+      "cliente",
+      "veiculo",
+      "servicos",
+      "quando",
+      "produtos"
+     ],
+     "veiculo": [
+      "placa",
+      "modelo",
+      "marca",
+      "cor",
+      "porte"
+     ],
+     "cliente": [
+      "nome",
+      "telefone"
+     ]
+    },
+    "local": {
+     "etapas": [
+      "servicos",
+      "quando",
+      "cliente",
+      "veiculo",
+      "produtos"
+     ],
+     "veiculo": [
+      "placa",
+      "modelo",
+      "marca",
+      "cor",
+      "porte"
+     ],
+     "cliente": [
+      "nome",
+      "telefone"
+     ]
+    }
+   }
+  },
+  {
+   "nome": "repetidos e desconhecidos saem",
+   "entrada": {
+    "futuro": {
+     "etapas": [
+      "quando",
+      "quando",
+      "x",
+      "servicos"
+     ],
+     "cliente": [
+      "telefone",
+      "nome",
+      "telefone"
+     ]
+    }
+   },
+   "valida": true,
+   "esperado": {
+    "futuro": {
+     "etapas": [
+      "quando",
+      "servicos",
+      "cliente",
+      "veiculo",
+      "produtos"
+     ],
+     "veiculo": [
+      "placa",
+      "modelo",
+      "marca",
+      "cor",
+      "porte"
+     ],
+     "cliente": [
+      "telefone",
+      "nome"
+     ]
+    },
+    "local": {
+     "etapas": [
+      "cliente",
+      "veiculo",
+      "servicos",
+      "quando",
+      "produtos"
+     ],
+     "veiculo": [
+      "placa",
+      "modelo",
+      "marca",
+      "cor",
+      "porte"
+     ],
+     "cliente": [
+      "nome",
+      "telefone"
+     ]
+    }
+   }
+  },
+  {
+   "nome": "ordem completa nova",
+   "entrada": {
+    "futuro": {
+     "etapas": [
+      "produtos",
+      "quando",
+      "servicos",
+      "veiculo",
+      "cliente"
+     ]
+    }
+   },
+   "valida": true,
+   "esperado": {
+    "futuro": {
+     "etapas": [
+      "produtos",
+      "quando",
+      "servicos",
+      "veiculo",
+      "cliente"
+     ],
+     "veiculo": [
+      "placa",
+      "modelo",
+      "marca",
+      "cor",
+      "porte"
+     ],
+     "cliente": [
+      "nome",
+      "telefone"
+     ]
+    },
+    "local": {
+     "etapas": [
+      "cliente",
+      "veiculo",
+      "servicos",
+      "quando",
+      "produtos"
+     ],
+     "veiculo": [
+      "placa",
+      "modelo",
+      "marca",
+      "cor",
+      "porte"
+     ],
+     "cliente": [
+      "nome",
+      "telefone"
+     ]
+    }
+   }
+  },
+  {
+   "nome": "chave de tipo desconhecida é recusada",
+   "entrada": {
+    "outro": {}
+   },
+   "valida": false,
+   "esperado": {
+    "futuro": {
+     "etapas": [
+      "cliente",
+      "veiculo",
+      "servicos",
+      "quando",
+      "produtos"
+     ],
+     "veiculo": [
+      "placa",
+      "modelo",
+      "marca",
+      "cor",
+      "porte"
+     ],
+     "cliente": [
+      "nome",
+      "telefone"
+     ]
+    },
+    "local": {
+     "etapas": [
+      "cliente",
+      "veiculo",
+      "servicos",
+      "quando",
+      "produtos"
+     ],
+     "veiculo": [
+      "placa",
+      "modelo",
+      "marca",
+      "cor",
+      "porte"
+     ],
+     "cliente": [
+      "nome",
+      "telefone"
+     ]
+    }
+   }
+  },
+  {
+   "nome": "grupo desconhecido é recusado",
+   "entrada": {
+    "futuro": {
+     "cor": [
+      "a"
+     ]
+    }
+   },
+   "valida": false,
+   "esperado": {
+    "futuro": {
+     "etapas": [
+      "cliente",
+      "veiculo",
+      "servicos",
+      "quando",
+      "produtos"
+     ],
+     "veiculo": [
+      "placa",
+      "modelo",
+      "marca",
+      "cor",
+      "porte"
+     ],
+     "cliente": [
+      "nome",
+      "telefone"
+     ]
+    },
+    "local": {
+     "etapas": [
+      "cliente",
+      "veiculo",
+      "servicos",
+      "quando",
+      "produtos"
+     ],
+     "veiculo": [
+      "placa",
+      "modelo",
+      "marca",
+      "cor",
+      "porte"
+     ],
+     "cliente": [
+      "nome",
+      "telefone"
+     ]
+    }
+   }
+  },
+  {
+   "nome": "lista que não é lista é recusada",
+   "entrada": {
+    "futuro": {
+     "etapas": "servicos"
+    }
+   },
+   "valida": false,
+   "esperado": {
+    "futuro": {
+     "etapas": [
+      "cliente",
+      "veiculo",
+      "servicos",
+      "quando",
+      "produtos"
+     ],
+     "veiculo": [
+      "placa",
+      "modelo",
+      "marca",
+      "cor",
+      "porte"
+     ],
+     "cliente": [
+      "nome",
+      "telefone"
+     ]
+    },
+    "local": {
+     "etapas": [
+      "cliente",
+      "veiculo",
+      "servicos",
+      "quando",
+      "produtos"
+     ],
+     "veiculo": [
+      "placa",
+      "modelo",
+      "marca",
+      "cor",
+      "porte"
+     ],
+     "cliente": [
+      "nome",
+      "telefone"
+     ]
+    }
+   }
+  },
+  {
+   "nome": "item que não é texto é recusado",
+   "entrada": {
+    "futuro": {
+     "etapas": [
+      1
+     ]
+    }
+   },
+   "valida": false,
+   "esperado": {
+    "futuro": {
+     "etapas": [
+      "cliente",
+      "veiculo",
+      "servicos",
+      "quando",
+      "produtos"
+     ],
+     "veiculo": [
+      "placa",
+      "modelo",
+      "marca",
+      "cor",
+      "porte"
+     ],
+     "cliente": [
+      "nome",
+      "telefone"
+     ]
+    },
+    "local": {
+     "etapas": [
+      "cliente",
+      "veiculo",
+      "servicos",
+      "quando",
+      "produtos"
+     ],
+     "veiculo": [
+      "placa",
+      "modelo",
+      "marca",
+      "cor",
+      "porte"
+     ],
+     "cliente": [
+      "nome",
+      "telefone"
+     ]
+    }
+   }
+  },
+  {
+   "nome": "mais de 20 itens é recusado",
+   "entrada": {
+    "futuro": {
+     "etapas": [
+      "a",
+      "a",
+      "a",
+      "a",
+      "a",
+      "a",
+      "a",
+      "a",
+      "a",
+      "a",
+      "a",
+      "a",
+      "a",
+      "a",
+      "a",
+      "a",
+      "a",
+      "a",
+      "a",
+      "a",
+      "a"
+     ]
+    }
+   },
+   "valida": false,
+   "esperado": {
+    "futuro": {
+     "etapas": [
+      "cliente",
+      "veiculo",
+      "servicos",
+      "quando",
+      "produtos"
+     ],
+     "veiculo": [
+      "placa",
+      "modelo",
+      "marca",
+      "cor",
+      "porte"
+     ],
+     "cliente": [
+      "nome",
+      "telefone"
+     ]
+    },
+    "local": {
+     "etapas": [
+      "cliente",
+      "veiculo",
+      "servicos",
+      "quando",
+      "produtos"
+     ],
+     "veiculo": [
+      "placa",
+      "modelo",
+      "marca",
+      "cor",
+      "porte"
+     ],
+     "cliente": [
+      "nome",
+      "telefone"
+     ]
+    }
+   }
+  },
+  {
+   "nome": "texto comprido demais é recusado",
+   "entrada": {
+    "futuro": {
+     "etapas": [
+      "aaaaaaaaaaaaaaaaaaaaa"
+     ]
+    }
+   },
+   "valida": false,
+   "esperado": {
+    "futuro": {
+     "etapas": [
+      "cliente",
+      "veiculo",
+      "servicos",
+      "quando",
+      "produtos"
+     ],
+     "veiculo": [
+      "placa",
+      "modelo",
+      "marca",
+      "cor",
+      "porte"
+     ],
+     "cliente": [
+      "nome",
+      "telefone"
+     ]
+    },
+    "local": {
+     "etapas": [
+      "cliente",
+      "veiculo",
+      "servicos",
+      "quando",
+      "produtos"
+     ],
+     "veiculo": [
+      "placa",
+      "modelo",
+      "marca",
+      "cor",
+      "porte"
+     ],
+     "cliente": [
+      "nome",
+      "telefone"
+     ]
+    }
+   }
+  },
+  {
+   "nome": "tipo nulo é recusado",
+   "entrada": {
+    "futuro": null
+   },
+   "valida": false,
+   "esperado": {
+    "futuro": {
+     "etapas": [
+      "cliente",
+      "veiculo",
+      "servicos",
+      "quando",
+      "produtos"
+     ],
+     "veiculo": [
+      "placa",
+      "modelo",
+      "marca",
+      "cor",
+      "porte"
+     ],
+     "cliente": [
+      "nome",
+      "telefone"
+     ]
+    },
+    "local": {
+     "etapas": [
+      "cliente",
+      "veiculo",
+      "servicos",
+      "quando",
+      "produtos"
+     ],
+     "veiculo": [
+      "placa",
+      "modelo",
+      "marca",
+      "cor",
+      "porte"
+     ],
+     "cliente": [
+      "nome",
+      "telefone"
+     ]
+    }
+   }
+  },
+  {
+   "nome": "lista no lugar do objeto é recusada",
+   "entrada": [],
+   "valida": false,
+   "esperado": {
+    "futuro": {
+     "etapas": [
+      "cliente",
+      "veiculo",
+      "servicos",
+      "quando",
+      "produtos"
+     ],
+     "veiculo": [
+      "placa",
+      "modelo",
+      "marca",
+      "cor",
+      "porte"
+     ],
+     "cliente": [
+      "nome",
+      "telefone"
+     ]
+    },
+    "local": {
+     "etapas": [
+      "cliente",
+      "veiculo",
+      "servicos",
+      "quando",
+      "produtos"
+     ],
+     "veiculo": [
+      "placa",
+      "modelo",
+      "marca",
+      "cor",
+      "porte"
+     ],
+     "cliente": [
+      "nome",
+      "telefone"
+     ]
+    }
+   }
+  }
+ ]
+}

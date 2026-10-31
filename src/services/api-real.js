@@ -6,6 +6,7 @@
 // página pede o login de novo); nenhuma função lança erro: devolve { ok, ... } com mensagem em português; erro técnico nunca vira texto cru na tela.
 // Docs: docs/F2-front-na-api-real.md. Rotas: POST /api/auth/login, PUT /api/usuarios/me/senha, GET /api/publico/loja, /api/onboarding/*, /api/clientes, /api/servicos, /api/usuarios.
 
+import { PADRAO_PAINEL, ordemAtenderValida, sanearOrdemAtender } from '../domain/ordem-atender.js';
 import { MAX_BYTES, conferirImagens, lerResumoAnexo, tipoPorConteudo } from '../domain/imagem-chamado.js';
 import { corpoDaSemana, erroDaSemana } from '../domain/expediente.js';
 import { corValida, erroDaMarca, logoValida } from '../domain/tema.js';
@@ -1136,7 +1137,7 @@ const CAMPOS_ATENDER = ['nome', 'telefone', 'profissional', 'vendedor', 'formaPa
 const lerRegras = (d) => {
   d = d && typeof d === 'object' ? d : {};
   const campos = (l, futuro) => listaDe(l, 9).map((x) => texto(x, 20)).filter((x) => CAMPOS_ATENDER.includes(x) && !(futuro && x === 'formaPagamento'));
-  return { formaPagamentoPadrao: ['', 'pix', 'dinheiro', 'cartao'].includes(d.formaPagamentoPadrao) ? d.formaPagamentoPadrao : 'pix', futuro: campos(d.futuro, true), local: campos(d.local, false), ordemServicos: d.ordemServicos === 'manual' ? 'manual' : 'uso', profissionalAutomatico: d.profissionalAutomatico === true };
+  return { formaPagamentoPadrao: ['', 'pix', 'dinheiro', 'cartao'].includes(d.formaPagamentoPadrao) ? d.formaPagamentoPadrao : 'pix', futuro: campos(d.futuro, true), local: campos(d.local, false), ordemServicos: d.ordemServicos === 'manual' ? 'manual' : 'uso', profissionalAutomatico: d.profissionalAutomatico === true, ordemAtender: sanearOrdemAtender(d.ordemAtender, PADRAO_PAINEL) };
 };
 export const regras = {
   // GET /api/estabelecimento/regras-atendimento  (quem usa a agenda; o formulário Atender precisa da forma padrão e dos campos obrigatórios)
@@ -1145,8 +1146,12 @@ export const regras = {
     return r.ok ? { ok: true, regras: lerRegras(r.dados) } : r;
   },
   // PUT /api/estabelecimento/regras-atendimento  { formaPagamentoPadrao?, camposObrigatorios?: { futuro, local } }  (só o proprietário)
-  async gravar({ formaPagamentoPadrao, camposObrigatorios, ordemServicos, profissionalAutomatico } = {}) {
+  async gravar({ formaPagamentoPadrao, camposObrigatorios, ordemServicos, profissionalAutomatico, ordemAtender } = {}) {
     const corpo = {};
+    if (ordemAtender !== undefined) {
+      if (!ordemAtenderValida(ordemAtender)) return { ok: false, status: 0, erro: 'Ordem do Atender inválida.' };
+      corpo.ordemAtender = sanearOrdemAtender(ordemAtender, PADRAO_PAINEL); // v133
+    }
     if (profissionalAutomatico !== undefined) {
       if (typeof profissionalAutomatico !== 'boolean') return { ok: false, status: 0, erro: 'Escolha automática do profissional: sim ou não.' };
       corpo.profissionalAutomatico = profissionalAutomatico; // B9c

@@ -89,13 +89,11 @@ const textoDe = (p, t) => p.getByTestId(t).innerText();
   const { ctx, p } = await abrir();
   await p.getByTestId('atender-abrir').click();
   await p.getByTestId('atender-form').waitFor();
-  // ordem (B9b, igual à página do cliente): Veículo (se houver) → Serviços → Quando (Agora / Escolher horário) → Dados do cliente → Produtos…; botões de Quando com alvo de toque maior
+  // ordem (pedido do Marcelo): Cliente → Serviços → Quando (Agora / Escolher data) → Produtos…; botões de Quando com alvo de toque maior
   const y = async (rotulo) => (await p.locator('.atender-real legend', { hasText: rotulo }).first().boundingBox()).y;
-  const [ys, yq, yc] = [await y('Serviços'), await y('Quando'), await y('Dados do cliente')];
-  assert.ok(ys < yq && yq < yc, `ordem dos blocos: Serviços ${ys}, Quando ${yq}, Dados do cliente ${yc}`);
-  if (await p.locator('.atender-real legend', { hasText: 'Veículo' }).count()) assert.ok(await y('Veículo') < ys, 'Veículo vem antes dos serviços');
-  assert.match(await p.getByTestId('atender-quando').innerText(), /Escolher horário/);
-  if (await p.getByTestId('atender-produtos-bloco').count()) assert.ok(yc < await y('Produtos'), 'Produtos vem depois dos dados do cliente');
+  const [yc, ys, yq] = [await y('Cliente'), await y('Serviços'), await y('Quando')];
+  assert.ok(yc < ys && ys < yq, `ordem dos blocos: Cliente ${yc}, Serviços ${ys}, Quando ${yq}`);
+  if (await p.getByTestId('atender-produtos-bloco').count()) assert.ok(yq < await y('Produtos'), 'Produtos vem depois de Quando');
   for (const id of ['atender-agora', 'atender-quando']) assert.ok((await p.getByTestId(id).boundingBox()).height >= 44, `${id}: altura de toque`);
   assert.match(await textoDe(p, 'atender-tipo'), /Atendimento já feito/);
   assert.equal(await p.getByTestId(`atender-srv-${id(52)}`).count(), 0, 'serviço desativado não é oferecido');

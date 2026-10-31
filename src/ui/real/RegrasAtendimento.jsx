@@ -7,6 +7,8 @@ import { regras as api } from '../../services/api-real.js';
 import { CAMPOS_DO_ATENDER, FORMAS_PAGAMENTO } from '../../domain/atender-form.js';
 import { capAtiva } from '../../domain/tipos.js';
 import { Aviso, Btn, Campo } from '../leve/mini.jsx';
+import OrdemAtender from '../leve/OrdemAtender.jsx';
+import { PADRAO_PAINEL } from '../../domain/ordem-atender.js';
 
 const VEICULO = ['veiculo', 'placa', 'modelo', 'porte']; // só na estética (v121)
 const CAMPOS_FUTURO = () => ['nome', 'telefone', 'profissional', 'vendedor', ...(capAtiva('usaVeiculo') ? VEICULO : [])];
@@ -34,7 +36,7 @@ export default function RegrasAtendimento() {
     e.preventDefault();
     if (salvando) return;
     setSalvando(true); setErro(''); setOk('');
-    const r = await api.gravar({ formaPagamentoPadrao: regras.formaPagamentoPadrao, camposObrigatorios: { futuro: regras.futuro, local: regras.local }, ordemServicos: regras.ordemServicos, profissionalAutomatico: regras.profissionalAutomatico });
+    const r = await api.gravar({ formaPagamentoPadrao: regras.formaPagamentoPadrao, camposObrigatorios: { futuro: regras.futuro, local: regras.local }, ordemServicos: regras.ordemServicos, profissionalAutomatico: regras.profissionalAutomatico, ordemAtender: regras.ordemAtender });
     setSalvando(false);
     if (!r.ok) { setErro(r.erro); return; }
     setRegras(r.regras); setOk('Regras salvas.');
@@ -63,6 +65,7 @@ export default function RegrasAtendimento() {
         </select>
       </Campo>
       <label className="check-linha"><input type="checkbox" checked={regras.profissionalAutomatico} onChange={(e) => { setOk(''); setErro(''); setRegras({ ...regras, profissionalAutomatico: e.target.checked }); }} data-testid="regras-profissional-auto" /><span>Não perguntar quem vai fazer o serviço: o app escolhe quem está com a agenda mais livre (no Atender e no link do cliente)</span></label>
+      <OrdemAtender valor={regras.ordemAtender} padrao={PADRAO_PAINEL} usaVeiculo={capAtiva('usaVeiculo')} aoMudar={(v) => { setOk(''); setErro(''); setRegras({ ...regras, ordemAtender: v }); }} />
       {grupo('futuro', 'Campos obrigatórios no agendamento (data futura)', CAMPOS_FUTURO())}
       {grupo('local', 'Campos obrigatórios no atendimento feito (agora ou passado)', CAMPOS_LOCAL())}
       {erro && <Aviso tipo="erro" data-testid="regras-erro">{erro}</Aviso>}
