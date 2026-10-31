@@ -84,3 +84,4 @@ Feito · decisões tomadas sem confirmação · o que depende do Marcelo (com o 
 
 ## 29/10 (manhã)
 - Relatórios, Estoque e atualização automática da agenda/avisos no site real; cartão da agenda com data em negrito e hora grande; planos de serviço anotados (backlog B0). Falta: Estabelecimento real (endereço e localização, comissão geral, expediente, regras e link num lugar só), Financeiro, Admin A3 a A5, visual (#61).
+- v125 (31/10): aparelho confiável feito (B8). v126: B7 reforçado (link leva `?loja=` além do `#`; causa não reproduzida). Próximo na fila: Avaliações fase 2 (renumerar migrações do worktree para ≥ V39), Planos restantes, Admin A7; B6 só com o ok. Financeiro, Pix e reCAPTCHA só com confirmação escrita.

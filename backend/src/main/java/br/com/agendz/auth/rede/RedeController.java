@@ -1,6 +1,7 @@
 package br.com.agendz.auth.rede;
 
 import br.com.agendz.auth.Sessao;
+import br.com.agendz.auth.aparelho.AparelhosConfiaveis;
 import br.com.agendz.auth.SessaoService;
 import br.com.agendz.erro.ErroDeNegocio;
 import br.com.agendz.tenant.Loja;
@@ -42,10 +43,12 @@ public class RedeController {
     }
 
     private final RedesConfiaveis redes;
+    private final AparelhosConfiaveis aparelhos;
     private final SessaoService sessao;
 
-    public RedeController(RedesConfiaveis redes, SessaoService sessao) {
+    public RedeController(RedesConfiaveis redes, AparelhosConfiaveis aparelhos, SessaoService sessao) {
         this.redes = redes;
+        this.aparelhos = aparelhos;
         this.sessao = sessao;
     }
 
@@ -53,6 +56,7 @@ public class RedeController {
     public Sessao confiar(@RequestBody(required = false) Pedido d, @AuthenticationPrincipal Jwt jwt, HttpServletRequest req) {
         Loja loja = LojaContext.exigir();
         UUID id = UUID.fromString(jwt.getSubject());
+        if (Boolean.TRUE.equals(jwt.getClaim("ap"))) throw new ErroDeNegocio(HttpStatus.CONFLICT, "Este aparelho já é confiável; a rede confiável é pedida no computador."); // v125
         if (jwt.getIssuedAt() == null || Instant.now().isAfter(jwt.getIssuedAt().plus(JANELA_PARA_CONFIAR))) {
             throw new ErroDeNegocio(HttpStatus.FORBIDDEN, "Para confiar nesta rede, entre de novo agora (com a senha ou a digital).");
         }
@@ -74,7 +78,8 @@ public class RedeController {
         String rid = jwt.getClaimAsString("rid");
         if (rid == null) return;
         try {
-            redes.encerrarSessao(UUID.fromString(rid));
+            if (Boolean.TRUE.equals(jwt.getClaim("ap"))) aparelhos.sair(UUID.fromString(jwt.getSubject()), UUID.fromString(rid)); // aparelho confiável: sair tira a confiança
+            else redes.encerrarSessao(UUID.fromString(rid));
         } catch (IllegalArgumentException e) {
             // claim estranho: nada a encerrar
         }

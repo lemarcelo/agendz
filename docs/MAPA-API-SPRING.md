@@ -324,6 +324,15 @@ Rede = o **IP público que o servidor viu** (primeiro do `X-Forwarded-For` do Ca
 | `GET /api/usuarios/me/redes-confiaveis` / `DELETE …/{id}` | a própria pessoa | lista (com `atual`) e remove; de outra pessoa = 404 |
 `ConferirRedeDoTokenFilter` (depois de `ConferirLojaDoTokenFilter`), só para tokens com `auto`: a rede tem de existir, `rv` = `versao`, a pessoa tem de continuar **ativa e com o mesmo papel**; vindo da rede confiável não expira (365 dias); vindo de **outra** rede só vale até 24 h do `iat` (senão 401 "Sessão encerrada. Entre de novo."). Trocar a senha (`encerrarTodas`) derruba todos os tokens longos da pessoa. Token comum (24 h) não consulta o banco.
 
+## 10s. Aparelho confiável (v125, B8; `AparelhoConfiavelTest`)
+Além da rede confiável (10q, computador da loja): o **celular** continua logado em qualquer rede. Tabela `aparelho_confiavel` (V38, RLS): só id, pessoa, nome, datas; **nenhum segredo** (o token é assinado, a linha só diz "ainda vale"). Token longo (`auto`, `ap`, `rid`; 365 dias; `redeConfiavel: true` na sessão).
+| Rota | Quem | O que faz |
+|---|---|---|
+| `POST /api/auth/aparelhos-confiaveis` `{ rotulo? }` | logado, sessão aberta há **até 10 min** (senão 403); quem já usa um aparelho confiável recebe 409 | grava o aparelho (máx. **5 por pessoa**, 6º = 409; nome limpo, ≤ 60) e devolve a sessão com o token longo |
+| `GET /api/usuarios/me/aparelhos-confiaveis` / `DELETE …/{id}` | a própria pessoa | lista (com `atual`: o aparelho deste token) e remove; de outra pessoa ou outra loja = 404 |
+| `POST /api/auth/sair` | logado | em token de aparelho, **apaga** o aparelho (sair tira a confiança; o próximo login pergunta de novo) |
+`ConferirRedeDoTokenFilter`, token com `ap`: a linha tem de existir e ser da pessoa, com uso nos últimos **90 dias** (`ultimo_uso`, atualizado a cada 10 min de uso), pessoa **ativa com o mesmo papel**; vale em **qualquer rede**; senão 401. Trocar a senha (`SenhaController`), senha refeita pelo proprietário/Admin/suporte (`UsuarioService`, `PlataformaService`, `SuporteDaLoja`) apagam os aparelhos e sobem a `versao` das redes (antes a senha refeita por outra pessoa não derrubava a rede confiável).
+
 ## 10r. Box obrigatório na estética (v120)
 `POST /api/atendimentos` recusa com **409** (`AgendaController.SEM_BOX`) quando o tipo usa box e não há box ativo; `GET /api/publico/agendar` devolve `ativo: false` com o aviso `ERRO_SEM_BOX`. `POST /api/onboarding/boxes` (etapa Boxes do assistente) está na seção do onboarding. Teste: `EsteticaTest.semBoxAtivoNaoSeAtendeNemSeAbreOLinkDoCliente`.
 

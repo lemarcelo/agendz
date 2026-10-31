@@ -192,6 +192,9 @@ public class PlataformaService {
             List<String> achou = j.queryForList("select identificador from usuario where id = ? and " + Reservados.OCULTOS_SQL, String.class, usuarioId);
             if (achou.isEmpty()) return null;
             j.update("update usuario set senha_hash = ?, deve_trocar_senha = true where id = ?", hash, usuarioId);
+            // senha refeita por outra pessoa: nenhum acesso longo anterior (rede ou aparelho confiável) continua valendo
+            j.update("update rede_confiavel set versao = versao + 1 where usuario_id = ?", usuarioId);
+            j.update("delete from aparelho_confiavel where usuario_id = ?", usuarioId);
             return achou.get(0);
         });
         if (login == null) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, "Usuário não encontrado.");

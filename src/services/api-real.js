@@ -167,6 +167,28 @@ export const redes = {
   async encerrar() { if (token && sessao && sessao.redeConfiavel) await tentar('POST', '/api/auth/sair', {}); return { ok: true }; }, // tentar (sem esperar a internet): o cabeçalho sai antes de quem chamou limpar o token
 };
 
+// ---------- aparelho confiável (v125, B8; regras no servidor: AparelhosConfiaveis, ConferirRedeDoTokenFilter): o celular continua logado em qualquer rede ----------
+export const aparelhos = {
+  // POST /api/auth/aparelhos-confiaveis  { rotulo? }  (só logo depois de entrar: até 10 min; nunca com senha temporária) → sessão nova, com token de aparelho confiável (365 dias)
+  async confiar(rotulo) {
+    const r = await chamar('POST', '/api/auth/aparelhos-confiaveis', { rotulo: texto(rotulo, 60).trim() || undefined });
+    if (!r.ok) return r;
+    if (!guardarSessao(r.dados) || !sessao.redeConfiavel) return { ok: false, status: 502, erro: mensagemPadrao(500) };
+    return { ok: true, sessao: sessaoAtual() };
+  },
+  // GET /api/usuarios/me/aparelhos-confiaveis  (os da própria pessoa; `atual` = o aparelho deste token)
+  async listar() {
+    const r = await chamar('GET', '/api/usuarios/me/aparelhos-confiaveis');
+    return r.ok ? { ok: true, itens: listaDe(r.dados, 5).map((d) => ({ id: ID_REDE.test(String(d && d.id)) ? d.id : '', rotulo: texto(d && d.rotulo, 60), criadoEm: texto(d && d.criadoEm, 40), ultimoUso: d && d.ultimoUso ? texto(d.ultimoUso, 40) : '', atual: !!(d && d.atual === true) })).filter((x) => x.id) } : r;
+  },
+  // DELETE /api/usuarios/me/aparelhos-confiaveis/{id}  (o token daquele aparelho cai na hora)
+  async remover(id) {
+    if (!ID_REDE.test(String(id))) return { ok: false, status: 0, erro: 'Aparelho inválido.' };
+    const r = await chamar('DELETE', `/api/usuarios/me/aparelhos-confiaveis/${id}`);
+    return r.ok ? { ok: true } : r;
+  },
+};
+
 // ---------- login por digital / rosto / PIN do aparelho (passkey, WebAuthn; regras no servidor: PasskeyService) ----------
 // A passkey NUNCA substitui a senha: é uma segunda porta de entrada, que o aparelho assina. Cadastrar pede a senha de novo (recusa = 403, nunca 401).
 const paraB64u = (buf) => {

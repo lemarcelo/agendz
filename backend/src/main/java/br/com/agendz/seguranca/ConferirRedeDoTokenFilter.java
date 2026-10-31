@@ -1,5 +1,6 @@
 package br.com.agendz.seguranca;
 
+import br.com.agendz.auth.aparelho.AparelhosConfiaveis;
 import br.com.agendz.auth.rede.Rede;
 import br.com.agendz.auth.rede.RedesConfiaveis;
 import br.com.agendz.tenant.Loja;
@@ -28,9 +29,11 @@ public class ConferirRedeDoTokenFilter extends OncePerRequestFilter {
     public static final Duration FORA_DA_REDE = Duration.ofHours(24);
 
     private final RedesConfiaveis redes;
+    private final AparelhosConfiaveis aparelhos;
 
-    public ConferirRedeDoTokenFilter(RedesConfiaveis redes) {
+    public ConferirRedeDoTokenFilter(RedesConfiaveis redes, AparelhosConfiaveis aparelhos) {
         this.redes = redes;
+        this.aparelhos = aparelhos;
     }
 
     @Override
@@ -46,7 +49,21 @@ public class ConferirRedeDoTokenFilter extends OncePerRequestFilter {
         chain.doFilter(req, res);
     }
 
+    /** Token de aparelho confiável (v125): vale em qualquer rede enquanto a linha do aparelho existir, a pessoa estiver ativa com o mesmo papel e o uso não tiver parado por 90 dias. */
+    private boolean validoDeAparelho(JwtAuthenticationToken jwt) {
+        try {
+            UUID aparelho = UUID.fromString(jwt.getToken().getClaimAsString("rid"));
+            UUID usuario = UUID.fromString(jwt.getToken().getSubject());
+            if (!aparelhos.vale(aparelho, usuario) || !redes.usuarioConfere(usuario, jwt.getToken().getClaimAsString("papel"))) return false;
+            aparelhos.usou(aparelho);
+            return true;
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
     private boolean valido(JwtAuthenticationToken jwt, HttpServletRequest req) {
+        if (Boolean.TRUE.equals(jwt.getToken().getClaim("ap"))) return validoDeAparelho(jwt);
         try {
             UUID rid = UUID.fromString(jwt.getToken().getClaimAsString("rid"));
             Number rv = jwt.getToken().getClaim("rv");

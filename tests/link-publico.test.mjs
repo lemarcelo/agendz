@@ -15,7 +15,7 @@ test('lê #agendar, #agendar-<id>, #agendar@loja e #agendar-<id>@loja; o resto n
 test('monta o link com a loja só quando pedida e ignora valores fora do padrão', () => {
   const base = 'https://x.test/a';
   assert.equal(montarLinkAgendamento({ base }), `${base}#agendar`);
-  assert.equal(montarLinkAgendamento({ base, profissionalId: 'u-pablo', lojaNoLink: 'dalforno' }), `${base}#agendar-u-pablo@dalforno`);
+  assert.equal(montarLinkAgendamento({ base, profissionalId: 'u-pablo', lojaNoLink: 'dalforno' }), `${base}?loja=dalforno#agendar-u-pablo@dalforno`);
   assert.equal(montarLinkAgendamento({ base, busca: '?loja=apex', lojaNoLink: 'apex' }), `${base}?loja=apex#agendar@apex`);
   assert.equal(montarLinkAgendamento({ base, profissionalId: 'a b', lojaNoLink: 'Apex!' }), `${base}#agendar`);
 });

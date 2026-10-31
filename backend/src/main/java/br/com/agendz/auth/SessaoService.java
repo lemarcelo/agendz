@@ -49,6 +49,11 @@ public class SessaoService {
         return montar(usuarioId, loja, papel, nome, false, jwt.emitir(usuarioId, loja.id(), papel, nome, false), false, loginAutomatico && hash != null);
     }
 
+    /** Sessão com token de aparelho confiável (v125): token longo guardado no aparelho, vale em qualquer rede. */
+    public Sessao abrirDeAparelho(UUID usuarioId, Loja loja, String papel, String nome, UUID aparelhoId) {
+        return montar(usuarioId, loja, papel, nome, false, jwt.emitirDeAparelho(usuarioId, loja.id(), papel, nome, aparelhoId), true, false);
+    }
+
     /** Descreve a sessão de um token que a pessoa já tem (reabrir o site com a rede confiável): mesmo token, nada novo é emitido. */
     public Sessao descrever(UUID usuarioId, Loja loja, String papel, String nome, String token, boolean redeConfiavel) {
         return montar(usuarioId, loja, papel, nome, false, token, redeConfiavel, false);

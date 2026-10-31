@@ -3,8 +3,9 @@
 // temporária e mostra o painel com o menu. Os módulos entram um a um (Clientes na parte 2, Serviços na 3, Equipe na 4; a agenda na seguinte), cada um só
 // quando o servidor tem a regra inteira. Não importa `api.js` (a simulada) nem `hooks.js`: o estado aqui é só o da sessão real, em memória.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { cancelarEspera, carregarLoja, entrar, esperandoRede, onboarding, passkey, perfil as apiPerfil, portes as apiPortes, quandoEsperar, redes as apiRedes, restaurar, sair, sessaoAtual, suporte as apiSuporte, tokenDeRedeConfiavel, trocarSenha } from '../../services/api-real.js';
+import { aparelhos as apiAparelhos, cancelarEspera, carregarLoja, entrar, esperandoRede, onboarding, passkey, perfil as apiPerfil, portes as apiPortes, quandoEsperar, redes as apiRedes, restaurar, sair, sessaoAtual, suporte as apiSuporte, tokenDeRedeConfiavel, trocarSenha } from '../../services/api-real.js';
 import { esquecerSessaoDaRede, lembrarSessaoDaRede, sessaoGuardada } from './sessao-rede.js';
+import { ehCelular, rotuloDoAparelho } from '../../domain/aparelho.js';
 import PrimeiroAcesso from '../leve/PrimeiroAcesso.jsx';
 import Agenda from './Agenda.jsx';
 import Clientes from './Clientes.jsx';
@@ -106,7 +107,7 @@ function Login({ loja, aoEntrar }) {
         <Campo rotulo="Usuário"><input value={id} onChange={(e) => { setId(e.target.value); setErro(''); }} autoComplete="username webauthn" autoFocus maxLength={60} data-testid="login-id" /></Campo>
         <Campo rotulo="Senha"><input type="password" value={senha} onChange={(e) => { setSenha(e.target.value); setErro(''); }} autoComplete="current-password" maxLength={100} data-testid="login-senha" /></Campo>
         <label className="pa-check" data-testid="login-auto-rotulo"><input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} data-testid="login-auto" /> Login automático</label>
-        {auto && <p className="muted" data-testid="login-auto-ajuda">Depois de entrar, o Agendz pergunta se esta rede (o Wi-Fi ou a internet de onde você está) é de confiança. Nela você não precisa entrar de novo; em qualquer outra rede o acesso pede a digital ou a senha depois de 1 dia.</p>}
+        {auto && <p className="muted" data-testid="login-auto-ajuda">Depois de entrar, o Agendz pergunta se você quer confiar nesta rede (computador da loja) ou só neste aparelho (celular). Na rede confiável não precisa entrar de novo; em qualquer outra rede o acesso pede a digital ou a senha depois de 1 dia. No aparelho confiável você continua logado em qualquer rede.</p>}
         {erro && <Aviso tipo="erro" data-testid="login-erro">{erro}</Aviso>}
         <Btn variante="primario" type="submit" disabled={enviando} data-testid="login-entrar">{enviando ? 'Entrando…' : 'Entrar'}</Btn>
         {passkey.disponivel() && <Btn type="button" disabled={enviando} onClick={entrarComDigital} data-testid="login-digital">Entrar com a digital</Btn>}
@@ -117,28 +118,45 @@ function Login({ loja, aoEntrar }) {
   );
 }
 
-// Depois de entrar com "Login automático" numa rede ainda não confiável: o servidor identifica a rede (IP público; nunca o nome do Wi-Fi) e guarda só uma marca irreversível.
+// Depois de entrar com "Login automático": a pessoa escolhe confiar na REDE (computador da loja: o servidor identifica o IP público, nunca o nome do Wi-Fi, e guarda só uma
+// marca irreversível) ou só neste APARELHO (celular: o token longo vale em qualquer rede). No celular a sugestão é o aparelho; no computador, a rede. (v125)
 function PerguntaRede({ loja, aoResponder }) {
   const [rotulo, setRotulo] = useState('');
-  const [enviando, setEnviando] = useState(false);
+  const [enviando, setEnviando] = useState('');
   const [erro, setErro] = useState('');
-  const sim = async () => {
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+  const celular = ehCelular(ua);
+  const enviar = async (qual) => {
     if (enviando) return;
-    setEnviando(true); setErro('');
-    const r = await apiRedes.confiar(rotulo);
-    setEnviando(false);
+    setEnviando(qual); setErro('');
+    const r = qual === 'aparelho' ? await apiAparelhos.confiar(rotuloDoAparelho(ua)) : await apiRedes.confiar(rotulo);
+    setEnviando('');
     if (!r.ok) { setErro(r.erro); return; }
     aoResponder(r.sessao);
   };
+  const blocoRede = (
+    <div className="form-grade um" key="rede" data-testid="pergunta-rede-rede">
+      <p><b>Neste Wi-Fi (computador da loja)</b></p>
+      <p className="muted">Quem entra por esta rede não digita nada e a sessão não vence. Em qualquer outra rede, o acesso dura 1 dia e depois pede a digital ou a senha. Dá para remover a rede quando quiser em Meu perfil.</p>
+      <Campo rotulo="Nome desta rede (opcional)"><input value={rotulo} onChange={(e) => setRotulo(e.target.value)} maxLength={60} placeholder="Ex.: Casa, Loja" data-testid="rede-rotulo" /></Campo>
+      <Btn variante={celular ? undefined : 'primario'} disabled={!!enviando} onClick={() => enviar('rede')} data-testid="rede-sim">{enviando === 'rede' ? 'Salvando…' : 'Sim, confiar nesta rede'}</Btn>
+    </div>
+  );
+  const blocoAparelho = (
+    <div className="form-grade um" key="aparelho" data-testid="pergunta-rede-aparelho">
+      <p><b>Só neste aparelho (celular)</b></p>
+      <p className="muted">Este aparelho continua logado em qualquer rede (Wi-Fi ou internet do chip) por até 1 ano, desde que você o use ao menos a cada 90 dias. Se perder o aparelho, remova-o em Meu perfil, de outro lugar. Sair ou trocar a senha também tira a confiança.</p>
+      <Btn variante={celular ? 'primario' : undefined} disabled={!!enviando} onClick={() => enviar('aparelho')} data-testid="aparelho-sim">{enviando === 'aparelho' ? 'Salvando…' : 'Sim, confiar neste aparelho'}</Btn>
+    </div>
+  );
   return (
     <Cartao loja={loja}>
       <div className="form-grade um form-acesso-real" data-testid="pergunta-rede">
-        <p><b>Deseja logar automaticamente nesta rede Wi-Fi?</b></p>
-        <p className="muted">Nesta rede você entra direto, sem digitar nada, e a sessão não vence. Em qualquer outra rede, o acesso dura 1 dia e depois pede a digital ou a senha. Dá para remover a rede quando quiser em Meu perfil. Use só em aparelho e rede que são seus.</p>
-        <Campo rotulo="Nome desta rede (opcional)"><input value={rotulo} onChange={(e) => setRotulo(e.target.value)} maxLength={60} placeholder="Ex.: Casa, Loja" data-testid="rede-rotulo" /></Campo>
+        <p><b>Deseja logar automaticamente?</b></p>
+        <p className="muted">Use só em aparelho e rede que são seus.</p>
+        {celular ? [blocoAparelho, blocoRede] : [blocoRede, blocoAparelho]}
         {erro && <Aviso tipo="erro" data-testid="rede-erro">{erro}</Aviso>}
-        <Btn variante="primario" disabled={enviando} onClick={sim} data-testid="rede-sim">{enviando ? 'Salvando…' : 'Sim, confiar nesta rede'}</Btn>
-        <Btn disabled={enviando} onClick={() => aoResponder(null)} data-testid="rede-nao">Agora não</Btn>
+        <Btn disabled={!!enviando} onClick={() => aoResponder(null)} data-testid="rede-nao">Agora não</Btn>
       </div>
     </Cartao>
   );
@@ -269,7 +287,7 @@ function Painel({ loja, sessao, aoSair, aoMudarMarca }) {
         </div>
       </header>
       {(sessao.secoes || []).includes('agenda') && <AlertaAgenda prefs={prefs} aoIr={irParaAgendamento} aoDestacar={destacar} />}
-      {perfilAberto && <MeuPerfil loja={loja} sessao={sessao} dados={meus} prefs={prefs} aoPrefs={setPrefs} aoMudou={(d) => setMeus((antes) => ({ ...(antes || {}), ...d }))} aoFechar={() => setPerfilAberto(false)} />}
+      {perfilAberto && <MeuPerfil aoSair={aoSair} loja={loja} sessao={sessao} dados={meus} prefs={prefs} aoPrefs={setPrefs} aoMudou={(d) => setMeus((antes) => ({ ...(antes || {}), ...d }))} aoFechar={() => setPerfilAberto(false)} />}
       <div className="corpo">
         <main className="principal" data-portes={versaoPortes}>
           {aba === 'avisos' && (dono || (sessao.secoes || []).includes('agenda')) && (

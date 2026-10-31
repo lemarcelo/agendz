@@ -7,6 +7,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { perfil as api, trocarSenha } from '../../services/api-real.js';
 import Digital from './Digital.jsx';
 import RedesConfiaveis from './RedesConfiaveis.jsx';
+import AparelhosConfiaveis from './AparelhosConfiaveis.jsx';
 import { fotoValida, FOTO_MAX } from '../../domain/foto.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
 import { gravarPrefs, tocarBipe, vibrar } from './alerta.js';
@@ -43,7 +44,7 @@ const OPCOES = [
   ['vibracao', 'Vibração', 'Só em aparelhos que vibram (celular). No computador não faz nada.'],
 ];
 
-export default function MeuPerfil({ loja, sessao, dados, prefs, aoPrefs, aoMudou, aoFechar }) {
+export default function MeuPerfil({ loja, sessao, dados, prefs, aoPrefs, aoMudou, aoFechar, aoSair }) {
   const [f, setF] = useState(() => ({ nome: dados?.nome || '', apelido: dados?.apelido || '', email: dados?.email || '', telefone: dados?.telefone || '', nascimento: dados?.nascimento || '' }));
   const [carregado, setCarregado] = useState(!!dados);
   const [msg, setMsg] = useState('');
@@ -165,6 +166,7 @@ export default function MeuPerfil({ loja, sessao, dados, prefs, aoPrefs, aoMudou
         </form>
         <Digital />
         <RedesConfiaveis />
+        <AparelhosConfiaveis aoRemoverEste={aoSair} />
       </div>
     </div>
   );

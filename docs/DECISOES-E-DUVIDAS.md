@@ -158,3 +158,18 @@ Lista simples. Cada item está no histórico do `prompt-agendz-regras.md` (v84 a
 - **Decidi:** a prévia no porte lista até 6 serviços ativos e comuns (combo fica de fora) e pesquisa por nome sem acento; mostra "preço específico" quando o serviço tem valor próprio no porte.
 - **Decidi:** os 90 dias contam do início do agendamento (o futuro também conta), iguais no Artifact e no servidor.
 - **Corrigi (sem relação):** teste de fila de avaliações usava data UTC e falhava depois das 21h (horário de Brasília).
+
+## v125 (31/10): aparelho confiável (login automático no celular)
+- **Decidi:** o token do aparelho é assinado e a tabela só guarda "ainda vale" (id, pessoa, nome, datas): sem hash de segredo no banco.
+- **Decidi:** Sair e trocar a senha **apagam** o aparelho (mais forte que subir versão): o próximo login pergunta de novo.
+- **Decidi:** sem uso por 90 dias o aparelho deixa de valer (cumpre o "renovado só com uso"); o prazo máximo do token é 365 dias.
+- **Decidi:** a pergunta continua atrás da caixa "Login automático"; no celular a sugestão é o aparelho, no computador a rede.
+- **Decidi:** o nome do aparelho vem do navegador (ex.: "Celular Android · Chrome"); para mudar, remove e inclui de novo.
+- **Corrigi (brecha antiga da v120):** senha refeita pelo proprietário, pelo Admin ou pelo suporte não derrubava a rede confiável; agora derruba a rede e os aparelhos.
+- **Adiado:** pedir a senha de novo em ação sensível do proprietário quando a sessão é de aparelho; faço junto do B6 (proprietário), com a sua aprovação.
+- **Confirmado pelo Marcelo:** DNS coringa `*.agendz.io` já existe.
+
+## v126 (31/10): link do cliente na demonstração leva a loja em `?loja=` e no `#`
+- **Relato:** link gerado pelo Artifact da Dalforno (`…frame.claudeusercontent.com/_f/…/#agendar@dalforno`) abria a Apex ao clicar. Não reproduzi: abrindo o mesmo tipo de endereço (origem http, caminho e `#agendar@loja`), a loja certa abre, com ou sem loja salva no navegador e também na troca de hash com a página já aberta. O navegador do app recusou abrir o link real do quadro.
+- **Hipótese:** o fragmento (`#`) se perde no caminho (redirecionamento ou quadro do claude.ai) e a página cai na loja padrão.
+- **Decisão sem confirmação:** reforçar com `?loja=<slug>` além do `#…@<slug>`; a Apex só aparece se nenhum dos dois chegar. **Em aberto:** se ainda abrir a Apex, preciso saber se o endereço aberto no navegador ainda tem `?loja=` e `#` (copie a barra de endereços da aba aberta).

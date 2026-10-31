@@ -1,7 +1,7 @@
 # F4: loja nova só com um subdomínio
 
 ## Como fica (pronto na infraestrutura)
-1. **DNS:** o registro curinga `*.agendz.io` já aponta para a VPS. Nada a fazer por loja.
+1. **DNS:** o registro curinga `*.agendz.io` já aponta para a VPS (**confirmado pelo Marcelo em 31/10**). Nada a fazer por loja.
 2. **Certificado:** o Caddy emite sob demanda na primeira visita, **só se** a API responder 200 em `/interno/dominio-permitido?domain=` (loja existe ou domínio próprio verificado). Nome desconhecido não gasta o limite do Let's Encrypt (50 certificados/semana por domínio).
 3. **Banco:** um comando na VPS cria a loja, o dono e a senha temporária forte (mostrada uma vez) e confere o endereço:
    `bash nova-loja.sh barbearia-x "Barbearia X" barbearia joao "João"`

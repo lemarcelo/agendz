@@ -115,3 +115,8 @@ Snapshot do estado com senhas e CPFs em texto puro no navegador; senha comparada
 - **O que se guarda:** só o **hash** (HMAC com o pepper, amarrado à loja e à pessoa) do IP público da rede; o rótulo que a pessoa dá ("Casa"), a data e o último uso. O IP em texto puro **não** é gravado nem entra em log; a mesma rede em duas contas não gera o mesmo hash.
 - **No aparelho:** só o token de rede confiável fica no `localStorage` (`agendz-rede:<loja>`), apagado ao sair, ao trocar a senha e quando o servidor o recusa. Token comum nunca é guardado.
 - **Direitos:** a pessoa lista e remove as próprias redes em Meu perfil; sair, remover a rede, desativar a pessoa ou mudar seu papel derrubam o token longo.
+
+## Aparelho confiável (v125, login automático no celular)
+- **O que se guarda no servidor:** só o id, a pessoa, o **nome do aparelho** que o navegador sugeriu (ex.: "Celular Android · Chrome"; texto de pessoa, limpo e ≤ 60) e as datas de criação e último uso. Nenhum IP, nenhum segredo (o token é assinado; a linha só diz que ainda vale).
+- **No aparelho:** o token longo no mesmo lugar do token de rede (`agendz-rede:<loja>`, só `ui/real/sessao-rede.js`), apagado ao sair, ao remover o aparelho e quando o servidor o recusa.
+- **Direitos:** a pessoa lista e remove os próprios aparelhos em Meu perfil (de outro lugar, se perdeu o celular); sair, trocar a senha, senha refeita por outra pessoa, desativar a pessoa, mudar o papel e 90 dias sem uso derrubam o token.

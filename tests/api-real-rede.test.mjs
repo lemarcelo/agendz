@@ -3,7 +3,7 @@
 // reabrir com o token guardado confere no servidor (GET /api/auth/sessao) e recusa token de outro formato; listar/remover/encerrar falam só com as rotas certas.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { configurar, entrar, redes, restaurar, sair, sessaoAtual, tokenDeRedeConfiavel } from '../src/services/api-real.js';
+import { aparelhos, configurar, entrar, redes, restaurar, sair, sessaoAtual, tokenDeRedeConfiavel } from '../src/services/api-real.js';
 
 const JWT = 'aaaaaaaaaa.bbbbbbbbbb.cccccccccc';
 const ID = '00000000-0000-4000-8000-000000000001';
@@ -91,4 +91,41 @@ test('listar e remover: leitura defensiva e id validado antes de ir ao servidor'
   assert.equal((await redes.remover('../x')).ok, false);
   assert.equal(chamadas.length, 1, 'id inválido não vai ao servidor');
   assert.equal((await redes.remover(ID)).ok, true);
+});
+
+test('aparelho confiável: confiar leva só o nome e troca para o token longo; listar e remover usam as rotas de aparelho, com id validado', async () => {
+  const longo = 'gggggggggg.hhhhhhhhhh.iiiiiiiiii';
+  servidor({
+    'POST /api/auth/login': { status: 200, corpo: sessaoJson({ perguntarRede: true }) },
+    'POST /api/auth/aparelhos-confiaveis': { status: 200, corpo: sessaoJson({ token: longo, redeConfiavel: true }) },
+    'GET /api/usuarios/me/aparelhos-confiaveis': { status: 200, corpo: [{ id: ID, rotulo: 'Celular Android · Chrome', criadoEm: '2026-10-31T10:00:00Z', ultimoUso: '2026-10-31T11:00:00Z', atual: true }, { id: 'x', rotulo: 'lixo' }, null] },
+    [`DELETE /api/usuarios/me/aparelhos-confiaveis/${ID}`]: { status: 204, corpo: undefined },
+  });
+  await entrar({ identificador: 'alan', senha: '1234', loginAutomatico: true });
+  const c = await aparelhos.confiar('  Celular Android · Chrome  ');
+  assert.equal(c.ok, true);
+  assert.deepEqual(chamadas[1].corpo, { rotulo: 'Celular Android · Chrome' });
+  assert.equal(chamadas[1].auth, `Bearer ${JWT}`);
+  assert.equal(tokenDeRedeConfiavel(), longo, 'o token de aparelho pode ser guardado no aparelho');
+  assert.equal(sessaoAtual().perguntarRede, false);
+  const l = await aparelhos.listar();
+  assert.equal(l.itens.length, 1);
+  assert.equal(l.itens[0].atual, true);
+  assert.equal((await aparelhos.remover('../x')).ok, false);
+  assert.equal(chamadas.length, 3, 'id inválido não vai ao servidor');
+  assert.equal((await aparelhos.remover(ID)).ok, true);
+});
+
+test('aparelho confiável: resposta sem token longo é erro e nada fica guardável; 403/409 do servidor chegam com a mensagem dele', async () => {
+  servidor({ 'POST /api/auth/login': { status: 200, corpo: sessaoJson() }, 'POST /api/auth/aparelhos-confiaveis': { status: 200, corpo: sessaoJson() } });
+  await entrar({ identificador: 'alan', senha: '1234' });
+  const r = await aparelhos.confiar('');
+  assert.equal(r.ok, false);
+  assert.equal(tokenDeRedeConfiavel(), null);
+  servidor({ 'POST /api/auth/login': { status: 200, corpo: sessaoJson() }, 'POST /api/auth/aparelhos-confiaveis': { status: 409, corpo: { mensagem: 'Você já tem 5 aparelhos confiáveis. Remova um em Meu perfil para adicionar outro.' } } });
+  await entrar({ identificador: 'alan', senha: '1234' });
+  const e = await aparelhos.confiar('');
+  assert.equal(e.ok, false);
+  assert.equal(e.status, 409);
+  assert.match(e.erro, /5 aparelhos confiáveis/);
 });

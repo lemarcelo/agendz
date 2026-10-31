@@ -14,7 +14,13 @@ export function lerHashAgendar(hash) {
 export function montarLinkAgendamento({ base, busca = '', profissionalId = '', lojaNoLink = '' }) {
   const prof = /^[\w-]{1,40}$/.test(String(profissionalId)) ? `-${profissionalId}` : '';
   const loja = /^[a-z0-9-]{1,40}$/.test(String(lojaNoLink)) ? `@${lojaNoLink}` : '';
-  return `${base}${busca}#agendar${prof}${loja}`;
+  return `${base}${buscaComLoja(busca, lojaNoLink)}#agendar${prof}${loja}`;
+}
+
+// v126: na demonstração a loja vai DUAS vezes no link (`?loja=<slug>` e `#…@<slug>`): se um redirecionamento ou o quadro do Artifact perder o fragmento,
+// a parte `?loja=` ainda leva o cliente à loja certa (nunca à padrão). `busca` já preenchida (a página já veio com `?loja=`) fica como está.
+export function buscaComLoja(busca = '', lojaNoLink = '') {
+  return !busca && /^[a-z0-9-]{1,40}$/.test(String(lojaNoLink)) ? `?loja=${lojaNoLink}` : busca;
 }
 
 // Endereço do Artifact publicado: reserva para quando a página roda num quadro sem endereço próprio (`about:srcdoc`, origem 'null'), onde origem + caminho
@@ -38,7 +44,7 @@ export function lerHashPlanos(hash) {
 }
 export function montarLinkPlanos({ base, busca = '', lojaNoLink = '' }) {
   const loja = /^[a-z0-9-]{1,40}$/.test(String(lojaNoLink)) ? `@${lojaNoLink}` : '';
-  return `${base}${busca}#planos${loja}`;
+  return `${base}${buscaComLoja(busca, lojaNoLink)}#planos${loja}`;
 }
 
 // Página de avaliação do cliente (`#avaliar/<token>`, na demonstração `#avaliar@<loja>/<token>`). O token pessoal (48 hex, um por agendamento) vai no
@@ -50,5 +56,5 @@ export function lerHashAvaliar(hash) {
 }
 export function montarLinkAvaliar({ base, busca = '', lojaNoLink = '', token }) {
   const loja = /^[a-z0-9-]{1,40}$/.test(String(lojaNoLink)) ? `@${lojaNoLink}` : '';
-  return `${base}${busca}#avaliar${loja}/${token}`;
+  return `${base}${buscaComLoja(busca, lojaNoLink)}#avaliar${loja}/${token}`;
 }

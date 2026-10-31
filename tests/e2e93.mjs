@@ -99,7 +99,7 @@ try {
   // B. rede nova: pergunta; "Agora não" não guarda nada
   await entrar(p, true);
   await p.getByTestId('pergunta-rede').waitFor();
-  assert.match(await p.getByTestId('pergunta-rede').innerText(), /Deseja logar automaticamente nesta rede Wi-Fi\?/);
+  assert.match(await p.getByTestId('pergunta-rede').innerText(), /Deseja logar automaticamente\?/);
   await semRolagem(p, 'pergunta da rede');
   assert.equal(await p.getByTestId('agenda-dia').count(), 0, 'o painel só abre depois da resposta');
   await p.getByTestId('rede-nao').click();
