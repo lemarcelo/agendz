@@ -1,6 +1,6 @@
 # Agendz: estado do projeto (resumo para retomar em qualquer conversa)
 
-Atualizado em 2026-10-26. Leia este arquivo primeiro; depois `CLAUDE.md` (regras fixas) e `/home/claude/prompt-agendz-regras.md` (regras de negócio + histórico v1–v72).
+Base escrita em 2026-10-26 (partes posteriores podem estar desatualizadas: confira `git log` e `docs/HISTORICO-VERSOES.md`, que vai até a v137). Leia este arquivo primeiro; depois `CLAUDE.md` (regras fixas) e `docs/MAPA-FUNCIONAMENTO.md` (regras por perfil). O antigo `prompt-agendz-regras.md` não existe mais.
 
 ## 1. O que é
 Agendz: plataforma multi-tenant de agendamento (dono: Marcelo). Cada **loja** tem um **tipo** (definido na criação, nunca muda): `estetica_automotiva` (Apex, cliente real) e `barbearia`. Academia fica adiada. O código é um só; o que muda por tipo está em `src/tipos/<tipo>/` (definição com capacidades, rótulos, frases, visual; seed; mensagens de WhatsApp; tema CSS) e na tabela "O que muda por tipo" de `docs/EQUIVALENCIA-BARBEARIA.md`.
@@ -24,7 +24,7 @@ Agendz: plataforma multi-tenant de agendamento (dono: Marcelo). Cada **loja** te
 - **Atualizar o site hoje (PowerShell):** gerar `bash deploy/montar-site.sh agendz.io` (aqui, comigo), baixar o zip, `scp deploy\site\index.html agendz@179.197.84.7:/opt/agendz/site/` (não precisa reiniciar). Caddyfile novo: copiar e `docker compose restart caddy`.
 - **Aviso:** o ar é do **protótipo** (dados de exemplo, estado no navegador). Sem cliente real até a F1.
 
-- **Pasta local do Marcelo:** `C:\git\agendz` (Windows), criada por `git clone` do repositório privado `agendz` (nada de zip). Claude envia para o GitHub; Marcelo traz com `git pull`; não editar lá em paralelo sem avisar.
+- **Pasta local do Marcelo:** `C:\git\agendz-workspace\agendz` (Windows; antes `C:\git\agendz`), criada por `git clone` do repositório privado `agendz` (nada de zip). O push de um lote vai para um branch de trabalho, só com autorização; sincronizar a pasta local é decisão do Marcelo (nunca pull automático).
 
 ## 4. Limites deste ambiente (Claude)
 - Sem SSH para fora; sem Maven Central nem Docker/Caddy/PostgreSQL locais → o Spring **não compila aqui**. Por isso a F1 usa **GitHub Actions** para compilar e testar (`mvn verify` com PostgreSQL), e eu leio o resultado com `gh`.

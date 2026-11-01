@@ -6,7 +6,7 @@ Cole no início de uma sessão nova, ou diga "siga o `docs/PROMPT-CONTINUACAO.md
 Você trabalha no Agendz (repositório `lemarcelo/agendz`, pasta `agendz`). Leia antes: `CLAUDE.md`, `docs/ESTADO-DO-PROJETO.md`, `docs/CHECKLIST-MARCELO.md` (o que o Marcelo já fez), `docs/PENDENTE-MARCELO.md` (se existir) e `docs/F3-primeiro-acesso.md`.
 
 ## Contrato de autonomia
-- Trabalhe a fila inteira, em ordem, **sem parar para perguntar e sem mensagens de progresso**. O widget de tarefas mostra o andamento. Só escreva ao Marcelo no fim (relato) ou se travar de verdade.
+- Trabalhe a fila em ordem, **sem parar para perguntar e sem mensagens de progresso** dentro do lote (fases A a C do `CLAUDE.md` da raiz do workspace). O lote termina em **parar e pedir autorização** (fase D): commit local pode ser preparado, mas push, merge em `main`, deploy e Artifact só com autorização. Só escreva ao Marcelo no fim do lote (relato) ou se travar de verdade.
 - Dúvida de bom senso: decida, registre no histórico dos docs e siga. Os itens de "Decisões já tomadas" abaixo **não se perguntam de novo**.
 - Item que depende do Marcelo (conta, segredo, DNS, senha, dado real, dinheiro): adiante tudo que não depende dele, **anote em `docs/PENDENTE-MARCELO.md`** (o quê, por quê, comando pronto) e passe ao próximo item. Nunca espere.
 - Pare e pergunte **só** se: a decisão é irreversível ou custa dinheiro; exige mudar regra fixa do `CLAUDE.md`; ou a fila acabou e tudo que resta está bloqueado.
@@ -64,7 +64,7 @@ Você trabalha no Agendz (repositório `lemarcelo/agendz`, pasta `agendz`). Leia
 Nunca escreva senha, token ou chave em chat, arquivo, commit, log ou saída do CI. Senha de usuário real nasce no servidor e só o Marcelo a vê, uma vez. O que o CI usa de produção são só endpoints públicos.
 
 ## Pronto significa
-Teste novo que falha sem a correção; teste de isolamento entre lojas (Gate 3) em todo recurso novo; `npm run verificar` quando mexer no front; CI verde; `MAPA-API-SPRING.md`, `ESTADO-DO-PROJETO.md` e `prompt-agendz-regras.md` atualizados; commit e push com a atribuição; Artifact republicado se o front mudou.
+Teste novo que falha sem a correção; teste de isolamento entre lojas (Gate 3) em todo recurso novo; `npm run verificar` quando mexer no front; CI verde; `MAPA-API-SPRING.md`, `ESTADO-DO-PROJETO.md` e `HISTORICO-VERSOES.md` atualizados; commit local com a atribuição; push do branch de trabalho, CI, merge em `main`, deploy e Artifact (se o front mudou) só com a autorização da fase correspondente.
 
 ## Limites do ambiente
 Sem SSH de saída (não toco na VPS; "testar no servidor real" = job do CI com endpoints públicos). Sem Maven Central nem Docker aqui: o CI compila e testa o back-end (acompanhe com `gh api repos/lemarcelo/agendz/actions/runs/...`). Para SQL, use um PostgreSQL 16 local descartável.
