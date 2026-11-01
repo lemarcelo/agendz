@@ -18,11 +18,11 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
-/** POST /api/auth/login: a loja vem do Host (nunca do corpo). Erro de usuário e de senha dão a MESMA resposta (não revela quem existe). */
+/** POST /api/auth/login (corpo: identificador, senha, captcha opcional): a loja vem do Host (nunca do corpo). Erro de usuário e de senha dão a MESMA resposta (não revela quem existe). */
 @RestController
 public class AuthController {
 
-    public record LoginRequest(@NotBlank @Size(max = 60) String identificador, @NotBlank @Size(max = 100) String senha, Boolean loginAutomatico) {
+    public record LoginRequest(@NotBlank @Size(max = 60) String identificador, @NotBlank @Size(max = 100) String senha, Boolean loginAutomatico, @Size(max = 4096) String captcha) {
     }
 
     private record Usuario(UUID id, String nome, String papel, String senhaHash, boolean ativo, boolean deveTrocarSenha) {
@@ -35,12 +35,14 @@ public class AuthController {
     private final PasswordEncoder encoder;
     private final SessaoService sessao;
     private final LimiteDeLogin limite;
+    private final Recaptcha recaptcha;
 
-    public AuthController(LojaJdbc banco, PasswordEncoder encoder, SessaoService sessao, LimiteDeLogin limite) {
+    public AuthController(LojaJdbc banco, PasswordEncoder encoder, SessaoService sessao, LimiteDeLogin limite, Recaptcha recaptcha) {
         this.banco = banco;
         this.encoder = encoder;
         this.sessao = sessao;
         this.limite = limite;
+        this.recaptcha = recaptcha;
     }
 
     @PostMapping("/api/auth/login")
@@ -48,8 +50,12 @@ public class AuthController {
         Loja loja = LojaContext.exigir();
         String login = req.identificador().trim().toLowerCase(Locale.ROOT);
         String chave = loja.id() + "|" + login;
-        if (limite.bloqueado(chave)) {
+        if (limite.bloqueadoNoLogin(chave, recaptcha.ativo())) {
             throw new ErroDeNegocio(HttpStatus.TOO_MANY_REQUESTS, "Muitas tentativas. Aguarde alguns minutos e tente de novo.");
+        }
+        // Depois de 5 senhas erradas seguidas a senha sozinha não basta: 428 faz a tela mostrar o reCAPTCHA. A recusa do captcha não conta como erro de senha.
+        if (recaptcha.ativo() && limite.exigeCaptcha(chave) && !recaptcha.valido(req.captcha())) {
+            throw new ErroDeNegocio(HttpStatus.PRECONDITION_REQUIRED, "Confirme que você não é um robô para continuar.");
         }
         List<Usuario> achados = banco.naLoja(jdbc -> jdbc.query(
                 "select id, nome, papel, senha_hash, ativo, deve_trocar_senha from usuario where identificador = ?",

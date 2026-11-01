@@ -9,11 +9,16 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Component;
 
-/** Trava de força bruta: 5 erros em 15 minutos para o mesmo login na mesma loja bloqueiam novas tentativas (429) até a janela passar. Em memória (uma API). */
+/**
+ * Trava de força bruta: 5 erros em 15 minutos para o mesmo login na mesma loja bloqueiam novas tentativas (429) até a janela passar. Em memória (uma API).
+ * Login com reCAPTCHA ativo (B4): depois de 5 senhas erradas seguidas a próxima tentativa exige a prova do reCAPTCHA, e o bloqueio duro só vem no 12º erro.
+ */
 @Component
 public class LimiteDeLogin {
 
     static final int MAX_ERROS = 5;
+    static final int CAPTCHA_APOS = 5;
+    static final int MAX_ERROS_COM_CAPTCHA = 12;
     static final Duration JANELA = Duration.ofMinutes(15);
 
     private final Map<String, Deque<Instant>> erros = new ConcurrentHashMap<>();
@@ -34,6 +39,22 @@ public class LimiteDeLogin {
         Deque<Instant> fila = recentes(chave);
         synchronized (fila) {
             return fila.size() >= MAX_ERROS;
+        }
+    }
+
+    /** Login: sem reCAPTCHA configurado vale o limite de sempre (5); com ele, só o limite maior (12). */
+    public boolean bloqueadoNoLogin(String chave, boolean captchaAtivo) {
+        Deque<Instant> fila = recentes(chave);
+        synchronized (fila) {
+            return fila.size() >= (captchaAtivo ? MAX_ERROS_COM_CAPTCHA : MAX_ERROS);
+        }
+    }
+
+    /** Já houve erros demais para seguir só com a senha: a próxima tentativa precisa do reCAPTCHA. */
+    public boolean exigeCaptcha(String chave) {
+        Deque<Instant> fila = recentes(chave);
+        synchronized (fila) {
+            return fila.size() >= CAPTCHA_APOS;
         }
     }
 
