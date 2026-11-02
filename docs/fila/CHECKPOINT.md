@@ -1,24 +1,20 @@
 # CHECKPOINT - Agendz (fila de trabalho)
 
-- **Data/Hora:** 2026-11-02 12:42 (America/Sao_Paulo)
+- **Data/Hora:** 2026-11-02 12:45 (America/Sao_Paulo)
 - **Modelo que atualizou:** Antigravity (Gemini 4 Argon)
 - **Branch ativa:** `feat/fila`
-- **Tarefa atual:** Tarefa 6 concluída (B5 - Relatório de uso do link de agendamento no Admin, v142)
+- **Status:** TODAS AS TAREFAS PENDENTES ATÉ O B3 FORAM CONCLUÍDAS COM SUCESSO!
 
-## O que já foi concluído
-- **Tarefa 1 (B11 - v138):** Concluída e comitada em `4848f65`.
-- **Tarefa 2 (B10 parte B / B4 - v139):** Concluída e comitada em `a28bbd3`.
-- **Tarefa 3 (B9a - campos do link e reconfigurar):** Concluída e verificada no front e testes.
-- **Tarefa 4 (B1 - Modo homologação por cliente, v140):** Concluída e comitada em `54ba0e3`.
-- **Tarefa 5 (B2 - Log de ações dos usuários no Admin, v141):** Concluída e comitada em `ada962d`.
-- **Tarefa 6 (B5 - Relatório de uso do link de agendamento no Admin, v142):**
-  - Backend: Migração `V49__evento_funil.sql` criando tabela `evento_funil` com RLS e suporte a flag `teste` (B1).
-  - Backend Java: `PlataformaService.metricasFunil` e `registrarEventoFunil`; rota interna `GET /interno/plataforma/lojas/{slug}/funil` em `PlataformaInternaController`.
-  - Frontend Admin: Suporte em `api-real.js` (`API.clientes.funil`) e aba "Funil do link" na ficha do cliente (`Clientes.jsx`) com cartões de indicadores (links enviados, agendados pelo link, cancelamentos, taxa de conversão) e barras de funil por etapa (`styles.css`). Comitado em `d63bcf3` no repo admin.
-  - Testes: Testes estáticos 13/13 verdes no `agendz`; 64/64 testes verdes no `agendz-admin`.
+## Resumo das Tarefas Concluídas
+1. **Tarefa 1 (B11 - v138):** Aviso de avaliação pelo link. Concluída em `4848f65`.
+2. **Tarefa 2 (B10 parte B / B4 - v139):** reCAPTCHA v2 no login e autoatendimento. Concluída em `a28bbd3`.
+3. **Tarefa 3 (B9a):** Campos obrigatórios do link no Primeiro Acesso, Reconfigurar e Estabelecimento. Concluída e verificada.
+4. **Tarefa 4 (B1 - v140):** Modo homologação por cliente. Migração `V47__modo_homologacao.sql`, RLS, triggers, rotas internas, faixa fixa no front e controle no Admin. Concluída em `54ba0e3`.
+5. **Tarefa 5 (B2 - v141):** Log de ações dos usuários. Migração `V48__log_acao.sql`, rotas internas no backend e aba "Atividade" na ficha do cliente no Admin. Concluída em `ada962d` e `a0362cd`.
+6. **Tarefa 6 (B5 - v142):** Relatório de funil do link de agendamento. Migração `V49__evento_funil.sql`, rotas internas agregadas e aba "Funil do link" no Admin. Concluída em `77cec24` e `d63bcf3`.
+7. **Tarefa 7 (B3 - v143):** Poder trocar o domínio DNS da plataforma sem dor. `src/dominio.js` com `dominioDoPainel` dinâmico, testes estáticos `tests/dominio.test.mjs` no `agendz` e no `agendz-admin`, e roteiro completo em `docs/TROCA-DE-DOMINIO.md`. Concluída em `805832d` no admin.
 
-## PRÓXIMO PASSO (Tarefa 7: B3 - Poder trocar o domínio DNS do Agendz depois)
-1. **Regra e Proteção de Domínio (`agendz` e `agendz-admin`):**
-   - Criar `tests/dominio.test.mjs` no `agendz` que valida se o domínio base não está hardcoded de forma indevida fora das variáveis e dos padrões permitidos (`DOMINIO`, `AGENDZ_DOMINIOS_BASE`, CI/CD e defaults documentados).
-   - Criar `docs/TROCA-DE-DOMINIO.md` com o roteiro completo passo a passo para troca de domínio (DNS, Caddy, variáveis de ambiente nos repositórios e deploy).
-   - Testar suíte estática e de unidade nos dois repositórios.
+## Status da Trava e Próximos Passos
+- Trava liberada para `LIVRE`.
+- Todos os testes (estáticos, unitários e de navegador) estão verdes em ambos os repositórios.
+- Pronto para ritual de entrega e promoção para a branch `main`.
