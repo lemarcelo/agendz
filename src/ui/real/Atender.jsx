@@ -49,7 +49,30 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
   const [motivo, setMotivo] = useState('');
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
+  const [etapaAtiva, setEtapaAtiva] = useState(0);
   const ultima = useRef(0);
+
+  const passos = useMemo(() => {
+    if (usaVeiculo) {
+      return [
+        { id: 'veiculo', nome: 'Veículo' },
+        { id: 'servicos', nome: 'Serviços' },
+        { id: 'quando', nome: 'Quando' },
+        { id: 'cliente', nome: 'Cliente & Concluir' },
+      ];
+    }
+    return [
+      { id: 'servicos', nome: 'Serviços' },
+      { id: 'quando', nome: 'Quando' },
+      { id: 'cliente', nome: 'Cliente & Concluir' },
+    ];
+  }, [usaVeiculo]);
+
+  const focarBloco = (id, idx) => {
+    if (idx != null) setEtapaAtiva(idx);
+    const el = document.getElementById(`atender-bloco-${id}`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  };
 
   useEffect(() => { let vivo = true; apiServicos.listar({ para: 'atender' }).then((r) => { if (vivo) { if (r.ok) setServicos(r.servicos.filter((s) => s.ativo !== false)); else { setServicos([]); setErro(r.erro); } } }); return () => { vivo = false; }; }, []);
   useEffect(() => { let vivo = true; apiRegras.obter().then((r) => { if (vivo && r.ok) setRegras(r.regras); }); return () => { vivo = false; }; }, []);
@@ -157,7 +180,7 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
   };
   const blocos = {
     veiculo: usaVeiculo ? (
-        <fieldset className="atender-real-bloco" data-testid="atender-veiculo-bloco">
+        <fieldset className="atender-real-bloco" id="atender-bloco-veiculo" data-testid="atender-veiculo-bloco">
           <legend>Veículo{exigenciasDoVeiculo(regras, tipo).length ? ' *' : ''}</legend>
           {doCliente.length > 0 && (
             <div className="acoes" role="group" aria-label="Veículos do cliente">
@@ -173,10 +196,13 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
             </div>
           )}
           <p className="muted">{veiculoEscolhido ? `Porte ${ROTULO_PORTE[veiculoEscolhido.porte] || ROTULO_PORTE[porte]}: define o preço e o tempo dos serviços.` : 'O veículo novo fica salvo no cadastro do cliente (quando há telefone). O porte define o preço e o tempo dos serviços.'}</p>
+          <div className="acoes" style={{ marginTop: 6 }}>
+            <Btn variante="primario" type="button" onClick={() => focarBloco('servicos', 1)} data-testid="atender-prox-servicos">Escolher serviços →</Btn>
+          </div>
         </fieldset>
     ) : null,
     servicos: (
-      <fieldset className="atender-real-bloco">
+      <fieldset className="atender-real-bloco" id="atender-bloco-servicos">
         <legend>Serviços</legend>
         <Campo rotulo="Buscar serviço"><input value={buscaSrv} onChange={(e) => setBuscaSrv(e.target.value)} maxLength={40} placeholder="Nome ou código" data-testid="atender-busca-servico" /></Campo>
         {servicos === null && <p className="muted" role="status">Carregando…</p>}
@@ -189,10 +215,13 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
           ))}
         </ul>
         <p className="muted" data-testid="atender-total">{resumo.qtd ? `${resumo.qtd} serviço${resumo.qtd === 1 ? '' : 's'} · ${resumo.minutos} min · ${fmtMoney(resumo.total)}` : itens.length ? 'Só produtos: registra a venda de agora.' : 'Escolha ao menos um serviço ou um produto.'}</p>
+        <div className="acoes" style={{ marginTop: 6 }}>
+          <Btn variante="primario" type="button" onClick={() => focarBloco('quando', usaVeiculo ? 2 : 1)} data-testid="atender-prox-quando">Definir data, hora e equipe →</Btn>
+        </div>
       </fieldset>
     ),
     quando: (
-      <fieldset className="atender-real-bloco" data-testid="atender-quando-bloco">
+      <fieldset className="atender-real-bloco" id="atender-bloco-quando" data-testid="atender-quando-bloco">
         <legend>Quando</legend>
         <div className="acoes">
           <button type="button" className={`btn btn-quando${!personalizar ? ' btn-on' : ''}`} aria-pressed={!personalizar} onClick={() => { setPersonalizar(false); setErro(''); }} data-testid="atender-agora"><Icone n="clock" size={15} />Agora</button>
@@ -206,10 +235,13 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
         )}
         {bloqueado && <Aviso tipo="erro" data-testid="atender-retro-bloqueado">Lançar um dia anterior é com o proprietário ou a recepção. Peça a eles para registrar.</Aviso>}
         <p className="muted" data-testid="atender-tipo">{tipo === 'futuro' ? 'Agendamento: o horário fica reservado para o cliente.' : 'Atendimento já feito: entra como concluído.'}</p>
+        <div className="acoes" style={{ marginTop: 6 }}>
+          <Btn variante="primario" type="button" onClick={() => focarBloco('cliente', usaVeiculo ? 3 : 2)} data-testid="atender-prox-cliente">Identificar cliente e pagamento →</Btn>
+        </div>
       </fieldset>
     ),
     cliente: (
-      <fieldset className="atender-real-bloco">
+      <fieldset className="atender-real-bloco" id="atender-bloco-cliente">
         <legend>Cliente</legend>
         {cliente ? (
           <p className="msg-ok" data-testid="atender-vinculo">Cadastro escolhido: {cliente.apelido || cliente.nome}. <button type="button" className="link" onClick={() => { setCliente(null); setVeiculoId(''); }} data-testid="atender-trocar-cliente">Trocar</button></p>
@@ -260,10 +292,22 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
   return (
     <form className="atender-real" onSubmit={enviar} data-testid="atender-form" aria-label="Atender">
       <div className="atender-real-topo">
-        <h3 className="atender-real-titulo">Atender</h3>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <h3 className="atender-real-titulo">Atender</h3>
+          <span className="badge-modo" style={{ background: 'var(--surface-3)', border: '1px solid var(--line-strong)', borderRadius: 6, padding: '2px 8px', fontSize: 11, color: 'var(--ink)', fontWeight: 600 }}>
+            {tipo === 'futuro' ? '📅 Agendamento' : '⚡ Agora'}
+          </span>
+        </div>
         <Btn tamanho="sm" onClick={aoFechar} data-testid="atender-fechar" aria-label="Fechar"><Icone n="x" size={15} /></Btn>
       </div>
 
+      <ol className="pub-passos" role="tablist" style={{ margin: '4px 0 8px', cursor: 'pointer' }}>
+        {passos.map((p, idx) => (
+          <li key={p.id} className={etapaAtiva === idx ? 'on' : ''} onClick={() => focarBloco(p.id, idx)}>
+            <span>{idx + 1}</span> {p.nome}
+          </li>
+        ))}
+      </ol>
 
       {ordem.etapas.map((k) => <React.Fragment key={k}>{blocos[k]}</React.Fragment>)}
 

@@ -47,6 +47,7 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
   const [erros, setErros] = useState([]);
   const [motivoRetro, setMotivoRetro] = useState('');
   const [semPlano, setSemPlano] = useState(false); // o cliente tem plano, mas esta vez a pessoa quer cobrar normal
+  const [etapaAtiva, setEtapaAtiva] = useState(0);
 
   const inicio = personalizar && data ? tsAt(fromYmd(data), minutos) : null;
   const futuro = inicio != null && inicio > agora + 60000;
@@ -71,6 +72,28 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
   const cadastrado = clienteId ? st.clientes.find((c) => c.id === clienteId) : tel.length >= 10 ? acharClientePorTelefone(st.clientes, tel, nome) : null;
   // Veículo: o do cadastro do cliente (se tiver só um, já vem escolhido) ou um novo. O porte dele decide preço e duração de cada serviço.
   const usaVeiculo = capAtiva('usaVeiculo'); // tipo sem veículo (barbearia): nada de veículo, porte nem box
+
+  const passos = useMemo(() => {
+    if (usaVeiculo) {
+      return [
+        { id: 'veiculo', nome: 'Veículo' },
+        { id: 'servicos', nome: 'Serviços' },
+        { id: 'quando', nome: 'Quando' },
+        { id: 'cliente', nome: 'Cliente & Concluir' },
+      ];
+    }
+    return [
+      { id: 'servicos', nome: 'Serviços' },
+      { id: 'quando', nome: 'Quando' },
+      { id: 'cliente', nome: 'Cliente & Concluir' },
+    ];
+  }, [usaVeiculo]);
+
+  const focarBloco = (id, idx) => {
+    if (idx != null) setEtapaAtiva(idx);
+    const el = document.getElementById(`atender-bloco-${id}`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  };
   const veiculosCli = usaVeiculo ? cadastrado?.veiculos || [] : [];
   const veicSel = !usaVeiculo ? '' : !veiculosCli.length ? 'novo' : veiculoId === 'novo' || veiculosCli.some((x) => x.id === veiculoId) ? veiculoId : veiculosCli.length === 1 ? veiculosCli[0].id : '';
   const veicExistente = veiculosCli.find((x) => x.id === veicSel) || null;
@@ -189,7 +212,7 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
   };
   const blocos = {
     veiculo: usaVeiculo ? (
-          <fieldset className="campo-largo conj" data-testid="atender-veiculo">
+          <fieldset className="campo-largo conj" id="atender-bloco-veiculo" data-testid="atender-veiculo">
             <legend>Veículo{obrig.some((k) => CAMPOS_DE_VEICULO.includes(k)) ? ' *' : ''}</legend>
             {veiculosCli.length > 0 && (
               <Campo rotulo="Veículo do cliente">
@@ -206,9 +229,13 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
               </div>
             )}
             {porteDefinido && <p className="muted" data-testid="atender-porte-info">Preços e tempos do porte {ROTULO_PORTE[porteAtual].toLowerCase()}.</p>}
+            <div className="acoes" style={{ marginTop: 8 }}>
+              <Btn variante="primario" type="button" onClick={() => focarBloco('servicos', 1)} data-testid="atender-prox-servicos">Escolher serviços →</Btn>
+            </div>
           </fieldset>
         ) : null,
     servicos: (
+      <div id="atender-bloco-servicos" className="campo-largo">
         <ListaItens titulo="Serviços" testid="atender-lista-servicos" itens={servicos} selecionado={(s) => servicoIds.includes(s.id)} renderItem={(s) => (
           <div key={s.id} className={`servico-linha ${servicoIds.includes(s.id) ? 'on' : ''}`}>
             <label className="servico-op-lado">
@@ -217,9 +244,13 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
             </label>
           </div>
         )} />
+        <div className="acoes" style={{ marginTop: 8 }}>
+          <Btn variante="primario" type="button" onClick={() => focarBloco('quando', usaVeiculo ? 2 : 1)} data-testid="atender-prox-quando">Definir data e hora →</Btn>
+        </div>
+      </div>
     ),
     quando: (
-      <>
+      <div id="atender-bloco-quando" className="campo-largo">
         <div className="campo-largo grupo-hora">
           <div className="campo"><span className="campo-rotulo">Quando</span>
             <div className="linha-campos">
@@ -259,13 +290,16 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
             {podePlano && <label className="interruptor"><input type="checkbox" checked={!semPlano} onChange={(e) => setSemPlano(!e.target.checked)} data-testid="atender-usar-plano" /><span className="trilho"><i className="bolinha" /></span><span className="interruptor-txt"><b>Usar o plano neste atendimento</b><small className="muted">Os serviços do plano saem de graça; o resto é cobrado normalmente.</small></span></label>}
           </div>
         )}
-      </>
+        <div className="acoes" style={{ marginTop: 8 }}>
+          <Btn variante="primario" type="button" onClick={() => focarBloco('cliente', usaVeiculo ? 3 : 2)} data-testid="atender-prox-cliente">Identificar cliente e pagamento →</Btn>
+        </div>
+      </div>
     ),
     cliente: (
-      <>
+      <div id="atender-bloco-cliente" className="campo-largo form-grade" style={{ margin: 0, padding: 0 }}>
         {!ehProfissional && <PickerCliente clientes={st.clientes} valor={clienteId} onEscolher={escolheCliente} onLimpar={() => setClienteId('')} />}
         {ordem.cliente.map((k) => <React.Fragment key={k}>{camposCli[k]}</React.Fragment>)}
-      </>
+      </div>
     ),
     produtos: produtos.length > 0 ? (
           <ListaItens titulo="Produtos" testid="atender-lista-produtos" itens={produtos} selecionado={(m) => Number(qtds[m.id]) > 0} renderItem={(m) => (
@@ -280,6 +314,13 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
   return (
     <Modal titulo="Atender" sub="Serviço ou produto é o único campo obrigatório. A data decide o resto: agora ou passado registra o atendimento; data futura vira agendamento." onClose={onClose} largura={640}
       rodape={<><Btn onClick={onClose}>Cancelar</Btn><Btn variante="primario" onClick={salvar} data-testid="salvar-atender">{futuro ? 'Agendar' : 'Registrar'}</Btn></>}>
+      <ol className="pub-passos" role="tablist" style={{ margin: '0 0 14px', cursor: 'pointer' }}>
+        {passos.map((p, idx) => (
+          <li key={p.id} className={etapaAtiva === idx ? 'on' : ''} onClick={() => focarBloco(p.id, idx)}>
+            <span>{idx + 1}</span> {p.nome}
+          </li>
+        ))}
+      </ol>
       <div className="form-grade">
         {ordem.etapas.map((k) => <React.Fragment key={k}>{blocos[k]}</React.Fragment>)}
         {!auto && (
