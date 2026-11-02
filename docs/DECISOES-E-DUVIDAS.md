@@ -1,4 +1,4 @@
-# Decisões tomadas sem confirmação e possíveis dúvidas (28/10)
+﻿# Decisões tomadas sem confirmação e possíveis dúvidas (28/10)
 
 Lista simples. Cada item está no histórico do `prompt-agendz-regras.md` (v84 a v86) com mais detalhe.
 
@@ -230,3 +230,4 @@ Lista simples. Cada item está no histórico do `prompt-agendz-regras.md` (v84 a
 - v137 (B10 A) — Decisão sem confirmação: "sucesso sem gravar" só para sinal claro de robô (isca, menos de 2 s, selo falso). O selo é o instante da abertura + HMAC da loja, devolvido no pedido (nada guardado no servidor); selo ausente não é sinal, para não punir página aberta antes da atualização.
 - v137 (B10 A) — Decisão sem confirmação: o registro de barrados guarda só hora, loja, hash de IP/telefone e motivo, no máximo um por IP+motivo por minuto, apagado em 30 dias; é gravado em transação independente para sobreviver ao erro.
 - v137 (B10 A) — Decisão sem confirmação: o Artifact só ganhou o limite configurável (demonstração); não simula o sucesso sem gravar. Contadores de frequência continuam em memória (zeram ao reiniciar o servidor).
+- 01/11 (v138, B11): aviso de avaliaÃ§Ã£o no link pelo token do agendamento no aparelho. DecisÃ£o sem confirmaÃ§Ã£o: reaproveita emitirAcesso gerando token seguro de avaliaÃ§Ã£o sem expor identidade, consulta periÃ³dica a cada 60 s em Meus agendamentos.
