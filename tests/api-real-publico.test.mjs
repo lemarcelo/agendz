@@ -1,4 +1,4 @@
-/* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
+﻿/* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
 // Link do cliente no site real (src/services/api-real.js, `publico.*` e `linkAgendamento`): rotas e corpos, rota pública nunca leva o token do painel,
 // o token de acesso vai no cabeçalho (cancelar) ou no corpo (meus) e nunca na URL, entrada ruim nem sai do cliente e a leitura é defensiva.
 import test from 'node:test';
@@ -237,4 +237,29 @@ test('estética (v104): portes e tabelas por porte lidos com defesa; porte na co
     veiculo: { placa: 'ABC1D23', modelo: 'Onix', marca: '', cor: 'Prata', porte: 'suv', id: 'x', clienteId: 'y' } });
   assert.deepEqual(chamadas[0].corpo.veiculo, { placa: 'ABC1D23', modelo: 'Onix', porte: 'suv', cor: 'Prata' });
   assert.deepEqual(r.agendamento.veiculo, { placa: 'ABC1D23', modelo: 'Onix', porte: 'suv' });
+});
+
+test('obterTokenAvaliacao: token vai no cabecalho X-Acesso e rota publica sem token de sessao', async () => {
+  let chamado = null;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    chamado = { url, opts };
+    return { ok: true, status: 200, json: async () => ({ ok: true, avaliarToken: '0123456789abcdef0123456789abcdef0123456789abcdef' }) };
+  };
+  try {
+    const ruim = await publico.obterTokenAvaliacao('id-invalido', 'token-invalido');
+    assert.strictEqual(ruim.ok, false);
+    assert.strictEqual(chamado, null);
+
+    const bomId = '00000000-0000-0000-0000-000000000001';
+    const bomToken = '0123456789abcdef0123456789abcdef0123456789abcdef';
+    const r = await publico.obterTokenAvaliacao(bomId, bomToken);
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(r.avaliarToken, '0123456789abcdef0123456789abcdef0123456789abcdef');
+    assert.ok(chamado.url.endsWith('/api/publico/agendamentos/' + bomId + '/avaliacao'));
+    assert.strictEqual(chamado.opts.headers['X-Acesso'], bomToken);
+    assert.strictEqual(chamado.opts.headers['Authorization'], undefined);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

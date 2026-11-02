@@ -1,4 +1,4 @@
-package br.com.agendz.avaliacoes;
+﻿package br.com.agendz.avaliacoes;
 
 import static org.hamcrest.Matchers.hasSize;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -694,4 +694,57 @@ class AvaliacoesTest extends BaseApi {
         escrever(put("/api/clientes/" + cli), dono, "{\"apelido\":\"Clientão\"}").andExpect(status().isOk()).andExpect(jsonPath("$.semMensagens").value(true));
         escrever(post("/api/clientes"), dono, "{\"nome\":\"Novo Cliente\",\"telefone\":\"" + novoTelefone() + "\",\"semMensagens\":true}").andExpect(status().isCreated()).andExpect(jsonPath("$.semMensagens").value(true));
     }
+    @Test
+    void obterTokenDeAvaliacaoPeloLinkPublico() throws Exception {
+        String ag = atender("Cliente Link", novoTelefone(), corte);
+        String tokenAcesso = "0123456789abcdef0123456789abcdef0123456789abcdef";
+        String tokenHash = hash(tokenAcesso);
+        jdbc.update("insert into acesso_publico (loja_id, agendamento_id, token_hash, criado_em, expira_em) values (?::uuid, ?::uuid, ?, now(), now() + interval '30 days')",
+                LOJA_OFFBOX, ag, tokenHash);
+
+        // 1. Sem token ou token invalido = 404
+        mvc.perform(post("/api/publico/agendamentos/" + ag + "/avaliacao").with(host(OFFBOX)))
+                .andExpect(status().isNotFound());
+        mvc.perform(post("/api/publico/agendamentos/" + ag + "/avaliacao").with(host(OFFBOX)).header("X-Acesso", "token_invalido"))
+                .andExpect(status().isNotFound());
+
+        // 2. Agendamento com status diferente de concluido = 404
+        jdbc.update("update agendamento set status = 'confirmado' where id = ?::uuid", ag);
+        mvc.perform(post("/api/publico/agendamentos/" + ag + "/avaliacao").with(host(OFFBOX)).header("X-Acesso", tokenAcesso))
+                .andExpect(status().isNotFound());
+
+        // 3. Agendamento concluido = 200 e devolve avaliarToken
+        jdbc.update("update agendamento set status = 'concluido' where id = ?::uuid", ag);
+        String resp = mvc.perform(post("/api/publico/agendamentos/" + ag + "/avaliacao").with(host(OFFBOX)).header("X-Acesso", tokenAcesso))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.avaliarToken").isString())
+                .andReturn().getResponse().getContentAsString();
+        String avaliarToken = extrairToken(resp);
+        assertNotNull(avaliarToken);
+        assertEquals(48, avaliarToken.length());
+
+        // O token gerado funciona em /api/publico/avaliacoes
+        pubGet(OFFBOX, avaliarToken, novoIp()).andExpect(status().isOk()).andExpect(jsonPath("$.dados.loja").value("Offbox"));
+
+        // 4. Chamada subsequente antes de avaliar substitui o token anterior
+        String resp2 = mvc.perform(post("/api/publico/agendamentos/" + ag + "/avaliacao").with(host(OFFBOX)).header("X-Acesso", tokenAcesso))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        String avaliarToken2 = extrairToken(resp2);
+        assertNotEquals(avaliarToken, avaliarToken2);
+        // Token anterior agora nao funciona mais
+        pubGet(OFFBOX, avaliarToken, novoIp()).andExpect(status().isNotFound());
+        // Token novo funciona
+        pubGet(OFFBOX, avaliarToken2, novoIp()).andExpect(status().isOk());
+
+        // 5. Apos avaliar, nova chamada responde 404
+        pubPost(OFFBOX, avaliarToken2, "{\"nota\":5,\"texto\":\"Otimo servico\"}", novoIp()).andExpect(status().isCreated());
+        mvc.perform(post("/api/publico/agendamentos/" + ag + "/avaliacao").with(host(OFFBOX)).header("X-Acesso", tokenAcesso))
+                .andExpect(status().isNotFound());
+    }
+
+    private static String extrairToken(String json) {
+        Matcher m = Pattern.compile("\"avaliarToken\"\\s*:\\s*\"([0-9a-f]{48})\"").matcher(json);
+        return m.find() ? m.group(1) : null;
+    }
+
 }

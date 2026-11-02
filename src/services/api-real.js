@@ -1,4 +1,4 @@
-/* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
+﻿/* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
 // Cliente HTTP da API real (Spring Boot). SÓ entra no build do site publicado (`src/main-real.jsx`); o Artifact e os testes de regra usam
 // `api.js` (simulada, sem rede). Este é o ÚNICO arquivo de `src/` com `fetch` (tests/estatico.test.mjs confere isso e que o Artifact não o importa).
 //
@@ -1456,6 +1456,12 @@ export const publico = {
     return r.ok ? { ok: true, horarios: listaDe(r.dados, 100).filter((x) => x && instante(x.inicio) !== null && IDV(x.profissionalId)).map((x) => ({ inicio: instante(x.inicio), profissionalId: x.profissionalId })) } : r;
   },
   // POST /api/publico/agendamentos/{id}/remarcar  { inicio }  (cabeçalho X-Acesso): só com 24 h ou mais; o horário volta a "a confirmar"
+    // POST /api/publico/agendamentos/{id}/avaliacao  (cabecalho X-Acesso: token DESTE agendamento)    { avaliarToken }
+  async obterTokenAvaliacao(id, token) {
+    if (!ID.test(String(id)) || !/^[0-9a-f]{48}$/.test(String(token))) return { ok: false, status: 0, erro: 'Agendamento nÃ£o encontrado.' };
+    const r = await chamar('POST', /api/publico/agendamentos/ + id + /avaliacao, undefined, undefined, { publico: true, cabecalhos: { 'X-Acesso': token } });
+    return r.ok && r.dados && typeof r.dados.avaliarToken === 'string' ? { ok: true, avaliarToken: r.dados.avaliarToken } : r;
+  },
   async remarcar(id, token, inicio) {
     if (!ID.test(String(id)) || !/^[0-9a-f]{48}$/.test(String(token))) return { ok: false, status: 0, erro: 'Agendamento não encontrado.' };
     if (!Number.isFinite(inicio)) return { ok: false, status: 0, erro: 'Escolha um dia e um horário.' };

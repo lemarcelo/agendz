@@ -1,4 +1,4 @@
-package br.com.agendz.avaliacoes;
+﻿package br.com.agendz.avaliacoes;
 
 import br.com.agendz.cifra.Cifra;
 import br.com.agendz.erro.ErroDeNegocio;
@@ -111,7 +111,35 @@ public class AvaliacaoService {
     }
 
     /** Pedido novo troca o link anterior (um vivo por agendamento) e limpa os vencidos. Devolve o token em claro, que só aparece aqui. */
-    String emitirAcesso(JdbcTemplate jdbc, UUID lojaId, UUID agendamentoId) {
+        /** Obtem o token de avaliacao pelo link publico do cliente. Exige que o token X-Acesso pertenca a este agendamento, status 'concluido' e sem avaliacao. */
+    public String obterTokenPublico(String ip, UUID agendamentoId, String tokenAcesso) {
+        Loja loja = LojaContext.exigir();
+        if (!limite.liberar("aval-link:" + loja.id() + ":" + ip, 30, Duration.ofMinutes(10))) {
+            throw new ErroDeNegocio(HttpStatus.TOO_MANY_REQUESTS, "Muitas tentativas. Aguarde alguns minutos.");
+        }
+        if (agendamentoId == null || tokenAcesso == null || !tokenAcesso.matches("[0-9a-f]{48}")) {
+            throw new ErroDeNegocio(HttpStatus.NOT_FOUND, "Atendimento nÃ£o encontrado.");
+        }
+        return banco.naLoja(jdbc -> {
+            Instant agora = relogio.instant();
+            List<UUID> l = jdbc.queryForList("select agendamento_id from acesso_publico where token_hash = ? and expira_em > ?", UUID.class, hash(tokenAcesso), utc(agora));
+            if (l.isEmpty() || !agendamentoId.equals(l.get(0))) {
+                throw new ErroDeNegocio(HttpStatus.NOT_FOUND, "Atendimento nÃ£o encontrado.");
+            }
+            List<Object[]> ag = jdbc.query("select a.status, exists(select 1 from avaliacao v where v.agendamento_id = a.id) as ja_avaliou from agendamento a where a.id = ?",
+                    (rs, i) -> new Object[]{rs.getString(1), rs.getBoolean(2)}, agendamentoId);
+            if (ag.isEmpty()) {
+                throw new ErroDeNegocio(HttpStatus.NOT_FOUND, "Atendimento nÃ£o encontrado.");
+            }
+            String status = (String) ag.get(0)[0];
+            boolean jaAvaliou = (boolean) ag.get(0)[1];
+            if (!"concluido".equals(status) || jaAvaliou) {
+                throw new ErroDeNegocio(HttpStatus.NOT_FOUND, "Atendimento nÃ£o encontrado.");
+            }
+            return emitirAcesso(jdbc, loja.id(), agendamentoId);
+        });
+    }
+String emitirAcesso(JdbcTemplate jdbc, UUID lojaId, UUID agendamentoId) {
         Instant agora = relogio.instant();
         jdbc.update("delete from avaliacao_acesso where expira_em < ? or (agendamento_id = ? and usado_em is null)", utc(agora), agendamentoId);
         String token = novoToken();

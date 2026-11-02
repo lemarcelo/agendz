@@ -1,4 +1,4 @@
-# Mapa `api.js` → Spring Boot
+﻿# Mapa `api.js` → Spring Boot
 
 Fonte: `src/services/api.js` (v41). Cada linha liga um método do protótipo ao endpoint, à permissão, à validação, à regra de domínio e aos testes que já cobrem o comportamento (Node) e que viram teste de integração (JUnit) em `backend-esqueleto/`.
 
@@ -287,7 +287,8 @@ Rotas **sem login** (a loja vem do Host; `SegurancaConfig` libera só estas). Li
 | `GET /api/publico/dias?de&dias&servicos&profissionalId` | dias com horário livre | até 31 dias por consulta, limitado a `diasMax` |
 | `POST /api/publico/agendamentos` | pede um horário | nome 2 a 60, telefone BR, 1 a 5 serviços, isca `site` vazia, até `diasMax`; entra a confirmar (`origem` link); máx. `limiteAbertos` (padrão 3) abertos por cliente; `selo` (de `GET /api/publico/agendar`) volta no corpo: isca preenchida, menos de 2 s ou selo falso = sucesso que não grava, com registro mínimo em `link_barrado` (V45, 30 dias); `cupomChave` opcional (errada = pedido inteiro recusado e tentativa gravada); devolve `{agendamento, token}` (token uma vez) |
 | `POST /api/publico/meus {tokens}` | os horários dos tokens | até 10 tokens; inválido some; nunca telefone nem id de cliente |
-| `POST /api/publico/agendamentos/{id}/cancelar` (`X-Acesso`) | cancela o próprio horário | token precisa ser DESTE horário; ativo e 24 h ou mais; motivo `cliente` |
+| `- POST /api/publico/agendamentos/{id}/avaliacao (cabeÃ§alho X-Acesso): gera o token de avaliaÃ§Ã£o para agendamento concluÃ­do sem avaliaÃ§Ã£o (B11).
+POST /api/publico/agendamentos/{id}/cancelar` (`X-Acesso`) | cancela o próprio horário | token precisa ser DESTE horário; ativo e 24 h ou mais; motivo `cliente` |
 | `GET/PUT /api/estabelecimento/link-agendamento` | liga/desliga, `diasMax` (1 a 60), `limiteAbertos` (1 a 20, padrão 3; V45; o GET também devolve `barrados {total, porMotivo}` dos últimos 30 dias), `telefoneObrigatorio`, `nomeObrigatorio` (v121) e `veiculoObrigatorio` (lista de `placa`/`modelo`/`porte`, só estética; V35) | só o proprietário |
 | `GET /api/publico/agendamentos/{id}/horarios?data=` e `/dias?de&dias=` (`X-Acesso`) | horários/dias livres para REMARCAR | mesmo profissional e serviços do horário; o próprio horário conta como livre; link desligado = lista vazia |
 | `POST /api/publico/agendamentos/{id}/remarcar {inicio}` (`X-Acesso`) | remarca o próprio horário | token deste horário; ativo; 24 h ou mais até o horário atual; regras do pedido no horário novo; volta a "a confirmar", `reagendado`; link desligado = 403; 30 por 10 min por IP |

@@ -1,9 +1,11 @@
-package br.com.agendz.avaliacoes;
+﻿package br.com.agendz.avaliacoes;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.Map;
 import org.springframework.http.ResponseEntity;
+import java.util.UUID;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -36,7 +38,13 @@ public class AvaliacaoPublicoController {
         return ResponseEntity.status(201).header("Cache-Control", "no-store").body(Map.of("ok", true));
     }
 
-    private static String ip(HttpServletRequest req) {
+        /** POST /api/publico/agendamentos/{id}/avaliacao (cabecalho X-Acesso: token de acesso do agendamento): gera o token de avaliacao se concluido e sem avaliacao. */
+    @PostMapping("/api/publico/agendamentos/{id}/avaliacao")
+    public ResponseEntity<Map<String, String>> pedirTokenAvaliacao(@PathVariable UUID id, @RequestHeader(value = "X-Acesso", required = false) String token, HttpServletRequest req) {
+        String avaliarToken = servico.obterTokenPublico(ip(req), id, token);
+        return ResponseEntity.ok().header("Cache-Control", "no-store").body(Map.of("avaliarToken", avaliarToken));
+    }
+private static String ip(HttpServletRequest req) {
         String f = req.getHeader("X-Forwarded-For");
         String v = f != null && !f.isBlank() ? f.split(",")[0].trim() : req.getRemoteAddr();
         return v != null && v.length() <= 45 && v.matches("[0-9a-fA-F:.]+") ? v : "desconhecido";
