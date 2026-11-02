@@ -277,4 +277,72 @@ public class PlataformaService {
         for (int n = 2; usados.contains(apelido.toLowerCase(Locale.ROOT)) || Reservados.reservado(apelido); n++) apelido = base + " " + n;
         return apelido;
     }
+
+    public record StatusHomologacao(boolean ativo, int sessaoAtual, Instant ativadoEm, String ativadoPor, String motivo, int totalLancamentosTeste) {
+    }
+
+    public record ReversaoHomologacao(int totalRevertidos) {
+    }
+
+    public StatusHomologacao statusHomologacao(Loja loja) {
+        return banco.naLoja(loja.id(), j -> {
+            var lista = j.query("select ativo, sessao_atual, ativado_em, ativado_por, motivo from loja_homologacao where loja_id = ?",
+                    (rs, i) -> new StatusHomologacao(
+                            rs.getBoolean("ativo"),
+                            rs.getInt("sessao_atual"),
+                            rs.getTimestamp("ativado_em") == null ? null : rs.getTimestamp("ativado_em").toInstant(),
+                            rs.getString("ativado_por"),
+                            rs.getString("motivo"),
+                            0
+                    ), loja.id());
+            StatusHomologacao st = lista.isEmpty() ? new StatusHomologacao(false, 0, null, null, null, 0) : lista.get(0);
+            Integer total = j.queryForObject("select count(*) from agendamento where teste = true", Integer.class);
+            return new StatusHomologacao(st.ativo(), st.sessaoAtual(), st.ativadoEm(), st.ativadoPor(), st.motivo(), total == null ? 0 : total);
+        });
+    }
+
+    public StatusHomologacao ativarHomologacao(Loja loja, String motivo, String ativadoPor) {
+        return banco.naLoja(loja.id(), j -> {
+            j.update(
+                    "insert into loja_homologacao (loja_id, ativo, sessao_atual, ativado_em, ativado_por, motivo) " +
+                    "values (?, true, 1, now(), ?, ?) " +
+                    "on conflict (loja_id) do update set " +
+                    "ativo = true, sessao_atual = loja_homologacao.sessao_atual + 1, ativado_em = now(), ativado_por = excluded.ativado_por, motivo = excluded.motivo",
+                    loja.id(), ativadoPor, motivo);
+            return statusHomologacao(loja);
+        });
+    }
+
+    public StatusHomologacao desativarHomologacao(Loja loja, boolean manterConfigs, boolean manterLancamentos) {
+        return banco.naLoja(loja.id(), j -> {
+            if (manterLancamentos) {
+                j.update("update agendamento set teste = false where teste = true");
+                j.update("update agendamento_servico set teste = false where teste = true");
+                j.update("update agendamento_produto set teste = false where teste = true");
+                j.update("update cliente set teste = false where teste = true");
+                j.update("update movimento_estoque set teste = false where teste = true");
+                j.update("update comissao_pagamento set teste = false where teste = true");
+                j.update("update aviso_painel set teste = false where teste = true");
+                j.update("update link_barrado set teste = false where teste = true");
+            }
+            j.update("update loja_homologacao set ativo = false where loja_id = ?", loja.id());
+            return statusHomologacao(loja);
+        });
+    }
+
+    public ReversaoHomologacao reverterHomologacao(Loja loja, Integer sessaoId) {
+        return banco.naLoja(loja.id(), j -> {
+            int qtd;
+            if (sessaoId != null && sessaoId > 0) {
+                qtd = j.update("update agendamento set teste = false where teste = true and teste_sessao = ?", sessaoId);
+                j.update("update agendamento_servico set teste = false where teste = true and agendamento_id in (select id from agendamento where teste_sessao = ?)", sessaoId);
+                j.update("update cliente set teste = false where teste = true and teste_sessao = ?", sessaoId);
+            } else {
+                qtd = j.update("update agendamento set teste = false where teste = true");
+                j.update("update agendamento_servico set teste = false where teste = true");
+                j.update("update cliente set teste = false where teste = true");
+            }
+            return new ReversaoHomologacao(qtd);
+        });
+    }
 }

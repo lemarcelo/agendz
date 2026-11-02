@@ -35,6 +35,13 @@ public class LojaRepository {
         return jdbc.query("select status from loja where id = ?", (rs, i) -> rs.getString(1), lojaId).stream().findFirst().orElse("ativo");
     }
 
+    /** Modo homologação por cliente (B1): quando ativo, lançamentos ganham teste=true e mensagens/cobranças são bloqueadas. */
+    public boolean emHomologacao(UUID lojaId) {
+        return Boolean.TRUE.equals(jdbc.query(
+                "select ativo from loja_homologacao where loja_id = ?",
+                (rs, i) -> rs.getBoolean(1), lojaId).stream().findFirst().orElse(false));
+    }
+
     /** Domínio próprio só vale VERIFICADO. */
     public Optional<String> slugDoDominioVerificado(String host) {
         return jdbc.query(

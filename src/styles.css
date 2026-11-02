@@ -1164,3 +1164,18 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
 .preco-especifico-lista { display: grid; gap: 8px; }
 .preco-especifico-linha { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: flex-end; min-width: 0; }
 .preco-especifico-linha .campo { flex: 1 1 130px; min-width: 0; }
+
+/* B1: Faixa de modo homologação */
+.faixa-homologacao {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  background: #fef08a;
+  color: #713f12;
+  border-bottom: 1px solid #facc15;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}

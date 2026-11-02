@@ -1,4 +1,5 @@
-STATUS: LIVRE
-ULTIMO_MODELO: Antigravity (Gemini 4 Argon) + Invoke-AiPipeline
-HORA: 2026-11-02 11:15 (America/Sao_Paulo)
-OBS: Tarefa 2 (B10 parte B / B4 - reCAPTCHA, v139) concluida e revisada com testes verdes (api-real-publico, e2e116 e e2e117).
+STATUS: EM_USO
+MODELO: Antigravity (Gemini 4 Argon)
+TAREFA: B2 (Log de acoes dos usuarios no Admin)
+HORA: 2026-11-02 12:37 (America/Sao_Paulo)
+OBS: B1 concluido com e2e118 e admin comitados; iniciando B2 (Flyway V48 log_acao, rotas internas e aba Atividade no Admin).

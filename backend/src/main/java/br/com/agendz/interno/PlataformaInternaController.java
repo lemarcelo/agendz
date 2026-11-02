@@ -55,6 +55,15 @@ public class PlataformaInternaController {
     public record CorpoDominio(String host) {
     }
 
+    public record CorpoAtivarHomologacao(String motivo, String ativadoPor) {
+    }
+
+    public record CorpoDesativarHomologacao(Boolean manterConfigs, Boolean manterLancamentos) {
+    }
+
+    public record CorpoReverterHomologacao(Integer sessaoId) {
+    }
+
     private final PlataformaService servico;
     private final DominiosDaLoja dominios;
     private final String chave;
@@ -161,6 +170,35 @@ public class PlataformaInternaController {
         conferir(enviada);
         dominios.remover(servico.loja(slug), host);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/interno/plataforma/lojas/{slug}/homologacao")
+    public ResponseEntity<PlataformaService.StatusHomologacao> homologacao(@PathVariable String slug, @RequestHeader(value = "X-Interno-Chave", required = false) String enviada) {
+        conferir(enviada);
+        return ResponseEntity.ok().header("Cache-Control", "no-store").body(servico.statusHomologacao(servico.loja(slug)));
+    }
+
+    @PostMapping("/interno/plataforma/lojas/{slug}/homologacao/ativar")
+    public ResponseEntity<PlataformaService.StatusHomologacao> ativarHomologacao(@PathVariable String slug, @RequestBody(required = false) CorpoAtivarHomologacao corpo, @RequestHeader(value = "X-Interno-Chave", required = false) String enviada) {
+        conferir(enviada);
+        String motivo = corpo != null && corpo.motivo() != null ? corpo.motivo() : "Ativado pelo Admin";
+        String ativadoPor = corpo != null && corpo.ativadoPor() != null ? corpo.ativadoPor() : "admin";
+        return ResponseEntity.ok().header("Cache-Control", "no-store").body(servico.ativarHomologacao(servico.loja(slug), motivo, ativadoPor));
+    }
+
+    @PostMapping("/interno/plataforma/lojas/{slug}/homologacao/desativar")
+    public ResponseEntity<PlataformaService.StatusHomologacao> desativarHomologacao(@PathVariable String slug, @RequestBody(required = false) CorpoDesativarHomologacao corpo, @RequestHeader(value = "X-Interno-Chave", required = false) String enviada) {
+        conferir(enviada);
+        boolean manterConfigs = corpo == null || corpo.manterConfigs() == null || corpo.manterConfigs();
+        boolean manterLancamentos = corpo != null && Boolean.TRUE.equals(corpo.manterLancamentos());
+        return ResponseEntity.ok().header("Cache-Control", "no-store").body(servico.desativarHomologacao(servico.loja(slug), manterConfigs, manterLancamentos));
+    }
+
+    @PostMapping("/interno/plataforma/lojas/{slug}/homologacao/reverter")
+    public ResponseEntity<PlataformaService.ReversaoHomologacao> reverterHomologacao(@PathVariable String slug, @RequestBody(required = false) CorpoReverterHomologacao corpo, @RequestHeader(value = "X-Interno-Chave", required = false) String enviada) {
+        conferir(enviada);
+        Integer sessaoId = corpo != null ? corpo.sessaoId() : null;
+        return ResponseEntity.ok().header("Cache-Control", "no-store").body(servico.reverterHomologacao(servico.loja(slug), sessaoId));
     }
 
     private void conferir(String enviada) {

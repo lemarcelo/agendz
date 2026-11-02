@@ -382,6 +382,7 @@ export default function AppReal() {
     return (
       <>
         <AvisoRede />
+        {loja?.emHomologacao && <div className="faixa-homologacao" data-testid="faixa-homologacao">Modo de homologação ativo — lançamentos são de teste; mensagens e cobranças estão desativadas.</div>}
         {css && <style id="tema-marca">{css}</style>}
         <AvaliarPublico loja={loja} token={avaliar.token} aoVoltar={sessao ? () => { globalThis.location.hash = ''; } : null} />
       </>
@@ -392,6 +393,7 @@ export default function AppReal() {
     return (
       <>
         <AvisoRede />
+        {loja?.emHomologacao && <div className="faixa-homologacao" data-testid="faixa-homologacao">Modo de homologação ativo — lançamentos são de teste; mensagens e cobranças estão desativadas.</div>}
         {css && <style id="tema-marca">{css}</style>}
         <AgendarPublico loja={loja} profissionalInicial={publica[1] ? publica[1].slice(1) : ''} logado={!!sessao} aoVoltar={() => { globalThis.location.hash = ''; }} />
       </>
@@ -400,6 +402,7 @@ export default function AppReal() {
   return (
     <>
       <AvisoRede />
+      {loja?.emHomologacao && <div className="faixa-homologacao" data-testid="faixa-homologacao">Modo de homologação ativo — lançamentos são de teste; mensagens e cobranças estão desativadas.</div>}
       {css && <style id="tema-marca">{css}</style>}
       {!sessao && <Login loja={loja} aoEntrar={aoEntrar} />}
       {sessao && sessao.perguntarRede && !sessao.deveTrocarSenha && <PerguntaRede loja={loja} aoResponder={(se) => { if (se) aoEntrar(se, ''); else setSessao({ ...sessao, perguntarRede: false }); }} />}

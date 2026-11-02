@@ -375,6 +375,10 @@ Só pela rede interna (o Caddy não publica `/interno`) e com `X-Interno-Chave` 
 | `PUT …/usuarios/{id}/ativo` | ativa ou desativa | a loja nunca fica sem proprietário ativo (409) |
 | `GET/PUT …/regras` | `limiteAgendas`, `limiteUsuarios`, `mensagensAtivas`, `limiteMensagensMes`, `cadastroObrigatorios` (`cpf`, `nascimento`) | faixas conferidas (400); **a loja aplica**: `UsuarioService.criar` (limite de usuários), `BoxController.gravar` (só barra quem aumenta as agendas ativas) e `ClienteService.criar` (campos obrigatórios); a recusa diz o motivo |
 | `GET/PUT …/status` | `em_teste`, `ativo`, `em_atraso`, `suspenso`, `encerrado` | `suspenso` e `encerrado` = **402** em toda rota `/api/**` da loja, menos `/api/auth/**`, `/api/publico/loja` e `/api/suporte/**` (`LojaFilter`) |
+| `GET …/homologacao` | status do modo de homologação (v140, B1) | devolve `{ativo, sessaoAtual, ativadoEm, ativadoPor, motivo, totalLancamentosTeste}` |
+| `POST …/homologacao/ativar` | ativa modo homologação (v140, B1) | corpo `{motivo, ativadoPor}`; cria snapshot e ativa sessão |
+| `POST …/homologacao/desativar` | desativa modo homologação (v140, B1) | corpo `{manterConfigs, manterLancamentos}`; se `manterLancamentos: true`, converte `teste = false` |
+| `POST …/homologacao/reverter` | reverte visibilidade de testes (v140, B1) | corpo `{sessaoId}`; devolve `{totalRevertidos}` |
 | `GET/POST …/dominios` | domínio próprio da loja (A5, v108; `DominiosTest`) | cadastrar `{host}`: formato de domínio (sem http/porta/barra/IP/localhost), fora do domínio da plataforma, até 3 por loja, único no sistema (409); devolve o TXT a criar (`_agendz-verificacao.<host>` = `agendz-verificacao=<token>`, token aleatório de 24 bytes) |
 | `POST …/dominios/verificar?host=` | consulta o TXT no DNS (`ConsultaTxt`) | só com o token certo `verificado = true` (e `verificado_em`); sem registro = 200 com `acabouDeVerificar: false`; DNS fora do ar = 503 sem detalhe; outra loja = 404 |
 | `DELETE …/dominios?host=` | remove o domínio | a loja continua; o Caddy (`/interno/dominio-permitido`) passa a negar certificado |

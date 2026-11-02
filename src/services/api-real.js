@@ -112,7 +112,7 @@ export async function carregarLoja() {
   const r = await chamar('GET', '/api/publico/loja');
   if (!r.ok) return { ok: false, status: r.status, erro: r.status === 404 ? 'Loja não encontrada' : r.erro };
   const d = r.dados || {};
-  return { ok: true, loja: { slug: texto(d.slug, 40), nome: texto(d.nome, 120), tipo: texto(d.tipo, 40), logo: typeof d.logo === 'string' ? d.logo : null, temaCor: texto(d.temaCor, 9) || null, temaCor2: texto(d.temaCor2, 9) || null, captchaChave: /^[A-Za-z0-9_-]{20,80}$/.test(String(d.captchaChave)) ? d.captchaChave : '' } };
+  return { ok: true, loja: { slug: texto(d.slug, 40), nome: texto(d.nome, 120), tipo: texto(d.tipo, 40), logo: typeof d.logo === 'string' ? d.logo : null, temaCor: texto(d.temaCor, 9) || null, temaCor2: texto(d.temaCor2, 9) || null, captchaChave: /^[A-Za-z0-9_-]{20,80}$/.test(String(d.captchaChave)) ? d.captchaChave : '', emHomologacao: Boolean(d.emHomologacao) } };
 }
 
 function guardarSessao(d) {
