@@ -1,4 +1,5 @@
-﻿/* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
+﻿import { useAtualizacaoAutomatica } from './atualizar.js';
+/* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
 // Página do cliente no site real (#agendar), SEM login (5e-1): escolhe serviço e profissional, vê só horários livres, pede o horário com nome e telefone
 // (cupom opcional) e acompanha ou cancela o que é dele. Fala só com `publico.*` de api-real.js (GET/POST /api/publico/*); a regra toda (horário livre,
 // expediente, 24 h para cancelar, limite de 3 abertos, cupom) está no servidor. O acesso a cada horário é um token que a resposta do pedido entrega UMA vez;
@@ -313,6 +314,40 @@ function Meus({ loja, acessos, setAcessos, diasMax, aoSincronizar }) {
   const [remarcando, setRemarcando] = useState(null); // { id, escolha }
   const [enviando, setEnviando] = useState(false);
   const tokens = acessos.map((a) => a.token).join(',');
+  const recarregarMeus = () => {
+    if (!acessos.length) return;
+    publico.meus(acessos.map((a) => a.token)).then((r) => {
+      if (!r || !r.ok) return; // falha de fundo nao mostra erro
+      setLista(r.agendamentos);
+      if (typeof aoSincronizar === 'function') aoSincronizar(r.agendamentos);
+      const ids = new Set(r.agendamentos.map((a) => a.id));
+      if (acessos.some((a) => !ids.has(a.id))) {
+        const novos = acessos.filter((a) => ids.has(a.id));
+        gravarAcessos(loja.slug, novos);
+        setAcessos(novos);
+      }
+    }).catch(() => {});
+  };
+  useAtualizacaoAutomatica(recarregarMeus, 60000);
+  const abrirAvaliacao = async (a) => {
+    const ac = acessos.find((x) => x.id === a.id);
+    if (!ac) return;
+    if (typeof publico.obterTokenAvaliacao === 'function') {
+      const r = await publico.obterTokenAvaliacao(a.id, ac.token);
+      if (r && r.ok && r.avaliarToken) {
+        window.location.hash = '#avaliar/' + r.avaliarToken;
+        return;
+      }
+    }
+    if (typeof publico.avaliarAgendamento === 'function') {
+      const r = await publico.avaliarAgendamento(a.id, ac.token);
+      if (r && r.ok && r.avaliarToken) {
+        window.location.hash = '#avaliar/' + r.avaliarToken;
+        return;
+      }
+    }
+    window.location.hash = '#avaliar/' + ac.token;
+  };
   useEffect(() => {
     let vivo = true;
     if (!acessos.length) { setLista([]); return undefined; }
@@ -402,7 +437,20 @@ function Meus({ loja, acessos, setAcessos, diasMax, aoSincronizar }) {
       {passados.length > 0 && (
         <>
           <h3>Anteriores</h3>
-          <ul className="pub-ags pub-passados">{passados.map((a) => <li key={a.id} className="pub-ag" data-testid={`pub-ag-${a.id}`}><span>{diaLongo(a.inicio)}, {horaDe(a.inicio)} · {a.servicos.join(', ')}</span><span className="muted">{a.rotulo}</span></li>)}</ul>
+          <ul className="pub-ags pub-passados">{passados.map((a) => (
+            <li key={a.id} className="pub-ag" data-testid={`pub-ag-${a.id}`}>
+              <div className="pub-ag-topo">
+                <div><span>{diaLongo(a.inicio)}, {horaDe(a.inicio)} Â· {a.servicos.join(', ')}</span></div>
+                <span className="muted">{a.rotulo}</span>
+              </div>
+              {a.status === 'concluido' && !a.avaliado && !a.avaliacao && (
+                <div className="pub-linha pub-avaliar-bloco" data-testid={`pub-avaliar-${a.id}`} style={{ marginTop: '0.5rem' }}>
+                  <span>Seu atendimento foi concluÃ­do. Conte como foi</span>
+                  <Btn tamanho="sm" variante="primario" onClick={() => abrirAvaliacao(a)} data-testid={`pub-avaliar-btn-${a.id}`}>Avaliar</Btn>
+                </div>
+              )}
+            </li>
+          ))}</ul>
         </>
       )}
     </section>
