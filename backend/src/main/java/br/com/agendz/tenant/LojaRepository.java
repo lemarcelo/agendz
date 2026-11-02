@@ -1,5 +1,6 @@
 package br.com.agendz.tenant;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
