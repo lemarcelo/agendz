@@ -201,6 +201,12 @@ public class PlataformaInternaController {
         return ResponseEntity.ok().header("Cache-Control", "no-store").body(servico.reverterHomologacao(servico.loja(slug), sessaoId));
     }
 
+    @GetMapping("/interno/plataforma/lojas/{slug}/atividades")
+    public ResponseEntity<List<PlataformaService.ItemLogAcao>> atividades(@PathVariable String slug, @RequestParam(value = "limite", defaultValue = "50") int limite, @RequestHeader(value = "X-Interno-Chave", required = false) String enviada) {
+        conferir(enviada);
+        return ResponseEntity.ok().header("Cache-Control", "no-store").body(servico.listarAtividades(servico.loja(slug), limite));
+    }
+
     private void conferir(String enviada) {
         if (chave.length() < 16) throw new ErroDeNegocio(HttpStatus.SERVICE_UNAVAILABLE, "Rota interna desligada: falta a chave INTERNO_CHAVE.");
         boolean ok = enviada != null && MessageDigest.isEqual(chave.getBytes(StandardCharsets.UTF_8), enviada.getBytes(StandardCharsets.UTF_8));

@@ -36,7 +36,7 @@ Regra de uso: toda funcionalidade nova pedida "para outro momento" entra aqui co
 **Cuidado:** é a mudança mais invasiva do backlog (toca todas as consultas). Fazer cedo é mais barato que tarde: cada módulo novo (5d financeiro/estoque, 5e mensagens) já deveria nascer com a coluna `teste`.
 **Dúvidas:** D1 "reverter" = tornar o lançamento real de novo (visível)? Ou desfazer/apagar? Estou assumindo "tornar visível"; apagar definitivo nunca. D2 Pix/WhatsApp reais ficam sempre desligados no modo teste (assumido).
 
-## B2. Log de ações dos usuários no Admin (pedido de 28/10)
+## B2. Log de ações dos usuários no Admin — **FEITO na v141 (02/11)** (pedido de 28/10)
 **Para que serve:** o Admin ver, por cliente, quem fez o quê e quando.
 **Já existe algo parecido?** Em parte: cada agendamento tem histórico (quem, quando, campo, de, para) e o Admin tem a linha do tempo das ações **do próprio Admin**. Não existe registro de ações dos usuários da loja em geral (login, cadastro de serviço, troca de equipe, cancelamentos...).
 **Como seria:** tabela `log_acao` no Agendz (loja, usuário, papel, ação, tipo e id do objeto, resumo sem dado pessoal, hora, origem normal/teste) gravada na mesma transação da ação; o Admin lê por rota interna. Retenção sugerida: 12 meses.

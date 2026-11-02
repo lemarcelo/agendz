@@ -345,4 +345,35 @@ public class PlataformaService {
             return new ReversaoHomologacao(qtd);
         });
     }
+
+    public record ItemLogAcao(UUID id, UUID usuarioId, String usuarioNome, String papel, String acao, String tipoObjeto, String objetoId, String resumo, String origem, boolean teste, Instant criadoEm) {
+    }
+
+    public List<ItemLogAcao> listarAtividades(Loja loja, int limite) {
+        int max = Math.min(Math.max(limite, 1), 200);
+        return banco.naLoja(loja.id(), j -> {
+            String sql = "select id, usuario_id, usuario_nome, papel, acao, tipo_objeto, objeto_id, resumo, origem, teste, criado_em from log_acao order by criado_em desc limit ?";
+            return j.query(sql, (rs, i) -> new ItemLogAcao(
+                    rs.getObject("id", UUID.class),
+                    rs.getObject("usuario_id", UUID.class),
+                    rs.getString("usuario_nome"),
+                    rs.getString("papel"),
+                    rs.getString("acao"),
+                    rs.getString("tipo_objeto"),
+                    rs.getString("objeto_id"),
+                    rs.getString("resumo"),
+                    rs.getString("origem"),
+                    rs.getBoolean("teste"),
+                    rs.getTimestamp("criado_em").toInstant()
+            ), max);
+        });
+    }
+
+    public void registrarLogAcao(Loja loja, UUID usuarioId, String usuarioNome, String papel, String acao, String tipoObjeto, String objetoId, String resumo, String origem, boolean teste) {
+        banco.naLoja(loja.id(), j -> {
+            j.update("insert into log_acao (loja_id, usuario_id, usuario_nome, papel, acao, tipo_objeto, objeto_id, resumo, origem, teste) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    loja.id(), usuarioId, usuarioNome, papel, acao, tipoObjeto, objetoId, resumo, origem == null ? "web" : origem, teste);
+            return null;
+        });
+    }
 }
