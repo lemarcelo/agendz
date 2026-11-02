@@ -53,7 +53,7 @@ test('todo arquivo de src/ tem o cabeçalho de direitos autorais (rode `npm run 
   const faltam = [];
   for (const rel of fs.readdirSync(path.join(raiz, 'src'), { recursive: true })) {
     if (!/\.(js|jsx|css)$/.test(rel)) continue;
-    if (!/^\/\* © \d{4} Marcelo — Agendz\. Todos os direitos reservados[^\n]*ref:[0-9a-f]{10} \*\/\n/.test(fs.readFileSync(path.join(raiz, 'src', rel), 'utf8'))) faltam.push(rel);
+    if (!/^\/\* © \d{4} Marcelo — Agendz\. Todos os direitos reservados[^\r\n]*ref:[0-9a-f]{10} \*\/\r?\n/.test(fs.readFileSync(path.join(raiz, 'src', rel), 'utf8'))) faltam.push(rel);
   }
   assert.deepEqual(faltam, []);
   assert.ok(fs.existsSync(path.join(raiz, 'LICENSE.md')));

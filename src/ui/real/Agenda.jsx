@@ -407,7 +407,9 @@ export default function Agenda({ ehProprio = false, ehDono = false, ehProprietar
         <Btn variante="primario" tamanho="sm" onClick={() => { if (semBox) { setSemBoxAberto(true); return; } setAtendendo(true); setAviso(''); }} disabled={atendendo || atendem.length === 0} data-testid="atender-abrir"><Icone n="plus" size={15} />Atender</Btn>
       </div>
       {semBox && semBoxAberto && <AvisoSemBox podeCadastrar={ehProprietario && !!aoIrBoxes} aoCadastrar={() => aoIrBoxes('boxes')} aoFechar={() => setSemBoxAberto(false)} />}
-      {atendendo && <Atender profissionais={atendem} equipe={profs} meuId={meuId} ehProprio={ehProprio} aoSalvar={atendeu} aoFechar={() => setAtendendo(false)} />}
+      {atendendo && <div className="atender-fundo-real" role="dialog" aria-modal="true" aria-label="Atender" data-testid="atender-janela" onKeyDown={(e) => { if (e.key === 'Escape') setAtendendo(false); }}>
+        <Atender profissionais={atendem} equipe={profs} meuId={meuId} ehProprio={ehProprio} aoSalvar={atendeu} aoFechar={() => setAtendendo(false)} />
+      </div>}
       {mostrarSeletor && (
         <div className="seletor-chips" role="group" aria-label={Rot('profissional')} data-testid="seletor-profissionais">
           <button type="button" className={`chip${selecionado === 'todos' ? ' on' : ''}`} aria-pressed={selecionado === 'todos'} onClick={() => setSelecionado('todos')} data-testid="sel-todos">Todos</button>

@@ -12,7 +12,7 @@ test('há catálogo para todos os tipos de estabelecimento (e só para eles)', (
 });
 
 test('os arquivos do back-end são iguais ao que os seeds geram (rode node tools/gerar-catalogo.mjs se falhar)', () => {
-  for (const t of TIPOS_DO_CATALOGO) assert.equal(readFileSync(caminhoDoCatalogo(t), 'utf8'), textoDoCatalogo(t), `catálogo de ${t} desatualizado`);
+  for (const t of TIPOS_DO_CATALOGO) assert.equal(readFileSync(caminhoDoCatalogo(t), 'utf8').replace(/\r\n/g, '\n'), textoDoCatalogo(t), `catálogo de ${t} desatualizado`);
 });
 
 test('cada item cabe nas regras do servidor (ServicoController): chaves únicas, preço e duração dentro do teto, portes conhecidos', () => {
