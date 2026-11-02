@@ -49,7 +49,7 @@ Regra de uso: toda funcionalidade nova pedida "para outro momento" entra aqui co
 **Para ficar à prova de erro (tarefa pequena, a fazer junto da A3):** (1) teste estático nos dois repositórios que **falha** se `agendz.io` aparecer fora desses padrões; (2) todo link montado (e-mail, WhatsApp, link de agendamento) sai de uma função única que lê `DOMINIO`; (3) roteiro de troca em `docs/TROCA-DE-DOMINIO.md`: criar os registros DNS (curinga das lojas e `admin`), mudar a variável `DOMINIO` nos três repositórios, redeploy, conferir `deploy/smoke-producao.sh`; lojas com domínio próprio não mudam; slugs continuam iguais.
 **Onde mexe: os dois**, mas só em configuração e testes, sem regra de negócio.
 
-## B4. reCAPTCHA no login e no autoatendimento do cliente — **CONFIRMADO por escrito em 31/10 13:36; entra junto do B10 (posição 6 da fila)**
+## B4. reCAPTCHA no login e no autoatendimento do cliente — **FEITO na v139 (02/11)** (confirmado por escrito em 31/10 13:36; entregue junto do B10 parte B)
 **O que é:** a partir da 7ª tentativa errada seguida, o login pede a caixa "Não sou um robô" (Google reCAPTCHA v2).
 **Rascunho pronto:** `docs/backlog/B4-recaptcha.patch` (servidor: `Recaptcha`, `LimiteDeLogin.exigeCaptcha/bloqueadoNoLogin`, `AuthController` com campo `captcha` e resposta **428**, `captchaChave` em `/api/publico/loja`, `application.yml`, compose, `CaptchaLoginTest`). Não compilado (Java só compila no CI). Falta: tela do site real (carregar o script do Google só quando vier o 428 ou a chave), simulação no Artifact (caixa "Não sou um robô" sem rede), teste e2e, `docs/MAPA-API-SPRING.md`, prompt vivo e CLAUDE.md.
 **Decisões já tomadas:** sem as chaves nada muda (bloqueio em 5 erros); com as chaves, captcha do 6º erro em diante e bloqueio duro só no 12º; a recusa do captcha não conta como senha errada; falha de rede com o Google = recusa (nunca libera).
@@ -91,7 +91,7 @@ Regra de uso: toda funcionalidade nova pedida "para outro momento" entra aqui co
 - **Fora:** nada de consultório (nem campos de saúde, convênio ou prontuário).
 - **A decidir na hora (sem perguntar):** campo extra por tipo só entra por `vocab`/capacidade, nunca `if (tipo === …)`; padrão do link continua "exige tudo"; a escolha automática nasce nos dois lados (`api.js` e servidor) com casos em `equivalencia/`.
 
-## B10. Limite de agendamentos pelo link por loja e proteção contra robô (conversa de 31/10 13:28 — **parte A feita (v137): limite configurável, sucesso sem gravar para robô, registro mínimo e contagem; parte B (reCAPTCHA) a fazer**)
+## B10. Limite de agendamentos pelo link por loja e proteção contra robô (conversa de 31/10 13:28 — **FEITO: parte A na v137 e parte B (reCAPTCHA) na v139**)
 - Ideia: em Estabelecimento, o proprietário define quantos agendamentos externos (pelo link) cabem; passou do limite o cliente recebe "sucesso" mas nada é salvo nem registrado.
 - Minha recomendação: cliente comum que passou do limite recebe mensagem honesta; "sucesso silencioso" só para sinais claros de robô; sempre um registro mínimo (data, loja, hash do telefone/IP, motivo; sem dado pessoal; apagado em 30 dias) e um contador para o proprietário.
 - Hoje já existe: freio por telefone (5/min), IP (20/10 min) e loja (120/10 min) em `LimitePublico`, máximo de 3 horários abertos por telefone. Falta: limite configurável, contador que sobrevive a reinício (hoje em memória), registro das tentativas barradas, campo escondido/tempo mínimo e conferir o IP real atrás do Caddy. reCAPTCHA segue em B4 (aguarda confirmação por escrito).

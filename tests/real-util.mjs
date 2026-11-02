@@ -23,7 +23,7 @@ export async function subirServidor(trata, estado = {}) {
       const json = (st, obj) => { res.writeHead(st, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); return true; };
       const u = new URL(req.url, 'http://x');
       if (u.pathname === '/') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); return res.end(pagina); }
-      const c = { m: req.method, u: u.pathname, q: u.search, corpo: corpo ? JSON.parse(corpo) : null };
+      const c = { m: req.method, u: u.pathname, q: u.search, h: req.headers, corpo: corpo ? JSON.parse(corpo) : null };
       chamadas.push(c);
       const f = estado.falhar;
       if (f && f.rota.test(u.pathname) && (!f.metodo || f.metodo === req.method)) {
@@ -31,9 +31,10 @@ export async function subirServidor(trata, estado = {}) {
         if (f.status === 'rede') return req.socket.destroy();
         return json(f.status, { mensagem: f.mensagem || `Erro ${f.status} do servidor.` });
       }
+      if (trata(c, { json, estado })) return;
       if (u.pathname === '/api/publico/loja') return json(200, estado.loja);
       if (u.pathname === '/api/auth/login') return json(200, estado.sessao);
-      if (!trata(c, { json, estado })) json(404, {});
+      json(404, {});
     });
   });
   await new Promise((r) => servidor.listen(0, '127.0.0.1', r));

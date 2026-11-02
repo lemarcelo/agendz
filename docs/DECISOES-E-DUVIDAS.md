@@ -1,4 +1,4 @@
-﻿# Decisões tomadas sem confirmação e possíveis dúvidas (28/10)
+# Decisões tomadas sem confirmação e possíveis dúvidas (28/10)
 
 Lista simples. Cada item está no histórico do `prompt-agendz-regras.md` (v84 a v86) com mais detalhe.
 
@@ -230,4 +230,8 @@ Lista simples. Cada item está no histórico do `prompt-agendz-regras.md` (v84 a
 - v137 (B10 A) — Decisão sem confirmação: "sucesso sem gravar" só para sinal claro de robô (isca, menos de 2 s, selo falso). O selo é o instante da abertura + HMAC da loja, devolvido no pedido (nada guardado no servidor); selo ausente não é sinal, para não punir página aberta antes da atualização.
 - v137 (B10 A) — Decisão sem confirmação: o registro de barrados guarda só hora, loja, hash de IP/telefone e motivo, no máximo um por IP+motivo por minuto, apagado em 30 dias; é gravado em transação independente para sobreviver ao erro.
 - v137 (B10 A) — Decisão sem confirmação: o Artifact só ganhou o limite configurável (demonstração); não simula o sucesso sem gravar. Contadores de frequência continuam em memória (zeram ao reiniciar o servidor).
-- 01/11 (v138, B11): aviso de avaliaÃ§Ã£o no link pelo token do agendamento no aparelho. DecisÃ£o sem confirmaÃ§Ã£o: reaproveita emitirAcesso gerando token seguro de avaliaÃ§Ã£o sem expor identidade, consulta periÃ³dica a cada 60 s em Meus agendamentos.
+- 01/11 (v138, B11): aviso de avaliação no link pelo token do agendamento no aparelho. Decisão sem confirmação: reaproveita `emitirAcesso` gerando token seguro de avaliação sem expor identidade, consulta periódica a cada 60 s em Meus agendamentos.
+- 02/11 (v139, B10 parte B / B4 — reCAPTCHA):
+  - Decisão sem confirmação: limites suaves no link público por IP antes do bloqueio duro (agendar: 6 por 10 min; `meus`: 20 por min; cancelar e remarcar: 8 por 10 min); o **telefone não entra no limite suave** (evita que alguém force captcha para o telefone de outra pessoa).
+  - Decisão sem confirmação: no login, com reCAPTCHA ativo, 5 erros seguidos passam a exigir captcha (428) e o bloqueio duro (429 por 15 min) fica no 12º erro; sem as chaves configuradas (`RECAPTCHA_CHAVE_SITE`/`RECAPTCHA_SEGREDO`), nada muda (continua bloqueando no 5º erro).
+  - Decisão sem confirmação: falha de rede com o Google = recusa (nunca libera); tentativa barrada por falta ou falha de captcha no link entra em `link_barrado` com motivo `captcha` (V46, exibido como `verificação não resolvida` na tela do link).

@@ -14,7 +14,6 @@ const SELO = '1730000000.' + 'c'.repeat(32);
 const LOJA = { slug: 'dalforno', nome: 'Dalforno', tipo: 'barbearia', logo: null, temaCor: null, temaCor2: null };
 
 function modelo() {
-  let consultasMeus = 0;
   const m = { statusAg: 'a_confirmar', ativo: true };
   m.trata = (c, { json }) => {
     if (c.u === '/api/publico/agendar') {
@@ -38,7 +37,6 @@ function modelo() {
       });
     }
     if (c.u === '/api/publico/meus' && c.m === 'POST') {
-      consultasMeus++;
       const concluido = m.statusAg === 'concluido';
       return json(200, [{
         id: AG_ID, inicio: '2026-10-30T12:00:00.000Z', fim: '2026-10-30T12:30:00.000Z',
@@ -67,18 +65,24 @@ async function fluxo(vp, modo) {
   const m = modelo();
   const srv = await subirServidor(m.trata, { loja: LOJA });
   const nav = await abrirNavegador();
-  const { p } = await nav.abrir(srv.url + '/#agendar', { viewport: vp, fonteLarga: vp.width < 700 });
+  const touch = vp.width < 700;
+  const ctx = await nav.b.newContext({ viewport: vp, hasTouch: touch, isMobile: touch, locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' });
+  await ctx.clock.setFixedTime(new Date('2026-10-28T10:00:00-03:00'));
+  const p = await ctx.newPage(); p.setDefaultTimeout(8000);
+  p.on('pageerror', (e) => nav.erros.push('PAGE: ' + e.message));
+  await p.goto(srv.url + '#agendar');
+  if (vp.width < 700) await p.addStyleTag({ content: '*{font-family:"DejaVu Sans" !important}' });
   await p.evaluate((x) => document.documentElement.setAttribute('data-theme', x === 'claro' ? 'light' : 'dark'), modo);
   const T = (t) => p.getByTestId(t);
 
   // 1. Faz um agendamento pelo link
-  await T(`pub-serv-${CORTE}`).click();
-  await T('pub-avancar').click();
-  await T('dh-dias').waitFor();
-  await p.locator('button.dh-slot').first().click();
-  await T('pub-avancar').click();
+  await T(`pub-srv-${CORTE}`).check();
+  await T('pub-continuar-1').click();
+  await T('pub-dia-2026-10-30').click();
+  await T('pub-hora-0900').click();
+  await T('pub-continuar-2').click();
   await T('pub-nome').fill('Cliente Teste');
-  await T('pub-tel').fill('11999998888');
+  await T('pub-tel').fill('53999000002');
   await T('pub-enviar').click();
 
   // 2. Confere aviso na tela final (pub-feito)
@@ -92,13 +96,12 @@ async function fluxo(vp, modo) {
   assert.ok(await T(`pub-ag-${AG_ID}`).isVisible(), `${rotulo}: agendamento aparece em Meus`);
 
   // O agendamento ainda está a confirmar, não deve ter o aviso de avaliar
-  assert.equal(await T(`pub-avaliar-${AG_ID}`).isVisible(), false);
+  assert.equal(await T(`pub-avaliar-${AG_ID}`).count(), 0);
 
   // 4. Servidor passa o agendamento para concluído e simula atualização periódica/visibilidade
   m.statusAg = 'concluido';
   m.ativo = false;
   await p.evaluate(() => {
-    // Dispara visibilidade para recarregar Meus
     document.dispatchEvent(new Event('visibilitychange'));
     window.dispatchEvent(new Event('focus'));
   });
@@ -115,15 +118,17 @@ async function fluxo(vp, modo) {
   assert.equal(hashAtual, `#avaliar/${TOKEN_AVALIAR}`, `${rotulo}: hash final correto`);
 
   await nav.semRolagem(p, `${rotulo}: sem rolagem lateral`);
-  await nav.fechar();
-  await srv.fechar();
+  assert.deepEqual(nav.erros, [], `${rotulo}: sem erro de página`);
+  await nav.b.close();
+  srv.fechar();
   ok(rotulo);
 }
 
 const celular = { width: 390, height: 844 };
-const desktop = { width: 1440, height: 900 };
+const desktop = { width: 1280, height: 860 };
 
 await fluxo(celular, 'claro');
 await fluxo(celular, 'escuro');
 await fluxo(desktop, 'claro');
 await fluxo(desktop, 'escuro');
+console.log('e2e116 ok');
