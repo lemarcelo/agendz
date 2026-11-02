@@ -701,7 +701,7 @@ export const agenda = {
   },
   // GET /api/agendamentos/{id}  (com o histórico: quem, quando, o quê)
   async obter(id) {
-    if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Agendamento não encontrado.' };
+    if (!ID.test(String(id)) || !/^[0-9a-f]{48}$/.test(String(token))) return { ok: false, status: 0, erro: 'Agendamento nÃ£o encontrado.' };
     const r = await chamar('GET', `/api/agendamentos/${id}`);
     return r.ok ? { ok: true, agendamento: lerAgendamento(r.dados) } : r;
   },
@@ -753,21 +753,21 @@ export const agenda = {
   },
   // PUT /api/agendamentos/{id}/status  { status }   (reativar confere o horário; confirmar cancela os "a confirmar" que o cobrem)
   async mudarStatus(id, status) {
-    if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Agendamento não encontrado.' };
+    if (!ID.test(String(id)) || !/^[0-9a-f]{48}$/.test(String(token))) return { ok: false, status: 0, erro: 'Agendamento nÃ£o encontrado.' };
     if (!STATUS_AGENDA.includes(status)) return { ok: false, status: 0, erro: 'Status inválido.' };
     const r = await chamar('PUT', `/api/agendamentos/${id}/status`, { status });
     return r.ok ? { ok: true, agendamento: lerAgendamento(r.dados) } : r;
   },
   // PUT /api/agendamentos/{id}/forma-pagamento  { formaPagamento }  (v119: futuro ou concluído, nunca cancelado; profissional só nos seus; só registra a escolha)
   async mudarFormaPagamento(id, forma) {
-    if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Agendamento não encontrado.' };
+    if (!ID.test(String(id)) || !/^[0-9a-f]{48}$/.test(String(token))) return { ok: false, status: 0, erro: 'Agendamento nÃ£o encontrado.' };
     if (!['pix', 'dinheiro', 'cartao'].includes(forma)) return { ok: false, status: 0, erro: 'Forma de pagamento inválida.' };
     const r = await chamar('PUT', `/api/agendamentos/${id}/forma-pagamento`, { formaPagamento: forma });
     return r.ok ? { ok: true, agendamento: lerAgendamento(r.dados) } : r;
   },
   // POST /api/agendamentos/{id}/cupom  { chave }  (só a confirmar ou confirmado; um cupom por horário; chave errada responde sempre a mesma mensagem e 5 seguidas bloqueiam por 15 min)
   async aplicarCupom(id, chave) {
-    if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Agendamento não encontrado.' };
+    if (!ID.test(String(id)) || !/^[0-9a-f]{48}$/.test(String(token))) return { ok: false, status: 0, erro: 'Agendamento nÃ£o encontrado.' };
     const c = typeof chave === 'string' ? chave.trim().slice(0, 40) : '';
     if (!c) return { ok: false, status: 0, erro: 'Informe a chave do cupom.' };
     const r = await chamar('POST', `/api/agendamentos/${id}/cupom`, { chave: c });
@@ -775,13 +775,13 @@ export const agenda = {
   },
   // DELETE /api/agendamentos/{id}/cupom  (retira o cupom e devolve o uso)
   async retirarCupom(id) {
-    if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Agendamento não encontrado.' };
+    if (!ID.test(String(id)) || !/^[0-9a-f]{48}$/.test(String(token))) return { ok: false, status: 0, erro: 'Agendamento nÃ£o encontrado.' };
     const r = await chamar('DELETE', `/api/agendamentos/${id}/cupom`);
     return r.ok ? { ok: true, agendamento: lerAgendamento(r.dados) } : r;
   },
   // PUT /api/agendamentos/{id}/remarcar  { inicio, profissionalId?, encaixe?, status? }   (concluído nunca; cancelado só junto com um status não cancelado)
   async remarcar(id, { inicio, profissionalId, encaixe, status, boxId } = {}) {
-    if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Agendamento não encontrado.' };
+    if (!ID.test(String(id)) || !/^[0-9a-f]{48}$/.test(String(token))) return { ok: false, status: 0, erro: 'Agendamento nÃ£o encontrado.' };
     const novo = soDia(inicio);
     if (!novo) return { ok: false, status: 0, erro: 'Informe a nova data e hora.' };
     const corpo = { inicio: novo };
@@ -1149,7 +1149,7 @@ export const comissoes = {
   },
   // POST /api/agendamentos/{id}/comissao/cancelar  { quem?, motivo }  (só o proprietário; motivo de 5 a 300 letras; comissão paga não se cancela)
   async cancelar(agendamentoId, { quem, motivo } = {}) {
-    if (!ID.test(String(agendamentoId ?? ''))) return { ok: false, status: 0, erro: 'Agendamento não encontrado.' };
+    if (!ID.test(String(id)) || !/^[0-9a-f]{48}$/.test(String(token))) return { ok: false, status: 0, erro: 'Agendamento nÃ£o encontrado.' };
     if (quem !== undefined && quem !== null && quem !== '' && !ID.test(String(quem))) return { ok: false, status: 0, erro: 'Pessoa inválida.' };
     const m = typeof motivo === 'string' ? motivo.trim() : '';
     if (m.length > 300) return { ok: false, status: 0, erro: 'O motivo pode ter até 300 letras.' };
@@ -1158,7 +1158,7 @@ export const comissoes = {
   },
   // POST /api/agendamentos/{id}/comissao/restaurar  { quem? }
   async restaurar(agendamentoId, { quem } = {}) {
-    if (!ID.test(String(agendamentoId ?? ''))) return { ok: false, status: 0, erro: 'Agendamento não encontrado.' };
+    if (!ID.test(String(id)) || !/^[0-9a-f]{48}$/.test(String(token))) return { ok: false, status: 0, erro: 'Agendamento nÃ£o encontrado.' };
     if (quem !== undefined && quem !== null && quem !== '' && !ID.test(String(quem))) return { ok: false, status: 0, erro: 'Pessoa inválida.' };
     const r = await chamar('POST', `/api/agendamentos/${agendamentoId}/comissao/restaurar`, quem ? { quem } : {});
     return r.ok ? { ok: true } : r;
@@ -1439,7 +1439,7 @@ export const publico = {
   },
   // POST /api/publico/agendamentos/{id}/cancelar  (cabeçalho X-Acesso: o token DESTE horário)
   async cancelar(id, token) {
-    if (!ID.test(String(id)) || !/^[0-9a-f]{48}$/.test(String(token))) return { ok: false, status: 0, erro: 'Agendamento não encontrado.' };
+    if (!ID.test(String(id)) || !/^[0-9a-f]{48}$/.test(String(token))) return { ok: false, status: 0, erro: 'Agendamento nÃ£o encontrado.' };
     const r = await chamar('POST', `/api/publico/agendamentos/${id}/cancelar`, undefined, undefined, { publico: true, cabecalhos: { 'X-Acesso': token } });
     return r.ok ? { ok: true, agendamento: lerResumoPublico(r.dados) } : r;
   },
@@ -1459,11 +1459,11 @@ export const publico = {
     // POST /api/publico/agendamentos/{id}/avaliacao  (cabecalho X-Acesso: token DESTE agendamento)    { avaliarToken }
   async obterTokenAvaliacao(id, token) {
     if (!ID.test(String(id)) || !/^[0-9a-f]{48}$/.test(String(token))) return { ok: false, status: 0, erro: 'Agendamento nÃ£o encontrado.' };
-    const r = await chamar('POST', /api/publico/agendamentos/ + id + /avaliacao, undefined, undefined, { publico: true, cabecalhos: { 'X-Acesso': token } });
+    const r = await chamar('POST', `/api/publico/agendamentos/${id}/avaliacao`, undefined, undefined, { publico: true, cabecalhos: { 'X-Acesso': token } });
     return r.ok && r.dados && typeof r.dados.avaliarToken === 'string' ? { ok: true, avaliarToken: r.dados.avaliarToken } : r;
   },
   async remarcar(id, token, inicio) {
-    if (!ID.test(String(id)) || !/^[0-9a-f]{48}$/.test(String(token))) return { ok: false, status: 0, erro: 'Agendamento não encontrado.' };
+    if (!ID.test(String(id)) || !/^[0-9a-f]{48}$/.test(String(token))) return { ok: false, status: 0, erro: 'Agendamento nÃ£o encontrado.' };
     if (!Number.isFinite(inicio)) return { ok: false, status: 0, erro: 'Escolha um dia e um horário.' };
     const r = await chamar('POST', `/api/publico/agendamentos/${id}/remarcar`, { inicio: new Date(inicio).toISOString() }, undefined, { publico: true, cabecalhos: { 'X-Acesso': token } });
     return r.ok ? { ok: true, agendamento: lerResumoPublico(r.dados) } : r;
