@@ -1,8 +1,10 @@
 package br.com.agendz.publico;
 
+import br.com.agendz.tenant.LojaContext;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
@@ -28,8 +30,10 @@ public class LinkPublicoController {
     }
 
     private final LinkPublicoService servico;
+    private final CaptchaDoLink captcha;
 
-    public LinkPublicoController(LinkPublicoService servico) {
+    public LinkPublicoController(LinkPublicoService servico, CaptchaDoLink captcha) {
+        this.captcha = captcha;
         this.servico = servico;
     }
 
@@ -55,19 +59,22 @@ public class LinkPublicoController {
 
     /** POST /api/publico/agendamentos: pede um horário (entra a confirmar). Devolve o resumo e o token de acesso, uma vez. */
     @PostMapping("/api/publico/agendamentos")
-    public ResponseEntity<LinkPublicoService.Criado> agendar(@Valid @RequestBody LinkPublicoService.Pedido pedido, HttpServletRequest req) {
+    public ResponseEntity<LinkPublicoService.Criado> agendar(@Valid @RequestBody LinkPublicoService.Pedido pedido, @RequestHeader(value = "X-Captcha", required = false) @Size(max = 4096) String prova, HttpServletRequest req) {
+        captcha.exigirSeSuspeito(LojaContext.exigir(), ip(req), "agendar-ip", 6, Duration.ofMinutes(10), prova);
         return ResponseEntity.status(HttpStatus.CREATED).body(servico.agendar(ip(req), pedido));
     }
 
     /** POST /api/publico/meus: os horários a que os tokens dão acesso (POST só para o token não ir na URL). */
     @PostMapping("/api/publico/meus")
-    public List<LinkPublicoService.Resumo> meus(@Valid @RequestBody Tokens corpo, HttpServletRequest req) {
+    public List<LinkPublicoService.Resumo> meus(@Valid @RequestBody Tokens corpo, @RequestHeader(value = "X-Captcha", required = false) @Size(max = 4096) String prova, HttpServletRequest req) {
+        captcha.exigirSeSuspeito(LojaContext.exigir(), ip(req), "meus", 20, Duration.ofMinutes(1), prova);
         return servico.meus(ip(req), corpo.tokens());
     }
 
     /** POST /api/publico/agendamentos/{id}/cancelar (cabeçalho X-Acesso): cancela só com 24 h ou mais de antecedência. */
     @PostMapping("/api/publico/agendamentos/{id}/cancelar")
-    public LinkPublicoService.Resumo cancelar(@PathVariable UUID id, @RequestHeader(value = "X-Acesso", required = false) String token, HttpServletRequest req) {
+    public LinkPublicoService.Resumo cancelar(@PathVariable UUID id, @RequestHeader(value = "X-Acesso", required = false) String token, @RequestHeader(value = "X-Captcha", required = false) @Size(max = 4096) String prova, HttpServletRequest req) {
+        captcha.exigirSeSuspeito(LojaContext.exigir(), ip(req), "cancelar", 8, Duration.ofMinutes(10), prova);
         return servico.cancelar(ip(req), id, token);
     }
 
@@ -91,7 +98,8 @@ public class LinkPublicoController {
     /** POST /api/publico/agendamentos/{id}/remarcar (cabeçalho X-Acesso, corpo {inicio}): remarca só com 24 h ou mais; volta a "a confirmar". */
     @PostMapping("/api/publico/agendamentos/{id}/remarcar")
     public LinkPublicoService.Resumo remarcar(@PathVariable UUID id, @RequestHeader(value = "X-Acesso", required = false) String token,
-                                              @Valid @RequestBody NovoHorario corpo, HttpServletRequest req) {
+                                              @Valid @RequestBody NovoHorario corpo, @RequestHeader(value = "X-Captcha", required = false) @Size(max = 4096) String prova, HttpServletRequest req) {
+        captcha.exigirSeSuspeito(LojaContext.exigir(), ip(req), "remarcar", 8, Duration.ofMinutes(10), prova);
         return servico.remarcar(ip(req), id, token, corpo.inicio());
     }
 

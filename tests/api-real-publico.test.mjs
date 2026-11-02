@@ -1,9 +1,9 @@
-﻿/* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
+/* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
 // Link do cliente no site real (src/services/api-real.js, `publico.*` e `linkAgendamento`): rotas e corpos, rota pública nunca leva o token do painel,
 // o token de acesso vai no cabeçalho (cancelar) ou no corpo (meus) e nunca na URL, entrada ruim nem sai do cliente e a leitura é defensiva.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { avisos, configurar, entrar, linkAgendamento, publico } from '../src/services/api-real.js';
+import { avisos, carregarLoja, configurar, entrar, linkAgendamento, publico } from '../src/services/api-real.js';
 
 const SRV = '00000000-0000-4000-8000-000000000050';
 const PROF = '00000000-0000-4000-8000-000000000001';
@@ -143,7 +143,7 @@ test('linkAgendamento: pendências (o que falta para o cliente ver horários) s�
 test('linkAgendamento: GET e PUT do proprietário; dias fora de 1 a 60 nem saem', async () => {
   servidor({ ativo: false, diasMax: 14, disponivel: false });
   const r = await linkAgendamento.obter();
-  assert.deepEqual(r.link, { ativo: false, diasMax: 14, disponivel: false, telefoneObrigatorio: true, nomeObrigatorio: true, veiculoObrigatorio: ['placa', 'modelo', 'porte'], pendencias: [], limiteAbertos: 3, barrados: { total: 0, porMotivo: { limite_cliente: 0, isca: 0, rapido: 0, selo_invalido: 0, frequencia: 0 } } }, 'telefone, nome e dados do veículo obrigatórios de fábrica; limite 3 e contagem de barrados');
+  assert.deepEqual(r.link, { ativo: false, diasMax: 14, disponivel: false, telefoneObrigatorio: true, nomeObrigatorio: true, veiculoObrigatorio: ['placa', 'modelo', 'porte'], pendencias: [], limiteAbertos: 3, barrados: { total: 0, porMotivo: { limite_cliente: 0, isca: 0, rapido: 0, selo_invalido: 0, frequencia: 0, captcha: 0 } } }, 'telefone, nome e dados do veículo obrigatórios de fábrica; limite 3 e contagem de barrados');
   assert.deepEqual([chamadas[0].metodo, chamadas[0].url], ['GET', 'https://loja.teste/api/estabelecimento/link-agendamento']);
   servidor({ ativo: true, diasMax: 20, disponivel: true });
   const g = await linkAgendamento.gravar({ ativo: true, diasMax: 20 });
@@ -262,4 +262,48 @@ test('obterTokenAvaliacao: token vai no cabecalho X-Acesso e rota publica sem to
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test('reCAPTCHA (B10 parte B): captchaChave na loja, campo captcha no login e cabecalho X-Captcha nas rotas publicas', async () => {
+  const chaveBoa = '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI';
+  servidor({ slug: 'apex', nome: 'Apex', tipo: 'estetica_automotiva', captchaChave: chaveBoa });
+  assert.equal((await carregarLoja()).loja.captchaChave, chaveBoa);
+  servidor({ slug: 'apex', nome: 'Apex', tipo: 'estetica_automotiva', captchaChave: 'curta' });
+  assert.equal((await carregarLoja()).loja.captchaChave, '');
+  servidor({ slug: 'apex', nome: 'Apex', tipo: 'estetica_automotiva', captchaChave: '<script>'.repeat(4) });
+  assert.equal((await carregarLoja()).loja.captchaChave, '');
+
+  servidor({ token: 'jwt-1', id: PROF, nome: 'Dono', papel: 'dono' });
+  await entrar({ identificador: 'dono', senha: '123', captcha: 'prova-login' });
+  assert.equal(chamadas[0].corpo.captcha, 'prova-login');
+  servidor({ token: 'jwt-1', id: PROF, nome: 'Dono', papel: 'dono' });
+  await entrar({ identificador: 'dono', senha: '123', captcha: '' });
+  assert.ok(!('captcha' in chamadas[0].corpo));
+
+  const inicio = Date.parse('2026-11-03T12:00:00Z');
+  const resumo = { id: AG, inicio: '2026-11-03T12:00:00Z', fim: '2026-11-03T12:30:00Z', status: 'a_confirmar', rotulo: 'x', servicos: ['Corte'], duracao: 30, total: 40, profissional: 'Ana', ativo: true, podeCancelar: true };
+
+  servidor({ agendamento: resumo, token: TOKEN }, 201);
+  await publico.agendar({ nome: 'Maria', telefone: '53999000001', servicoIds: [SRV], inicio, captcha: 'prova-agendar' });
+  assert.equal(chamadas[0].cab['X-Captcha'], 'prova-agendar');
+  servidor({ agendamento: resumo, token: TOKEN }, 201);
+  await publico.agendar({ nome: 'Maria', telefone: '53999000001', servicoIds: [SRV], inicio, captcha: '' });
+  assert.equal(chamadas[0].cab['X-Captcha'], undefined);
+
+  servidor([resumo]);
+  await publico.meus([TOKEN], 'prova-meus');
+  assert.equal(chamadas[0].cab['X-Captcha'], 'prova-meus');
+  servidor([resumo]);
+  await publico.meus([TOKEN], 'x'.repeat(5000));
+  assert.equal(chamadas[0].cab['X-Captcha'], undefined);
+
+  servidor(resumo);
+  await publico.cancelar(AG, TOKEN, 'prova-cancelar');
+  assert.equal(chamadas[0].cab['X-Captcha'], 'prova-cancelar');
+  assert.equal(chamadas[0].cab['X-Acesso'], TOKEN);
+
+  servidor(resumo);
+  await publico.remarcar(AG, TOKEN, inicio, 'prova-remarcar');
+  assert.equal(chamadas[0].cab['X-Captcha'], 'prova-remarcar');
+  assert.equal(chamadas[0].cab['X-Acesso'], TOKEN);
 });

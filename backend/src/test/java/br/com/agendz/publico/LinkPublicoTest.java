@@ -63,6 +63,8 @@ class LinkPublicoTest extends BaseApi {
     private LimitePublico limitePublico;
     @Autowired
     br.com.agendz.cifra.Cifra cifra;
+    @Autowired
+    br.com.agendz.auth.Recaptcha recaptcha;
 
     @BeforeEach
     void preparar() throws Exception {
@@ -81,6 +83,11 @@ class LinkPublicoTest extends BaseApi {
         int n = SEQ.incrementAndGet();
         ip = "10.20." + (n / 250) + "." + (n % 250);
         telefone = 0;
+    }
+
+    @AfterEach
+    void desligarCaptcha() {
+        recaptcha.desligarTeste("");
     }
 
     @AfterEach
@@ -398,6 +405,42 @@ class LinkPublicoTest extends BaseApi {
         pedir(OFFBOX, corpo("Ana Lima", novoTelefone(), s, as(dia, 9, 0), ",\"selo\":\"" + seloDe(30) + "\"")).andExpect(status().isCreated());
         pedir(OFFBOX, corpo("Bia Lima", novoTelefone(), s, as(dia, 9, 30), "")).andExpect(status().isCreated());
         assertEquals(2, contar("select count(*) from agendamento"));
+    }
+
+    @Test
+    void oAutoatendimentoSoPedeCaptchaQuandoOIpJaPediuDemaisEFaltaProvaNaoGravaNada() throws Exception {
+        recaptcha.ligarParaTeste("chave-publica-de-teste", "prova-boa"::equals);
+        // os 6 primeiros pedidos do IP passam sem prova (nunca no primeiro pedido)
+        for (int i = 0; i < 6; i++) agendar(i, "");
+        int agendamentos = contar("select count(*) from agendamento");
+        String extra = corpo("Maria Souza", novoTelefone(), "\"" + corte + "\"", as(dia.plusDays(1), 9, 0), "");
+        mvc.perform(doCliente(post("/api/publico/agendamentos")).with(host(OFFBOX)).contentType(MediaType.APPLICATION_JSON).content(extra))
+                .andExpect(status().isPreconditionRequired()).andExpect(jsonPath("$.mensagem").value("Confirme que você não é um robô para continuar."));
+        mvc.perform(doCliente(post("/api/publico/agendamentos")).with(host(OFFBOX)).header("X-Captcha", "prova-ruim").contentType(MediaType.APPLICATION_JSON).content(extra))
+                .andExpect(status().isPreconditionRequired());
+        assertEquals(agendamentos, contar("select count(*) from agendamento"), "sem prova nada é gravado");
+        assertEquals(1, contar("select count(*) from link_barrado where motivo = 'captcha'"));
+        mvc.perform(doCliente(post("/api/publico/agendamentos")).with(host(OFFBOX)).header("X-Captcha", "prova-boa").contentType(MediaType.APPLICATION_JSON).content(extra))
+                .andExpect(status().isCreated());
+        assertEquals(agendamentos + 1, contar("select count(*) from agendamento"));
+    }
+
+    @Test
+    void semAsChavesDoGoogleOAutoatendimentoNaoMudaNada() throws Exception {
+        recaptcha.desligarTeste("");
+        for (int i = 0; i < 6; i++) agendar(i, "");
+        for (int i = 0; i < 2; i++) pedir(OFFBOX, corpo("Maria Souza", novoTelefone(), "\"" + corte + "\"", as(dia.plusDays(1), 9, 0).plusSeconds(i * 1800L), "")).andExpect(status().isCreated());
+        assertEquals(0, contar("select count(*) from link_barrado where motivo = 'captcha'"));
+    }
+
+    @Test
+    void cancelarEMeusTambemPedemCaptchaDepoisDeMuitosPedidosDoMesmoIp() throws Exception {
+        recaptcha.ligarParaTeste("chave-publica-de-teste", "prova-boa"::equals);
+        String qualquer = UUID.randomUUID().toString();
+        for (int i = 0; i < 8; i++) cancelar(OFFBOX, qualquer, "a".repeat(48)).andExpect(status().is(org.hamcrest.Matchers.not(428)));
+        cancelar(OFFBOX, qualquer, "a".repeat(48)).andExpect(status().isPreconditionRequired());
+        mvc.perform(doCliente(post("/api/publico/agendamentos/" + qualquer + "/cancelar")).with(host(OFFBOX)).header("X-Acesso", "a".repeat(48)).header("X-Captcha", "prova-boa"))
+                .andExpect(status().is(org.hamcrest.Matchers.not(428)));
     }
 
     @Test

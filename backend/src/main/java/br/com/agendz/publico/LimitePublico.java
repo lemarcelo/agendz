@@ -39,6 +39,18 @@ public class LimitePublico {
         }
     }
 
+    /** Quantos pedidos a chave já fez na janela, sem contar um novo (usado para decidir se o autoatendimento pede o reCAPTCHA). */
+    public int quantos(String chave, Duration janela) {
+        Deque<Instant> fila = pedidos.get(chave);
+        if (fila == null) return 0;
+        Instant corte = Instant.now(relogio).minus(janela);
+        synchronized (fila) {
+            int n = 0;
+            for (Instant t : fila) if (!t.isBefore(corte)) n++;
+            return n;
+        }
+    }
+
     /** Zera todas as contagens (uso dos testes: o limite é compartilhado entre eles). */
     public void reiniciar() {
         pedidos.clear();

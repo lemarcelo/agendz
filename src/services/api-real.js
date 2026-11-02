@@ -112,7 +112,7 @@ export async function carregarLoja() {
   const r = await chamar('GET', '/api/publico/loja');
   if (!r.ok) return { ok: false, status: r.status, erro: r.status === 404 ? 'Loja não encontrada' : r.erro };
   const d = r.dados || {};
-  return { ok: true, loja: { slug: texto(d.slug, 40), nome: texto(d.nome, 120), tipo: texto(d.tipo, 40), logo: typeof d.logo === 'string' ? d.logo : null, temaCor: texto(d.temaCor, 9) || null, temaCor2: texto(d.temaCor2, 9) || null } };
+  return { ok: true, loja: { slug: texto(d.slug, 40), nome: texto(d.nome, 120), tipo: texto(d.tipo, 40), logo: typeof d.logo === 'string' ? d.logo : null, temaCor: texto(d.temaCor, 9) || null, temaCor2: texto(d.temaCor2, 9) || null, captchaChave: /^[A-Za-z0-9_-]{20,80}$/.test(String(d.captchaChave)) ? d.captchaChave : '' } };
 }
 
 function guardarSessao(d) {
@@ -123,11 +123,11 @@ function guardarSessao(d) {
 }
 
 // POST /api/auth/login
-export async function entrar({ identificador, senha, loginAutomatico = false }) {
+export async function entrar({ identificador, senha, loginAutomatico = false, captcha = '' }) {
   const id = String(identificador ?? '').trim();
   const sn = String(senha ?? '');
   if (!id || !sn) return { ok: false, status: 0, erro: 'Informe o usuário e a senha' };
-  const r = await chamar('POST', '/api/auth/login', { identificador: id.slice(0, 60), senha: sn.slice(0, 100), ...(loginAutomatico === true ? { loginAutomatico: true } : {}) });
+  const r = await chamar('POST', '/api/auth/login', { identificador: id.slice(0, 60), senha: sn.slice(0, 100), ...(loginAutomatico === true ? { loginAutomatico: true } : {}), ...(typeof captcha === 'string' && captcha && captcha.length <= 4096 ? { captcha } : {}) });
   if (!r.ok) return r;
   if (!guardarSessao(r.dados)) return { ok: false, status: 502, erro: mensagemPadrao(500) };
   return { ok: true, sessao: sessaoAtual() };
@@ -1228,7 +1228,7 @@ const lerLink = (d) => {
     barrados: lerBarrados(d.barrados) };
 };
 // B10: só contagens dos pedidos que o link barrou nos últimos 30 dias (nunca IP, telefone ou hash)
-const MOTIVOS_BARRADO = ['limite_cliente', 'isca', 'rapido', 'selo_invalido', 'frequencia'];
+const MOTIVOS_BARRADO = ['limite_cliente', 'isca', 'rapido', 'selo_invalido', 'frequencia', 'captcha'];
 function lerBarrados(b) {
   b = b && typeof b === 'object' ? b : {};
   const por = b.porMotivo && typeof b.porMotivo === 'object' ? b.porMotivo : {};
@@ -1354,6 +1354,7 @@ export const marca = {
 // Rotas do cliente final (SEM login; a loja vem do endereço). O token de acesso a um horário vem na resposta do pedido, UMA vez; quem guarda é a página
 // (localStorage do aparelho do cliente, dentro de try/catch). Nada aqui usa o token do painel.
 const PUB = { publico: true };
+const comProva = (opcoes, captcha) => (typeof captcha === 'string' && captcha && captcha.length <= 4096 ? { ...opcoes, cabecalhos: { ...(opcoes.cabecalhos || {}), 'X-Captcha': captcha } } : opcoes);
 const IDV = (v) => (ID.test(String(v)) ? String(v) : '');
 const inteiroOuZero = (v) => (Number.isInteger(v) && v >= 0 ? v : 0);
 const ID_PORTE = /^[a-z0-9-]{2,24}$/; // portes cadastrados pelo dono (v122): ids dos de fábrica (medio, suv…) e gerados pelo servidor
@@ -1413,7 +1414,7 @@ export const publico = {
     return r.ok ? { ok: true, horarios: listaDe(r.dados, 100).filter((x) => x && instante(x.inicio) !== null && IDV(x.profissionalId)).map((x) => ({ inicio: instante(x.inicio), profissionalId: x.profissionalId })) } : r;
   },
   // POST /api/publico/agendamentos  { nome, telefone, servicoIds, inicio, profissionalId?, cupomChave?, veiculo?, site }  → { agendamento, token, usouPlano }
-  async agendar({ nome, telefone, servicoIds, inicio, profissionalId, cupomChave, veiculo, site, selo }) {
+  async agendar({ nome, telefone, servicoIds, inicio, profissionalId, cupomChave, veiculo, site, selo, captcha }) {
     if (!Number.isFinite(inicio)) return { ok: false, status: 0, erro: 'Escolha um dia e um horário.' };
     const corpo = { nome: texto(nome, 100), telefone: texto(telefone, 30), servicoIds: Array.isArray(servicoIds) ? servicoIds.filter((x) => ID.test(String(x))).slice(0, 10) : [], inicio: new Date(inicio).toISOString() };
     if (ID.test(String(profissionalId))) corpo.profissionalId = profissionalId;
@@ -1425,22 +1426,22 @@ export const publico = {
       if (typeof veiculo.marca === 'string' && veiculo.marca.trim()) corpo.veiculo.marca = texto(veiculo.marca, 60);
       if (typeof veiculo.cor === 'string' && veiculo.cor.trim()) corpo.veiculo.cor = texto(veiculo.cor, 40);
     }
-    const r = await chamar('POST', '/api/publico/agendamentos', corpo, undefined, PUB);
+    const r = await chamar('POST', '/api/publico/agendamentos', corpo, undefined, comProva(PUB, captcha));
     if (!r.ok) return r;
     const token = r.dados && typeof r.dados.token === 'string' && /^[0-9a-f]{48}$/.test(r.dados.token) ? r.dados.token : '';
     return { ok: true, agendamento: lerResumoPublico(r.dados && r.dados.agendamento), token, usouPlano: !!(r.dados && r.dados.usouPlano === true) };
   },
   // POST /api/publico/meus  { tokens }  → [resumo]   (o token vai no corpo, nunca na URL)
-  async meus(tokens) {
+  async meus(tokens, captcha) {
     const lista = (Array.isArray(tokens) ? tokens : []).filter((t) => /^[0-9a-f]{48}$/.test(String(t))).slice(0, 10);
     if (!lista.length) return { ok: true, agendamentos: [] };
-    const r = await chamar('POST', '/api/publico/meus', { tokens: lista }, undefined, PUB);
+    const r = await chamar('POST', '/api/publico/meus', { tokens: lista }, undefined, comProva(PUB, captcha));
     return r.ok ? { ok: true, agendamentos: listaDe(r.dados, 20).map(lerResumoPublico).filter((a) => a.id && a.inicio !== null) } : r;
   },
   // POST /api/publico/agendamentos/{id}/cancelar  (cabeçalho X-Acesso: o token DESTE horário)
-  async cancelar(id, token) {
+  async cancelar(id, token, captcha) {
     if (!ID.test(String(id)) || !/^[0-9a-f]{48}$/.test(String(token))) return { ok: false, status: 0, erro: 'Agendamento não encontrado.' };
-    const r = await chamar('POST', `/api/publico/agendamentos/${id}/cancelar`, undefined, undefined, { publico: true, cabecalhos: { 'X-Acesso': token } });
+    const r = await chamar('POST', `/api/publico/agendamentos/${id}/cancelar`, undefined, undefined, comProva({ publico: true, cabecalhos: { 'X-Acesso': token } }, captcha));
     return r.ok ? { ok: true, agendamento: lerResumoPublico(r.dados) } : r;
   },
   // GET /api/publico/agendamentos/{id}/dias?de=AAAA-MM-DD&dias=14  (cabeçalho X-Acesso)  → ['AAAA-MM-DD', ...]: dias com horário livre para REMARCAR este horário
@@ -1455,11 +1456,17 @@ export const publico = {
     const r = await chamar('GET', `/api/publico/agendamentos/${id}/horarios?data=${data}`, undefined, undefined, { publico: true, cabecalhos: { 'X-Acesso': token } });
     return r.ok ? { ok: true, horarios: listaDe(r.dados, 100).filter((x) => x && instante(x.inicio) !== null && IDV(x.profissionalId)).map((x) => ({ inicio: instante(x.inicio), profissionalId: x.profissionalId })) } : r;
   },
+  // POST /api/publico/agendamentos/{id}/avaliacao  (cabeçalho X-Acesso: token DESTE agendamento)    { avaliarToken }
+  async obterTokenAvaliacao(id, token) {
+    if (!ID.test(String(id ?? '')) || !/^[0-9a-f]{48}$/.test(String(token ?? ''))) return { ok: false, status: 0, erro: 'Agendamento não encontrado.' };
+    const r = await chamar('POST', '/api/publico/agendamentos/' + id + '/avaliacao', undefined, undefined, { publico: true, cabecalhos: { 'X-Acesso': token } });
+    return r.ok && r.dados && typeof r.dados.avaliarToken === 'string' ? { ok: true, avaliarToken: r.dados.avaliarToken } : r;
+  },
   // POST /api/publico/agendamentos/{id}/remarcar  { inicio }  (cabeçalho X-Acesso): só com 24 h ou mais; o horário volta a "a confirmar"
-  async remarcar(id, token, inicio) {
+  async remarcar(id, token, inicio, captcha) {
     if (!ID.test(String(id)) || !/^[0-9a-f]{48}$/.test(String(token))) return { ok: false, status: 0, erro: 'Agendamento não encontrado.' };
     if (!Number.isFinite(inicio)) return { ok: false, status: 0, erro: 'Escolha um dia e um horário.' };
-    const r = await chamar('POST', `/api/publico/agendamentos/${id}/remarcar`, { inicio: new Date(inicio).toISOString() }, undefined, { publico: true, cabecalhos: { 'X-Acesso': token } });
+    const r = await chamar('POST', `/api/publico/agendamentos/${id}/remarcar`, { inicio: new Date(inicio).toISOString() }, undefined, comProva({ publico: true, cabecalhos: { 'X-Acesso': token } }, captcha));
     return r.ok ? { ok: true, agendamento: lerResumoPublico(r.dados) } : r;
   },
   // GET /api/publico/avaliacoes  (cabeçalho X-Acesso: o token pessoal do atendimento, que vem do FRAGMENTO da página, nunca da URL)

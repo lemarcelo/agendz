@@ -37,6 +37,8 @@ services:
       ADMIN_INTERNO_URL: http://admin-api:8080   # chamados do Suporte (Admin API na mesma rede); sem o Admin no ar o Suporte responde 503
       AGENDZ_DOMINIOS_BASE: ${DOMINIO}
       AGENDZ_PERMITIR_QUERY: "false"
+      RECAPTCHA_CHAVE_SITE: ${RECAPTCHA_CHAVE_SITE:-}   # reCAPTCHA v2 (login e autoatendimento); vazio = desligado
+      RECAPTCHA_SEGREDO: ${RECAPTCHA_SEGREDO:-}
     # sem ports: só o Caddy fala com a API (reverse_proxy api:8080)
 
 volumes:
