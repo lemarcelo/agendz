@@ -1,4 +1,4 @@
-/* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
+﻿/* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
 // Página do cliente no site real (#agendar), SEM login (5e-1): escolhe serviço e profissional, vê só horários livres, pede o horário com nome e telefone
 // (cupom opcional) e acompanha ou cancela o que é dele. Fala só com `publico.*` de api-real.js (GET/POST /api/publico/*); a regra toda (horário livre,
 // expediente, 24 h para cancelar, limite de 3 abertos, cupom) está no servidor. O acesso a cada horário é um token que a resposta do pedido entrega UMA vez;
@@ -190,6 +190,7 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
         {feito.usouPlano && <p data-testid="pub-feito-plano"><Icone n="ticket" size={14} /> Este horário usa um atendimento do seu plano.</p>}
         {feito.desconto > 0 && <p data-testid="pub-feito-cupom"><Icone n="key" size={14} /> Cupom {feito.cupom}: −{fmtMoney(feito.desconto)} · a pagar {fmtMoney(feito.total - feito.desconto)}</p>}
         <p className="muted">{loja.nome} vai confirmar o seu horário. Você acompanha em “Meus agendamentos” neste aparelho.</p>
+        <p className="muted" data-testid="pub-feito-avaliar">Depois do atendimento vocÃª poderÃ¡ avaliar por aqui, em Meus agendamentos.</p>
         <div className="pub-linha">
           <Btn onClick={irParaMeus} data-testid="pub-ver-meus">Ver meus agendamentos</Btn>
           <Btn variante="fantasma" onClick={recomecar} data-testid="pub-novo">Agendar outro</Btn>
