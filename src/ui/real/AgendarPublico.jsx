@@ -1,4 +1,3 @@
-﻿import { useAtualizacaoAutomatica } from './atualizar.js';
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
 // Página do cliente no site real (#agendar), SEM login (5e-1): escolhe serviço e profissional, vê só horários livres, pede o horário com nome e telefone
 // (cupom opcional) e acompanha ou cancela o que é dele. Fala só com `publico.*` de api-real.js (GET/POST /api/publico/*); a regra toda (horário livre,
@@ -6,6 +5,7 @@
 // ele fica só neste aparelho (localStorage, dentro de try/catch: sem storage a página funciona, só não lembra dos horários na próxima visita).
 // Remarcar entrou na 5e-2 (24 h ou mais, como cancelar). Estética (v104): primeiro o veículo (placa, modelo, porte), que define preço e duração, e o horário só existe com profissional e box livres. Código por telefone e lembretes ficam para a 5e-3.
 // Não importa `api.js`, `hooks.js` nem `common.jsx` (tests/estatico.test.mjs).
+import { useAtualizacaoAutomatica } from './atualizar.js';
 import { caminhoHttps } from '../../domain/localizacao.js';
 import { adicionarReserva, lerReservas, limparReservas, removerReserva, sincronizarReservas } from '../../domain/reservas-local.js';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -16,6 +16,7 @@ import { Rot, capAtiva, rot } from '../../domain/tipos.js';
 import { PORTE_PADRAO, formatarPlaca, limparVeiculoComRegras, placaValida, tipoPlaca } from '../../domain/veiculos.js';
 import { logoValida } from '../../domain/tema.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
+import { useCaptcha } from './Captcha.jsx';
 
 // Datas sempre no fuso da loja (Brasília), não no do aparelho: o servidor entrega dias "AAAA-MM-DD" e horários em instantes.
 const FUSO = 'America/Sao_Paulo';
@@ -139,6 +140,7 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
   const [enviando, setEnviando] = useState(false);
   const [feito, setFeito] = useState(null);
   const [usaPlano, setUsaPlano] = useState(false); // o telefone é de quem tem plano com corte para este horário (só sim ou não)
+  const cap = useCaptcha(loja.captchaChave);
   const servicos = pagina.servicos.filter((x) => srv.includes(x.id));
   const preco = (x) => (usaVeiculo ? x.precos[porte || PORTE_PADRAO] ?? x.preco : x.preco); // sem porte (dono tirou a obrigatoriedade) vale o médio
   const minutos = (x) => (usaVeiculo ? x.duracoes[porte || PORTE_PADRAO] ?? x.duracao : x.duracao);
@@ -169,9 +171,11 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
   const enviar = async () => {
     if (enviando) return;
     setErro(''); setEnviando(true);
-    const r = await publico.agendar({ nome, telefone: tel, servicoIds: srv, profissionalId: escolha?.profissionalId || barb, inicio: escolha?.inicio, cupomChave: cupom, site: isca, selo: pagina.selo, ...(usaVeiculo ? { veiculo: { placa, marca, modelo, cor, porte } } : {}) });
+    const r = await publico.agendar({ nome, telefone: tel, servicoIds: srv, profissionalId: escolha?.profissionalId || barb, inicio: escolha?.inicio, cupomChave: cupom, site: isca, selo: pagina.selo, captcha: cap.prova, ...(usaVeiculo ? { veiculo: { placa, marca, modelo, cor, porte } } : {}) });
+    cap.gasta();
     setEnviando(false);
     if (!r.ok) {
+      cap.verificar(r);
       setErro(r.erro);
       if (r.status === 409 && /ocupado/.test(r.erro)) { setEscolha(null); setEtapa(2); }
       return;
@@ -191,7 +195,7 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
         {feito.usouPlano && <p data-testid="pub-feito-plano"><Icone n="ticket" size={14} /> Este horário usa um atendimento do seu plano.</p>}
         {feito.desconto > 0 && <p data-testid="pub-feito-cupom"><Icone n="key" size={14} /> Cupom {feito.cupom}: −{fmtMoney(feito.desconto)} · a pagar {fmtMoney(feito.total - feito.desconto)}</p>}
         <p className="muted">{loja.nome} vai confirmar o seu horário. Você acompanha em “Meus agendamentos” neste aparelho.</p>
-        <p className="muted" data-testid="pub-feito-avaliar">Depois do atendimento vocÃª poderÃ¡ avaliar por aqui, em Meus agendamentos.</p>
+        <p className="muted" data-testid="pub-feito-avaliar">Depois do atendimento você poderá avaliar por aqui, em Meus agendamentos.</p>
         <div className="pub-linha">
           <Btn onClick={irParaMeus} data-testid="pub-ver-meus">Ver meus agendamentos</Btn>
           <Btn variante="fantasma" onClick={recomecar} data-testid="pub-novo">Agendar outro</Btn>
@@ -295,6 +299,7 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
             <Campo rotulo="Cupom (opcional)"><input value={cupom} onChange={(e) => setCupom(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 14))} maxLength={14} autoComplete="off" autoCapitalize="characters" placeholder="XXXX-XXXX-XXXX" data-testid="pub-cupom" /></Campo>
             <input className="pub-isca" tabIndex={-1} aria-hidden="true" autoComplete="off" name="site" value={isca} onChange={(e) => setIsca(e.target.value)} data-testid="pub-isca" />
             {erro && <Aviso tipo="erro"><span data-testid="pub-erro">{erro}</span></Aviso>}
+            {cap.widget}
             <div className="pub-rodape">
               <Btn variante="fantasma" onClick={() => setEtapa(2)} data-testid={`pub-voltar-${2 - desl}`}>Voltar</Btn>
               <button type="submit" className="btn btn-primario" disabled={enviando} data-testid="pub-enviar">{enviando ? 'Enviando…' : 'Pedir este horário'}</button>
@@ -313,6 +318,8 @@ function Meus({ loja, acessos, setAcessos, diasMax, aoSincronizar }) {
   const [confirmando, setConfirmando] = useState(null);
   const [remarcando, setRemarcando] = useState(null); // { id, escolha }
   const [enviando, setEnviando] = useState(false);
+  const [pendenteMeus, setPendenteMeus] = useState(false);
+  const cap = useCaptcha(loja.captchaChave);
   const tokens = acessos.map((a) => a.token).join(',');
   const recarregarMeus = () => {
     if (!acessos.length) return;
@@ -348,26 +355,36 @@ function Meus({ loja, acessos, setAcessos, diasMax, aoSincronizar }) {
     }
     window.location.hash = '#avaliar/' + ac.token;
   };
-  useEffect(() => {
+  const consultarMeus = (prova) => {
     let vivo = true;
-    if (!acessos.length) { setLista([]); return undefined; }
-    publico.meus(acessos.map((a) => a.token)).then((r) => {
+    if (!acessos.length) { setLista([]); return () => {}; }
+    publico.meus(acessos.map((a) => a.token), prova).then((r) => {
+      if (prova) cap.gasta();
       if (!vivo) return;
-      if (!r.ok) { setErro(r.erro); setLista([]); return; }
+      if (!r.ok) {
+        if (cap.verificar(r)) setPendenteMeus(true);
+        setErro(r.erro);
+        setLista([]);
+        return;
+      }
+      setPendenteMeus(false);
       setErro(''); setLista(r.agendamentos); aoSincronizar(r.agendamentos);
       const ids = new Set(r.agendamentos.map((a) => a.id));
       if (acessos.some((a) => !ids.has(a.id))) { const novos = acessos.filter((a) => ids.has(a.id)); gravarAcessos(loja.slug, novos); setAcessos(novos); } // acesso vencido some do aparelho
     });
     return () => { vivo = false; };
-  }, [tokens]);
+  };
+  useEffect(() => consultarMeus(''), [tokens]);
+  useEffect(() => { if (pendenteMeus && cap.prova) return consultarMeus(cap.prova); return undefined; }, [pendenteMeus, cap.prova]);
   if (lista === null) return <section className="pub-cartao"><p className="muted" role="status">Carregando…</p></section>;
   const futuros = lista.filter((a) => a.ativo);
   const passados = lista.filter((a) => !a.ativo).sort((a, b) => b.inicio - a.inicio);
   const cancelar = async (a) => {
     const acesso = acessos.find((x) => x.id === a.id);
     setConfirmando(null); setAviso(''); setErro('');
-    const r = await publico.cancelar(a.id, acesso ? acesso.token : '');
-    if (!r.ok) { setErro(r.erro); return; }
+    const r = await publico.cancelar(a.id, acesso ? acesso.token : '', cap.prova);
+    cap.gasta();
+    if (!r.ok) { cap.verificar(r); setErro(r.erro); return; }
     setLista((l) => l.map((x) => (x.id === a.id ? r.agendamento : x))); aoSincronizar([r.agendamento]);
     setAviso('Horário cancelado.');
   };
@@ -379,9 +396,10 @@ function Meus({ loja, acessos, setAcessos, diasMax, aoSincronizar }) {
     if (!remarcando || !remarcando.escolha) return;
     const acesso = acessos.find((x) => x.id === a.id);
     setEnviando(true); setAviso(''); setErro('');
-    const r = await publico.remarcar(a.id, acesso ? acesso.token : '', remarcando.escolha.inicio);
+    const r = await publico.remarcar(a.id, acesso ? acesso.token : '', remarcando.escolha.inicio, cap.prova);
+    cap.gasta();
     setEnviando(false);
-    if (!r.ok) { setErro(r.erro); return; }
+    if (!r.ok) { cap.verificar(r); setErro(r.erro); return; }
     setLista((l) => l.map((x) => (x.id === a.id ? r.agendamento : x))); aoSincronizar([r.agendamento]);
     setRemarcando(null);
     setAviso('Pedido de novo horário enviado. A loja confirma em breve.');
@@ -392,6 +410,7 @@ function Meus({ loja, acessos, setAcessos, diasMax, aoSincronizar }) {
       <p className="muted">Aqui aparecem os horários pedidos neste aparelho. Dá para remarcar ou cancelar com 24 horas ou mais de antecedência; antes disso, fale com {loja.nome}.</p>
       {aviso && <Aviso><span data-testid="pub-aviso">{aviso}</span></Aviso>}
       {erro && <Aviso tipo="erro"><span data-testid="pub-erro-meus">{erro}</span></Aviso>}
+      {cap.widget}
       <h3>Próximos horários</h3>
       {!futuros.length && <p className="muted" data-testid="pub-sem-futuros">Você não tem horários marcados neste aparelho.</p>}
       <ul className="pub-ags">
@@ -440,12 +459,12 @@ function Meus({ loja, acessos, setAcessos, diasMax, aoSincronizar }) {
           <ul className="pub-ags pub-passados">{passados.map((a) => (
             <li key={a.id} className="pub-ag" data-testid={`pub-ag-${a.id}`}>
               <div className="pub-ag-topo">
-                <div><span>{diaLongo(a.inicio)}, {horaDe(a.inicio)} Â· {a.servicos.join(', ')}</span></div>
+                <div><span>{diaLongo(a.inicio)}, {horaDe(a.inicio)} · {a.servicos.join(', ')}</span></div>
                 <span className="muted">{a.rotulo}</span>
               </div>
               {a.status === 'concluido' && !a.avaliado && !a.avaliacao && (
                 <div className="pub-linha pub-avaliar-bloco" data-testid={`pub-avaliar-${a.id}`} style={{ marginTop: '0.5rem' }}>
-                  <span>Seu atendimento foi concluÃ­do. Conte como foi</span>
+                  <span>Seu atendimento foi concluído. Conte como foi</span>
                   <Btn tamanho="sm" variante="primario" onClick={() => abrirAvaliacao(a)} data-testid={`pub-avaliar-btn-${a.id}`}>Avaliar</Btn>
                 </div>
               )}

@@ -1,4 +1,4 @@
-STATUS: LIVRE
-ULTIMO_MODELO: Antigravity (Gemini 3.8 Flash)
-HORA: 2026-11-02 00:04 (America/Sao_Paulo)
-OBS: Liberado para o proximo modelo (Perplexity) assumir no VS Code.
+STATUS: EM_ANDAMENTO
+ULTIMO_MODELO: Antigravity (Gemini 4 Argon) + Invoke-AiPipeline
+HORA: 2026-11-02 11:04 (America/Sao_Paulo)
+OBS: Executando Tarefa 2 (B10 parte B - reCAPTCHA) passos 2, 3, 4, 6 e 7.

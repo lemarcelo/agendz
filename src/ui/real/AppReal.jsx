@@ -36,6 +36,7 @@ import { TIPOS, capAtiva, definirTipoAtivo, rotulo, tipoValido } from '../../dom
 import { definirPortes } from '../../domain/veiculos.js';
 import { cssDaMarca, logoValida } from '../../domain/tema.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
+import { useCaptcha } from './Captcha.jsx';
 
 // Faixa fixa no alto: a ação foi pedida mas o aparelho está sem internet; ela é enviada sozinha quando a conexão voltar (ou cancelada aqui).
 function AvisoRede() {
@@ -73,15 +74,17 @@ function Login({ loja, aoEntrar }) {
   const [enviando, setEnviando] = useState(false);
   const [esqueci, setEsqueci] = useState(false);
   const [auto, setAuto] = useState(false); // "Login automático": depois de entrar, o servidor pergunta se esta rede é de confiança
+  const cap = useCaptcha(loja.captchaChave);
   const autoRef = useRef(false);
   autoRef.current = auto;
   const enviar = async (e) => {
     e.preventDefault();
     if (enviando) return;
     setEnviando(true); setErro('');
-    const r = await entrar({ identificador: id, senha, loginAutomatico: auto });
+    const r = await entrar({ identificador: id, senha, loginAutomatico: auto, captcha: cap.prova });
+    cap.gasta();
     setEnviando(false);
-    if (!r.ok) { setErro(r.erro); setSenha(''); return; }
+    if (!r.ok) { cap.verificar(r); setErro(r.erro); setSenha(''); return; }
     aoEntrar(r.sessao, r.sessao.deveTrocarSenha ? senha : '');
   };
   // Entrar com a digital: o aparelho assina, o servidor confere; a sessão é a mesma do login por senha.
@@ -112,6 +115,7 @@ function Login({ loja, aoEntrar }) {
         <label className="pa-check" data-testid="login-auto-rotulo"><input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} data-testid="login-auto" /> Login automático</label>
         {auto && <p className="muted" data-testid="login-auto-ajuda">Depois de entrar, o Agendz pergunta se você quer confiar nesta rede (computador da loja) ou só neste aparelho (celular). Na rede confiável não precisa entrar de novo; em qualquer outra rede o acesso pede a digital ou a senha depois de 1 dia. No aparelho confiável você continua logado em qualquer rede.</p>}
         {erro && <Aviso tipo="erro" data-testid="login-erro">{erro}</Aviso>}
+        {cap.widget}
         <Btn variante="primario" type="submit" disabled={enviando} data-testid="login-entrar">{enviando ? 'Entrando…' : 'Entrar'}</Btn>
         {passkey.disponivel() && <Btn type="button" disabled={enviando} onClick={entrarComDigital} data-testid="login-digital">Entrar com a digital</Btn>}
         <button type="button" className="link" onClick={() => setEsqueci(!esqueci)} aria-expanded={esqueci} data-testid="login-esqueci">Esqueci minha senha</button>
