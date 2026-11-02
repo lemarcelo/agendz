@@ -4,6 +4,7 @@ import br.com.agendz.auth.Recaptcha;
 import br.com.agendz.cifra.Cifra;
 import br.com.agendz.erro.ErroDeNegocio;
 import br.com.agendz.tenant.Loja;
+import br.com.agendz.tenant.LojaRepository;
 import java.time.Duration;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -22,12 +23,14 @@ public class CaptchaDoLink {
     private final LimitePublico limite;
     private final BarradosDoLink barrados;
     private final Cifra cifra;
+    private final LojaRepository lojas;
 
-    public CaptchaDoLink(Recaptcha recaptcha, LimitePublico limite, BarradosDoLink barrados, Cifra cifra) {
+    public CaptchaDoLink(Recaptcha recaptcha, LimitePublico limite, BarradosDoLink barrados, Cifra cifra, LojaRepository lojas) {
         this.recaptcha = recaptcha;
         this.limite = limite;
         this.barrados = barrados;
         this.cifra = cifra;
+        this.lojas = lojas;
     }
 
     /**
@@ -35,9 +38,11 @@ public class CaptchaDoLink {
      * passa a exigir a prova.
      */
     public void exigirSeSuspeito(Loja loja, String ip, String chaveFreio, int suave, Duration janela, String prova) {
-        if (!recaptcha.ativo()) return;
+        String chaveSiteLoja = lojas.recaptchaChaveSite(loja.id());
+        String segredoLoja = lojas.recaptchaSegredo(loja.id());
+        if (!recaptcha.ativo(chaveSiteLoja, segredoLoja)) return;
         if (limite.quantos(chaveFreio + ":" + loja.id() + ":" + ip, janela) < suave) return;
-        if (recaptcha.valido(prova)) return;
+        if (recaptcha.valido(prova, segredoLoja)) return;
         barrados.registrar(loja.id(), BarradosDoLink.Motivo.CAPTCHA, cifra.hash(loja.id(), "ip", ip), null);
         throw new ErroDeNegocio(HttpStatus.PRECONDITION_REQUIRED, MENSAGEM);
     }

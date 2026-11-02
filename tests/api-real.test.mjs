@@ -41,7 +41,7 @@ test.beforeEach(() => { chamadas.length = 0; modo = 'normal'; configurar({ base:
 test('carregarLoja devolve só os campos conhecidos', async () => {
   const r = await carregarLoja();
   assert.equal(r.ok, true);
-  assert.deepEqual(Object.keys(r.loja).sort(), ['logo', 'nome', 'slug', 'temaCor', 'temaCor2', 'tipo']);
+  assert.deepEqual(Object.keys(r.loja).sort(), ['captchaChave', 'emHomologacao', 'logo', 'nome', 'slug', 'temaCor', 'temaCor2', 'tipo']);
   assert.equal(r.loja.tipo, 'barbearia');
   assert.equal(chamadas[0].auth, null, 'a rota pública não manda token');
 });

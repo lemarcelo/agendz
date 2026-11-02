@@ -7,8 +7,8 @@ import { agenda as api, boxes as apiBoxes, clientes as apiClientes, produtos as 
 import { fmtMoney, startOfDay } from '../../domain/time.js';
 import { formatarTelefone, somenteDigitos } from '../../domain/rules.js';
 import { Rot, capAtiva } from '../../domain/tipos.js';
-import { PADRAO_PAINEL, sanearOrdemAtender } from '../../domain/ordem-atender.js';
-import { PORTE_PADRAO, ROTULO_PORTE, portesParaEscolher, rotuloVeiculo } from '../../domain/veiculos.js';
+import { COMO_A_PAGINA_DO_CLIENTE, PADRAO_PAINEL, sanearOrdemAtender } from '../../domain/ordem-atender.js';
+import { EXEMPLO_PORTE, PORTE_PADRAO, ROTULO_PORTE, portesParaEscolher, rotuloVeiculo } from '../../domain/veiculos.js';
 import { REGRAS_DE_FABRICA, FORMAS_PAGAMENTO, boxesAtivos, camposFaltando, ehRetroativo, exige, faltaItem, exigenciasDoVeiculo, faltaVeiculo, porteDoAtendimento, formaEfetiva, filtrarProdutos, filtrarServicos, qtdValida, resumoDosProdutos, resumoDosServicos, servicoNoPorte, tipoDoAtendimento, vendedorPadrao } from '../../domain/atender-form.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
 
@@ -109,13 +109,36 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
     aoSalvar(tipo === 'futuro' ? 'Agendamento criado.' : 'Atendimento registrado.', r.agendamento);
   };
 
-  const ordem = sanearOrdemAtender(regras.ordemAtender, PADRAO_PAINEL)[tipo]; // v133: ordem das etapas e dos campos escolhida pelo proprietário (Estabelecimento > Regras)
+  const padraoOrdem = usaVeiculo ? COMO_A_PAGINA_DO_CLIENTE : PADRAO_PAINEL;
+  const ordem = sanearOrdemAtender(regras.ordemAtender, padraoOrdem)[tipo]; // v133: ordem das etapas e dos campos escolhida pelo proprietário (Estabelecimento > Regras)
   const camposVeic = {
     placa: <Campo rotulo={`Placa${exige(regras, tipo, 'placa') ? ' *' : ''}`}><input value={novoVeic.placa} onChange={(e) => { setNovoVeic({ ...novoVeic, placa: e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 8) }); setErro(''); }} maxLength={8} autoComplete="off" placeholder="ABC1D23" data-testid="atender-v-placa" /></Campo>,
     modelo: <Campo rotulo={`Modelo${exige(regras, tipo, 'modelo') ? ' *' : ''}`}><input value={novoVeic.modelo} onChange={(e) => setNovoVeic({ ...novoVeic, modelo: e.target.value })} maxLength={40} autoComplete="off" data-testid="atender-v-modelo" /></Campo>,
     marca: <Campo rotulo="Marca"><input value={novoVeic.marca} onChange={(e) => setNovoVeic({ ...novoVeic, marca: e.target.value })} maxLength={30} autoComplete="off" data-testid="atender-v-marca" /></Campo>,
     cor: <Campo rotulo="Cor"><input value={novoVeic.cor} onChange={(e) => setNovoVeic({ ...novoVeic, cor: e.target.value })} maxLength={20} autoComplete="off" data-testid="atender-v-cor" /></Campo>,
-    porte: <Campo rotulo={`Porte${exige(regras, tipo, 'porte') ? ' *' : ''}`}><select value={novoVeic.porte} onChange={(e) => { setNovoVeic({ ...novoVeic, porte: e.target.value }); setErro(''); }} data-testid="atender-v-porte"><option value="">{exige(regras, tipo, 'porte') ? 'Escolha…' : `${ROTULO_PORTE[PORTE_PADRAO]} (padrão)`}</option>{portesParaEscolher(novoVeic.porte).map(({ id: k }) => <option key={k} value={k}>{ROTULO_PORTE[k]}</option>)}</select></Campo>,
+    porte: (
+      <Campo rotulo={`Porte${exige(regras, tipo, 'porte') ? ' *' : ''}`} className="campo-largo">
+        <div className="pub-portes" role="group" aria-label="Porte do veículo" style={{ marginBottom: 6 }}>
+          {portesParaEscolher(novoVeic.porte).map(({ id: k }) => (
+            <button
+              type="button"
+              key={k}
+              className={`pub-porte ${novoVeic.porte === k ? 'on' : ''}`}
+              aria-pressed={novoVeic.porte === k}
+              onClick={() => { setNovoVeic({ ...novoVeic, porte: k }); setErro(''); }}
+              data-testid={`atender-v-porte-btn-${k}`}
+            >
+              <b>{ROTULO_PORTE[k]}</b>
+              <small>{(EXEMPLO_PORTE[k] || '').replace('Ex.: ', '')}</small>
+            </button>
+          ))}
+        </div>
+        <select value={novoVeic.porte} onChange={(e) => { setNovoVeic({ ...novoVeic, porte: e.target.value }); setErro(''); }} data-testid="atender-v-porte">
+          <option value="">{exige(regras, tipo, 'porte') ? 'Escolha…' : `${ROTULO_PORTE[PORTE_PADRAO]} (padrão)`}</option>
+          {portesParaEscolher(novoVeic.porte).map(({ id: k }) => <option key={k} value={k}>{ROTULO_PORTE[k]}</option>)}
+        </select>
+      </Campo>
+    ),
   };
   const camposCli = {
     nome: <Campo rotulo={`Nome${marca('nome')}`}><input value={nome} onChange={(e) => setNome(e.target.value)} maxLength={60} placeholder="Nome ou apelido" data-testid="atender-nome" /></Campo>,

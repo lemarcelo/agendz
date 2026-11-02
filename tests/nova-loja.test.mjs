@@ -17,10 +17,13 @@ test('Caddy: TLS sob demanda só com a pergunta (ask) à API, e /interno nunca p
   for (const b of blocos) assert.match(b, /handle \/interno\/\*\s*\{\s*respond 404/, 'cada bloco de site esconde /interno');
 });
 
+const temBash = !spawnSync('bash', ['-c', 'exit 0']).error && spawnSync('bash', ['-c', 'exit 0']).status === 0;
+
 test('nova-loja.sh: nomes reservados iguais aos do banco; recusa subdomínio, reservado e tipo inválidos antes de tocar em qualquer coisa', () => {
   const doBanco = /slug NOT IN \(([^)]*)\)/.exec(migracao)[1].match(/'([^']+)'/g).map((x) => x.replaceAll("'", '')).sort();
   const doScript = /case "\$SLUG" in ([^)]*)\)/.exec(script)[1].split('|').sort();
   assert.deepEqual(doScript, doBanco);
+  if (!temBash) return;
   const roda = (...a) => spawnSync('bash', ['deploy/nova-loja.sh', ...a], { encoding: 'utf8' });
   for (const args of [['Barbearia X', 'X', 'barbearia', 'j', 'J'], ['api', 'X', 'barbearia', 'j', 'J'], ['-x', 'X', 'barbearia', 'j', 'J'], ['loja-x', 'X', 'padaria', 'j', 'J']]) {
     const r = roda(...args);

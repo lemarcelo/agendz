@@ -38,16 +38,36 @@ public class Recaptcha {
         return !chaveSite.isEmpty() && (trocaDeTeste != null || !segredo.isEmpty());
     }
 
+    public boolean ativo(String chaveSiteLoja, String segredoLoja) {
+        if (trocaDeTeste != null) return true;
+        if (chaveSiteLoja != null && !chaveSiteLoja.isBlank() && segredoLoja != null && !segredoLoja.isBlank()) {
+            return true;
+        }
+        return ativo();
+    }
+
     /** Chave pública para o navegador; nula quando o reCAPTCHA está desligado. */
     public String chaveSite() {
         return ativo() ? chaveSite : null;
     }
 
+    /** Chave pública para o navegador considerando configuração da loja com fallback global. */
+    public String chaveSite(String chaveLoja) {
+        if (chaveLoja != null && !chaveLoja.isBlank()) return chaveLoja.trim();
+        return chaveSite();
+    }
+
     public boolean valido(String resposta) {
-        if (!ativo() || resposta == null || resposta.isBlank() || resposta.length() > 4096) return false;
+        return valido(resposta, null);
+    }
+
+    public boolean valido(String resposta, String segredoLoja) {
+        if (resposta == null || resposta.isBlank() || resposta.length() > 4096) return false;
         if (trocaDeTeste != null) return trocaDeTeste.test(resposta);
+        String segredoEfetivo = (segredoLoja != null && !segredoLoja.isBlank()) ? segredoLoja.trim() : this.segredo;
+        if (segredoEfetivo.isEmpty()) return false;
         try {
-            String corpo = "secret=" + URLEncoder.encode(segredo, StandardCharsets.UTF_8) + "&response=" + URLEncoder.encode(resposta, StandardCharsets.UTF_8);
+            String corpo = "secret=" + URLEncoder.encode(segredoEfetivo, StandardCharsets.UTF_8) + "&response=" + URLEncoder.encode(resposta, StandardCharsets.UTF_8);
             HttpRequest req = HttpRequest.newBuilder(URI.create(VERIFICAR)).timeout(Duration.ofSeconds(5))
                     .header("Content-Type", "application/x-www-form-urlencoded").POST(HttpRequest.BodyPublishers.ofString(corpo)).build();
             HttpResponse<String> r = http.send(req, HttpResponse.BodyHandlers.ofString());

@@ -1221,11 +1221,14 @@ export const regras = {
 const lerLink = (d) => {
   d = d && typeof d === 'object' ? d : {};
   const dm = Number.isInteger(d.diasMax) ? Math.min(60, Math.max(1, d.diasMax)) : 30;
-  return { ativo: d.ativo !== false, diasMax: dm, disponivel: d.disponivel !== false, telefoneObrigatorio: d.telefoneObrigatorio !== false,
+  const res = { ativo: d.ativo !== false, diasMax: dm, disponivel: d.disponivel !== false, telefoneObrigatorio: d.telefoneObrigatorio !== false,
     nomeObrigatorio: d.nomeObrigatorio !== false, veiculoObrigatorio: Array.isArray(d.veiculoObrigatorio) ? d.veiculoObrigatorio.filter((x) => ['placa', 'modelo', 'porte'].includes(x)) : ['placa', 'modelo', 'porte'],
     pendencias: Array.isArray(d.pendencias) ? d.pendencias.filter((x) => typeof x === 'string' && x).slice(0, 5).map((x) => x.slice(0, 300)) : [], // v119: o que falta cadastrar para o cliente ver horários
     limiteAbertos: Number.isInteger(d.limiteAbertos) ? Math.min(20, Math.max(1, d.limiteAbertos)) : 3, // B10: horários à frente que um mesmo cliente pode ter pelo link
     barrados: lerBarrados(d.barrados) };
+  if (d.recaptchaChaveSite !== undefined) res.recaptchaChaveSite = typeof d.recaptchaChaveSite === 'string' ? d.recaptchaChaveSite.slice(0, 100) : '';
+  if (d.recaptchaSegredoConfigurado !== undefined) res.recaptchaSegredoConfigurado = d.recaptchaSegredoConfigurado === true;
+  return res;
 };
 // B10: só contagens dos pedidos que o link barrou nos últimos 30 dias (nunca IP, telefone ou hash)
 const MOTIVOS_BARRADO = ['limite_cliente', 'isca', 'rapido', 'selo_invalido', 'frequencia', 'captcha'];
@@ -1241,9 +1244,11 @@ export const linkAgendamento = {
     const r = await chamar('GET', '/api/estabelecimento/link-agendamento');
     return r.ok ? { ok: true, link: lerLink(r.dados) } : r;
   },
-  // PUT /api/estabelecimento/link-agendamento  { ativo?, diasMax?, telefoneObrigatorio?, nomeObrigatorio?, veiculoObrigatorio?: ['placa','modelo','porte'], limiteAbertos?: 1..20 }
-  async gravar({ ativo, diasMax, telefoneObrigatorio, nomeObrigatorio, veiculoObrigatorio, limiteAbertos } = {}) {
+  // PUT /api/estabelecimento/link-agendamento  { ativo?, diasMax?, telefoneObrigatorio?, nomeObrigatorio?, veiculoObrigatorio?: ['placa','modelo','porte'], limiteAbertos?: 1..20, recaptchaChaveSite?, recaptchaSegredo? }
+  async gravar({ ativo, diasMax, telefoneObrigatorio, nomeObrigatorio, veiculoObrigatorio, limiteAbertos, recaptchaChaveSite, recaptchaSegredo } = {}) {
     const corpo = {};
+    if (recaptchaChaveSite !== undefined) corpo.recaptchaChaveSite = typeof recaptchaChaveSite === 'string' ? recaptchaChaveSite.trim().slice(0, 100) : '';
+    if (recaptchaSegredo !== undefined) corpo.recaptchaSegredo = typeof recaptchaSegredo === 'string' ? recaptchaSegredo.trim().slice(0, 150) : '';
     if (limiteAbertos !== undefined) {
       if (!Number.isInteger(limiteAbertos) || limiteAbertos < 1 || limiteAbertos > 20) return { ok: false, status: 0, erro: 'Informe de 1 a 20 horários por cliente.' };
       corpo.limiteAbertos = limiteAbertos;

@@ -4,6 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { store, auth, estabelecimento, publico } from '../src/services/api.js';
 import * as R from '../src/domain/rules.js';
 import {
@@ -111,7 +112,7 @@ test('a configuração pública informa o tipo, sem dados internos', () => {
 // ---------- texto sem rótulo fixo do profissional ----------
 // Texto que o cliente ou a equipe lê não pode ter "esteticista" escrito direto: vem do rótulo do tipo (rot('profissional')).
 // Fora da regra: ids, chaves de armazenamento, rotas e nomes de variável; templates.js (modelos da Meta, tratados por tipo na P2) e tipos.js.
-const RAIZ = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', 'src');
+const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'src');
 const FORA = new Set(['domain/tipos.js', 'domain/templates.js']);
 const foraDaRegra = (rel) => FORA.has(rel) || rel.startsWith('tipos/'); // pasta de cada tipo: o vocabulário próprio dele (modelos de mensagem, tema)
 const arquivosFonte = () => {

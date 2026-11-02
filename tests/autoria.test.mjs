@@ -3,13 +3,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { assinaturaDe, codificarZw, decodificarZw, gerarMarcas, lerSegredo, tagDeArquivo } from '../tools/autoria.mjs';
 import { verificarAmbiente, marcar, MARCA } from '../src/domain/autoria.js';
 import { store } from '../src/services/api.js';
 import { reiniciar } from './helpers.mjs';
 
-const raiz = new URL('..', import.meta.url).pathname;
+const raiz = fileURLToPath(new URL('..', import.meta.url));
 const segredo = lerSegredo(raiz);
 
 test('marca invisível: codifica e decodifica o id, e sobrevive a copiar e colar no meio de um texto', () => {

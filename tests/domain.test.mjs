@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { store, auth, agenda, whatsapp, excecoes, servicos, equipe, estabelecimento, clientes, afetadosPorExcecoes } from '../src/services/api.js';
 import { reiniciar } from './helpers.mjs';
@@ -12,7 +12,7 @@ const proxDiaUtil = (n = 1) => { let d = startOfDay(store.agora()); let c = 0; w
 const telDe = (agId) => { const a = st().agendamentos.find((x) => x.id === agId); return (st().clientes.find((c) => c.id === a?.clienteId) || {}).telefone; };
 const login = () => auth.login({ identificador: 'davi', senha: '1234' });
 const cria = (o) => agenda.criar({ clienteId: 'c-igor', profissionalId: 'u-pablo', servicoIds: ['s-lav-simples'], ...o });
-test.beforeEach(() => { reiniciar(); login(); });
+test.beforeEach(() => { mock.timers.reset(); mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-12T07:00:00-03:00') }); reiniciar(); login(); });
 
 test('dados de exemplo: um de cada status e uma etiqueta Reagendado', () => {
   const s = st();

@@ -42,6 +42,18 @@ public class LojaRepository {
                 (rs, i) -> rs.getBoolean(1), lojaId).stream().findFirst().orElse(false));
     }
 
+    /** Chave do site reCAPTCHA da própria loja (opcional, fallback para o ambiente). */
+    public String recaptchaChaveSite(UUID lojaId) {
+        return jdbc.query("select recaptcha_chave_site from configuracao_loja where loja_id = ?",
+                (rs, i) -> rs.getString(1), lojaId).stream().findFirst().orElse(null);
+    }
+
+    /** Segredo do reCAPTCHA da própria loja (opcional, fallback para o ambiente). */
+    public String recaptchaSegredo(UUID lojaId) {
+        return jdbc.query("select recaptcha_segredo from configuracao_loja where loja_id = ?",
+                (rs, i) -> rs.getString(1), lojaId).stream().findFirst().orElse(null);
+    }
+
     /** Domínio próprio só vale VERIFICADO. */
     public Optional<String> slugDoDominioVerificado(String host) {
         return jdbc.query(

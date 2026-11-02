@@ -13,8 +13,10 @@
 5. **Tarefa 5 (B2 - v141):** Log de ações dos usuários. Migração `V48__log_acao.sql`, rotas internas no backend e aba "Atividade" na ficha do cliente no Admin. Concluída em `ada962d` e `a0362cd`.
 6. **Tarefa 6 (B5 - v142):** Relatório de funil do link de agendamento. Migração `V49__evento_funil.sql`, rotas internas agregadas e aba "Funil do link" no Admin. Concluída em `77cec24` e `d63bcf3`.
 7. **Tarefa 7 (B3 - v143):** Poder trocar o domínio DNS da plataforma sem dor. `src/dominio.js` com `dominioDoPainel` dinâmico, testes estáticos `tests/dominio.test.mjs` no `agendz` e no `agendz-admin`, e roteiro completo em `docs/TROCA-DE-DOMINIO.md`. Concluída em `805832d` no admin.
+8. **reCAPTCHA Próprio por Loja (v144):** Delegação da chave pública e segredo por loja (`V50__recaptcha_por_loja.sql`, fallback global na plataforma, campos em Estabelecimento > Regras).
+9. **Tela Atender (Autoestética - v145):** Porte em caixas (`.pub-portes`, `.pub-porte`), veículo e porte no topo da lista por padrão e reordenação de todo o fluxo disponível em Regras.
 
 ## Status da Trava e Próximos Passos
 - Trava liberada para `LIVRE`.
-- Todos os testes (estáticos, unitários e de navegador) estão verdes em ambos os repositórios.
-- Pronto para ritual de entrega e promoção para a branch `main`.
+- Todos os testes estáticos (13/13) e testes unitários (1037/1037) passando.
+- Pronto para merge `feat/fila` -> `main` e deploy na VPS.

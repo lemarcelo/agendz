@@ -15,7 +15,7 @@ import { SeletorHora } from './Agendamento.jsx';
 import { nomeCliente } from './format.js';
 import { toast, useStore } from './hooks.js';
 import { capAtiva, Rot, rot } from '../domain/tipos.js';
-import { PADRAO_ARTIFACT, sanearOrdemAtender } from '../domain/ordem-atender.js';
+import { COMO_A_PAGINA_DO_CLIENTE, PADRAO_ARTIFACT, sanearOrdemAtender } from '../domain/ordem-atender.js';
 import { profissionalAutomatico } from '../domain/profissional-auto.js';
 
 // Botão único "Atender": atendimento de agora, registro do que já aconteceu (data passada) ou agendamento (data futura).
@@ -147,6 +147,21 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
     ),
     porte: (
                 <Campo rotulo={`Porte${obrig.includes('porte') ? ' *' : ''}`} className="campo-largo" dica={vNovo.porte ? EXEMPLO_PORTE[vNovo.porte] : 'O porte define o preço e a duração dos serviços. Sem porte vale o médio.'}>
+                  <div className="pub-portes" role="group" aria-label="Porte do veículo" style={{ marginBottom: 6 }}>
+                    {portesParaEscolher(vNovo.porte).map(({ id: k }) => (
+                      <button
+                        type="button"
+                        key={k}
+                        className={`pub-porte ${vNovo.porte === k ? 'on' : ''}`}
+                        aria-pressed={vNovo.porte === k}
+                        onClick={() => setVNovo({ ...vNovo, porte: k })}
+                        data-testid={`atender-porte-btn-${k}`}
+                      >
+                        <b>{ROTULO_PORTE[k]}</b>
+                        <small>{(EXEMPLO_PORTE[k] || '').replace('Ex.: ', '')}</small>
+                      </button>
+                    ))}
+                  </div>
                   <select value={vNovo.porte} onChange={(e) => setVNovo({ ...vNovo, porte: e.target.value })} data-testid="atender-porte">
                     <option value="">{obrig.includes('porte') ? 'Escolha…' : `${ROTULO_PORTE[PORTE_PADRAO]} (padrão)`}</option>
                     {portesParaEscolher(vNovo.porte).map(({ id: k }) => <option key={k} value={k}>{ROTULO_PORTE[k]}</option>)}

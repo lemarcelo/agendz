@@ -22,7 +22,7 @@ import { LIMITE_PORTES, PORTE_PADRAO, listaDePortes } from '../domain/veiculos.j
 import { fatorDeTexto, fatorEmTexto } from '../domain/previa-portes.js';
 import PreviaPortes from './leve/PreviaPortes.jsx';
 import OrdemAtender from './leve/OrdemAtender.jsx';
-import { PADRAO_ARTIFACT, sanearOrdemAtender } from '../domain/ordem-atender.js';
+import { COMO_A_PAGINA_DO_CLIENTE, PADRAO_ARTIFACT, sanearOrdemAtender } from '../domain/ordem-atender.js';
 
 const ORDEM_SEMANA = [1, 2, 3, 4, 5, 6, 0];
 
@@ -423,6 +423,16 @@ function LinkAgendamentoRegras({ e }) {
           {[7, 14, 30, 45, 60].map((d) => <option key={d} value={d}>{d} dias</option>)}
         </select>
       </Campo>
+      <fieldset className="conj" data-testid="recaptcha-loja">
+        <legend>reCAPTCHA próprio (Google v2)</legend>
+        <small className="muted">Opcional. Preencha se a loja usar domínio próprio ou quiser usar sua própria cota do Google. Deixe em branco para usar o padrão da plataforma.</small>
+        <Campo rotulo="Chave do site (Site Key)">
+          <input type="text" value={e.recaptchaChaveSite || ''} onChange={(x) => apiEst.salvar({ recaptchaChaveSite: x.target.value.trim() })} placeholder="Ex.: 6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI" maxLength={100} data-testid="recaptcha-chave-site" />
+        </Campo>
+        <Campo rotulo="Chave secreta (Secret Key)">
+          <input type="password" value={e.recaptchaSegredo || ''} onChange={(x) => apiEst.salvar({ recaptchaSegredo: x.target.value.trim() })} placeholder="Ex.: 6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe" maxLength={150} data-testid="recaptcha-segredo" />
+        </Campo>
+      </fieldset>
     </div>
   );
 }

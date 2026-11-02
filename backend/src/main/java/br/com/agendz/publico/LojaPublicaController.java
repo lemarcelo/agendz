@@ -25,6 +25,6 @@ public class LojaPublicaController {
     @GetMapping("/api/publico/loja")
     public LojaPublica loja() {
         Loja l = LojaContext.exigir();
-        return new LojaPublica(l.slug(), l.nome(), l.tipo(), l.logo(), l.temaCor(), l.temaCor2(), recaptcha.chaveSite(), lojas.emHomologacao(l.id()));
+        return new LojaPublica(l.slug(), l.nome(), l.tipo(), l.logo(), l.temaCor(), l.temaCor2(), recaptcha.chaveSite(lojas.recaptchaChaveSite(l.id())), lojas.emHomologacao(l.id()));
     }
 }

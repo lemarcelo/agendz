@@ -41,7 +41,8 @@ async function rodar(modo) {
   return { codigo, saida };
 }
 
-const temCurl = spawnSync('curl', ['--version']).status === 0;
+const temBash = !spawnSync('bash', ['-c', 'exit 0']).error && spawnSync('bash', ['-c', 'exit 0']).status === 0;
+const temCurl = temBash && spawnSync('curl', ['--version']).status === 0;
 
 test('smoke: passa com a loja ainda não criada e com a loja criada', { skip: !temCurl }, async () => {
   for (const modo of ['nao-criada', 'criada']) {
