@@ -4,10 +4,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const raiz = new URL('..', import.meta.url).pathname;
+const raiz = fileURLToPath(new URL('..', import.meta.url));
 const ler = (p) => readFileSync(join(raiz, p), 'utf8');
-const arquivos = (dir, ext) => readdirSync(join(raiz, dir), { recursive: true }).filter((f) => ext.some((e) => f.endsWith(e)) && !statSync(join(raiz, dir, f)).isDirectory()).map((f) => join(dir, f));
+const arquivos = (dir, ext) => readdirSync(join(raiz, dir), { recursive: true }).filter((f) => ext.some((e) => f.endsWith(e)) && !statSync(join(raiz, dir, f)).isDirectory()).map((f) => join(dir, f).replace(/\\/g, '/'));
 const fonte = arquivos('src', ['.js', '.jsx']);
 // Tira comentários para não acusar texto de explicação.
 const semComentarios = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`\\])\/\/.*$/gm, '$1');
@@ -109,7 +110,7 @@ test('todo arquivo de teste está no npm test (nenhum fica de fora)', () => {
   const pkg = JSON.parse(ler('package.json'));
   const feitos = readdirSync(join(raiz, 'tests')).filter((f) => f.endsWith('.test.mjs'));
   const cmd = pkg.scripts.test;
-  const usaGlob = /tests\/\*\*?\/?\*?\.test\.mjs|tests\/\*\.test\.mjs/.test(cmd) || /node --test\s*$/.test(cmd.trim());
+  const usaGlob = /tests\/\*\*?\/?\*?\.test\.mjs|tests\/\*\.test\.mjs/.test(cmd) || /node --test\s*$/.test(cmd.trim()) || /rodar-testes\.mjs/.test(cmd);
   if (!usaGlob) for (const f of feitos) assert.ok(cmd.includes(f), `${f} não roda no npm test`);
   assert.ok(feitos.length >= 6);
 });
