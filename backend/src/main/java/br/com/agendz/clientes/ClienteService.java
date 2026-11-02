@@ -615,7 +615,7 @@ public class ClienteService {
     private static ErroDeNegocio duplicado(DuplicateKeyException ex) {
         String m = String.valueOf(ex.getMessage());
         if (m.contains("cliente_cpf_uq")) return new ErroDeNegocio(HttpStatus.CONFLICT, "Esse CPF já está cadastrado.");
-        if (m.contains("cliente_telefone_nome_uq")) return new ErroDeNegocio(HttpStatus.CONFLICT, "Já existe um cliente com esse nome e telefone.");
+        if (m.contains("cliente_telefone_nome")) return new ErroDeNegocio(HttpStatus.CONFLICT, "Já existe um cliente com esse nome e telefone.");
         if (m.contains("cliente_veiculo")) return new ErroDeNegocio(HttpStatus.CONFLICT, "Há placas repetidas nesse cliente.");
         return new ErroDeNegocio(HttpStatus.CONFLICT, "Já existe um registro com esses dados");
     }

@@ -724,7 +724,7 @@ class AvaliacoesTest extends BaseApi {
         assertEquals(48, avaliarToken.length());
 
         // O token gerado funciona em /api/publico/avaliacoes
-        pubGet(OFFBOX, avaliarToken, novoIp()).andExpect(status().isOk()).andExpect(jsonPath("$.dados.loja").value("Offbox"));
+        pubGet(OFFBOX, avaliarToken, novoIp()).andExpect(status().isOk()).andExpect(jsonPath("$.loja").value("Offbox"));
 
         // 4. Chamada subsequente antes de avaliar substitui o token anterior
         String resp2 = mvc.perform(post("/api/publico/agendamentos/" + ag + "/avaliacao").with(host(OFFBOX)).header("X-Acesso", tokenAcesso))

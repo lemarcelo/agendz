@@ -32,32 +32,37 @@ public class LojaRepository {
 
     /** Situação da loja no Admin (em_teste, ativo, em_atraso, suspenso, encerrado); suspenso e encerrado fecham a loja (402). */
     public String status(UUID lojaId) {
-        return jdbc.query("select status from loja where id = ?", (rs, i) -> rs.getString(1), lojaId).stream().findFirst().orElse("ativo");
+        List<String> list = jdbc.query("select status from loja where id = ?", (rs, i) -> rs.getString(1), lojaId);
+        return list.isEmpty() || list.getFirst() == null ? "ativo" : list.getFirst();
     }
 
     /** Modo homologação por cliente (B1): quando ativo, lançamentos ganham teste=true e mensagens/cobranças são bloqueadas. */
     public boolean emHomologacao(UUID lojaId) {
-        return Boolean.TRUE.equals(jdbc.query(
+        List<Boolean> list = jdbc.query(
                 "select ativo from loja_homologacao where loja_id = ?",
-                (rs, i) -> rs.getBoolean(1), lojaId).stream().findFirst().orElse(false));
+                (rs, i) -> rs.getBoolean(1), lojaId);
+        return !list.isEmpty() && Boolean.TRUE.equals(list.getFirst());
     }
 
     /** Chave do site reCAPTCHA da própria loja (opcional, fallback para o ambiente). */
     public String recaptchaChaveSite(UUID lojaId) {
-        return jdbc.query("select recaptcha_chave_site from configuracao_loja where loja_id = ?",
-                (rs, i) -> rs.getString(1), lojaId).stream().findFirst().orElse(null);
+        List<String> list = jdbc.query("select recaptcha_chave_site from configuracao_loja where loja_id = ?",
+                (rs, i) -> rs.getString(1), lojaId);
+        return list.isEmpty() ? null : list.getFirst();
     }
 
     /** Segredo do reCAPTCHA da própria loja (opcional, fallback para o ambiente). */
     public String recaptchaSegredo(UUID lojaId) {
-        return jdbc.query("select recaptcha_segredo from configuracao_loja where loja_id = ?",
-                (rs, i) -> rs.getString(1), lojaId).stream().findFirst().orElse(null);
+        List<String> list = jdbc.query("select recaptcha_segredo from configuracao_loja where loja_id = ?",
+                (rs, i) -> rs.getString(1), lojaId);
+        return list.isEmpty() ? null : list.getFirst();
     }
 
     /** Domínio próprio só vale VERIFICADO. */
     public Optional<String> slugDoDominioVerificado(String host) {
-        return jdbc.query(
+        List<String> list = jdbc.query(
                 "select l.slug from loja_dominio d join loja l on l.id = d.loja_id where d.host = ? and d.verificado",
-                (rs, i) -> rs.getString(1), host).stream().findFirst();
+                (rs, i) -> rs.getString(1), host);
+        return list.isEmpty() ? Optional.empty() : Optional.ofNullable(list.getFirst());
     }
 }
