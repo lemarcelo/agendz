@@ -37,7 +37,8 @@ export default function LinkAgendamento() {
     setSalvando(true); setErro(''); setOk('');
     const r = await api.gravar({
       ativo: link.ativo, diasMax: n, limiteAbertos: lim, telefoneObrigatorio: link.telefoneObrigatorio, nomeObrigatorio: link.nomeObrigatorio,
-      recaptchaChaveSite: chaveSite.trim(), ...(segredo.trim() ? { recaptchaSegredo: segredo.trim() } : {}),
+      ...(chaveSite.trim() ? { recaptchaChaveSite: chaveSite.trim() } : (link.recaptchaChaveSite ? { recaptchaChaveSite: '' } : {})),
+      ...(segredo.trim() ? { recaptchaSegredo: segredo.trim() } : {}),
       ...(capAtiva('usaVeiculo') ? { veiculoObrigatorio: link.veiculoObrigatorio } : {}),
     });
     setSalvando(false);

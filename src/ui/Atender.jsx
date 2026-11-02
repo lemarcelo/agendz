@@ -281,15 +281,6 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
             {v && !v.erros.length && !v.pendentes.length && <p className="msg-ok"><Icon n="check" size={15} /> Horário livre · {v.retirada && v.dias > 1 ? `entrada ${fmtDate(inicio)} ${fmtHM(inicio)}, retirada prevista ${fmtDate(v.retirada)} ${fmtHM(v.retirada)} (${v.dias} dias)` : `${fmtHM(inicio)} às ${fmtHM(v.retirada || inicio + (v.duracao || 0) * MIN)}`}{v.boxId ? ` · ${nomeBox(st, v.boxId)}` : ''}</p>}
           </div>
         </div>
-        {planoCli && (
-          <div className="campo-largo subcartao" data-testid="atender-plano">
-            <b><Icon n="ticket" size={15} /> Plano {planoCli.plano}</b>
-            <span className="muted" data-testid="atender-plano-saldo">Restam {planoCli.restantes} atendimento{planoCli.restantes === 1 ? '' : 's'} em {rotuloMesPlano(planoCli.mes)}{planoCli.restantes <= 0 && planoCli.maisPermitidos > 0 ? ` · pode adiantar ${planoCli.maisPermitidos}` : ''}{planoCli.atrasado ? ' · mensalidade do mês ainda não registrada' : ''}.</span>
-            {cobertos.length === 0 && <span className="muted">Escolha um serviço que o plano inclui para usar o plano.</span>}
-            {cobertos.length > 0 && !podePlano && <span className="msg-conflito" data-testid="atender-plano-esgotado"><Icon n="alert" size={15} /> Os atendimentos do plano acabaram: este atendimento será cobrado pelo preço normal.</span>}
-            {podePlano && <label className="interruptor"><input type="checkbox" checked={!semPlano} onChange={(e) => setSemPlano(!e.target.checked)} data-testid="atender-usar-plano" /><span className="trilho"><i className="bolinha" /></span><span className="interruptor-txt"><b>Usar o plano neste atendimento</b><small className="muted">Os serviços do plano saem de graça; o resto é cobrado normalmente.</small></span></label>}
-          </div>
-        )}
         <div className="acoes" style={{ marginTop: 8 }}>
           <Btn variante="primario" type="button" onClick={() => focarBloco('cliente', usaVeiculo ? 3 : 2)} data-testid="atender-prox-cliente">Identificar cliente e pagamento →</Btn>
         </div>
@@ -299,6 +290,15 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
       <div id="atender-bloco-cliente" className="campo-largo form-grade" style={{ margin: 0, padding: 0 }}>
         {!ehProfissional && <PickerCliente clientes={st.clientes} valor={clienteId} onEscolher={escolheCliente} onLimpar={() => setClienteId('')} />}
         {ordem.cliente.map((k) => <React.Fragment key={k}>{camposCli[k]}</React.Fragment>)}
+        {planoCli && (
+          <div className="campo-largo subcartao" data-testid="atender-plano" style={{ marginTop: 8 }}>
+            <b><Icon n="ticket" size={15} /> Plano {planoCli.plano}</b>
+            <span className="muted" data-testid="atender-plano-saldo">Restam {planoCli.restantes} atendimento{planoCli.restantes === 1 ? '' : 's'} em {rotuloMesPlano(planoCli.mes)}{planoCli.restantes <= 0 && planoCli.maisPermitidos > 0 ? ` · pode adiantar ${planoCli.maisPermitidos}` : ''}{planoCli.atrasado ? ' · mensalidade do mês ainda não registrada' : ''}.</span>
+            {cobertos.length === 0 && <span className="muted">Escolha um serviço que o plano inclui para usar o plano.</span>}
+            {cobertos.length > 0 && !podePlano && <span className="msg-conflito" data-testid="atender-plano-esgotado"><Icon n="alert" size={15} /> Os atendimentos do plano acabaram: este atendimento será cobrado pelo preço normal.</span>}
+            {podePlano && <label className="interruptor" style={{ position: 'relative' }}><input type="checkbox" checked={!semPlano} onChange={(e) => setSemPlano(!e.target.checked)} data-testid="atender-usar-plano" style={{ position: 'absolute', top: 2, left: 2, width: 20, height: 20, opacity: 0.01, zIndex: 2 }} /><span className="trilho"><i className="bolinha" /></span><span className="interruptor-txt"><b>Usar o plano neste atendimento</b><small className="muted">Os serviços do plano saem de graça; o resto é cobrado normalmente.</small></span></label>}
+          </div>
+        )}
       </div>
     ),
     produtos: produtos.length > 0 ? (
