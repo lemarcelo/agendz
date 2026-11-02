@@ -376,4 +376,34 @@ public class PlataformaService {
             return null;
         });
     }
+
+    public record MetricasFunil(int linksEnviados, int agendamentosLink, int cancelamentos, Map<String, Integer> etapas, double taxaConversao) {
+    }
+
+    public MetricasFunil metricasFunil(Loja loja) {
+        return banco.naLoja(loja.id(), j -> {
+            Integer enviados = j.queryForObject("select count(*) from evento_funil where tipo_evento = 'link_enviado'", Integer.class);
+            Integer agendados = j.queryForObject("select count(*) from agendamento where origem = 'link'", Integer.class);
+            Integer cancelados = j.queryForObject("select count(*) from agendamento where origem = 'link' and status = 'cancelado'", Integer.class);
+
+            var etapasCont = new java.util.LinkedHashMap<String, Integer>();
+            for (String etapa : List.of("abriu", "identificou", "servico", "veiculo", "horario", "confirmou")) {
+                Integer qtd = j.queryForObject("select count(distinct visita_hash) from evento_funil where etapa = ?", Integer.class, etapa);
+                etapasCont.put(etapa, qtd == null ? 0 : qtd);
+            }
+            int env = enviados == null ? 0 : enviados;
+            int ag = agendados == null ? 0 : agendados;
+            int can = cancelados == null ? 0 : cancelados;
+            double taxa = env > 0 ? ((double) ag / env) * 100.0 : 0.0;
+            return new MetricasFunil(env, ag, can, etapasCont, Math.round(taxa * 10.0) / 10.0);
+        });
+    }
+
+    public void registrarEventoFunil(Loja loja, String tipoEvento, String etapa, String visitaHash, boolean teste) {
+        banco.naLoja(loja.id(), j -> {
+            j.update("insert into evento_funil (loja_id, tipo_evento, etapa, visita_hash, teste) values (?, ?, ?, ?, ?)",
+                    loja.id(), tipoEvento, etapa, visitaHash, teste);
+            return null;
+        });
+    }
 }

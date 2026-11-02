@@ -380,6 +380,7 @@ Só pela rede interna (o Caddy não publica `/interno`) e com `X-Interno-Chave` 
 | `POST …/homologacao/desativar` | desativa modo homologação (v140, B1) | corpo `{manterConfigs, manterLancamentos}`; se `manterLancamentos: true`, converte `teste = false` |
 | `POST …/homologacao/reverter` | reverte visibilidade de testes (v140, B1) | corpo `{sessaoId}`; devolve `{totalRevertidos}` |
 | `GET …/atividades` | log de ações dos usuários da loja (v141, B2) | query `limite` (padrão 50, máx 200); devolve lista de `{id, usuarioId, usuarioNome, papel, acao, tipoObjeto, objetoId, resumo, origem, teste, criadoEm}` |
+| `GET …/funil` | métricas de funil do link de agendamento (v142, B5) | devolve `{linksEnviados, agendamentosLink, cancelamentos, etapas, taxaConversao}` |
 | `GET/POST …/dominios` | domínio próprio da loja (A5, v108; `DominiosTest`) | cadastrar `{host}`: formato de domínio (sem http/porta/barra/IP/localhost), fora do domínio da plataforma, até 3 por loja, único no sistema (409); devolve o TXT a criar (`_agendz-verificacao.<host>` = `agendz-verificacao=<token>`, token aleatório de 24 bytes) |
 | `POST …/dominios/verificar?host=` | consulta o TXT no DNS (`ConsultaTxt`) | só com o token certo `verificado = true` (e `verificado_em`); sem registro = 200 com `acabouDeVerificar: false`; DNS fora do ar = 503 sem detalhe; outra loja = 404 |
 | `DELETE …/dominios?host=` | remove o domínio | a loja continua; o Caddy (`/interno/dominio-permitido`) passa a negar certificado |

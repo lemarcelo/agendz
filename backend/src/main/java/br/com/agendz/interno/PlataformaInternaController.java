@@ -207,6 +207,12 @@ public class PlataformaInternaController {
         return ResponseEntity.ok().header("Cache-Control", "no-store").body(servico.listarAtividades(servico.loja(slug), limite));
     }
 
+    @GetMapping("/interno/plataforma/lojas/{slug}/funil")
+    public ResponseEntity<PlataformaService.MetricasFunil> funil(@PathVariable String slug, @RequestHeader(value = "X-Interno-Chave", required = false) String enviada) {
+        conferir(enviada);
+        return ResponseEntity.ok().header("Cache-Control", "no-store").body(servico.metricasFunil(servico.loja(slug)));
+    }
+
     private void conferir(String enviada) {
         if (chave.length() < 16) throw new ErroDeNegocio(HttpStatus.SERVICE_UNAVAILABLE, "Rota interna desligada: falta a chave INTERNO_CHAVE.");
         boolean ok = enviada != null && MessageDigest.isEqual(chave.getBytes(StandardCharsets.UTF_8), enviada.getBytes(StandardCharsets.UTF_8));

@@ -58,7 +58,7 @@ Regra de uso: toda funcionalidade nova pedida "para outro momento" entra aqui co
 **Configurar pelo Admin (pergunta de 28/10: sim, dá):** tela **Segurança do login** no Admin com chave do site, segredo (cifrado no banco do Admin, nunca mostrado de novo, só "trocar") e liga/desliga; o Agendz lê pela rota interna da A3 (cache curto) e cai nas variáveis de ambiente se o Admin estiver fora do ar. Pré-configurado = vem desligado, com o passo a passo na própria tela. Depende da A3. Onde mexe: os dois.
 
 
-## B5. Relatório de uso do link de agendamento no Admin (pedido de 28/10)
+## B5. Relatório de uso do link de agendamento no Admin — **FEITO na v142 (02/11)** (pedido de 28/10)
 **Para que serve:** o Admin ver, por cliente (loja), quantos links foram enviados e como foi o caminho até o agendamento, para melhorar o processo.
 **O que mostrar (só contagens, por loja e por período):**
 - links enviados (cada vez que o proprietário ou a equipe usa "Link de agendamento": copiar ou abrir o WhatsApp);
