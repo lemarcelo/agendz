@@ -2,6 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { textoConvite, enderecosWhatsapp } from '../src/domain/whatsapp.js';
 
 const LINK = 'https://exemplo.com/agenda/#agendar-u-kiko';
@@ -48,6 +49,6 @@ test('front: o botão abre o WhatsApp em aba nova e copia como reserva, sem sair
 test('front: nenhum arquivo do app usa o esquema whatsapp:// (deixa a tela em branco sem aplicativo registrado)', () => {
   const ruins = [];
   const ler = (d) => { for (const n of readdirSync(d, { withFileTypes: true })) { const f = `${d}/${n.name}`; if (n.isDirectory()) ler(f); else if (/\.(jsx?|mjs)$/.test(n.name) && /['"`]whatsapp:/.test(readFileSync(f, 'utf8'))) ruins.push(f); } };
-  ler(new URL('../src', import.meta.url).pathname);
+  ler(fileURLToPath(new URL('../src', import.meta.url)));
   assert.deepEqual(ruins, []);
 });
