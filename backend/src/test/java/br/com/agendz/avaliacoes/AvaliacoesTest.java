@@ -737,7 +737,7 @@ class AvaliacoesTest extends BaseApi {
         pubGet(OFFBOX, avaliarToken2, novoIp()).andExpect(status().isOk());
 
         // 5. Apos avaliar, nova chamada responde 404
-        pubPost(OFFBOX, avaliarToken2, "{\"nota\":5,\"texto\":\"Otimo servico\"}", novoIp()).andExpect(status().isCreated());
+        pubPost(OFFBOX, avaliarToken2, novoIp(), "{\"nota\":5,\"texto\":\"Otimo servico\"}").andExpect(status().isCreated());
         mvc.perform(post("/api/publico/agendamentos/" + ag + "/avaliacao").with(host(OFFBOX)).header("X-Acesso", tokenAcesso))
                 .andExpect(status().isNotFound());
     }
