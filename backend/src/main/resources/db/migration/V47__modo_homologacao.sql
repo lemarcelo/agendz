@@ -25,8 +25,8 @@ ALTER TABLE cliente ADD COLUMN teste_sessao integer;
 CREATE INDEX idx_cliente_teste ON cliente (loja_id, teste);
 
 -- Remove a unicidade rigida que incluiria clientes de teste e cria indice unico apenas para registros reais
-ALTER TABLE cliente DROP CONSTRAINT IF EXISTS cliente_loja_id_telefone_key;
-CREATE UNIQUE INDEX IF NOT EXISTS cliente_loja_telefone_real_uq ON cliente (loja_id, telefone) WHERE (teste = false);
+ALTER TABLE cliente DROP CONSTRAINT IF EXISTS cliente_telefone_nome_uq;
+CREATE UNIQUE INDEX IF NOT EXISTS cliente_telefone_nome_real_uq ON cliente (loja_id, telefone_hash, nome_chave) WHERE (teste = false);
 
 ALTER TABLE movimento_estoque ADD COLUMN teste boolean NOT NULL DEFAULT false;
 ALTER TABLE movimento_estoque ADD COLUMN teste_sessao integer;

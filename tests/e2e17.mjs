@@ -1,6 +1,7 @@
 // Muitos esteticistas: foto circular no calendário, seletor compacto e dia com 15 colunas (computador e celular); perfil atendente.
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
+import { fileURLToPath } from 'node:url';
 
 const b = await chromium.launch();
 const erros = [];
@@ -50,10 +51,10 @@ for (const [nome, vp, touch] of [['computador', { width: 1280, height: 800 }, fa
   assert.ok(await p.getByTestId('agenda-modo-horarios').isVisible(), `${nome}: aba Horários visível`);
   assert.ok(await p.getByTestId('agenda-horarios').isVisible(), `${nome}: Horários do dia`);
   await semRolagem(p, `${nome}: semana`);
-  await p.screenshot({ path: new URL(`../shots/semana-${nome}.png`, import.meta.url).pathname });
+  await p.screenshot({ path: fileURLToPath(new URL(`../shots/semana-${nome}.png`, import.meta.url)) });
   await p.getByTestId('agenda-modo-horarios').click();
   await p.waitForTimeout(150);
-  await p.screenshot({ path: new URL(`../shots/muitos-${nome}.png`, import.meta.url).pathname });
+  await p.screenshot({ path: fileURLToPath(new URL(`../shots/muitos-${nome}.png`, import.meta.url)) });
 
   // seletor: buscar e escolher UM esteticista; escolher outro troca (não soma)
   await T('filtro-abrir').click();
@@ -69,7 +70,7 @@ for (const [nome, vp, touch] of [['computador', { width: 1280, height: 800 }, fa
   await p.locator('.seletor-item').nth(2).click();
   assert.doesNotMatch(await T('filtro-abrir').innerText(), /\+\d/, `${nome}: trocou, não somou`);
   assert.equal(await T('filtro-qualquer').count(), 0, `${nome}: não existe mais "Qualquer"`);
-  await p.screenshot({ path: new URL(`../shots/seletor-${nome}.png`, import.meta.url).pathname });
+  await p.screenshot({ path: fileURLToPath(new URL(`../shots/seletor-${nome}.png`, import.meta.url)) });
   await ctx.close();
 }
 

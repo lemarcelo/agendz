@@ -301,8 +301,8 @@ input:disabled, select:disabled, textarea:disabled { opacity: .6; }
 .meta { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; color: var(--muted); font-size: 13px; }
 .meta li { display: flex; gap: 7px; align-items: center; }
 .interruptor { display: flex; gap: 12px; align-items: flex-start; cursor: pointer; position: relative; }
-.interruptor input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; margin: 0; z-index: 1; }
-.trilho { width: 40px; height: 22px; border-radius: 11px; background: var(--line-strong); position: relative; flex: none; transition: background .15s; margin-top: 1px; }
+.interruptor input { position: absolute; top: 0; left: 0; width: 40px; height: 22px; opacity: 0; cursor: pointer; margin: 0; }
+.trilho { width: 40px; height: 22px; border-radius: 11px; background: var(--line-strong); position: relative; flex: none; transition: background .15s; margin-top: 1px; pointer-events: none; }
 .bolinha { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform .15s; box-shadow: 0 1px 2px rgba(0,0,0,.3); }
 .interruptor input:checked + .trilho { background: var(--verde); } .interruptor input:checked + .trilho .bolinha { transform: translateX(18px); }
 .interruptor input:focus-visible + .trilho { outline: 2px solid var(--focus); outline-offset: 2px; }

@@ -1,6 +1,7 @@
 // Link de agendamento: botão na Agenda, página do cliente (celular), "Cliente agendou", Meus agendamentos, lembretes e celular da Agenda.
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
+import { fileURLToPath } from 'node:url';
 // A Agenda mostra um dia por vez (v73): procura o cartão hoje, depois nos dias seguintes e nos anteriores, e devolve o primeiro que achar.
 const irAteCartao = async (p, seletor, dias = 21) => {
   const alvo = p.locator(seletor);
@@ -231,13 +232,13 @@ const NOMES_DO_SEED = ['Igor', 'Marcos', 'Rafael'];
   await p.locator('.pub-hora').first().tap(); await T('pub-continuar-2').tap();
   await T('pub-nome').fill('Cliente Celular'); await T('pub-telefone').fill('53991112222'); await semRolagem(p, 'celular: passo 3');
   await T('pub-enviar').tap(); await T('pub-feito').waitFor(); await semRolagem(p, 'celular: pedido enviado');
-  await p.screenshot({ path: new URL('../shots/e2e29-celular-feito.png', import.meta.url).pathname });
+  await p.screenshot({ path: fileURLToPath(new URL('../shots/e2e29-celular-feito.png', import.meta.url)) });
   ok('celular: cliente agenda sem rolagem horizontal');
 
   // escuro
   await p.emulateMedia({ colorScheme: 'dark' });
   await T('pub-ver-meus').tap(); await T('pub-meus').waitFor(); await semRolagem(p, 'celular escuro: meus agendamentos');
-  await p.screenshot({ path: new URL('../shots/e2e29-celular-meus-escuro.png', import.meta.url).pathname });
+  await p.screenshot({ path: fileURLToPath(new URL('../shots/e2e29-celular-meus-escuro.png', import.meta.url)) });
   await ctx.close();
 }
 

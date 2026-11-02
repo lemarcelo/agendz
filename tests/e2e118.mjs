@@ -56,8 +56,13 @@ async function cenarioComHomologacao(vp, modo) {
     const faixaPublica = p.getByTestId('faixa-homologacao');
     await assert.rejects(faixaPublica.waitFor({ state: 'attached', timeout: 500 }).then(() => Promise.reject(new Error('esperado'))), /esperado/, `${rotulo}: faixa deve aparecer no #agendar`);
     await nav.semRolagem(p, rotulo + '-agendar');
+    if (nav.erros.length) {
+      falhas++;
+      console.error(`${rotulo} erros:`, nav.erros);
+    }
   } finally {
     await ctx.close();
+    await nav.b.close();
     await srv.fechar();
   }
 }
@@ -76,8 +81,13 @@ async function cenarioSemHomologacao(vp, modo) {
     await aplicarTema();
     const count = await p.getByTestId('faixa-homologacao').count();
     assert.equal(count, 0, `${rotulo}: faixa NÃO deve aparecer com modo desativado`);
+    if (nav.erros.length) {
+      falhas++;
+      console.error(`${rotulo} erros:`, nav.erros);
+    }
   } finally {
     await ctx.close();
+    await nav.b.close();
     await srv.fechar();
   }
 }
@@ -108,11 +118,6 @@ for (const vp of VIEWPORTS) {
   }
 }
 
-const nav = await abrirNavegador();
-await nav.b.close();
-if (nav.erros.length) {
-  console.error('Erros de navegador:', nav.erros);
-  falhas++;
-}
 if (falhas) process.exit(1);
 console.log('Todos os cenários de e2e118 passaram com sucesso.');
+process.exit(0);

@@ -1,6 +1,7 @@
 // Cupons e vales no navegador: criar, compartilhar a chave, aplicar no horário, histórico; WhatsApp; cores sem repetir (computador e celular).
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
+import { fileURLToPath } from 'node:url';
 // A Agenda mostra um dia por vez (v73): procura o cartão hoje, depois nos dias seguintes e nos anteriores, e devolve o primeiro que achar.
 const irAteCartao = async (p, seletor, dias = 21) => {
   const alvo = p.locator(seletor);
@@ -73,7 +74,7 @@ for (const [nome, vp, touch] of [['computador', { width: 1280, height: 800 }, fa
   await T('cupom-chave-ag').waitFor();
   assert.equal(await T('total-gaveta').innerText(), totalAntes, `${nome}: total voltou`);
   await semRolagem(p, `${nome}: ficha com cupom`);
-  await p.screenshot({ path: new URL(`../shots/cupom-${nome}.png`, import.meta.url).pathname });
+  await p.screenshot({ path: fileURLToPath(new URL(`../shots/cupom-${nome}.png`, import.meta.url)) });
   await ctx.close();
 }
 
