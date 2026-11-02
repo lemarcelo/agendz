@@ -131,7 +131,8 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
     : futuro ? `Agendamento para ${fmtDate(inicio)} às ${fmtHM(inicio)}.`
       : passado ? `Atendimento que já aconteceu em ${fmtDate(inicio)} às ${fmtHM(inicio)}, registrado como concluído.` : 'Atendimento de agora, concluído.';
 
-  const ordem = sanearOrdemAtender(st.estabelecimento.ordemAtender, PADRAO_ARTIFACT)[futuro ? 'futuro' : 'local']; // v133: ordem escolhida pelo proprietário (Estabelecimento > Regras)
+  const padraoOrdem = usaVeiculo ? COMO_A_PAGINA_DO_CLIENTE : PADRAO_ARTIFACT;
+  const ordem = sanearOrdemAtender(st.estabelecimento.ordemAtender, padraoOrdem)[futuro ? 'futuro' : 'local']; // v133: ordem escolhida pelo proprietário (Estabelecimento > Regras)
   const camposVeic = {
     placa: (
                 <Campo rotulo={`Placa${obrig.includes('placa') ? ' *' : ''}`} erro={vNovo.placa && !placaValida(vNovo.placa) ? 'Placa inválida (ABC-1234 ou ABC1D23).' : undefined}><input value={vNovo.placa} onChange={(e) => setVNovo({ ...vNovo, placa: e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 8) })} maxLength={8} autoComplete="off" placeholder="ABC1D23" data-testid="atender-placa" /></Campo>
@@ -146,23 +147,29 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
                 <Campo rotulo="Cor (opcional)"><input value={vNovo.cor} onChange={(e) => setVNovo({ ...vNovo, cor: e.target.value })} maxLength={20} autoComplete="off" data-testid="atender-cor" /></Campo>
     ),
     porte: (
-                <Campo rotulo={`Porte${obrig.includes('porte') ? ' *' : ''}`} className="campo-largo" dica={vNovo.porte ? EXEMPLO_PORTE[vNovo.porte] : 'O porte define o preço e a duração dos serviços. Sem porte vale o médio.'}>
-                  <div className="pub-portes" role="group" aria-label="Porte do veículo" style={{ marginBottom: 6 }}>
+                <Campo rotulo={`Porte do veículo${obrig.includes('porte') ? ' *' : ''}`} className="campo-largo" dica={vNovo.porte ? EXEMPLO_PORTE[vNovo.porte] : 'O porte define o preço e a duração dos serviços. Sem porte vale o médio.'}>
+                  <div className="pub-portes" role="group" aria-label="Porte do veículo">
                     {portesParaEscolher(vNovo.porte).map(({ id: k }) => (
                       <button
                         type="button"
                         key={k}
-                        className={`pub-porte ${vNovo.porte === k ? 'on' : ''}`}
-                        aria-pressed={vNovo.porte === k}
+                        className={`pub-porte ${(vNovo.porte || PORTE_PADRAO) === k ? 'on' : ''}`}
+                        aria-pressed={(vNovo.porte || PORTE_PADRAO) === k}
                         onClick={() => setVNovo({ ...vNovo, porte: k })}
-                        data-testid={`atender-porte-btn-${k}`}
+                        data-testid={`atender-porte-${k}`}
                       >
                         <b>{ROTULO_PORTE[k]}</b>
                         <small>{(EXEMPLO_PORTE[k] || '').replace('Ex.: ', '')}</small>
                       </button>
                     ))}
                   </div>
-                  <select value={vNovo.porte} onChange={(e) => setVNovo({ ...vNovo, porte: e.target.value })} data-testid="atender-porte">
+                  <select
+                    value={vNovo.porte || PORTE_PADRAO}
+                    onChange={(e) => setVNovo({ ...vNovo, porte: e.target.value })}
+                    data-testid="atender-porte"
+                    aria-label="Porte do veículo"
+                    style={{ position: 'absolute', opacity: 0.01, width: 20, height: 20, zIndex: -1 }}
+                  >
                     <option value="">{obrig.includes('porte') ? 'Escolha…' : `${ROTULO_PORTE[PORTE_PADRAO]} (padrão)`}</option>
                     {portesParaEscolher(vNovo.porte).map(({ id: k }) => <option key={k} value={k}>{ROTULO_PORTE[k]}</option>)}
                   </select>

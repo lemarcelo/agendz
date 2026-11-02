@@ -1,4 +1,4 @@
-﻿package br.com.agendz.avaliacoes;
+package br.com.agendz.avaliacoes;
 
 import br.com.agendz.cifra.Cifra;
 import br.com.agendz.erro.ErroDeNegocio;

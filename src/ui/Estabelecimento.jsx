@@ -255,7 +255,7 @@ export default function Estabelecimento({ user }) {
             </Campo>
             <Interruptor checked={e.profissionalAutomatico === true} onChange={(v) => { const r = apiEst.salvar({ profissionalAutomatico: v }); if (r.ok) toast(v ? 'O app escolhe quem faz o serviço.' : 'Quem faz o serviço volta a ser escolhido na tela.'); else toast(r.erros[0], 'erro'); }}
               rotulo={`Não perguntar quem vai fazer o serviço`} descricao={`Ligado, o campo do ${rot('profissional')} some do Atender e do link do cliente, e o app escolhe quem está com a agenda mais livre naquele dia (empate: quem tem menos horários na semana, depois a ordem da equipe). Respeita expediente, conflito${capAtiva('usaRecursoFisico') ? ', box' : ''} e horário fixo reservado. Desligado (padrão), a pessoa escolhe.`} testid="regras-profissional-auto" />
-            <OrdemAtender valor={sanearOrdemAtender(e.ordemAtender, PADRAO_ARTIFACT)} padrao={PADRAO_ARTIFACT} usaVeiculo={capAtiva('usaVeiculo')}
+            <OrdemAtender valor={sanearOrdemAtender(e.ordemAtender, capAtiva('usaVeiculo') ? COMO_A_PAGINA_DO_CLIENTE : PADRAO_ARTIFACT)} padrao={capAtiva('usaVeiculo') ? COMO_A_PAGINA_DO_CLIENTE : PADRAO_ARTIFACT} usaVeiculo={capAtiva('usaVeiculo')}
               aoMudar={(v) => { const r = apiEst.salvar({ ordemAtender: v }); if (r.ok) toast('Ordem do Atender salva.'); else toast(r.erros[0], 'erro'); }} />
             <PagamentoRegras st={st} e={e} />
             {ehDono(user) && <Campo rotulo={`Comissão padrão do ${rot('profissional')} (%)`} dica={`Parte de cada ${rot('atendimento')} que fica com o ${rot('profissional')}. O restante é do estabelecimento. Pode ser mudada por serviço ou por ${rot('profissional')}. Só o proprietário altera e vê.`}>

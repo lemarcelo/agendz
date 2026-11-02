@@ -1,4 +1,4 @@
-﻿package br.com.agendz.seguranca;
+package br.com.agendz.seguranca;
 
 import br.com.agendz.auth.aparelho.AparelhosConfiaveis;
 import br.com.agendz.auth.rede.RedesConfiaveis;

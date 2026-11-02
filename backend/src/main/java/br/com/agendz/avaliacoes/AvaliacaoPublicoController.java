@@ -1,4 +1,4 @@
-﻿package br.com.agendz.avaliacoes;
+package br.com.agendz.avaliacoes;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.servlet.http.HttpServletRequest;

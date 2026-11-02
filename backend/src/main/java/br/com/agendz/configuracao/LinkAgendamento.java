@@ -34,6 +34,9 @@ public class LinkAgendamento {
     public static final List<String> VEICULO_DO_LINK = List.of("placa", "modelo", "porte");
 
     public record Config(boolean ativo, int diasMax, boolean telefoneObrigatorio, boolean nomeObrigatorio, List<String> veiculoObrigatorio, int limiteAbertos, String recaptchaChaveSite, String recaptchaSegredo) {
+        public Config(boolean ativo, int diasMax, boolean telefoneObrigatorio, boolean nomeObrigatorio, List<String> veiculoObrigatorio, int limiteAbertos) {
+            this(ativo, diasMax, telefoneObrigatorio, nomeObrigatorio, veiculoObrigatorio, limiteAbertos, null, null);
+        }
     }
 
     public record Resposta(boolean ativo, int diasMax, boolean disponivel, boolean telefoneObrigatorio, boolean nomeObrigatorio, List<String> veiculoObrigatorio, List<String> pendencias,

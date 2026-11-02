@@ -117,23 +117,34 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
     marca: <Campo rotulo="Marca"><input value={novoVeic.marca} onChange={(e) => setNovoVeic({ ...novoVeic, marca: e.target.value })} maxLength={30} autoComplete="off" data-testid="atender-v-marca" /></Campo>,
     cor: <Campo rotulo="Cor"><input value={novoVeic.cor} onChange={(e) => setNovoVeic({ ...novoVeic, cor: e.target.value })} maxLength={20} autoComplete="off" data-testid="atender-v-cor" /></Campo>,
     porte: (
-      <Campo rotulo={`Porte${exige(regras, tipo, 'porte') ? ' *' : ''}`} className="campo-largo">
-        <div className="pub-portes" role="group" aria-label="Porte do veículo" style={{ marginBottom: 6 }}>
-          {portesParaEscolher(novoVeic.porte).map(({ id: k }) => (
-            <button
-              type="button"
-              key={k}
-              className={`pub-porte ${novoVeic.porte === k ? 'on' : ''}`}
-              aria-pressed={novoVeic.porte === k}
-              onClick={() => { setNovoVeic({ ...novoVeic, porte: k }); setErro(''); }}
-              data-testid={`atender-v-porte-btn-${k}`}
-            >
-              <b>{ROTULO_PORTE[k]}</b>
-              <small>{(EXEMPLO_PORTE[k] || '').replace('Ex.: ', '')}</small>
-            </button>
-          ))}
+      <Campo rotulo={`Porte do veículo${exige(regras, tipo, 'porte') ? ' *' : ''}`} className="campo-largo">
+        <div className="pub-portes" role="group" aria-label="Porte do veículo">
+          {portesParaEscolher(novoVeic.porte).map(({ id: k, nome, exemplo }) => {
+            const rot = ROTULO_PORTE[k] || nome;
+            const ex = (EXEMPLO_PORTE[k] || exemplo || '').replace('Ex.: ', '');
+            const ativo = (novoVeic.porte || PORTE_PADRAO) === k;
+            return (
+              <button
+                type="button"
+                key={k}
+                className={`pub-porte ${ativo ? 'on' : ''}`}
+                aria-pressed={ativo}
+                onClick={() => { setNovoVeic({ ...novoVeic, porte: k }); setErro(''); }}
+                data-testid={`atender-v-porte-${k}`}
+              >
+                <b>{rot}</b>
+                {ex && <small>{ex}</small>}
+              </button>
+            );
+          })}
         </div>
-        <select value={novoVeic.porte} onChange={(e) => { setNovoVeic({ ...novoVeic, porte: e.target.value }); setErro(''); }} data-testid="atender-v-porte">
+        <select
+          value={novoVeic.porte || PORTE_PADRAO}
+          onChange={(e) => { setNovoVeic({ ...novoVeic, porte: e.target.value }); setErro(''); }}
+          data-testid="atender-v-porte"
+          aria-label="Porte do veículo"
+          style={{ position: 'absolute', opacity: 0.01, width: 20, height: 20, zIndex: -1 }}
+        >
           <option value="">{exige(regras, tipo, 'porte') ? 'Escolha…' : `${ROTULO_PORTE[PORTE_PADRAO]} (padrão)`}</option>
           {portesParaEscolher(novoVeic.porte).map(({ id: k }) => <option key={k} value={k}>{ROTULO_PORTE[k]}</option>)}
         </select>

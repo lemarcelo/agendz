@@ -1,4 +1,4 @@
-﻿package br.com.agendz.avaliacoes;
+package br.com.agendz.avaliacoes;
 
 import static org.hamcrest.Matchers.hasSize;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -698,7 +698,7 @@ class AvaliacoesTest extends BaseApi {
     void obterTokenDeAvaliacaoPeloLinkPublico() throws Exception {
         String ag = atender("Cliente Link", novoTelefone(), corte);
         String tokenAcesso = "0123456789abcdef0123456789abcdef0123456789abcdef";
-        String tokenHash = hash(tokenAcesso);
+        String tokenHash = AvaliacaoService.hash(tokenAcesso);
         jdbc.update("insert into acesso_publico (loja_id, agendamento_id, token_hash, criado_em, expira_em) values (?::uuid, ?::uuid, ?, now(), now() + interval '30 days')",
                 LOJA_OFFBOX, ag, tokenHash);
 

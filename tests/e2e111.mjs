@@ -21,24 +21,25 @@ const fechar = async () => { await p.keyboard.press('Escape'); await T('salvar-a
 
 await T('demo-davi').click(); await T('agenda-topo').waitFor();
 
-// 1. padrão = ordem de hoje da demonstração: Serviços antes de Veículo
+// 1. padrão da autoestética: Veículo (porte no topo) vem antes de Serviços
 await abrirAtender();
-assert.ok(await y('atender-lista-servicos') < await y('atender-veiculo'), 'padrão: Serviços vem antes de Veículo');
+assert.ok(await y('atender-veiculo') < await y('atender-lista-servicos'), 'padrão da estética: Veículo vem antes de Serviços');
+assert.ok(await y('atender-porte') < await y('atender-placa'), 'porte vem no topo dos campos de veículo');
 await fechar();
-ok('padrão: a ordem de hoje (Serviços → … → Veículo)');
+ok('padrão da autoestética: Veículo com porte no topo');
 
 // 2. a configuração existe só para o proprietário, com os dois tipos de atendimento
 await T('nav-estab').click();
 await p.getByRole('tab', { name: 'Regras' }).click();
 await T('ordem-atender').waitFor();
 await T('ordem-futuro').waitFor(); await T('ordem-local').waitFor();
-assert.equal(await T('ordem-local-etapas-sobe-servicos').isDisabled(), true, 'a primeira etapa não sobe');
+assert.equal(await T('ordem-local-etapas-sobe-veiculo').isDisabled(), true, 'a primeira etapa não sobe');
 ok('Estabelecimento > Regras mostra a ordem para agendamento e atendimento feito');
 
-// 3. mover só o atendimento feito: Veículo sobe até o topo; o agendamento (futuro) fica como estava
-for (let i = 0; i < 4; i++) { if (await T('ordem-local-etapas-sobe-veiculo').isDisabled()) break; await T('ordem-local-etapas-sobe-veiculo').click(); }
+// 3. mover só o atendimento feito: Veículo desce para depois dos Serviços; o agendamento (futuro) fica como estava
+for (let i = 0; i < 4; i++) { if (await T('ordem-local-etapas-desce-veiculo').isDisabled()) break; await T('ordem-local-etapas-desce-veiculo').click(); }
 await abrirAtender(); // "Agora" = atendimento feito
-assert.ok(await y('atender-veiculo') < await y('atender-lista-servicos'), 'atendimento feito: Veículo agora vem antes dos Serviços');
+assert.ok(await y('atender-lista-servicos') < await y('atender-veiculo'), 'atendimento feito: Serviços agora vem antes de Veículo');
 await fechar();
 ok('mudar a ordem do atendimento feito reflete no Atender');
 
@@ -57,7 +58,7 @@ await T('nav-estab').click();
 await p.getByRole('tab', { name: 'Regras' }).click();
 await T('ordem-padrao').click();
 await abrirAtender();
-assert.ok(await y('atender-lista-servicos') < await y('atender-veiculo'), 'fábrica: Serviços antes de Veículo');
+assert.ok(await y('atender-veiculo') < await y('atender-lista-servicos'), 'fábrica da autoestética: Veículo antes de Serviços');
 await fechar();
 ok('voltar à ordem de fábrica');
 

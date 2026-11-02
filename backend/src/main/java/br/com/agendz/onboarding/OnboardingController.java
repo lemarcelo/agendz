@@ -375,7 +375,8 @@ public class OnboardingController {
             br.com.agendz.configuracao.LinkAgendamento.Config n = new br.com.agendz.configuracao.LinkAgendamento.Config(atual.ativo(), atual.diasMax(),
                     corpo.telefoneObrigatorio() == null ? atual.telefoneObrigatorio() : corpo.telefoneObrigatorio(),
                     corpo.nomeObrigatorio() == null ? atual.nomeObrigatorio() : corpo.nomeObrigatorio(),
-                    corpo.veiculoObrigatorio() == null ? atual.veiculoObrigatorio() : List.copyOf(corpo.veiculoObrigatorio()), atual.limiteAbertos());
+                    corpo.veiculoObrigatorio() == null ? atual.veiculoObrigatorio() : List.copyOf(corpo.veiculoObrigatorio()), atual.limiteAbertos(),
+                    atual.recaptchaChaveSite(), atual.recaptchaSegredo());
             br.com.agendz.configuracao.LinkAgendamento.gravarConfig(jdbc, loja.id(), n);
             reconfiguracoes.anotarLink(jdbc, reconf, atual, n);
             return null;
