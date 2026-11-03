@@ -18,16 +18,30 @@ const nav = await abrirNavegador();
 try {
   for (const tipo of ['estetica_automotiva', 'barbearia']) {
     estado.loja = { slug: 'teste', nome: 'Loja teste', tipo };
-    for (const width of [390, 1904]) for (const tema of ['light', 'dark']) {
+    for (const width of [390, 1366, 1904]) for (const tema of ['light', 'dark']) {
       const { ctx, p } = await nav.abrir(srv.url, { viewport: { width, height: 1000 }, fonteLarga: true });
       try {
         await p.evaluate((t) => document.documentElement.dataset.theme = t, tema);
         await p.getByTestId('agenda-dia').waitFor();
+        if (process.env.AGENDZ_REVISAO_VISUAL) await p.screenshot({ animations: 'disabled', path: `shots-revisao/${tipo}-${width}-${tema}-agenda.png` });
+        const principal = await p.locator('.app-real .principal').boundingBox();
+        assert.ok(principal.width <= 1441, 'conteúdo não deve esticar em telas largas');
+        const cabecalho = await p.locator('.app-real .topo').boundingBox();
+        for (const el of await p.locator('.app-real .topo button:visible').all()) {
+          const rect = await el.boundingBox();
+          assert.ok(rect.x >= -1 && rect.x + rect.width <= width + 1 && rect.y >= cabecalho.y - 1 && rect.y + rect.height <= cabecalho.y + cabecalho.height + 1, 'controle do topo fora da tela ou do cabeçalho');
+        }
+        const botoesTopo = await p.locator('.app-real .topo button:visible').evaluateAll((els) => els.map((el) => { const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, right: r.right, bottom: r.bottom }; }));
+        for (let i = 0; i < botoesTopo.length; i++) for (let j = i + 1; j < botoesTopo.length; j++) {
+          const a = botoesTopo[i], b = botoesTopo[j];
+          assert.ok(a.right <= b.x + 1 || b.right <= a.x + 1 || a.bottom <= b.y + 1 || b.bottom <= a.y + 1, 'controles do topo não devem se sobrepor');
+        }
         const marca = p.getByTestId('marca-inicio-real');
         const logo = await marca.locator('img, .marca-icone').boundingBox();
         const nome = await marca.locator('.marca-nome').boundingBox();
         assert.ok(nome.y >= logo.y + logo.height, 'nome abaixo da marca');
         await p.getByTestId('nav-clientes').click();
+        if (process.env.AGENDZ_REVISAO_VISUAL) { await p.getByTestId('tela-clientes').waitFor(); await p.screenshot({ animations: 'disabled', path: `shots-revisao/${tipo}-${width}-${tema}-clientes.png` }); }
         await marca.click();
         await p.getByTestId('agenda-dia').waitFor();
         await p.getByTestId('atender-abrir').click();
@@ -53,6 +67,13 @@ try {
         assert.equal(await p.getByTestId('atender-quando-bloco').isVisible(), false);
         assert.equal(await p.getByTestId('salvar-atender').isVisible(), true);
         if (tipo === 'estetica_automotiva') {
+          if (width === 390) {
+            const campoPorte = await p.getByTestId('atender-v-porte-medio').boundingBox();
+            const campoPlaca = await p.getByTestId('atender-v-placa').boundingBox();
+            assert.ok(campoPorte.width >= campoPlaca.width * 0.9, 'portes usam a largura disponível');
+            const primeiro = await p.getByTestId('atender-v-porte-pequeno').boundingBox();
+            assert.ok(Math.abs(primeiro.y - campoPorte.y) < 2, 'portes aparecem lado a lado no celular');
+          }
           await p.getByTestId('atender-v-placa').fill('ABC1234');
           await p.getByTestId('atender-v-modelo').fill('Carro');
         }

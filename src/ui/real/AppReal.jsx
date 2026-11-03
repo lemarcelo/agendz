@@ -276,7 +276,7 @@ function Painel({ loja, sessao, aoSair, aoMudarMarca }) {
   const comSuporte = dono || (sessao.secoes || []).includes('suporte'); // v119: de fábrica só o proprietário; os outros se ele liberar
   if (comSuporte) itens.push(['suporte', 'Suporte', 'info']);
   return (
-    <div className="app">
+    <div className="app app-real">
       <header className="topo">
         <LogoPequena loja={loja} aoInicio={() => { setPerfilAberto(false); setFoco(null); setAba(itens[0][0]); }} />
         <nav className="nav" aria-label="Seções">
