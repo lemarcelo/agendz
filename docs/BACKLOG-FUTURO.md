@@ -2,6 +2,46 @@
 
 Regra de uso: toda funcionalidade nova pedida "para outro momento" entra aqui com **o que é**, **onde mexe** (só Admin, só Agendz, ou os dois) e **dúvidas**. Não implementar antes de a fila principal (`docs/PROMPT-CONTINUACAO.md`) chegar nela, salvo se o Marcelo pedir.
 
+## Agenda e clientes parceiros — pedidos de 03/11 (roteiro adaptado para Flash 3.8 com trava de testes)
+
+**Onde mexe:** Agendz; verificar na implementação os efeitos no site real, servidor e demonstração. A inclusão aqui não autoriza implementar ou publicar agora.
+**Regra obrigatória para execução em Flash 3.8 (ou outro modelo leve):**
+- **Passo 1 (Leitura cirúrgica):** ler apenas os arquivos listados em cada item abaixo; normalizar `CRLF -> LF` antes de editar no Windows; rodar `npm run build` após cada edição.
+- **Passo 2 (Prints obrigatórios + resumo em texto ANTES de tudo):** para qualquer alteração visual ou com reflexo visual na aplicação, gerar capturas reais em `1366px` e `390px` (`shots-revisao/`), copiar para a pasta de artefatos da conversa, **mostrar as telas no chat e explicar em texto, de forma resumida, o que foi alterado**. **PARAR e aguardar aprovação visual** antes de rodar a suíte completa ou fazer commit/push.
+- **Passo 3 (Compensação com testes anti-erro):** para cada item implementado, adicionar/atualizar asserções em `tests/estatico.test.mjs` (garantindo que nenhum `data-testid` existente foi perdido) e no `tests/e2e*.mjs` correspondente (testando `390px` com fonte `DejaVu Sans`, ausência de rolagem horizontal, ausência de sobreposição por `boundingBox()`, fechamento de modais com `Escape`/botão fechar, erro do servidor `400`/`409` na tela e persistência do corpo `POST`/`PUT`).
+
+1. **Previsão de conclusão no cartão — [implementada apenas no trabalho local, ainda não versionada nem publicada]:** `Termina às HH:MM` (`data-testid="cartao-termino"` e `cartao-proximo-termino`) abaixo do horário inicial em `src/ui/real/Agenda.jsx`, usando `a.fim` (fim do serviço, não `fimOcupado`). A sessão anterior registrou cobertura em `tests/estatico.test.mjs` e `tests/e2e46.mjs`; confirmar o estado e os testes antes da entrega.
+2. **Cliente parceiro (aguarda confirmação das regras):** não cobrar o serviço de cliente parceiro.
+   - **Antes de codificar, perguntar ao Marcelo (com opções curtas):** (a) é um campo booleano `parceiro` no cadastro do cliente? (b) zera só os serviços ou também produtos? (c) gera comissão ou zera comissão?
+   - **Testes obrigatórios ao implementar:** isolamento entre lojas (Gate 3), cálculo de total = 0 nos serviços do parceiro, bloqueio para quem não tem permissão de editar cliente, e verificação visual do selo/indicador no cartão em `390px` e `1366px`.
+3. **Reativar cancelado pedindo novo horário:** ao tocar no cartão de um horário cancelado (`detalhe-modal`) e escolher `acao-reativar`, abrir seletor de data/hora preenchido com o horário original (permitindo trocar ou manter) e validar disponibilidade/conflito.
+   - **Arquivos exatos:** `src/ui/real/Agenda.jsx` (bloco `status === 'cancelado'` dentro de `Detalhe`), `tests/e2e46.mjs` (seção 5) e `tests/e2e76.mjs` (seção 2b).
+   - **Testes obrigatórios (Flash guardrail):** (a) conflito `409` mantém o modal aberto e mostra `agendamento-erro`; (b) horário livre envia `PUT` e volta o cartão para `a_confirmar`; (c) fechar o modal não trava cliques na agenda; (d) sem rolagem lateral em `390px`.
+4. **Aviso de atraso no cartão (aguarda confirmação):** no modal `Detalhe` do horário, oferecer botão para enviar mensagem de aviso de atraso no WhatsApp perguntando quantos minutos (padrão = último valor usado no `localStorage` com `try/catch`, ex.: `15` min quando vazio).
+   - **Testes obrigatórios (Flash guardrail):** `localStorage` envolto em `try/catch` (vigiado por `tests/estatico.test.mjs`), link `https://wa.me/` válido com telefone do cliente, aviso quando cliente não tem telefone, e layout do modal em `390px`.
+5. **Opção “Atendido” para registro anterior (etapa Quando do Atender):** na etapa **Quando** de `src/ui/real/Atender.jsx`, adicionar botão **Atendido** (`data-testid="atender-atendido"`) à esquerda de **Agora** (`atender-agora`), mantendo **Escolher data** (`atender-quando`).
+   - **Arquivos exatos:** `src/ui/real/Atender.jsx`, `src/styles.css` (`.grupo-hora .btn-quando`), `tests/e2e47.mjs` / `tests/e2e53.mjs`.
+   - **Cuidado para modelos leves:** reaproveitar o envio existente de `POST /api/atendimentos` com data/hora passada (status sai `concluido`), mantendo o campo de motivo quando exigido pelo servidor para dias anteriores.
+   - **Testes obrigatórios (Flash guardrail):** medir `boundingBox()` dos 3 botões (**Atendido**, **Agora**, **Escolher data**) em `390px` garantindo que cabem sem rolagem lateral (`scrollWidth <= 390`) e sem sobreposição; testar que **Agora** e **Escolher data** continuam idênticos.
+6. **Calendário: modal com horários e ações do dia:** ao clicar em um dia na aba **Calendário** (`mes-dia-YYYY-MM-DD` em `src/ui/real/Agenda.jsx`), abrir um modal listando os cartões daquele dia (reutilizando `Cartao`, `Detalhe` e `PedirAvaliacao`), mantendo a aba Calendário ativa por trás.
+   - **Arquivos exatos:** `src/ui/real/Agenda.jsx`, `src/styles.css`, `tests/e2e46.mjs` (seção 8) e `tests/e2e76.mjs` (seção 7).
+   - **Testes obrigatórios (Flash guardrail):** abrir dia com agendamentos e dia vazio no modal; abrir `Detalhe` de um cartão dentro do modal do dia; fechar com `Escape` e com botão fechar sem deixar `.detalhe-fundo-real` preso na tela; medir `390px` e `1366px`.
+7. **Pedido de avaliação: modal e compartilhamento:** transformar `src/ui/real/PedirAvaliacao.jsx` em modal centralizado (`role="dialog" aria-modal="true"`), com botões alinhados ao tema da loja e opção de abrir no WhatsApp (`wa.me/?text=`) para escolher qualquer contato quando não houver telefone ou quando o usuário quiser encaminhar.
+   - **Arquivos exatos:** `src/ui/real/PedirAvaliacao.jsx`, `src/ui/real/Agenda.jsx`, `src/styles.css`, `tests/e2e89.mjs`.
+   - **Testes obrigatórios (Flash guardrail):** preservar bloqueio quando o cliente marcou "não receber mensagens"; testar com e sem telefone; verificar fechamento do modal e ausência de rolagem lateral em `390px`.
+
+**Continuidade:** avaliar essas dúvidas quando o trabalho for iniciado e pedir detalhes essenciais se necessário. Para mudanças de tela, seguir a skill visual e apresentar prévias de computador e celular antes da suíte completa e do deploy.
+
+## Continuidade do trabalho visual e PWA — 03/11
+
+O trabalho a seguir foi registrado na sessão local como implementado, porém o código ainda está **não commitado e não publicado**. Antes de prosseguir em outro ambiente, transferir ou versionar essas alterações e conferir a situação real. Os testes e capturas da sessão anterior não foram repetidos nesta atualização do backlog.
+
+- Agenda: cartões menores, previsão de término e altura independente; abrir detalhes em modal, com concluir em verde, remarcar em amarelo, histórico e sem o botão de aplicar cupom no modal. Conferir os demais fluxos e permissões existentes.
+- Estabelecimento: campos organizados e reordenação pela alça à esquerda, com movimento visível durante o arraste, teclado e sem setas redundantes. Conferir mouse, toque e persistência.
+- Revisão visual geral das telas e configurações: verificar alinhamento e comportamento em computador e celular, temas e tipos de loja, incluindo estados vazios e preenchidos; preservar cores derivadas da logo e a lógica existente.
+- PWA por loja: a sessão anterior registra alterações locais no nome, ícone, manifesto e cor da barra. Validar o servidor, inclusive a compilação Java ainda pendente no ambiente anterior, e conferir isolamento por loja antes de entregar.
+- Entrega: seguir a skill visual e as regras de `CLAUDE.md`; preservar os arquivos locais e verificar os testes existentes. As capturas e testes relatados na sessão anterior não substituem a verificação do estado efetivamente entregue.
+
 ## B0. Planos de serviços (pedido de 29/10 — **FEITO em 31/10, v136**; ficou só o que está em "Em aberto" abaixo)
 **v136 fechou o B0:** "Usar modelo" no site real, cliente com plano que agenda pelo link gasta o corte no servidor (nunca é recusado por causa do plano) e a página real do link avisa "usa um atendimento do seu plano" antes e depois do pedido (`POST /api/publico/planos/uso`, só sim ou não). **Em aberto (precisa do Marcelo ou de backlog próprio):** produto incluso e validade em meses do modelo (o plano do servidor ainda não guarda), cobrança da mensalidade por Pix/financeiro (aguarda confirmação por escrito).
 **Para que serve:** vender um plano recorrente a um cliente (ex.: lavagem mensal, corte quinzenal): menu **Planos**, onde o proprietário escolhe o **cliente**, o **serviço**, a **recorrência** e o **valor** do plano. **Decisões do Marcelo (29/10, 09:56):** a **cobrança é por mês**; cada mês gera um **valor a receber** pelo pacote (cliente + plano + mês, em aberto até pagar); o pagamento fica informado como **"plano"** (nova forma de pagamento, ao lado de Pix/dinheiro/cartão), e os atendimentos do plano não geram cobrança avulsa.
