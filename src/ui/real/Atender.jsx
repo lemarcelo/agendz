@@ -54,8 +54,15 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
   const [motivo, setMotivo] = useState('');
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
+  const [sucesso, setSucesso] = useState(null);
   const [etapaAtiva, setEtapaAtiva] = useState(0);
   const ultima = useRef(0);
+
+  useEffect(() => {
+    if (!sucesso) return undefined;
+    const timer = setTimeout(() => aoSalvar(sucesso.texto, sucesso.agendamento), 1200);
+    return () => clearTimeout(timer);
+  }, [sucesso]);
 
   useEffect(() => { let vivo = true; apiServicos.listar({ para: 'atender' }).then((r) => { if (vivo) { if (r.ok) setServicos(r.servicos.filter((s) => s.ativo !== false)); else { setServicos([]); setErro(r.erro); } } }); return () => { vivo = false; }; }, []);
   useEffect(() => { let vivo = true; apiRegras.obter().then((r) => { if (vivo && r.ok) setRegras(r.regras); }); return () => { vivo = false; }; }, []);
@@ -112,7 +119,7 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
     });
     setEnviando(false);
     if (!r.ok) { setErro(r.erro); return; }
-    aoSalvar(tipo === 'futuro' ? 'Agendamento criado.' : 'Atendimento registrado.', r.agendamento);
+    setSucesso({ texto: tipo === 'futuro' ? 'Agendamento criado.' : 'Atendimento registrado.', agendamento: r.agendamento });
   };
 
   const padraoOrdem = usaVeiculo ? COMO_A_PAGINA_DO_CLIENTE : PADRAO_PAINEL;
@@ -262,6 +269,8 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
         </fieldset>
     ) : null,
   };
+
+  if (sucesso) return <div className="atender-real atender-sucesso-real" role="status" aria-live="polite" data-testid="atender-sucesso"><span className="atender-sucesso-icone-real"><Icone n="check" size={32} /></span><strong>{sucesso.texto}</strong></div>;
 
   return (
     <form className="atender-real" onSubmit={enviar} data-testid="atender-form" aria-label="Atender">

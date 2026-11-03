@@ -208,7 +208,7 @@ const abrirCartao = async (p) => { await p.getByTestId('nav-agenda').click(); aw
   assert.equal(banco.length, antes, 'chave errada: nada foi criado');
   await p.getByTestId('atender-cupom').fill('abcd-efgh-jklm');
   await p.getByTestId('salvar-atender').click();
-  await p.getByTestId('agenda-aviso').waitFor();
+  await p.getByTestId('atender-janela').waitFor({ state: 'detached' });
   assert.equal(chamadasDe('POST', '/api/atendimentos').at(-1).corpo.cupomChave, 'abcd-efgh-jklm');
   assert.equal(banco.length, antes + 1);
   assert.equal(banco.at(-1).desconto, 4.5);

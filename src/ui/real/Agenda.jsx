@@ -271,6 +271,7 @@ export default function Agenda({ ehProprio = false, ehDono = false, ehProprietar
   const [versao, setVersao] = useState(0);
   const [aberto, setAberto] = useState(null);
   const [atendendo, setAtendendo] = useState(false);
+  const [destaqueAtendido, setDestaqueAtendido] = useState('');
   const [clientes, setClientes] = useState(new Map());
   const [profs, setProfs] = useState([]);
   const [boxes, setBoxes] = useState([]);
@@ -377,9 +378,16 @@ export default function Agenda({ ehProprio = false, ehDono = false, ehProprietar
   const atendeu = (texto, ag) => {
     setAtendendo(false);
     apiClientes.listar().then((r) => { if (r.ok) { setClientes(new Map(r.clientes.map((c) => [c.id, c.apelido || c.nome]))); setFichas(new Map(r.clientes.map((c) => [c.id, { nome: c.apelido || c.nome, telefone: c.telefone }]))); } });
-    setModo('horarios'); setCursor(startOfDay(ag.inicio)); setDiasAdiante(7); setAberto(null);
-    alterou(texto, ag);
+    setModo('horarios'); setSelecionado('todos'); setCursor(startOfDay(ag.inicio || Date.now())); setDiasAdiante(7); setAberto(null);
+    setDestaqueAtendido(ag.id); setRolarPara(ag.id);
+    setAviso(ag.conflitosPendentes?.length ? `Há ${ag.conflitosPendentes.length} agendamento(s) a confirmar no mesmo horário.` : '');
+    setVersao((v) => v + 1);
   };
+  useEffect(() => {
+    if (!destaqueAtendido) return undefined;
+    const timer = setTimeout(() => setDestaqueAtendido(''), 9000);
+    return () => clearTimeout(timer);
+  }, [destaqueAtendido]);
   const irPara = (ts) => { setCursor(startOfDay(ts)); setAberto(null); setAviso(''); setDiasAdiante(7); };
   const passo = (n) => (modo === 'horarios' ? irPara(addDays(cursor, n)) : irPara(addMonths(cursor, n)));
   const mostrarSeletor = !ehProprio && atendem.length > 1;
@@ -387,7 +395,7 @@ export default function Agenda({ ehProprio = false, ehDono = false, ehProprietar
 
   const cartao = (a, testid) => (
     <Cartao key={a.id} a={a} testid={testid} nomeCliente={nomeCliente(a)} nomeProf={nomeProf(a.profissionalId)} mostraProf={!ehProprio && selecionado === 'todos' && atendem.length > 1}
-      aberto={aberto === a.id} aoAbrir={() => setAberto(aberto === a.id ? null : a.id)} aoSegurar={setTrocaForma} destaque={destaqueIds.includes(a.id)} avaliacao={notas.get(a.id) || null}>
+      aberto={aberto === a.id} aoAbrir={() => setAberto(aberto === a.id ? null : a.id)} aoSegurar={setTrocaForma} destaque={destaqueIds.includes(a.id) || destaqueAtendido === a.id} avaliacao={notas.get(a.id) || null}>
       <Detalhe a={a} nomeProf={nomeProf(a.profissionalId)} nomeDe={nomeProf} profissionais={atendem} boxes={boxes} ehDono={ehDono} aoAlterar={alterou} aoAvisar={setAvisoRemarcar} cliente={a.clienteId ? fichas.get(a.clienteId) || null : null} loja={{ nome: nomeLoja, ...lojaInfo }} />
     </Cartao>
   );

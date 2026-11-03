@@ -181,7 +181,7 @@ const texto = (p, t) => p.getByTestId(t).innerText();
   await p.getByTestId(`atender-veiculo-${V_ONIX}`).check();
   await p.getByTestId('atender-box').selectOption(BX2);
   await p.getByTestId('salvar-atender').click();
-  await p.getByTestId('agenda-aviso').waitFor();
+  await p.getByTestId('atender-janela').waitFor({ state: 'detached' });
   assert.equal(ultimo('POST', '/api/atendimentos').corpo.boxId, BX2);
   const cartao = p.locator('[data-testid="cartao"]').first();
   await cartao.waitFor();

@@ -158,7 +158,7 @@ const concluirAtender = async (p) => { await p.getByTestId('atender-prox-quando'
   await p.getByTestId('atender-telefone').fill('11977776666');
   await p.getByTestId('atender-forma-cartao').check();
   await p.getByTestId('salvar-atender').click();
-  await p.getByTestId('agenda-aviso').waitFor();
+  await p.getByTestId('atender-janela').waitFor({ state: 'detached' });
   assert.equal(ultimo().corpo.formaPagamento, 'cartao');
   assert.equal(banco.at(-1).formaPagamento, 'cartao');
   ok('Atender: padrão marcado, * nos obrigatórios, mensagem do servidor na tela, forma escolhida vai no corpo');
@@ -168,7 +168,7 @@ const concluirAtender = async (p) => { await p.getByTestId('atender-prox-quando'
   await concluirAtender(p);
   await p.getByTestId('atender-telefone').fill('11977776666');
   await p.getByTestId('salvar-atender').click();
-  await p.getByTestId('agenda-aviso').waitFor();
+  await p.getByTestId('atender-janela').waitFor({ state: 'detached' });
   assert.equal(ultimo().corpo.formaPagamento, 'dinheiro');
   ok('sem escolher, vale a forma padrão da loja');
   await ctx.close();
@@ -190,7 +190,7 @@ const concluirAtender = async (p) => { await p.getByTestId('atender-prox-quando'
   assert.equal(qtdAtendimentos(), antes, 'nada enviado');
   await p.getByTestId('atender-forma-pix').check();
   await p.getByTestId('salvar-atender').click();
-  await p.getByTestId('agenda-aviso').waitFor();
+  await p.getByTestId('atender-janela').waitFor({ state: 'detached' });
   assert.equal(ultimo().corpo.formaPagamento, 'pix');
   ok('sem padrão: a tela exige escolher a forma antes de enviar');
   await ctx.close();
@@ -209,7 +209,7 @@ const concluirAtender = async (p) => { await p.getByTestId('atender-prox-quando'
   await p.getByTestId('atender-prox-cliente').click();
   await p.getByTestId('atender-nome').fill('Ana Lima'); await p.getByTestId('atender-telefone').fill('11977776666');
   await p.getByTestId('salvar-atender').click();
-  await p.getByTestId('agenda-aviso').waitFor();
+  await p.getByTestId('atender-janela').waitFor({ state: 'detached' });
   assert.ok(!('formaPagamento' in ultimo().corpo), 'futuro não manda forma');
   ok('futuro: sem bloco de forma e sem forma no corpo');
   await ctx.close();

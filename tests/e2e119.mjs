@@ -4,14 +4,20 @@ import assert from 'node:assert/strict';
 import { subirServidor, abrirNavegador, id } from './real-util.mjs';
 
 const estado = {};
+let ags = [];
 const srv = await subirServidor((c, { json }) => {
   if (c.u === '/api/profissionais') return json(200, [{ id: id(1), nome: 'Ana', papel: 'dono', atende: true }]);
   if (c.u === '/api/estabelecimento/regras-atendimento') return json(200, { futuro: [], local: [] });
   if (c.u === '/api/estabelecimento/local') return json(200, {});
   if (c.u === '/api/boxes') return json(200, [{ id: id(60), nome: 'Box 1', ativo: true }]);
   if (c.u === '/api/servicos') return json(200, [{ id: id(50), nome: 'Serviço', ativo: true, preco: 40, duracaoMin: 30, precos: { medio: 40 }, duracoes: { medio: 30 } }]);
-  if (c.u === '/api/atendimentos' && c.m === 'POST') return json(201, { id: id(101), status: 'concluido' });
-  if (['/api/agendamentos', '/api/clientes', '/api/produtos', '/api/avisos'].includes(c.u)) return json(200, []);
+  if (c.u === '/api/atendimentos' && c.m === 'POST') {
+    const novo = { id: id(101), profissionalId: id(1), nomeAvulso: c.corpo?.nome || 'Cliente Teste', inicio: '2026-10-28T10:00:00-03:00', fim: '2026-10-28T10:30:00-03:00', fimOcupado: '2026-10-28T10:30:00-03:00', status: 'concluido', total: 40, servicos: [{ servicoId: id(50), nome: 'Serviço', preco: 40, duracaoMin: 30 }], produtos: [], conflitosPendentes: [], historico: [] };
+    ags = [novo];
+    return json(201, novo);
+  }
+  if (c.u === '/api/agendamentos') return json(200, ags);
+  if (['/api/clientes', '/api/produtos', '/api/avisos'].includes(c.u)) return json(200, []);
   return false;
 }, estado);
 const nav = await abrirNavegador();
@@ -19,6 +25,7 @@ try {
   for (const tipo of ['estetica_automotiva', 'barbearia']) {
     estado.loja = { slug: 'teste', nome: 'Loja teste', tipo };
     for (const width of [390, 1366, 1904]) for (const tema of ['light', 'dark']) {
+      ags = [];
       const { ctx, p } = await nav.abrir(srv.url, { viewport: { width, height: 1000 }, fonteLarga: true });
       try {
         await p.evaluate((t) => document.documentElement.dataset.theme = t, tema);
@@ -79,7 +86,12 @@ try {
         }
         await p.getByTestId('atender-nome').fill('Cliente Teste');
         await p.getByTestId('salvar-atender').click();
-        await p.waitForFunction(() => !document.querySelector('[data-testid="atender-form"]'));
+        await p.getByTestId('atender-sucesso').waitFor();
+        if (process.env.AGENDZ_REVISAO_VISUAL) await p.screenshot({ animations: 'disabled', path: `shots-revisao/${tipo}-${width}-${tema}-sucesso.png` });
+        await p.getByTestId('atender-janela').waitFor({ state: 'detached' });
+        assert.equal(await p.getByTestId('agenda-aviso').count(), 0);
+        await p.waitForFunction((novoId) => document.querySelector(`[data-id="${novoId}"]`)?.getAttribute('data-destaque') === 'sim', id(101));
+        if (process.env.AGENDZ_REVISAO_VISUAL) await p.screenshot({ animations: 'disabled', path: `shots-revisao/${tipo}-${width}-${tema}-destaque.png` });
         assert.equal(srv.ultimo('POST', '/api/atendimentos').corpo.servicoIds[0], id(50));
         assert.equal(srv.ultimo('POST', '/api/atendimentos').corpo.nome, 'Cliente Teste');
         if (tipo === 'estetica_automotiva') assert.equal(srv.ultimo('POST', '/api/atendimentos').corpo.veiculo.placa, 'ABC1234');

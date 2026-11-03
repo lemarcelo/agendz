@@ -83,7 +83,7 @@ async function abrir(viewport = { width: 1280, height: 860 }) {
   assert.equal(await p.getByTestId('atender-vendedor').inputValue(), ALAN, 'vendedor padrão = quem lança');
   await p.getByTestId('atender-prox-quando').click(); await p.getByTestId('atender-prox-cliente').click();
   await p.getByTestId('salvar-atender').click();
-  await p.getByTestId('agenda-aviso').waitFor();
+  await p.getByTestId('atender-janela').waitFor({ state: 'detached' });
   const c = ultimo().corpo;
   assert.deepEqual(c.produtos, [{ materialId: POMADA, qtd: 2 }]); assert.equal(c.vendedorId, ALAN);
   assert.ok(!JSON.stringify(c).includes('preco') && !JSON.stringify(c).includes('comissao'));
@@ -104,7 +104,7 @@ async function abrir(viewport = { width: 1280, height: 860 }) {
   await p.getByTestId('atender-vendedor').selectOption(KIKO);
   await p.getByTestId('atender-prox-quando').click(); await p.getByTestId('atender-prox-cliente').click();
   await p.getByTestId('salvar-atender').click();
-  await p.getByTestId('agenda-aviso').waitFor();
+  await p.getByTestId('atender-janela').waitFor({ state: 'detached' });
   const c = ultimo().corpo;
   assert.deepEqual(c.servicoIds, []); assert.deepEqual(c.produtos, [{ materialId: OLEO, qtd: 1 }]); assert.equal(c.vendedorId, KIKO);
   assert.match(await p.locator('[data-testid="cartao"]').filter({ hasText: 'Venda de produtos' }).first().innerText(), /R\$\s?30,00/);

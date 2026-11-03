@@ -17,6 +17,7 @@ const chamadas = [];
 let papel = 'dono';
 let tipoLoja = 'barbearia';
 let seq = 0;
+let conflitos = [];
 let derrubar = 0; // quantas respostas de POST /api/atendimentos o servidor falso "perde" (grava e derruba a conexão)
 const porChave = new Map(); // Idempotency-Key → agendamento já gravado
 const servidor = http.createServer((req, res) => {
@@ -47,7 +48,7 @@ const servidor = http.createServer((req, res) => {
       const quando = c.inicio ? Date.parse(c.inicio) : AGORA.getTime();
       const futuro = quando > AGORA.getTime() + 60000;
       if (!futuro && quando < INICIO_DO_DIA && !(c.motivoRetroativo && c.motivoRetroativo.length >= 5)) return json(400, { mensagem: 'Informe o motivo do lançamento de um dia anterior (por que não foi registrado na hora).' });
-      const a = { id: id(300 + (seq += 1)), clienteId: c.clienteId || NOVO, profissionalId: papel === 'profissional' ? KIKO : (c.profissionalId || ALAN), inicio: new Date(quando).toISOString(), fim: new Date(quando + 45 * 60000).toISOString(), fimOcupado: new Date(quando + 45 * 60000).toISOString(), status: futuro ? (c.status || 'a_confirmar') : 'concluido', encaixe: !!c.encaixe, total: 45, servicos: [{ servicoId: SRV_CORTE, nome: 'Corte', preco: 45, duracaoMin: 45 }], conflitosPendentes: [], origem: futuro ? 'painel' : 'atendimento', reagendado: false, statusManual: false, motivoRetroativo: c.motivoRetroativo || null, historico: [] };
+      const a = { id: id(300 + (seq += 1)), clienteId: c.clienteId || NOVO, profissionalId: papel === 'profissional' ? KIKO : (c.profissionalId || ALAN), inicio: new Date(quando).toISOString(), fim: new Date(quando + 45 * 60000).toISOString(), fimOcupado: new Date(quando + 45 * 60000).toISOString(), status: futuro ? (c.status || 'a_confirmar') : 'concluido', encaixe: !!c.encaixe, total: 45, servicos: [{ servicoId: SRV_CORTE, nome: 'Corte', preco: 45, duracaoMin: 45 }], conflitosPendentes: conflitos, origem: futuro ? 'painel' : 'atendimento', reagendado: false, statusManual: false, motivoRetroativo: c.motivoRetroativo || null, historico: [] };
       const chave = req.headers['idempotency-key'];
       if (chave && porChave.has(chave)) return json(201, porChave.get(chave)); // repetição: devolve o que já gravou
       banco.push(a);
@@ -109,13 +110,19 @@ const textoDe = (p, t) => p.getByTestId(t).innerText();
   await p.getByTestId('atender-prox-quando').click(); await p.getByTestId('atender-prox-cliente').click();
   await p.getByTestId('atender-telefone').fill('(11) 98888-7777');
   await p.getByTestId('salvar-atender').click();
-  await p.getByTestId('agenda-aviso').waitFor();
-  assert.match(await textoDe(p, 'agenda-aviso'), /Atendimento registrado/);
+  await p.getByTestId('atender-sucesso').waitFor();
+  assert.match(await p.getByTestId('atender-sucesso').innerText(), /Atendimento registrado/);
+  await p.getByTestId('atender-janela').waitFor({ state: 'detached' });
   assert.equal(await p.getByTestId('atender-form').count(), 0, 'o painel fecha ao salvar');
+  assert.equal(await p.getByTestId('agenda-aviso').count(), 0, 'sem notificação na agenda');
   const c = ultimo().corpo;
   assert.deepEqual(c.servicoIds, [SRV_CORTE]); assert.equal(c.telefone, '(11) 98888-7777'); assert.equal(c.profissionalId, ALAN);
   assert.ok(!('inicio' in c), 'sem data: o servidor decide "agora"'); assert.ok(!('status' in c));
   await p.waitForFunction(() => document.querySelector('[data-testid="cartao"][data-status="concluido"]'));
+  const cartaoNovo = p.locator(`[data-id="${banco.at(-1).id}"]`);
+  await p.waitForFunction((novoId) => document.querySelector(`[data-id="${novoId}"]`)?.getAttribute('data-destaque') === 'sim', banco.at(-1).id);
+  await p.waitForFunction((novoId) => document.activeElement?.closest(`[data-id="${novoId}"]`) !== null, banco.at(-1).id);
+  assert.equal(await cartaoNovo.getAttribute('data-destaque'), 'sim');
   ok('atendimento local: vai sem data, fecha o painel e o cartão concluído aparece');
   await ctx.close();
 }
@@ -138,11 +145,14 @@ const textoDe = (p, t) => p.getByTestId(t).innerText();
   await p.getByTestId('atender-nome').fill('Ana Lima'); await p.getByTestId('atender-telefone').fill('11977776666');
   await p.getByTestId('atender-status-confirmado').check();
   await p.getByTestId('salvar-atender').click();
-  await p.getByTestId('agenda-aviso').waitFor();
-  assert.match(await textoDe(p, 'agenda-aviso'), /Agendamento criado/);
+  await p.getByTestId('atender-sucesso').waitFor();
+  assert.match(await p.getByTestId('atender-sucesso').innerText(), /Agendamento criado/);
+  await p.getByTestId('atender-janela').waitFor({ state: 'detached' });
+  assert.equal(await p.getByTestId('agenda-aviso').count(), 0, 'sem notificação na agenda');
   const c = ultimo().corpo;
   assert.equal(c.inicio, '2026-11-03T13:00:00.000Z'); assert.equal(c.status, 'confirmado'); assert.equal(c.nome, 'Ana Lima'); assert.equal(c.encaixe, false);
   assert.match(await textoDe(p, 'agenda-titulo'), /3 de novembro/i, 'a agenda vai para o dia do novo agendamento');
+  await p.waitForFunction((novoId) => document.querySelector(`[data-id="${novoId}"]`)?.getAttribute('data-destaque') === 'sim', banco.at(-1).id);
   ok('agendamento futuro: erro do servidor na tela, depois salva confirmado e a agenda salta para o dia');
   await ctx.close();
 }
@@ -161,14 +171,15 @@ const textoDe = (p, t) => p.getByTestId(t).innerText();
   assert.match(await textoDe(p, 'atender-erro'), /Informe o motivo do lançamento de um dia anterior/);
   await p.getByTestId('atender-voltar').click(); await p.getByTestId('atender-motivo-retro').fill('Esqueci de lançar na hora'); await p.getByTestId('atender-prox-cliente').click();
   await p.getByTestId('salvar-atender').click();
-  await p.getByTestId('agenda-aviso').waitFor();
+  await p.getByTestId('atender-janela').waitFor({ state: 'detached' });
   assert.equal(ultimo().corpo.motivoRetroativo, 'Esqueci de lançar na hora');
   ok('dia anterior: motivo no corpo e mensagem do servidor quando falta');
   await ctx.close();
 }
 
-// 4. busca de cliente cadastrado: escolhe, preenche nome e telefone e manda o clienteId
+// 4. busca de cliente cadastrado: escolhe, preenche nome e telefone e manda o clienteId (preservando aviso se houver conflito pendente)
 {
+  conflitos = [id(888)];
   const { ctx, p } = await abrir();
   await p.getByTestId('atender-abrir').click();
   await p.getByTestId(`atender-srv-${SRV_CORTE}`).check(); await p.getByTestId('atender-prox-quando').click(); await p.getByTestId('atender-prox-cliente').click();
@@ -178,8 +189,11 @@ const textoDe = (p, t) => p.getByTestId(t).innerText();
   assert.equal(await p.getByTestId('atender-nome').inputValue(), 'Bruno');
   assert.equal(await p.getByTestId('atender-telefone').inputValue(), '(11) 99999-0001');
   await p.getByTestId('salvar-atender').click();
+  await p.getByTestId('atender-janela').waitFor({ state: 'detached' });
   await p.getByTestId('agenda-aviso').waitFor();
+  assert.match(await textoDe(p, 'agenda-aviso'), /Há 1 agendamento\(s\) a confirmar no mesmo horário/);
   assert.equal(ultimo().corpo.clienteId, BRUNO);
+  conflitos = [];
   ok('cliente cadastrado: escolhido na busca e enviado pelo id');
   await ctx.close();
 }
@@ -231,8 +245,9 @@ const textoDe = (p, t) => p.getByTestId(t).innerText();
   await p.getByTestId('atender-prox-quando').click(); await p.getByTestId('atender-prox-cliente').click();
   await p.getByTestId('atender-telefone').fill('(11) 95555-4444');
   await p.getByTestId('salvar-atender').click();
-  await p.getByTestId('agenda-aviso').waitFor({ timeout: 15000 });
-  assert.match(await textoDe(p, 'agenda-aviso'), /Atendimento registrado/);
+  await p.getByTestId('atender-sucesso').waitFor({ timeout: 15000 });
+  assert.match(await p.getByTestId('atender-sucesso').innerText(), /Atendimento registrado/);
+  await p.getByTestId('atender-janela').waitFor({ state: 'detached' });
   const envios = chamadas.filter((c) => c.m === 'POST' && c.u === '/api/atendimentos').slice(-2);
   assert.equal(envios.length, 2, 'duas tentativas: a primeira perdeu a resposta');
   assert.equal(banco.length, antes + 1, 'gravou uma vez só');
