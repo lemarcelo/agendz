@@ -31,6 +31,11 @@ try {
       try {
         await p.evaluate((t) => document.documentElement.dataset.theme = t, tema);
         await p.getByTestId('agenda-dia').waitFor();
+        const maisDias = await p.getByTestId('proximos-mais').boundingBox();
+        const areaAgenda = await p.locator('.agenda-proximos-real').boundingBox();
+        assert.ok(maisDias.width <= 220, `botão de mais dias esticado: ${maisDias.width}px`);
+        assert.ok(Math.abs(maisDias.x - areaAgenda.x) <= 2, 'botão deve acompanhar a margem da lista');
+        assert.ok(maisDias.height >= 44, 'botão deve ser confortável para toque');
         if (process.env.AGENDZ_REVISAO_VISUAL) await p.screenshot({ animations: 'disabled', path: `shots-revisao/${tipo}-${width}-${tema}-agenda.png` });
         const principal = await p.locator('.app-real .principal').boundingBox();
         assert.ok(principal.width <= 1441, 'conteúdo não deve esticar em telas largas');

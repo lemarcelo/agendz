@@ -455,7 +455,7 @@ export default function Agenda({ ehProprio = false, ehDono = false, ehProprietar
                 <div className="agenda-lista-real">{g.lista.map((a) => cartao(a, 'cartao-proximo'))}</div>
               </div>
             ))}
-            {temMais && <Btn onClick={() => setDiasAdiante(diasAdiante + 7)} data-testid="proximos-mais">Ver mais 7 dias</Btn>}
+            {temMais && <div className="agenda-mais-real"><Btn onClick={() => setDiasAdiante(diasAdiante + 7)} data-testid="proximos-mais">Ver mais 7 dias <Icone n="down" size={16} /></Btn></div>}
           </div>
         </>
       )}

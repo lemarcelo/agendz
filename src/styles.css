@@ -878,6 +878,8 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
 .agenda-titulo-real { margin: 0 0 0 6px; font-size: 16px; } .agenda-titulo-real::first-letter { text-transform: uppercase; }
 .agenda-dia-real, .agenda-lista-real, .agenda-proximos-real { display: grid; gap: 8px; }
 .agenda-proximos-real { margin-top: 12px; }
+.agenda-mais-real { justify-self: start; }
+.agenda-mais-real .btn { min-height: 44px; }
 .agenda-titulo-proximos-real { margin: 0; font-size: 14px; color: var(--muted); }
 .agenda-grupo-real { display: grid; gap: 6px; }
 /* Linha dos cancelados do dia (recolhida; abre os cartões). Vale na tela simulada e no site real. */
