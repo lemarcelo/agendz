@@ -70,7 +70,7 @@ async function varrer() {
           await p.getByTestId('login-entrar').click();
           // O dono de uma loja que ainda não concluiu o assistente de início cai no assistente (testid `pa`), não no menu: isso é o esperado no primeiro acesso.
           const chegou = await Promise.race([
-            p.locator('[data-testid^="nav-"]').first().waitFor().then(() => 'menu'),
+            p.locator('[data-testid^="nav-"]').first().waitFor({ state: 'attached' }).then(() => 'menu'),
             p.getByTestId('pa').waitFor().then(() => 'assistente'),
           ]);
           if (chegou === 'assistente') { relatorio.avisos.push(`${onde()}: o assistente de início ainda está aberto nesta loja (o dono cai nele ao entrar)`); await ctx.close(); continue; }
@@ -84,6 +84,7 @@ async function varrer() {
           tela = id;
           try {
             await pausa(p);
+            if (!(await p.getByTestId(id).isVisible()) && await p.getByTestId('menu-alternar-real').count()) await p.getByTestId('menu-alternar-real').click();
             await p.getByTestId(id).click();
             await p.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {});
             await p.waitForTimeout(400);
