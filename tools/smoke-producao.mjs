@@ -98,7 +98,7 @@ async function varrer() {
                 await p.getByTestId('atender-abrir').click();
                 if (!(await p.locator('.atender-real').first().waitFor({ timeout: 5000 }).then(() => true, () => false))) falha(onde(), { tipo: 'interação', detalhe: 'o Atender não abriu' });
                 await p.screenshot({ path: `shots-smoke/${vp.n}-${tema}-atender.png`, fullPage: true });
-                await p.getByTestId(id).click(); // volta à lista sem salvar
+                await p.getByTestId('atender-fechar').click(); // fecha a janela sem salvar
               }
             }
             await p.screenshot({ path: `shots-smoke/${vp.n}-${tema}-${id}.png`, fullPage: true });

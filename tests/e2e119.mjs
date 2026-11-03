@@ -9,7 +9,9 @@ const srv = await subirServidor((c, { json }) => {
   if (c.u === '/api/estabelecimento/regras-atendimento') return json(200, { futuro: [], local: [] });
   if (c.u === '/api/estabelecimento/local') return json(200, {});
   if (c.u === '/api/boxes') return json(200, [{ id: id(60), nome: 'Box 1', ativo: true }]);
-  if (['/api/agendamentos', '/api/clientes', '/api/servicos', '/api/produtos', '/api/avisos'].includes(c.u)) return json(200, []);
+  if (c.u === '/api/servicos') return json(200, [{ id: id(50), nome: 'Serviço', ativo: true, preco: 40, duracaoMin: 30, precos: { medio: 40 }, duracoes: { medio: 30 } }]);
+  if (c.u === '/api/atendimentos' && c.m === 'POST') return json(201, { id: id(101), status: 'concluido' });
+  if (['/api/agendamentos', '/api/clientes', '/api/produtos', '/api/avisos'].includes(c.u)) return json(200, []);
   return false;
 }, estado);
 const nav = await abrirNavegador();
@@ -21,6 +23,13 @@ try {
       try {
         await p.evaluate((t) => document.documentElement.dataset.theme = t, tema);
         await p.getByTestId('agenda-dia').waitFor();
+        const marca = p.getByTestId('marca-inicio-real');
+        const logo = await marca.locator('img, .marca-icone').boundingBox();
+        const nome = await marca.locator('.marca-nome').boundingBox();
+        assert.ok(nome.y >= logo.y + logo.height, 'nome abaixo da marca');
+        await p.getByTestId('nav-clientes').click();
+        await marca.click();
+        await p.getByTestId('agenda-dia').waitFor();
         await p.getByTestId('atender-abrir').click();
         const painel = p.getByTestId('atender-form');
         await painel.waitFor();
@@ -30,6 +39,26 @@ try {
         assert.ok(caixa.width <= 721, `Atender esticado: ${caixa.width}px`);
         assert.ok(caixa.width >= Math.min(700, width - 60), 'painel aproveita a largura disponível');
         if (width > 720) assert.ok(Math.abs(caixa.x + caixa.width / 2 - width / 2) < 24, 'painel centralizado');
+        assert.equal(await p.getByTestId('atender-lista-servicos').isVisible(), true);
+        await p.getByTestId(`atender-srv-${id(50)}`).check();
+        await p.getByTestId('atender-prox-quando').click();
+        assert.equal(await p.getByTestId('atender-lista-servicos').isVisible(), false);
+        await p.getByTestId('atender-voltar').click();
+        assert.equal(await p.getByTestId(`atender-srv-${id(50)}`).isChecked(), true);
+        await p.getByTestId('atender-prox-quando').click();
+        await p.getByTestId('atender-prox-cliente').click();
+        assert.equal(await p.getByTestId('atender-quando-bloco').isVisible(), false);
+        assert.equal(await p.getByTestId('salvar-atender').isVisible(), true);
+        if (tipo === 'estetica_automotiva') {
+          await p.getByTestId('atender-v-placa').fill('ABC1234');
+          await p.getByTestId('atender-v-modelo').fill('Carro');
+        }
+        await p.getByTestId('atender-nome').fill('Cliente Teste');
+        await p.getByTestId('salvar-atender').click();
+        await p.waitForFunction(() => !document.querySelector('[data-testid="atender-form"]'));
+        assert.equal(srv.ultimo('POST', '/api/atendimentos').corpo.servicoIds[0], id(50));
+        assert.equal(srv.ultimo('POST', '/api/atendimentos').corpo.nome, 'Cliente Teste');
+        if (tipo === 'estetica_automotiva') assert.equal(srv.ultimo('POST', '/api/atendimentos').corpo.veiculo.placa, 'ABC1234');
         await nav.semRolagem(p, `${tipo} ${width} ${tema}`);
       } finally { await ctx.close(); }
     }

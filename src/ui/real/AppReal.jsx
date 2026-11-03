@@ -203,13 +203,13 @@ function TrocarSenha({ loja, sessao, senhaEnviada, aoTrocar, aoSair }) {
   );
 }
 
-function LogoPequena({ loja }) {
+function LogoPequena({ loja, aoInicio }) {
   const tipo = TIPOS[loja.tipo];
   return (
-    <div className="topo-marca">
+    <button type="button" className="topo-marca topo-marca-real" onClick={aoInicio} aria-label="Ir para o início" data-testid="marca-inicio-real">
       {logoValida(loja.logo) ? <img className="marca-logo" src={loja.logo} alt="" width={32} height={32} /> : <span className="marca-icone"><Icone n={tipo.visual.iconeMarca} size={18} /></span>}
       <span className="marca-nome">{loja.nome}</span>
-    </div>
+    </button>
   );
 }
 
@@ -278,7 +278,7 @@ function Painel({ loja, sessao, aoSair, aoMudarMarca }) {
   return (
     <div className="app">
       <header className="topo">
-        <LogoPequena loja={loja} />
+        <LogoPequena loja={loja} aoInicio={() => { setPerfilAberto(false); setFoco(null); setAba(itens[0][0]); }} />
         <nav className="nav" aria-label="Seções">
           {itens.map(([k, r, ic]) => (
             <button key={k} type="button" className={aba === k ? 'on' : ''} onClick={() => { setAba(k); setFoco(null); }} aria-current={aba === k ? 'page' : undefined} title={r} data-testid={`nav-${k}`}><Icone n={ic} size={17} /><span>{r}</span>{k === 'suporte' && chamadosNovos > 0 && <i className="badge" data-testid="badge-suporte">{chamadosNovos}</i>}</button>

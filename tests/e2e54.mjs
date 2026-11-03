@@ -191,13 +191,15 @@ const abrirCartao = async (p) => { await p.getByTestId('nav-agenda').click(); aw
 // 3. Atender: o campo de cupom só no agendamento futuro; chave errada não cria nada; certa vai no corpo
 {
   const { ctx, p } = await entrar();
-  await p.getByTestId('nav-agenda').click(); await p.getByTestId('agenda-dia').waitFor(); await p.getByTestId('atender-abrir').click(); await p.getByTestId('atender-forma-bloco').waitFor();
+  await p.getByTestId('nav-agenda').click(); await p.getByTestId('agenda-dia').waitFor(); await p.getByTestId('atender-abrir').click();
   assert.equal(await p.getByTestId('atender-cupom').count(), 0, 'atendimento de agora não tem cupom');
+  await p.getByTestId(`atender-srv-${SRV_CORTE}`).check();
+  await p.getByTestId('atender-prox-quando').click();
   await p.getByTestId('atender-quando').click();
   await p.getByTestId('atender-data').fill('2026-11-03T10:00');
+  await p.getByTestId('atender-prox-cliente').click();
   await p.getByTestId('atender-cupom').waitFor();
   await p.getByTestId('atender-nome').fill('Ana Lima'); await p.getByTestId('atender-telefone').fill('11977776666');
-  await p.getByTestId(`atender-srv-${SRV_CORTE}`).check();
   const antes = banco.length;
   await p.getByTestId('atender-cupom').fill('ERRADA-ERRADA');
   await p.getByTestId('salvar-atender').click();

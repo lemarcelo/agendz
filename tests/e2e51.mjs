@@ -81,6 +81,7 @@ async function abrir(viewport = { width: 1280, height: 860 }) {
   await p.getByTestId(`atender-qtd-${POMADA}`).fill('2');
   assert.match(await textoDe(p, 'atender-total-produtos'), /2 unidades · R\$\s?90,00 em produtos/);
   assert.equal(await p.getByTestId('atender-vendedor').inputValue(), ALAN, 'vendedor padrão = quem lança');
+  await p.getByTestId('atender-prox-quando').click(); await p.getByTestId('atender-prox-cliente').click();
   await p.getByTestId('salvar-atender').click();
   await p.getByTestId('agenda-aviso').waitFor();
   const c = ultimo().corpo;
@@ -101,6 +102,7 @@ async function abrir(viewport = { width: 1280, height: 860 }) {
   await p.getByTestId(`atender-prod-${OLEO}`).check();
   assert.match(await textoDe(p, 'atender-total'), /Só produtos/);
   await p.getByTestId('atender-vendedor').selectOption(KIKO);
+  await p.getByTestId('atender-prox-quando').click(); await p.getByTestId('atender-prox-cliente').click();
   await p.getByTestId('salvar-atender').click();
   await p.getByTestId('agenda-aviso').waitFor();
   const c = ultimo().corpo;
@@ -115,14 +117,17 @@ async function abrir(viewport = { width: 1280, height: 860 }) {
   const { ctx, p } = await abrir();
   const antes = chamadas.filter((c) => c.u === '/api/atendimentos').length;
   await p.getByTestId('atender-abrir').click();
+  await p.getByTestId(`atender-prod-${POMADA}`).check();
+  await p.getByTestId('atender-prox-quando').click();
   await p.getByTestId('atender-quando').click();
   await p.getByTestId('atender-data').fill('2026-11-03T10:00');
+  await p.getByTestId('atender-prox-cliente').click();
   await p.getByTestId('atender-nome').fill('Ana Lima'); await p.getByTestId('atender-telefone').fill('11977776666');
-  await p.getByTestId(`atender-prod-${POMADA}`).check();
   await p.getByTestId('salvar-atender').click();
   await p.getByTestId('atender-erro').waitFor();
   assert.match(await textoDe(p, 'atender-erro'), /Produto sozinho só no atendimento de agora/);
   assert.equal(chamadas.filter((c) => c.u === '/api/atendimentos').length, antes, 'a tela barra antes de enviar');
+  await p.getByTestId('atender-voltar').click(); await p.getByTestId('atender-voltar').click();
   await p.getByTestId(`atender-qtd-${POMADA}`).fill('5000');
   assert.equal(await p.getByTestId(`atender-qtd-${POMADA}`).inputValue(), '999');
   await p.getByTestId(`atender-qtd-${POMADA}`).fill('0');

@@ -90,7 +90,8 @@ async function entrar(viewport = { width: 1280, height: 860 }) {
   await p.getByTestId('nav-estabelecimento').click(); await p.getByTestId('tela-estabelecimento').waitFor();
   return { ctx, p };
 }
-const abrirAtender = async (p) => { await p.getByTestId('nav-agenda').click(); await p.getByTestId('agenda-dia').waitFor(); await p.getByTestId('atender-abrir').click(); await p.getByTestId('atender-forma-bloco').waitFor(); };
+const abrirAtender = async (p) => { await p.getByTestId('nav-agenda').click(); await p.getByTestId('agenda-dia').waitFor(); await p.getByTestId('atender-abrir').click(); await p.getByTestId('atender-lista-servicos').waitFor(); };
+const concluirAtender = async (p) => { await p.getByTestId('atender-prox-quando').click(); await p.getByTestId('atender-prox-cliente').click(); };
 
 // 1. o proprietário vê as regras no Início e muda: o corpo leva só forma e listas; a resposta do servidor volta à tela
 {
@@ -129,8 +130,9 @@ const abrirAtender = async (p) => { await p.getByTestId('nav-agenda').click(); a
   assert.deepEqual(put.ordemAtender.local.etapas, ['servicos', 'cliente', 'quando', 'produtos', 'veiculo']);
   assert.deepEqual(put.ordemAtender.futuro.etapas, PADRAO_PAINEL.futuro.etapas, 'o agendamento futuro não mudou');
   await abrirAtender(p);
-  const y = async (rotulo) => (await p.locator('.atender-real legend', { hasText: rotulo }).first().boundingBox()).y;
-  assert.ok(await y('Serviços') < await y('Cliente'), 'Serviços antes de Cliente no atendimento feito');
+  assert.equal(await p.getByTestId('atender-lista-servicos').isVisible(), true);
+  await concluirAtender(p);
+  assert.equal(await p.getByTestId('atender-nome').isVisible(), true);
   ok('ordem do Atender: mover no cartão, corpo completo, o Atender segue a ordem salva');
   await ctx.close();
 }
@@ -140,12 +142,13 @@ const abrirAtender = async (p) => { await p.getByTestId('nav-agenda').click(); a
   regras = { formaPagamentoPadrao: 'dinheiro', futuro: ['nome'], local: ['telefone', 'formaPagamento'] };
   const { ctx, p } = await entrar();
   await abrirAtender(p);
+  await p.getByTestId(`atender-srv-${SRV_CORTE}`).check();
+  await concluirAtender(p);
   await p.waitForFunction((t) => document.querySelector(`[data-testid="${t}"]`)?.checked === true, 'atender-forma-dinheiro'); // as regras chegam do servidor logo depois de abrir
   assert.equal(await p.getByTestId('atender-forma-dinheiro').isChecked(), true, 'o padrão vem marcado');
   assert.match(await p.getByTestId('atender-forma-bloco').innerText(), /forma de pagamento \*/i);
   assert.match(await p.locator('label.campo', { has: p.getByTestId('atender-telefone') }).innerText(), /Telefone \*/);
   assert.doesNotMatch(await p.locator('label.campo', { has: p.getByTestId('atender-nome') }).innerText(), /\*/, 'nome não é obrigatório no atendimento feito');
-  await p.getByTestId(`atender-srv-${SRV_CORTE}`).check();
   assert.match(await textoDe(p, 'atender-faltam'), /Falta preencher: telefone\./);
   const antes = banco.length;
   await p.getByTestId('salvar-atender').click();
@@ -162,6 +165,7 @@ const abrirAtender = async (p) => { await p.getByTestId('nav-agenda').click(); a
   // o padrão vale quando nada é escolhido
   await p.getByTestId('atender-abrir').click();
   await p.getByTestId(`atender-srv-${SRV_CORTE}`).check();
+  await concluirAtender(p);
   await p.getByTestId('atender-telefone').fill('11977776666');
   await p.getByTestId('salvar-atender').click();
   await p.getByTestId('agenda-aviso').waitFor();
@@ -175,9 +179,10 @@ const abrirAtender = async (p) => { await p.getByTestId('nav-agenda').click(); a
   regras = { formaPagamentoPadrao: '', futuro: ['nome', 'telefone'], local: [] };
   const { ctx, p } = await entrar();
   await abrirAtender(p);
+  await p.getByTestId(`atender-srv-${SRV_CORTE}`).check();
+  await concluirAtender(p);
   await p.waitForFunction(() => document.querySelector('[data-testid="atender-forma-pix"]')?.checked === false); // até as regras chegarem, vale a de fábrica (Pix)
   for (const f of FORMAS) assert.equal(await p.getByTestId(`atender-forma-${f}`).isChecked(), false);
-  await p.getByTestId(`atender-srv-${SRV_CORTE}`).check();
   const antes = qtdAtendimentos();
   await p.getByTestId('salvar-atender').click();
   await p.getByTestId('atender-erro').waitFor();
@@ -196,11 +201,13 @@ const abrirAtender = async (p) => { await p.getByTestId('nav-agenda').click(); a
   regras = { formaPagamentoPadrao: 'pix', futuro: ['nome', 'telefone'], local: [] };
   const { ctx, p } = await entrar();
   await abrirAtender(p);
+  await p.getByTestId(`atender-srv-${SRV_CORTE}`).check();
+  await p.getByTestId('atender-prox-quando').click();
   await p.getByTestId('atender-quando').click();
   await p.getByTestId('atender-data').fill('2026-11-03T10:00');
   assert.equal(await p.getByTestId('atender-forma-bloco').count(), 0);
+  await p.getByTestId('atender-prox-cliente').click();
   await p.getByTestId('atender-nome').fill('Ana Lima'); await p.getByTestId('atender-telefone').fill('11977776666');
-  await p.getByTestId(`atender-srv-${SRV_CORTE}`).check();
   await p.getByTestId('salvar-atender').click();
   await p.getByTestId('agenda-aviso').waitFor();
   assert.ok(!('formaPagamento' in ultimo().corpo), 'futuro não manda forma');

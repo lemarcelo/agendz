@@ -53,25 +53,15 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
   const ultima = useRef(0);
 
   const passos = useMemo(() => {
-    if (usaVeiculo) {
-      return [
-        { id: 'veiculo', nome: 'Veículo' },
-        { id: 'servicos', nome: 'Serviços' },
-        { id: 'quando', nome: 'Quando' },
-        { id: 'cliente', nome: 'Cliente & Concluir' },
-      ];
-    }
     return [
       { id: 'servicos', nome: 'Serviços' },
       { id: 'quando', nome: 'Quando' },
       { id: 'cliente', nome: 'Cliente & Concluir' },
     ];
-  }, [usaVeiculo]);
+  }, []);
 
   const focarBloco = (id, idx) => {
     if (idx != null) setEtapaAtiva(idx);
-    const el = document.getElementById(`atender-bloco-${id}`);
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   };
 
   useEffect(() => { let vivo = true; apiServicos.listar({ para: 'atender' }).then((r) => { if (vivo) { if (r.ok) setServicos(r.servicos.filter((s) => s.ativo !== false)); else { setServicos([]); setErro(r.erro); } } }); return () => { vivo = false; }; }, []);
@@ -196,9 +186,6 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
             </div>
           )}
           <p className="muted">{veiculoEscolhido ? `Porte ${ROTULO_PORTE[veiculoEscolhido.porte] || ROTULO_PORTE[porte]}: define o preço e o tempo dos serviços.` : 'O veículo novo fica salvo no cadastro do cliente (quando há telefone). O porte define o preço e o tempo dos serviços.'}</p>
-          <div className="acoes" style={{ marginTop: 6 }}>
-            <Btn variante="primario" type="button" onClick={() => focarBloco('servicos', 1)} data-testid="atender-prox-servicos">Escolher serviços →</Btn>
-          </div>
         </fieldset>
     ) : null,
     servicos: (
@@ -216,7 +203,7 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
         </ul>
         <p className="muted" data-testid="atender-total">{resumo.qtd ? `${resumo.qtd} serviço${resumo.qtd === 1 ? '' : 's'} · ${resumo.minutos} min · ${fmtMoney(resumo.total)}` : itens.length ? 'Só produtos: registra a venda de agora.' : 'Escolha ao menos um serviço ou um produto.'}</p>
         <div className="acoes" style={{ marginTop: 6 }}>
-          <Btn variante="primario" type="button" onClick={() => focarBloco('quando', usaVeiculo ? 2 : 1)} data-testid="atender-prox-quando">Definir data, hora e equipe →</Btn>
+          <Btn variante="primario" type="button" onClick={() => focarBloco('quando', 1)} data-testid="atender-prox-quando">Próximo →</Btn>
         </div>
       </fieldset>
     ),
@@ -236,7 +223,7 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
         {bloqueado && <Aviso tipo="erro" data-testid="atender-retro-bloqueado">Lançar um dia anterior é com o proprietário ou a recepção. Peça a eles para registrar.</Aviso>}
         <p className="muted" data-testid="atender-tipo">{tipo === 'futuro' ? 'Agendamento: o horário fica reservado para o cliente.' : 'Atendimento já feito: entra como concluído.'}</p>
         <div className="acoes" style={{ marginTop: 6 }}>
-          <Btn variante="primario" type="button" onClick={() => focarBloco('cliente', usaVeiculo ? 3 : 2)} data-testid="atender-prox-cliente">Identificar cliente e pagamento →</Btn>
+          <Btn variante="primario" type="button" onClick={() => focarBloco('cliente', 2)} data-testid="atender-prox-cliente">Próximo →</Btn>
         </div>
       </fieldset>
     ),
@@ -301,16 +288,18 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
         <Btn tamanho="sm" onClick={aoFechar} data-testid="atender-fechar" aria-label="Fechar"><Icone n="x" size={15} /></Btn>
       </div>
 
-      <ol className="pub-passos" role="tablist" style={{ margin: '4px 0 8px', cursor: 'pointer' }}>
+      <ol className="pub-passos" style={{ margin: '4px 0 8px' }}>
         {passos.map((p, idx) => (
-          <li key={p.id} className={etapaAtiva === idx ? 'on' : ''} onClick={() => focarBloco(p.id, idx)}>
-            <span>{idx + 1}</span> {p.nome}
+          <li key={p.id} className={etapaAtiva === idx ? 'on' : ''}>
+            <button type="button" className="atender-passo-real" aria-current={etapaAtiva === idx ? 'step' : undefined} onClick={() => focarBloco(p.id, idx)}><span>{idx + 1}</span> {p.nome}</button>
           </li>
         ))}
       </ol>
 
-      {ordem.etapas.map((k) => <React.Fragment key={k}>{blocos[k]}</React.Fragment>)}
+      {ordem.etapas.filter((k) => k !== 'veiculo').map((k) => <div className="atender-pagina-real" key={k} hidden={(k === 'produtos' ? 'servicos' : k) !== passos[etapaAtiva].id}>{blocos[k]}</div>)}
+      {usaVeiculo && <div className="atender-pagina-real" hidden={passos[etapaAtiva].id !== 'cliente'}>{blocos.veiculo}</div>}
 
+      <div hidden={passos[etapaAtiva].id !== 'cliente'}>
       <div className="form-grade">
         {!auto && (
           <Campo rotulo={`${Rot('profissional')}${marca('profissional')}`}>
@@ -355,12 +344,14 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
         </Campo>
       )}
       {tipo === 'futuro' && <label className="check-linha"><input type="checkbox" checked={encaixe} onChange={(e) => setEncaixe(e.target.checked)} data-testid="atender-encaixe" /><span>Encaixe (pode ficar sobre um horário já confirmado)</span></label>}
+      </div>
 
       {faltam.length > 0 && <p className="muted" data-testid="atender-faltam">Falta preencher: {faltam.join(', ')}.</p>}
       {erro && <Aviso tipo="erro" data-testid="atender-erro">{erro}</Aviso>}
       <div className="acoes">
         <Btn onClick={aoFechar} data-testid="atender-cancelar">Cancelar</Btn>
-        <Btn variante="primario" type="submit" disabled={enviando || bloqueado} data-testid="salvar-atender">{enviando ? 'Salvando…' : tipo === 'futuro' ? 'Agendar' : 'Registrar'}</Btn>
+        {etapaAtiva > 0 && <Btn type="button" onClick={() => setEtapaAtiva(etapaAtiva - 1)} data-testid="atender-voltar">← Voltar</Btn>}
+        {passos[etapaAtiva].id === 'cliente' && <Btn variante="primario" type="submit" disabled={enviando || bloqueado} data-testid="salvar-atender">{enviando ? 'Salvando…' : tipo === 'futuro' ? 'Agendar' : 'Registrar'}</Btn>}
       </div>
     </form>
   );
