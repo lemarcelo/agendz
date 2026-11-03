@@ -96,7 +96,7 @@ const textoDe = (p, t) => p.getByTestId(t).innerText();
   assert.equal(await p.locator('[data-testid="proximo-dia"]').count(), 3);
   assert.match(await textoDe(p, 'agenda-proximos'), /Amanhã/);
   const primeiro = p.locator('[data-testid="cartao"]').first();
-  assert.match(await primeiro.innerText(), /09:00/); assert.match(await primeiro.innerText(), /Bruno/); assert.match(await primeiro.innerText(), /Corte/);
+  assert.match(await primeiro.innerText(), /09:00/); assert.match(await primeiro.innerText(), /Termina às 09:45/); assert.match(await primeiro.innerText(), /Bruno/); assert.match(await primeiro.innerText(), /Corte/);
   assert.match(await p.locator('[data-testid="cartao"]').nth(1).innerText(), /Caio Souza/, 'sem apelido: o nome');
   assert.equal(await p.locator('[data-testid="cartao"][data-status="cancelado"]').count(), 0, 'cancelado sai da lista do dia');
   assert.equal((await textoDe(p, 'cancelados-resumo')).trim(), 'Cancelado (1)', 'e vira uma linha no fim');
@@ -126,9 +126,28 @@ const textoDe = (p, t) => p.getByTestId(t).innerText();
   assert.match(await textoDe(p, 'agenda-aviso'), /confirmado/);
   ok('confirmar muda o status e recarrega');
 
-  // 4. cancelar com confirmação na tela: "Voltar" não envia; "Sim" envia
+  // 4. cancelar com confirmação na tela: "Voltar" não envia; "Sim" envia; Cancelar à esquerda e Concluir à direita em outline
   const antes = chamadas.filter((c) => c.u.endsWith('/status')).length;
   await p.locator('[data-testid="cartao-abrir"]').first().click();
+  const posBotoes = await p.evaluate(() => {
+    const canc = document.querySelector('[data-testid="acao-cancelar"]');
+    const rem = document.querySelector('[data-testid="acao-remarcar"]');
+    const conc = document.querySelector('[data-testid="acao-concluir"]');
+    const rCanc = canc.getBoundingClientRect();
+    const rConc = conc.getBoundingClientRect();
+    return {
+      cancX: rCanc.x,
+      concX: rConc.x,
+      mesmaLinha: Math.abs(rCanc.y - rConc.y) < 8,
+      bgCanc: getComputedStyle(canc).backgroundColor,
+      bgRem: getComputedStyle(rem).backgroundColor,
+      bgConc: getComputedStyle(conc).backgroundColor,
+    };
+  });
+  assert.ok(posBotoes.cancX < posBotoes.concX && posBotoes.mesmaLinha, `Cancelar deve ficar à esquerda e Concluir à direita na mesma linha: ${JSON.stringify(posBotoes)}`);
+  assert.equal(posBotoes.bgCanc, 'rgba(0, 0, 0, 0)', 'Cancelar deve ter fundo transparente (outline)');
+  assert.equal(posBotoes.bgRem, 'rgba(0, 0, 0, 0)', 'Remarcar deve ter fundo transparente (outline)');
+  assert.equal(posBotoes.bgConc, 'rgba(0, 0, 0, 0)', 'Concluir deve ter fundo transparente (outline)');
   await p.getByTestId('acao-cancelar').click();
   await p.getByTestId('cancelar-confirmacao').waitFor();
   await p.getByTestId('cancelar-nao').click();
@@ -277,7 +296,13 @@ const textoDe = (p, t) => p.getByTestId(t).innerText();
   assert.ok(bl.x + bl.width <= bat.x + 0.5 || bl.y + bl.height <= bat.y + 0.5, 'Link e Atender não se sobrepõem');
   const abaD = ctx.waitForEvent('page', { timeout: 6000 }); await p.getByTestId('agenda-link').tap();
   const popD = await abaD; assert.match(decodeURIComponent(popD.url().split('text=')[1]), /Agende seu horário.*#agendar$/); await popD.close();
-  await p.locator('[data-testid="cartao"][data-status="confirmado"]').first().locator('[data-testid="cartao-abrir"]').click(); await p.getByTestId('acao-remarcar').click(); await semRolagem('remarcar');
+  await p.locator('[data-testid="cartao"][data-status="confirmado"]').first().locator('[data-testid="cartao-abrir"]').click();
+  await p.getByTestId('detalhe-modal').waitFor();
+  await p.getByTestId('historico-abrir').click();
+  await p.getByTestId('historico-lista').waitFor();
+  assert.match(await textoDe(p, 'historico-lista'), /Alan/);
+  await p.getByTestId('acao-remarcar').click(); await semRolagem('remarcar');
+  await p.getByTestId('detalhe-fechar').click();
   await p.getByTestId('aba-calendario').click(); await p.getByTestId('calendario').waitFor(); await semRolagem('calendário');
   ok('390 px com fonte larga: sem rolagem lateral');
   await ctx.close();
@@ -367,6 +392,11 @@ for (const [w, h] of [[1366, 820], [1920, 1000], [390, 800]]) {
   const linhas = new Set(m.lista.map((c) => c.y)).size;
   if (w >= 1000) { assert.equal(linhas, 1, `${w}: os cartões cabem numa linha`); assert.ok(m.lista[0].w < w * 0.5, `${w}: cartão não ocupa a linha inteira (${m.lista[0].w})`); }
   else assert.equal(linhas, 2, `${w}: no celular uma coluna`);
+  const vizinho = p.getByTestId('cartao').first();
+  const alturaAntes = (await vizinho.boundingBox()).height;
+  await p.getByTestId('cartao').last().getByTestId('cartao-abrir').click();
+  assert.equal(await p.getByTestId('cartao').last().getByTestId('cartao-abrir').getAttribute('aria-expanded'), 'true');
+  assert.ok(Math.abs((await vizinho.boundingBox()).height - alturaAntes) <= 1, `${w}: abrir um cartão não estica o vizinho`);
   ok(`${w} px: cartões do dia em grade igual (${m.lista[0].w} px, ${linhas} linha(s))`);
   await ctx.close();
 }

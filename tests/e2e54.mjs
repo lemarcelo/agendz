@@ -159,28 +159,20 @@ const abrirCartao = async (p) => { await acessarSecao(p, 'nav-agenda'); await p.
   await ctx.close();
 }
 
-// 2. ficha do horário: chave errada = mensagem genérica; certa = desconto e valor a pagar; retirar desfaz
+// 2. ficha do horário (modal): não tem botão "Aplicar cupom"; quando o atendimento já tem cupom, mostra desconto sem expor a chave e retirar desfaz
 {
   cupons = []; chaveSeq = 0;
   cupons.push({ id: id(777), nome: 'Vale corte', tipo: 'percentual', servicoIds: [], percentual: 10, valor: null, inicio: '2026-10-01', fim: '2026-12-31', usosMax: 5, usosPorCliente: 1, chave: 'ABCD-EFGH-JKLM', ativo: true, usos: 0 });
+  aplicar(ag, 'ABCD-EFGH-JKLM');
   const { ctx, p } = await entrar();
   await abrirCartao(p);
-  assert.equal(await p.getByTestId('detalhe-cupom').count(), 0);
-  await p.getByTestId('acao-cupom').click();
-  await p.getByTestId('cupom-chave-agenda').fill('AAAA-BBBB-CCCC');
-  await p.getByTestId('cupom-aplicar').click();
-  await p.getByTestId('agendamento-erro').waitFor();
-  assert.equal((await p.getByTestId('agendamento-erro').innerText()).trim(), GENERICO);
-  assert.equal(ag.desconto, 0, 'nada mudou');
-  await p.getByTestId('cupom-chave-agenda').fill('abcd efgh jklm');
-  await p.getByTestId('cupom-aplicar').click();
+  assert.equal(await p.getByTestId('acao-cupom').count(), 0, 'modal de detalhes não oferece Aplicar cupom');
   await p.getByTestId('detalhe-cupom').waitFor();
-  assert.deepEqual(chamadasDe('POST', `/api/agendamentos/${AG1}/cupom`).at(-1).corpo, { chave: 'abcd efgh jklm' }, 'o servidor normaliza a chave; a tela só apara');
   const t = await p.getByTestId('detalhe-cupom').innerText();
   assert.match(t, /Vale corte/); assert.match(t, /4,50/); assert.match(t, /40,50/);
   assert.match(await p.getByTestId('cartao').first().innerText(), /40,50/, 'o cartão mostra o valor com desconto');
   assert.ok(!(await p.getByTestId('agendamento-detalhe').innerText()).includes('ABCD-EFGH-JKLM'), 'a chave nunca aparece na agenda');
-  ok('ficha: chave errada devolve a mensagem genérica; certa mostra desconto e valor a pagar');
+  ok('ficha: sem botão Aplicar cupom; mostra desconto e valor a pagar sem expor a chave');
   await p.getByTestId('acao-retirar-cupom').click();
   await p.waitForFunction(() => !document.querySelector('[data-testid="detalhe-cupom"]'));
   assert.equal(ag.desconto, 0);
@@ -229,8 +221,8 @@ const abrirCartao = async (p) => { await acessarSecao(p, 'nav-agenda'); await p.
   await larg('formulário de cupom');
   await p.getByTestId('cupom-cancelar').click();
   await acessarSecao(p, 'nav-agenda'); await p.getByTestId('cartao').first().waitFor(); await p.getByTestId('cartao-abrir').first().click();
-  await p.getByTestId('acao-cupom').click(); await p.getByTestId('cupom-form-agenda').waitFor();
-  await larg('ficha com cupom');
+  await p.getByTestId('detalhe-modal').waitFor();
+  await larg('ficha em modal');
   ok('390 px com fonte larga: sem rolagem lateral');
   await ctx.close();
 }

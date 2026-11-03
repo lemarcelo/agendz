@@ -32,15 +32,13 @@ Regra de uso: toda funcionalidade nova pedida "para outro momento" entra aqui co
 
 **Continuidade:** avaliar essas dúvidas quando o trabalho for iniciado e pedir detalhes essenciais se necessário. Para mudanças de tela, seguir a skill visual e apresentar prévias de computador e celular antes da suíte completa e do deploy.
 
-## Continuidade do trabalho visual e PWA — 03/11
+## Continuidade do trabalho visual e PWA — 03/11 (versionado em `feat/fila`)
 
-O trabalho a seguir foi registrado na sessão local como implementado, porém o código ainda está **não commitado e não publicado**. Antes de prosseguir em outro ambiente, transferir ou versionar essas alterações e conferir a situação real. Os testes e capturas da sessão anterior não foram repetidos nesta atualização do backlog.
+O trabalho a seguir foi implementado, validado visualmente com o Marcelo e versionado na branch `feat/fila`:
 
-- Agenda: cartões menores, previsão de término e altura independente; abrir detalhes em modal, com concluir em verde, remarcar em amarelo, histórico e sem o botão de aplicar cupom no modal. Conferir os demais fluxos e permissões existentes.
-- Estabelecimento: campos organizados e reordenação pela alça à esquerda, com movimento visível durante o arraste, teclado e sem setas redundantes. Conferir mouse, toque e persistência.
-- Revisão visual geral das telas e configurações: verificar alinhamento e comportamento em computador e celular, temas e tipos de loja, incluindo estados vazios e preenchidos; preservar cores derivadas da logo e a lógica existente.
-- PWA por loja: a sessão anterior registra alterações locais no nome, ícone, manifesto e cor da barra. Validar o servidor, inclusive a compilação Java ainda pendente no ambiente anterior, e conferir isolamento por loja antes de entregar.
-- Entrega: seguir a skill visual e as regras de `CLAUDE.md`; preservar os arquivos locais e verificar os testes existentes. As capturas e testes relatados na sessão anterior não substituem a verificação do estado efetivamente entregue.
+- Agenda: cartões menores, previsão de término (`Termina às HH:MM`) e altura independente; abrir detalhes em modal, com botões em estilo outline (`background: transparent` + borda e texto na cor): **Cancelar** (vermelho) sempre à esquerda, **Remarcar** (amarelo), **Histórico** e **Concluir** (verde) sempre à direita, sem o botão de aplicar cupom no modal.
+- Estabelecimento: campos organizados (`max-width: 900px`) e reordenação pela alça à esquerda (`⠿`), com movimento visível durante o arraste, teclado e sem setas redundantes.
+- PWA por loja: rotas públicas `/api/publico/manifest.webmanifest` e `/api/publico/icone` servindo nome e logo da loja pelo `Host`, e barra superior (`theme-color`) sem o verde fixo `#14532d`.
 
 ## B0. Planos de serviços (pedido de 29/10 — **FEITO em 31/10, v136**; ficou só o que está em "Em aberto" abaixo)
 **v136 fechou o B0:** "Usar modelo" no site real, cliente com plano que agenda pelo link gasta o corte no servidor (nunca é recusado por causa do plano) e a página real do link avisa "usa um atendimento do seu plano" antes e depois do pedido (`POST /api/publico/planos/uso`, só sim ou não). **Em aberto (precisa do Marcelo ou de backlog próprio):** produto incluso e validade em meses do modelo (o plano do servidor ainda não guarda), cobrança da mensalidade por Pix/financeiro (aguarda confirmação por escrito).

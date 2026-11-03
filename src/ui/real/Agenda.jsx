@@ -48,7 +48,7 @@ function Cartao({ a, nomeCliente, nomeProf, mostraProf, aberto, aoAbrir, aoSegur
             <span className="cartao-nome" title={nomeCliente} data-testid={`${testid}-cliente`}>{abreviarNome(nomeCliente, 24)}</span>
             <span className={`chip chip-p st-${v.cor}`} data-testid={`${testid}-status`}>{v.rotulo}</span>
           </div>
-          <div className={`cartao-quando ${testid === 'cartao' ? 'quando-hoje' : 'quando-proximo'}`}><b className="cartao-data" data-testid="cartao-data">{fmtDiaMesSemana(a.inicio)}</b><strong className="cartao-hora">{fmtHM(a.inicio)}</strong></div>
+          <div className={`cartao-quando ${testid === 'cartao' ? 'quando-hoje' : 'quando-proximo'}`}><b className="cartao-data" data-testid="cartao-data">{fmtDiaMesSemana(a.inicio)}</b><strong className="cartao-hora">{fmtHM(a.inicio)}</strong>{Number.isFinite(a.fim) && <small className="cartao-termino-real" data-testid={`${testid}-termino`}>Termina às {fmtHM(a.fim)}</small>}</div>
         </div>
         <div className="cartao-servico" title={servicos} data-testid={`${testid}-servico`}>{servicos}</div>
         <div className="cartao-profissional">
@@ -72,10 +72,12 @@ function Cartao({ a, nomeCliente, nomeProf, mostraProf, aberto, aoAbrir, aoSegur
   );
 }
 
-// Detalhes e ações de um agendamento aberto: status, cancelar com confirmação na tela, remarcar e histórico.
+// Detalhes e ações de um agendamento aberto em modal: status, cancelar com confirmação na tela, remarcar e histórico.
 // `aoAvisar` sobe o aviso de remarcação para a Agenda: o cartão pode sair da lista (outro dia) e levaria o aviso junto.
-function Detalhe({ a, nomeProf, nomeDe, profissionais, boxes, ehDono, aoAlterar, aoAvisar, cliente = null, loja = null }) {
+function Detalhe({ a, nomeCliente, nomeProf, nomeDe, profissionais, boxes, ehDono, aoFechar, aoAlterar, aoAvisar, cliente = null, loja = null }) {
+  const v = visual(a);
   const [hist, setHist] = useState(null);
+  const [histAberto, setHistAberto] = useState(false);
   const [erro, setErro] = useState('');
   const [ocupado, setOcupado] = useState(false);
   const [cancelando, setCancelando] = useState(false);
@@ -83,19 +85,18 @@ function Detalhe({ a, nomeProf, nomeDe, profissionais, boxes, ehDono, aoAlterar,
   const [quando, setQuando] = useState(() => aoLocal(a.inicio));
   const [prof, setProf] = useState(a.profissionalId);
   const [boxEscolhido, setBoxEscolhido] = useState(''); // '' = manter o box atual (o servidor tenta o mesmo e, se ocupado, outro livre)
-  const [cupomAberto, setCupomAberto] = useState(false);
-  const [chave, setChave] = useState('');
   useEffect(() => { let vivo = true; api.obter(a.id).then((r) => { if (vivo && r.ok) setHist(r.agendamento.historico); }); return () => { vivo = false; }; }, [a.id, a.status, a.inicio]);
-  const executar = async (fn, aviso) => {
+  const executar = async (fn, aviso, fechar = true) => {
     if (ocupado) return;
     setOcupado(true); setErro('');
     const r = await fn();
     setOcupado(false);
     if (!r.ok) { setErro(r.erro); return; }
-    setCancelando(false); setRemarcando(false); setCupomAberto(false); setChave('');
+    setCancelando(false); setRemarcando(false);
     aoAlterar(aviso, r.agendamento);
+    if (fechar && aoFechar) aoFechar();
   };
-  const mudar = (status, aviso) => () => executar(() => api.mudarStatus(a.id, status), aviso);
+  const mudar = (status, aviso) => () => executar(() => api.mudarStatus(a.id, status), aviso, true);
   const remarcar = (e) => {
     e.preventDefault();
     const ts = doLocal(quando);
@@ -114,81 +115,108 @@ function Detalhe({ a, nomeProf, nomeDe, profissionais, boxes, ehDono, aoAlterar,
       // tem cadastro, mas a ficha não chegou (quem não lê Clientes, lista com erro, cadastro fora da lista): não fica em silêncio, diz que não deu para conferir o telefone
       else if (r.ok && r.agendamento.inicio !== a.inicio) aoAvisar({ naoConferido: true });
       return r;
-    }, 'Agendamento remarcado.');
+    }, 'Agendamento remarcado.', true);
   };
-  // Chamado direto do clique (sem await antes): o navegador só deixa abrir a aba nova nesse momento.
   const ativoStatus = a.status;
   const podeCupom = (ativoStatus === 'a_confirmar' || ativoStatus === 'confirmado') && a.origem !== 'atendimento'; // atendimento local nunca usa cupom
+  const valorFinal = fmtMoney(a.total - a.desconto + a.totalProdutos);
   return (
-    <div className="cartao-detalhe" data-testid="agendamento-detalhe">
-      <ul className="detalhe-itens">
-        {a.servicos.map((s, i) => <li key={`${s.servicoId}-${i}`}>{s.nome} · {s.duracaoMin} min · {fmtMoney(s.preco)}{s.desconto > 0 ? ` (cupom −${fmtMoney(s.desconto)})` : ''}</li>)}
-        {a.produtos.map((p) => <li key={p.materialId} data-testid="detalhe-produto">{p.qtd}× {p.nome} · {fmtMoney(p.preco * p.qtd)}{p.vendedorId && p.vendedorId !== a.profissionalId ? ` · vendeu ${nomeDe(p.vendedorId)}` : ''}</li>)}
-      </ul>
-      {a.estetica && (a.estetica.placa || a.estetica.box) && (
-        <p className="detalhe-veiculo-real" data-testid="detalhe-veiculo"><Icone n="car" size={14} /> {rotuloVeiculo({ marca: a.estetica.marca, modelo: a.estetica.modelo, cor: a.estetica.cor, placa: a.estetica.placa })}{a.estetica.porte ? ` · porte ${ROTULO_PORTE[a.estetica.porte] || a.estetica.porte}` : ''}{a.estetica.box ? ` · ${a.estetica.box}` : ''}</p>
-      )}
-      <p className="muted">{fmtDateTime(a.inicio)} até {fmtHM(a.fim ?? a.inicio)} · com {nomeProf}{a.motivoCancelamento ? ` · cancelado (${a.motivoCancelamento})` : ''}</p>
-      {erro && <Aviso tipo="erro" data-testid="agendamento-erro">{erro}</Aviso>}
-      {a.cupom && <p data-testid="detalhe-cupom"><Icone n="key" size={14} /> Cupom {a.cupom.nome}: −{fmtMoney(a.desconto)} · a pagar {fmtMoney(a.total - a.desconto + a.totalProdutos)}</p>}
-      {podeCupom && !a.cupom && !cupomAberto && !cancelando && !remarcando && <div className="acoes"><Btn tamanho="sm" onClick={() => { setCupomAberto(true); setErro(''); }} data-testid="acao-cupom">Aplicar cupom</Btn></div>}
-      {podeCupom && a.cupom && !cancelando && !remarcando && <div className="acoes"><Btn tamanho="sm" disabled={ocupado} onClick={() => executar(() => api.retirarCupom(a.id), 'Cupom retirado.')} data-testid="acao-retirar-cupom">Retirar cupom</Btn></div>}
-      {cupomAberto && (
-        <form className="form-grade" onSubmit={(e) => { e.preventDefault(); executar(() => api.aplicarCupom(a.id, chave), 'Cupom aplicado.'); }} data-testid="cupom-form-agenda">
-          <Campo rotulo="Chave do cupom"><input value={chave} maxLength={40} autoComplete="off" autoCapitalize="characters" spellCheck={false} onChange={(e) => { setChave(e.target.value); setErro(''); }} placeholder="XXXX-XXXX-XXXX" data-testid="cupom-chave-agenda" /></Campo>
-          <div className="acoes">
-            <Btn tamanho="sm" onClick={() => { setCupomAberto(false); setChave(''); setErro(''); }} data-testid="cupom-voltar">Voltar</Btn>
-            <Btn variante="primario" tamanho="sm" type="submit" disabled={ocupado} data-testid="cupom-aplicar">{ocupado ? 'Aplicando…' : 'Aplicar'}</Btn>
-          </div>
-        </form>
-      )}
-      {!cancelando && !remarcando && (
-        <div className="acoes">
-          {ativoStatus === 'a_confirmar' && <Btn variante="primario" tamanho="sm" disabled={ocupado} onClick={mudar('confirmado', 'Agendamento confirmado.')} data-testid="acao-confirmar">Confirmar</Btn>}
-          {(ativoStatus === 'a_confirmar' || ativoStatus === 'confirmado') && <Btn tamanho="sm" disabled={ocupado} onClick={mudar('concluido', 'Agendamento concluído.')} data-testid="acao-concluir">Concluir</Btn>}
-          {ativoStatus === 'concluido' && <Btn tamanho="sm" disabled={ocupado} onClick={mudar('confirmado', 'Agendamento reaberto como confirmado.')} data-testid="acao-reabrir">Reabrir</Btn>}
-          {ativoStatus === 'cancelado' && <Btn variante="primario" tamanho="sm" disabled={ocupado} onClick={mudar('a_confirmar', 'Agendamento reativado.')} data-testid="acao-reativar">Reativar</Btn>}
-          {ativoStatus !== 'cancelado' && ativoStatus !== 'concluido' && <Btn tamanho="sm" disabled={ocupado} onClick={() => setRemarcando(true)} data-testid="acao-remarcar">Remarcar</Btn>}
-          {ativoStatus !== 'cancelado' && <Btn tamanho="sm" variante="perigo" disabled={ocupado} onClick={() => setCancelando(true)} data-testid="acao-cancelar">Cancelar</Btn>}
+    <div className="detalhe-fundo-real" role="dialog" aria-modal="true" aria-label="Detalhes do atendimento" data-testid="detalhe-modal"
+      onClick={(e) => { if (e.target === e.currentTarget && aoFechar) aoFechar(); }}
+      onKeyDown={(e) => { if (e.key === 'Escape' && aoFechar) aoFechar(); }}>
+      <div className="cartao-detalhe detalhe-modal-real" data-testid="agendamento-detalhe">
+        <div className="detalhe-topo-real">
+          <h3 className="detalhe-titulo-real">Detalhes do atendimento</h3>
+          <Btn tamanho="sm" onClick={aoFechar} aria-label="Fechar detalhes" data-testid="detalhe-fechar"><Icone n="x" size={16} /></Btn>
         </div>
-      )}
-      {cancelando && (
-        <div className="confirmar-linha" data-testid="cancelar-confirmacao">
-          <span>Cancelar este agendamento?</span>
-          <Btn tamanho="sm" variante="perigo" disabled={ocupado} onClick={mudar('cancelado', 'Agendamento cancelado.')} data-testid="cancelar-sim">Sim, cancelar</Btn>
-          <Btn tamanho="sm" onClick={() => setCancelando(false)} data-testid="cancelar-nao">Voltar</Btn>
-        </div>
-      )}
-      {remarcando && (
-        <form className="form-grade" onSubmit={remarcar} data-testid="remarcar-form">
-          <Campo rotulo="Nova data e hora"><input type="datetime-local" step={300} value={quando} onChange={(e) => { setQuando(e.target.value); setErro(''); }} data-testid="remarcar-quando" /></Campo>
-          {ehDono && profissionais.length > 1 && (
-            <Campo rotulo={Rot('profissional')}>
-              <select value={prof} onChange={(e) => setProf(e.target.value)} data-testid="remarcar-prof">{profissionais.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}</select>
-            </Campo>
-          )}
-          {a.estetica && a.estetica.boxId && boxes.length > 0 && (
-            <Campo rotulo="Box">
-              <select value={boxEscolhido} onChange={(e) => setBoxEscolhido(e.target.value)} data-testid="remarcar-box">
-                <option value="">Manter {a.estetica.box || 'o box atual'}</option>
-                {boxes.filter((b) => b.id !== a.estetica.boxId).map((b) => <option key={b.id} value={b.id}>{b.nome}</option>)}
-              </select>
-            </Campo>
-          )}
-          <div className="acoes">
-            <Btn tamanho="sm" onClick={() => { setRemarcando(false); setErro(''); }} data-testid="remarcar-cancelar">Voltar</Btn>
-            <Btn variante="primario" tamanho="sm" type="submit" disabled={ocupado} data-testid="remarcar-salvar">{ocupado ? 'Salvando…' : 'Remarcar'}</Btn>
+        <div className="detalhe-linhas-real">
+          <div className="detalhe-linha-real">
+            <Icone n="team" size={16} />
+            <strong className="detalhe-cliente-real">{nomeCliente}</strong>
+            <span className={`chip chip-p st-${v.cor}`}>{v.rotulo}</span>
           </div>
-        </form>
-      )}
-      {hist && hist.length > 0 && (
-        <details className="historico">
-          <summary data-testid="historico-abrir">Histórico ({hist.length})</summary>
-          <ul data-testid="historico-lista">
-            {hist.map((e, i) => <li key={i}><span className="muted">{e.em ? fmtDateTime(e.em) : ''}</span> · {e.autor}: {e.campo}{e.de ? ` de ${e.de}` : ''}{e.para ? ` para ${e.para}` : ''}</li>)}
-          </ul>
-        </details>
-      )}
+          <div className="detalhe-linha-real">
+            <Icone n="calendar" size={16} />
+            <span>{fmtDayLong(a.inicio)} · {fmtHM(a.inicio)} às {fmtHM(a.fim ?? a.inicio)}{a.motivoCancelamento ? ` · cancelado (${a.motivoCancelamento})` : ''}</span>
+          </div>
+          <div className="detalhe-linha-real">
+            <Icone n={capAtiva('usaVeiculo') ? 'brush' : 'scissors'} size={16} />
+            <ul className="detalhe-itens">
+              {a.servicos.map((s, i) => <li key={`${s.servicoId}-${i}`}>{s.nome} · {s.duracaoMin} min · {fmtMoney(s.preco)}{s.desconto > 0 ? ` (cupom −${fmtMoney(s.desconto)})` : ''}</li>)}
+              {a.produtos.map((p) => <li key={p.materialId} data-testid="detalhe-produto">{p.qtd}× {p.nome} · {fmtMoney(p.preco * p.qtd)}{p.vendedorId && p.vendedorId !== a.profissionalId ? ` · vendeu ${nomeDe(p.vendedorId)}` : ''}</li>)}
+              {a.servicos.length === 0 && a.produtos.length === 0 && <li className="muted">Sem serviço</li>}
+            </ul>
+          </div>
+          {a.estetica && (a.estetica.placa || a.estetica.box) && (
+            <div className="detalhe-linha-real" data-testid="detalhe-veiculo">
+              <Icone n="car" size={16} />
+              <span>{rotuloVeiculo({ marca: a.estetica.marca, modelo: a.estetica.modelo, cor: a.estetica.cor, placa: a.estetica.placa })}{a.estetica.porte ? ` · porte ${ROTULO_PORTE[a.estetica.porte] || a.estetica.porte}` : ''}{a.estetica.box ? ` · ${a.estetica.box}` : ''}</span>
+            </div>
+          )}
+          <div className="detalhe-linha-real">
+            <Icone n="users" size={16} />
+            <span>{Rot('profissional')}: <b>{nomeProf}</b></span>
+          </div>
+          <div className="detalhe-linha-real">
+            <Icone n="wallet" size={16} />
+            <span>
+              <b>{valorFinal}</b>
+              {a.cupom && <span data-testid="detalhe-cupom"> · Cupom {a.cupom.nome}: −{fmtMoney(a.desconto)} · a pagar {valorFinal}</span>}
+            </span>
+            {podeCupom && a.cupom && !cancelando && !remarcando && <Btn tamanho="sm" disabled={ocupado} onClick={() => executar(() => api.retirarCupom(a.id), 'Cupom retirado.', false)} data-testid="acao-retirar-cupom">Retirar cupom</Btn>}
+          </div>
+        </div>
+        {erro && <Aviso tipo="erro" data-testid="agendamento-erro">{erro}</Aviso>}
+        {!cancelando && !remarcando && (
+          <div className="acoes detalhe-acoes-real">
+            {ativoStatus !== 'cancelado' && <Btn tamanho="sm" variante="perigo" disabled={ocupado} onClick={() => setCancelando(true)} data-testid="acao-cancelar">Cancelar</Btn>}
+            {ativoStatus !== 'cancelado' && ativoStatus !== 'concluido' && <Btn variante="remarcar" tamanho="sm" disabled={ocupado} onClick={() => setRemarcando(true)} data-testid="acao-remarcar">Remarcar</Btn>}
+            {ativoStatus === 'a_confirmar' && <Btn variante="primario" tamanho="sm" disabled={ocupado} onClick={mudar('confirmado', 'Agendamento confirmado.')} data-testid="acao-confirmar">Confirmar</Btn>}
+            {ativoStatus === 'concluido' && <Btn tamanho="sm" disabled={ocupado} onClick={mudar('confirmado', 'Agendamento reaberto como confirmado.')} data-testid="acao-reabrir">Reabrir</Btn>}
+            {ativoStatus === 'cancelado' && <Btn variante="primario" tamanho="sm" disabled={ocupado} onClick={mudar('a_confirmar', 'Agendamento reativado.')} data-testid="acao-reativar">Reativar</Btn>}
+            <Btn tamanho="sm" aria-expanded={histAberto} onClick={() => setHistAberto((x) => !x)} data-testid="historico-abrir">Histórico{hist && hist.length > 0 ? ` (${hist.length})` : ''}</Btn>
+            {(ativoStatus === 'a_confirmar' || ativoStatus === 'confirmado') && <Btn variante="concluir" tamanho="sm" disabled={ocupado} onClick={mudar('concluido', 'Agendamento concluído.')} data-testid="acao-concluir">Concluir</Btn>}
+          </div>
+        )}
+        {cancelando && (
+          <div className="confirmar-linha" data-testid="cancelar-confirmacao">
+            <span>Cancelar este agendamento?</span>
+            <Btn tamanho="sm" variante="perigo" disabled={ocupado} onClick={mudar('cancelado', 'Agendamento cancelado.')} data-testid="cancelar-sim">Sim, cancelar</Btn>
+            <Btn tamanho="sm" onClick={() => setCancelando(false)} data-testid="cancelar-nao">Voltar</Btn>
+          </div>
+        )}
+        {remarcando && (
+          <form className="form-grade" onSubmit={remarcar} data-testid="remarcar-form">
+            <Campo rotulo="Nova data e hora"><input type="datetime-local" step={300} value={quando} onChange={(e) => { setQuando(e.target.value); setErro(''); }} data-testid="remarcar-quando" /></Campo>
+            {ehDono && profissionais.length > 1 && (
+              <Campo rotulo={Rot('profissional')}>
+                <select value={prof} onChange={(e) => setProf(e.target.value)} data-testid="remarcar-prof">{profissionais.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}</select>
+              </Campo>
+            )}
+            {a.estetica && a.estetica.boxId && boxes.length > 0 && (
+              <Campo rotulo="Box">
+                <select value={boxEscolhido} onChange={(e) => setBoxEscolhido(e.target.value)} data-testid="remarcar-box">
+                  <option value="">Manter {a.estetica.box || 'o box atual'}</option>
+                  {boxes.filter((b) => b.id !== a.estetica.boxId).map((b) => <option key={b.id} value={b.id}>{b.nome}</option>)}
+                </select>
+              </Campo>
+            )}
+            <div className="acoes">
+              <Btn tamanho="sm" onClick={() => { setRemarcando(false); setErro(''); }} data-testid="remarcar-cancelar">Voltar</Btn>
+              <Btn variante="primario" tamanho="sm" type="submit" disabled={ocupado} data-testid="remarcar-salvar">{ocupado ? 'Salvando…' : 'Remarcar'}</Btn>
+            </div>
+          </form>
+        )}
+        {histAberto && (
+          <div className="historico detalhe-historico-real">
+            {hist && hist.length > 0 ? (
+              <ul data-testid="historico-lista">
+                {hist.map((e, i) => <li key={i}><span className="muted">{e.em ? fmtDateTime(e.em) : ''}</span>{e.autor ? ` · ${e.autor}` : ''}: {e.campo}{e.de ? ` de ${e.de}` : ''}{e.para ? ` para ${e.para}` : ''}</li>)}
+              </ul>
+            ) : <p className="muted" data-testid="historico-lista">Nenhuma alteração registrada.</p>}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -423,7 +451,7 @@ export default function Agenda({ ehProprio = false, ehDono = false, ehProprietar
   const cartao = (a, testid) => (
     <Cartao key={a.id} a={a} testid={testid} nomeCliente={nomeCliente(a)} nomeProf={nomeProf(a.profissionalId)} mostraProf={!ehProprio && selecionado === 'todos' && atendem.length > 1}
       aberto={aberto === a.id} aoAbrir={() => setAberto(aberto === a.id ? null : a.id)} aoSegurar={setTrocaForma} destaque={destaqueIds.includes(a.id) || destaqueAtendido === a.id} avaliacao={notas.get(a.id) || null}>
-      <Detalhe a={a} nomeProf={nomeProf(a.profissionalId)} nomeDe={nomeProf} profissionais={atendem} boxes={boxes} ehDono={ehDono} aoAlterar={alterou} aoAvisar={setAvisoRemarcar} cliente={a.clienteId ? fichas.get(a.clienteId) || null : null} loja={{ nome: nomeLoja, ...lojaInfo }} />
+      <Detalhe a={a} nomeCliente={nomeCliente(a)} nomeProf={nomeProf(a.profissionalId)} nomeDe={nomeProf} profissionais={atendem} boxes={boxes} ehDono={ehDono} aoFechar={() => setAberto(null)} aoAlterar={alterou} aoAvisar={setAvisoRemarcar} cliente={a.clienteId ? fichas.get(a.clienteId) || null : null} loja={{ nome: nomeLoja, ...lojaInfo }} />
     </Cartao>
   );
 

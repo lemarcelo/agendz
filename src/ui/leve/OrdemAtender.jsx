@@ -2,23 +2,53 @@
 // Ordem da tela Atender (v133), só do proprietário: para cada tipo de atendimento (agendamento e atendimento feito) sobe/desce as etapas e os campos de Veículo e de
 // Cliente. Componente compartilhado entre o Artifact (Estabelecimento > Regras) e o site real (cartão Regras do atendimento): não importa api.js, hooks.js nem common.jsx.
 // A regra e o saneamento moram em domain/ordem-atender.js; quem usa grava o valor devolvido em `aoMudar` (o servidor confere de novo).
-import React from 'react';
-import { Btn, Icone } from './mini.jsx';
-import { COMO_A_PAGINA_DO_CLIENTE, ROTULO_CAMPO, ROTULO_ETAPA, moverItem } from '../../domain/ordem-atender.js';
+import React, { useRef, useState } from 'react';
+import { Btn } from './mini.jsx';
+import { COMO_A_PAGINA_DO_CLIENTE, ROTULO_CAMPO, ROTULO_ETAPA } from '../../domain/ordem-atender.js';
 
 const TITULO = { futuro: 'Agendamento (data futura)', local: 'Atendimento feito (agora ou passado)' };
 
 function Lista({ tipo, grupo, itens, rotulos, usaVeiculo, aoMover }) {
   const visiveis = itens.filter((x) => usaVeiculo || x !== 'veiculo');
+  const listaRef = useRef(null);
+  const gesto = useRef(null);
+  const [destino, setDestino] = useState(null);
+  const iniciar = (e, id) => {
+    if (e.button !== 0 && e.button !== undefined) return;
+    const indice = visiveis.indexOf(id);
+    gesto.current = { id, indice, destino: indice };
+    setDestino({ id, indice });
+    if (e.currentTarget.focus) e.currentTarget.focus();
+    if (e.currentTarget.setPointerCapture && e.pointerId !== undefined) {
+      try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+    }
+  };
+  const mover = (e) => {
+    if (!gesto.current) return;
+    const linhas = [...listaRef.current.querySelectorAll('[data-ordem-id]')];
+    const alvo = linhas.findIndex((el) => e.clientY < el.getBoundingClientRect().bottom);
+    const indice = alvo < 0 ? linhas.length - 1 : alvo;
+    gesto.current.destino = indice;
+    setDestino({ id: gesto.current.id, indice });
+  };
+  const terminar = (cancelado = false) => {
+    const g = gesto.current;
+    gesto.current = null; setDestino(null);
+    if (g && !cancelado && g.destino !== g.indice) aoMover(g.id, g.destino - g.indice);
+  };
+  const exibicao = [...visiveis];
+  if (destino) {
+    const origem = exibicao.indexOf(destino.id);
+    if (origem >= 0) { exibicao.splice(origem, 1); exibicao.splice(destino.indice, 0, destino.id); }
+  }
   return (
-    <ol className="ordem-atender-lista" data-testid={`ordem-${tipo}-${grupo}`}>
-      {visiveis.map((id, i) => (
-        <li key={id}>
+    <ol ref={listaRef} className="ordem-atender-lista" data-testid={`ordem-${tipo}-${grupo}`}>
+      {exibicao.map((id) => (
+        <li key={id} data-ordem-id={id} className={destino?.id === id ? 'ordem-atender-destino' : ''}>
+          <button type="button" className="ordem-atender-alca" aria-label={`Mover ${rotulos[id]}: arraste ou use as setas para cima e para baixo`} data-testid={`ordem-${tipo}-${grupo}-mover-${id}`}
+            onPointerDown={(e) => iniciar(e, id)} onPointerMove={mover} onPointerUp={() => terminar()} onPointerCancel={() => terminar(true)}
+            onKeyDown={(e) => { if (e.key === 'Escape' && gesto.current) { e.preventDefault(); terminar(true); } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e.preventDefault(); aoMover(id, e.key === 'ArrowUp' ? -1 : 1); } }}>⠿</button>
           <span>{rotulos[id]}</span>
-          <span className="ordem-atender-setas">
-            <Btn tamanho="sm" disabled={i === 0} onClick={() => aoMover(id, -1)} aria-label={`Subir ${rotulos[id]}`} data-testid={`ordem-${tipo}-${grupo}-sobe-${id}`}><Icone n="up" size={15} /></Btn>
-            <Btn tamanho="sm" disabled={i === visiveis.length - 1} onClick={() => aoMover(id, 1)} aria-label={`Descer ${rotulos[id]}`} data-testid={`ordem-${tipo}-${grupo}-desce-${id}`}><Icone n="down" size={15} /></Btn>
-          </span>
         </li>
       ))}
     </ol>
@@ -29,7 +59,10 @@ export default function OrdemAtender({ valor, padrao, aoMudar, usaVeiculo = fals
   const mexer = (tipo, grupo, id, delta) => {
     // a lista inteira (com a etapa Veículo escondida, quando o tipo não usa) é movida pela posição entre as visíveis
     const atual = valor[tipo][grupo].filter((x) => usaVeiculo || x !== 'veiculo');
-    const movida = moverItem(atual, id, delta);
+    const origem = atual.indexOf(id), destino = origem + delta;
+    if (origem < 0 || destino < 0 || destino >= atual.length) return;
+    const movida = [...atual];
+    movida.splice(origem, 1); movida.splice(destino, 0, id);
     const resto = valor[tipo][grupo].filter((x) => !movida.includes(x));
     aoMudar({ ...valor, [tipo]: { ...valor[tipo], [grupo]: [...movida, ...resto] } });
   };

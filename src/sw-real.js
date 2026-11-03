@@ -10,7 +10,7 @@ self.addEventListener('push', (e) => {
   let bruto = '';
   try { bruto = e.data ? e.data.text() : ''; } catch { bruto = ''; }
   const m = lerMensagem(bruto);
-  e.waitUntil(self.registration.showNotification(m.titulo, { body: m.texto, tag: m.tag, data: { url: m.url }, icon: '/icone.svg', badge: '/icone.svg', renotify: true }));
+  e.waitUntil(self.registration.showNotification(m.titulo, { body: m.texto, tag: m.tag, data: { url: m.url }, icon: '/api/publico/icone', badge: '/api/publico/icone', renotify: true }));
 });
 
 self.addEventListener('notificationclick', (e) => {

@@ -46,6 +46,23 @@ class LojaPorEnderecoTest extends BaseIntegracao {
     }
 
     @Test
+    void manifestoEIconeDoAppSaemComNomeELogoDaLoja() throws Exception {
+        mvc.perform(get("/api/publico/manifest.webmanifest").with(host("dalforno.agendz.io")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Barbearia Dal Forno"))
+                .andExpect(jsonPath("$.short_name").value("Barbearia Dal Forno"))
+                .andExpect(jsonPath("$.theme_color").value("#0b0d10"))
+                .andExpect(jsonPath("$.icons[0].src").value("/api/publico/icone"))
+                .andExpect(jsonPath("$.icons[0].type").value("image/jpeg"));
+        mvc.perform(get("/api/publico/icone").with(host("dalforno.agendz.io")))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().contentType("image/jpeg"));
+        mvc.perform(get("/api/publico/icone").with(host("apex.agendz.io")))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().contentType("image/png"));
+    }
+
+    @Test
     void hostDesconhecidoOuEngenhosoDa404() throws Exception {
         for (String h : new String[] {"agendz.io", "naoexiste.agendz.io", "a.b.agendz.io",
                 "dalforno.agendz.io.evil.com", "www.agendz.io", "outro.com"}) {

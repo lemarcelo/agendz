@@ -28,16 +28,40 @@ assert.ok(await y('atender-porte') < await y('atender-placa'), 'porte vem no top
 await fechar();
 ok('padrão da autoestética: Veículo com porte no topo');
 
-// 2. a configuração existe só para o proprietário, com os dois tipos de atendimento
+// 2. a configuração existe só para o proprietário, com os dois tipos de atendimento e alças sem setas visíveis
 await T('nav-estab').click();
 await p.getByRole('tab', { name: 'Regras' }).click();
 await T('ordem-atender').waitFor();
 await T('ordem-futuro').waitFor(); await T('ordem-local').waitFor();
-assert.equal(await T('ordem-local-etapas-sobe-veiculo').isDisabled(), true, 'a primeira etapa não sobe');
-ok('Estabelecimento > Regras mostra a ordem para agendamento e atendimento feito');
+assert.equal(await p.locator('[data-testid^="ordem-local-etapas-sobe-"], [data-testid^="ordem-local-etapas-desce-"]').count(), 0, 'sem botões de seta visíveis');
+await T('ordem-local-etapas-mover-veiculo').focus();
+await p.keyboard.press('ArrowUp'); // já é a primeira etapa: nada muda
+assert.equal(await p.locator('[data-testid="ordem-local-etapas"] li').first().getAttribute('data-ordem-id'), 'veiculo', 'a primeira etapa não sobe');
+ok('Estabelecimento > Regras mostra a ordem para agendamento e atendimento feito com alça de arrastar');
 
-// 3. mover só o atendimento feito: Veículo desce para depois dos Serviços; o agendamento (futuro) fica como estava
-for (let i = 0; i < 4; i++) { if (await T('ordem-local-etapas-desce-veiculo').isDisabled()) break; await T('ordem-local-etapas-desce-veiculo').click(); }
+// 3. mover só o atendimento feito (arraste com mouse, cancelamento com Escape e teclado): Veículo desce para depois dos Serviços; o agendamento (futuro) fica como estava
+{
+  const alcaVei = T('ordem-local-etapas-mover-veiculo');
+  const alcaSrv = T('ordem-local-etapas-mover-servicos');
+  await alcaVei.scrollIntoViewIfNeeded();
+  const bv = await alcaVei.boundingBox();
+  const bs = await alcaSrv.boundingBox();
+  // Escape durante o arraste cancela a mudança
+  await p.mouse.move(bv.x + bv.width / 2, bv.y + bv.height / 2);
+  await p.mouse.down();
+  await p.mouse.move(bs.x + bs.width / 2, bs.y + bs.height - 2, { steps: 4 });
+  assert.equal(await p.locator('.ordem-atender-destino').count(), 1, 'item destacado e deslocado durante o gesto');
+  await p.keyboard.press('Escape');
+  await p.mouse.up();
+  assert.equal(await p.locator('[data-testid="ordem-local-etapas"] li').first().getAttribute('data-ordem-id'), 'veiculo', 'Escape cancela o arraste');
+  // Agora arrasta Veículo para depois de Serviços e usa ArrowDown para descer mais uma posição
+  await p.mouse.move(bv.x + bv.width / 2, bv.y + bv.height / 2);
+  await p.mouse.down();
+  await p.mouse.move(bs.x + bs.width / 2, bs.y + bs.height - 2, { steps: 5 });
+  await p.mouse.up();
+  await alcaVei.focus();
+  await p.keyboard.press('ArrowDown');
+}
 await abrirAtender(); // "Agora" = atendimento feito
 assert.ok(await y('atender-lista-servicos') < await y('atender-veiculo'), 'atendimento feito: Serviços agora vem antes de Veículo');
 await fechar();

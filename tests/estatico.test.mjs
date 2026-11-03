@@ -120,3 +120,28 @@ test('todo e2e existente é executado pelo run-e2e (padrão e2e*.mjs)', () => {
   assert.ok(/e2e\\d\*\\\.mjs/.test(run));
   assert.ok(readdirSync(join(raiz, 'tests')).filter((f) => /^e2e\d*\.mjs$/.test(f)).length >= 11);
 });
+
+// Guardrails extras contra regressões comuns em modelos mais leves (Flash): contratos visuais, testids e PWA por loja.
+test('guardrails visuais e PWA por loja: modal da agenda, alça do OrdemAtender e manifesto/ícone dinâmicos', () => {
+  const agenda = ler('src/ui/real/Agenda.jsx');
+  for (const tid of ['detalhe-modal', 'agendamento-detalhe', 'detalhe-fechar', 'historico-abrir', 'historico-lista', 'acao-confirmar', 'acao-concluir', 'acao-remarcar', 'acao-cancelar', 'acao-reativar', 'acao-retirar-cupom']) {
+    assert.ok(agenda.includes(tid), `Agenda.jsx precisa manter data-testid="${tid}"`);
+  }
+  assert.ok(!agenda.includes('data-testid="acao-cupom"'), 'modal de detalhes da Agenda não deve exibir botão Aplicar cupom (acao-cupom)');
+  assert.ok(agenda.includes('Termina às'), 'cartão da Agenda deve exibir previsão "Termina às HH:MM"');
+  assert.ok(agenda.indexOf('data-testid="acao-cancelar"') < agenda.indexOf('data-testid="acao-concluir"'), 'no modal da Agenda, Cancelar deve vir à esquerda e Concluir à direita');
+  const css = ler('src/styles.css');
+  assert.ok(/\.btn-concluir\s*\{[^}]*background:\s*transparent/.test(css) && /\.btn-remarcar\s*\{[^}]*background:\s*transparent/.test(css), 'botões coloridos (.btn-concluir e .btn-remarcar) devem seguir o padrão outline (background: transparent) igual ao .btn-perigo');
+
+  const ordem = ler('src/ui/leve/OrdemAtender.jsx');
+  assert.ok(ordem.includes('-mover-'), 'OrdemAtender deve usar alça de arrastar (-mover-)');
+  assert.ok(!ordem.includes('-sobe-') && !ordem.includes('-desce-'), 'OrdemAtender não deve exibir setas (-sobe-/-desce-)');
+  assert.ok(ordem.includes('ArrowUp') && ordem.includes('ArrowDown') && ordem.includes('Escape'), 'OrdemAtender deve manter suporte a teclado (ArrowUp/ArrowDown/Escape)');
+
+  const buildMjs = ler('build.mjs');
+  assert.ok(!buildMjs.includes('#14532d'), 'build.mjs não deve fixar o verde #14532d no manifesto ou theme-color');
+  assert.ok(buildMjs.includes('/api/publico/manifest.webmanifest') && buildMjs.includes('/api/publico/icone'), 'build real deve apontar manifesto e ícone dinâmicos da loja');
+
+  const appReal = ler('src/ui/real/AppReal.jsx');
+  assert.ok(appReal.includes('document.title = loja.nome') && appReal.includes('apple-mobile-web-app-title') && appReal.includes('theme-color'), 'AppReal.jsx deve atualizar título, nome do app e theme-color pela loja carregada');
+});

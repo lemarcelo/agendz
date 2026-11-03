@@ -124,7 +124,16 @@ const concluirAtender = async (p) => { await p.getByTestId('atender-prox-quando'
   await p.getByTestId('regras-real').waitFor();
   await p.getByTestId('ordem-atender').waitFor();
   assert.equal(await p.getByTestId('ordem-local-veiculo').count(), 0, 'barbearia não tem campos de veículo');
-  await p.getByTestId('ordem-local-etapas-sobe-servicos').click();
+  assert.equal(await p.locator('[data-testid^="ordem-local-etapas-sobe-"]').count(), 0, 'sem setas visíveis na lista');
+  const alcaSrv = p.getByTestId('ordem-local-etapas-mover-servicos');
+  const alcaCli = p.getByTestId('ordem-local-etapas-mover-cliente');
+  await alcaSrv.scrollIntoViewIfNeeded();
+  const bSrv = await alcaSrv.boundingBox();
+  const bCli = await alcaCli.boundingBox();
+  await p.mouse.move(bSrv.x + bSrv.width / 2, bSrv.y + bSrv.height / 2);
+  await p.mouse.down();
+  await p.mouse.move(bCli.x + bCli.width / 2, bCli.y + 4, { steps: 5 });
+  await p.mouse.up();
   await p.getByTestId('regras-salvar').click();
   await p.getByTestId('regras-ok').waitFor();
   const put = chamadas.filter((c) => c.m === 'PUT' && c.u === '/api/estabelecimento/regras-atendimento').at(-1).corpo;

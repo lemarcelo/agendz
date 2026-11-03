@@ -156,9 +156,21 @@ try {
   estado.desligado = false;
   ok('C: bloqueado, sem suporte (com a dica do iPhone) e servidor desligado têm texto próprio e nenhum botão inútil');
 
-  // D. remover outro aparelho pede confirmação
+  // D. remover outro aparelho pede confirmação + título, ícone e barra superior seguem a loja (sem verde #14532d)
   estado.itens = [{ id: OUTRO, aparelho: 'Celular Android · Chrome', criadoEm: '2026-10-30T09:00:00Z', ultimoEnvio: '2026-10-31T09:00:00Z' }];
   p = await abrir({ viewport: { width: 1366, height: 800 }, tema: 'dark' });
+  const metaPwa = await p.evaluate(() => ({
+    titulo: document.title,
+    appTitle: document.head.querySelector('meta[name="apple-mobile-web-app-title"]')?.content || '',
+    themeColor: document.head.querySelector('meta[name="theme-color"]')?.content || '',
+    manifestHref: document.head.querySelector('link[rel="manifest"]')?.getAttribute('href') || '',
+    iconHref: document.head.querySelector('link[rel="icon"]')?.getAttribute('href') || '',
+  }));
+  assert.equal(metaPwa.titulo, 'Dalforno', 'título da página assume o nome da loja');
+  assert.equal(metaPwa.appTitle, 'Dalforno', 'nome do web app assume o nome da loja');
+  assert.ok(metaPwa.themeColor && metaPwa.themeColor !== '#14532d', 'barra superior nunca usa o verde fixo #14532d');
+  assert.equal(metaPwa.manifestHref, '/api/publico/manifest.webmanifest', 'manifesto aponta para o endpoint por loja');
+  assert.equal(metaPwa.iconHref, '/api/publico/icone', 'ícone aponta para a logo/ícone da loja');
   await p.getByTestId('push-item').waitFor();
   assert.match(await p.getByTestId('push-item').first().innerText(), /Celular Android · Chrome/);
   await p.getByTestId('push-remover').click();

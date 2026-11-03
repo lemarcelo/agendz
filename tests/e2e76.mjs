@@ -60,7 +60,10 @@ const { b, erros, pedidosWa, abrir, semRolagem } = await abrirNavegador();
 const T = (p, t) => p.locator(`[data-testid="${t}"]`);
 const texto = (p, t) => T(p, t).innerText();
 const cartaoDe = (p, hora, lista = 'cartao') => p.locator(`[data-testid="${lista}"]`, { hasText: hora }).first();
-const abrirCartao = (p, hora) => cartaoDe(p, hora).locator('[data-testid="cartao-abrir"]').click();
+const abrirCartao = async (p, hora) => {
+  if (await T(p, 'detalhe-fechar').count()) await T(p, 'detalhe-fechar').click();
+  await cartaoDe(p, hora).locator('[data-testid="cartao-abrir"]').click();
+};
 const remarcarPara = async (p, hora, destino, { prof } = {}) => {
   await abrirCartao(p, hora);
   await T(p, 'acao-remarcar').click();
@@ -129,7 +132,7 @@ const remarcarPara = async (p, hora, destino, { prof } = {}) => {
   ok('reativar recusado (409): mensagem do servidor e o cartão continua cancelado');
 
   // 3. cancelar pela lista de próximos: aviso e cartão fora da lista
-  await abrirCartao(p, '10:00').catch(() => {});
+  if (await T(p, 'detalhe-fechar').count()) await T(p, 'detalhe-fechar').click();
   await p.locator('[data-testid="cartao-proximo-abrir"]').first().click();
   await T(p, 'acao-cancelar').click(); await T(p, 'cancelar-sim').click();
   await p.waitForFunction(() => /Agendamento cancelado/.test(document.querySelector('[data-testid="agenda-aviso"]')?.textContent || ''));
@@ -237,15 +240,16 @@ for (const [rotulo, status, hora] of [['sem acesso a Clientes (403)', 403, '09:0
   await T(p, 'agenda-proximo').click(); await T(p, 'agenda-proximo').click();
   await T(p, 'agenda-vazio').waitFor();
   assert.match(await texto(p, 'agenda-vazio'), /Nenhum agendamento neste dia/);
-  // cartão aberto + formulário de remarcar: ao mudar de dia fecha tudo e some o aviso do dia anterior
+  // cartão aberto + formulário de remarcar: fechar o modal e mudar de dia limpa o formulário e não reabre ao voltar
   await T(p, 'agenda-hoje').click();
   await abrirCartao(p, '09:00'); await T(p, 'acao-remarcar').click();
+  await T(p, 'detalhe-fechar').click();
   await T(p, 'agenda-proximo').click();
   await p.waitForFunction(() => document.querySelectorAll('[data-testid="remarcar-form"]').length === 0);
   assert.equal(await T(p, 'agendamento-detalhe').count(), 0);
   await T(p, 'agenda-anterior').click();
   assert.equal(await T(p, 'agendamento-detalhe').count(), 0, 'voltar ao dia não reabre o cartão');
-  ok('dia vazio com a frase certa; mudar de dia fecha cartão e formulário');
+  ok('dia vazio com a frase certa; fechar modal e mudar de dia não reabre');
   await ctx.close();
 }
 

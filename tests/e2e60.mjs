@@ -87,11 +87,11 @@ const A1 = id(101), A4 = id(104);
   assert.equal(await c1.getByTestId('cartao-data').innerText(), 'qua 28/10');
   const est = await c1.evaluate((el) => ({ peso: Number(getComputedStyle(el.querySelector('.cartao-data')).fontWeight), hora: parseFloat(getComputedStyle(el.querySelector('.cartao-hora')).fontSize), horaPeso: Number(getComputedStyle(el.querySelector('.cartao-hora')).fontWeight), dataTam: parseFloat(getComputedStyle(el.querySelector('.cartao-data')).fontSize) }));
   assert.ok(est.peso >= 700 && est.horaPeso >= 700, 'data e hora em negrito');
-  assert.ok(est.hora >= 24 && est.hora > est.dataTam, `do dia: hora um pouco maior (${est.hora}px > ${est.dataTam}px)`);
+  assert.ok(est.hora >= 22 && est.hora > est.dataTam, `do dia: hora um pouco maior (${est.hora}px > ${est.dataTam}px)`);
   const prox = p.locator('[data-testid="cartao-proximo"]').first();
   assert.equal(await prox.getByTestId('cartao-data').innerText(), 'qui 29/10');
   const tam = await prox.evaluate((el) => ({ data: parseFloat(getComputedStyle(el.querySelector('.cartao-data')).fontSize), hora: parseFloat(getComputedStyle(el.querySelector('.cartao-hora')).fontSize) }));
-  assert.ok(tam.data >= 24 && tam.data > tam.hora, `dos próximos dias: data maior (${tam.data}px > ${tam.hora}px)`);
+  assert.ok(tam.data >= 22 && tam.data > tam.hora, `dos próximos dias: data maior (${tam.data}px > ${tam.hora}px)`);
   // data e hora ficam à direita do cartão (depois do nome e do status)
   for (const el of [c1, prox]) {
     const r = await el.evaluate((c) => { const q = c.querySelector('.cartao-quando').getBoundingClientRect(), n = c.querySelector('.cartao-nome').getBoundingClientRect(), box = c.getBoundingClientRect(); return { qEsq: q.left, nDir: n.right, qDir: q.right, boxDir: box.right }; });
@@ -121,6 +121,7 @@ const A1 = id(101), A4 = id(104);
   assert.ok(await p.locator('[data-testid="cartao"]').count() >= 1);
   banco.length = 0; banco.push(...lista);
   // aviso novo aparece em Início sem recarregar
+  await p.getByTestId('detalhe-fechar').click();
   await acessarSecao(p, 'nav-avisos');
   await p.getByTestId('avisos-vazio').waitFor();
   avisosServidor = [{ id: id(900), tipo: 'cancelou', texto: 'Bruno cancelou o horário de quinta.', em: '2026-10-28T12:00:00Z', lido: false }];

@@ -400,7 +400,35 @@ export default function AppReal() {
   };
   useEffect(() => { carregar(); }, []);
   const loja = estado.fase === 'ok' ? estado.loja : null;
-  useEffect(() => { if (loja) document.documentElement.setAttribute('data-tipo', loja.tipo); }, [loja]);
+  useEffect(() => {
+    if (!loja) return undefined;
+    document.documentElement.setAttribute('data-tipo', loja.tipo);
+    document.title = loja.nome || 'Agendz';
+    const iconeHref = logoValida(loja.logo) ? loja.logo : '/api/publico/icone';
+    for (const rel of ['icon', 'apple-touch-icon']) {
+      let el = document.head.querySelector(`link[rel="${rel}"]`);
+      if (!el) { el = document.createElement('link'); el.rel = rel; document.head.appendChild(el); }
+      el.href = iconeHref;
+    }
+    for (const nome of ['apple-mobile-web-app-title', 'application-name']) {
+      let el = document.head.querySelector(`meta[name="${nome}"]`);
+      if (!el) { el = document.createElement('meta'); el.name = nome; document.head.appendChild(el); }
+      el.content = loja.nome || 'Agendz';
+    }
+    const atualizarCorTopo = () => {
+      let el = document.head.querySelector('meta[name="theme-color"]');
+      if (!el) { el = document.createElement('meta'); el.name = 'theme-color'; document.head.appendChild(el); }
+      const fundo = globalThis.getComputedStyle ? globalThis.getComputedStyle(document.body).backgroundColor : '';
+      el.content = fundo && fundo !== 'rgba(0, 0, 0, 0)' ? fundo : '#0b0d10';
+    };
+    atualizarCorTopo();
+    const mq = globalThis.matchMedia ? globalThis.matchMedia('(prefers-color-scheme: dark)') : null;
+    if (mq && mq.addEventListener) {
+      mq.addEventListener('change', atualizarCorTopo);
+      return () => mq.removeEventListener('change', atualizarCorTopo);
+    }
+    return undefined;
+  }, [loja]);
   const css = useMemo(() => (loja ? cssDaMarca({ logo: loja.logo, corTema: loja.temaCor, corTema2: loja.temaCor2, temaCor: loja.temaCor ? 'logo' : 'padrao' }) : ''), [loja]);
   const aoSair = () => {
     if (loja) esquecerSessaoDaRede(loja.slug);
