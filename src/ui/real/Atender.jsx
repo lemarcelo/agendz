@@ -15,6 +15,11 @@ import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
 const aoLocal = (ts) => { const d = new Date(ts); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
 const doLocal = (v) => { const t = new Date(v).getTime(); return Number.isFinite(t) ? t : null; };
 const telNacional = (t) => { const d = somenteDigitos(t); return d.startsWith('55') && d.length >= 12 ? d.slice(2) : d; };
+const PASSOS_ATENDER = [
+  { id: 'servicos', nome: 'Serviços' },
+  { id: 'quando', nome: 'Quando' },
+  { id: 'cliente', nome: 'Cliente & Concluir' },
+];
 
 export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSalvar, aoFechar }) {
   const agora = Date.now();
@@ -51,18 +56,6 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
   const [enviando, setEnviando] = useState(false);
   const [etapaAtiva, setEtapaAtiva] = useState(0);
   const ultima = useRef(0);
-
-  const passos = useMemo(() => {
-    return [
-      { id: 'servicos', nome: 'Serviços' },
-      { id: 'quando', nome: 'Quando' },
-      { id: 'cliente', nome: 'Cliente & Concluir' },
-    ];
-  }, []);
-
-  const focarBloco = (id, idx) => {
-    if (idx != null) setEtapaAtiva(idx);
-  };
 
   useEffect(() => { let vivo = true; apiServicos.listar({ para: 'atender' }).then((r) => { if (vivo) { if (r.ok) setServicos(r.servicos.filter((s) => s.ativo !== false)); else { setServicos([]); setErro(r.erro); } } }); return () => { vivo = false; }; }, []);
   useEffect(() => { let vivo = true; apiRegras.obter().then((r) => { if (vivo && r.ok) setRegras(r.regras); }); return () => { vivo = false; }; }, []);
@@ -282,18 +275,18 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
         <Btn tamanho="sm" onClick={aoFechar} data-testid="atender-fechar" aria-label="Fechar"><Icone n="x" size={15} /></Btn>
       </div>
 
-      <ol className="pub-passos" style={{ margin: '4px 0 8px' }}>
-        {passos.map((p, idx) => (
+      <ol className="pub-passos atender-passos-real">
+        {PASSOS_ATENDER.map((p, idx) => (
           <li key={p.id} className={etapaAtiva === idx ? 'on' : ''}>
-            <button type="button" className="atender-passo-real" aria-current={etapaAtiva === idx ? 'step' : undefined} onClick={() => focarBloco(p.id, idx)}><span>{idx + 1}</span> {p.nome}</button>
+            <button type="button" className="atender-passo-real" aria-current={etapaAtiva === idx ? 'step' : undefined} onClick={() => setEtapaAtiva(idx)}><span>{idx + 1}</span> {p.nome}</button>
           </li>
         ))}
       </ol>
 
-      {ordem.etapas.filter((k) => k !== 'veiculo').map((k) => <div className="atender-pagina-real" key={k} hidden={(k === 'produtos' ? 'servicos' : k) !== passos[etapaAtiva].id}>{blocos[k]}</div>)}
-      {usaVeiculo && <div className="atender-pagina-real" hidden={passos[etapaAtiva].id !== 'cliente'}>{blocos.veiculo}</div>}
+      {ordem.etapas.filter((k) => k !== 'veiculo').map((k) => <div className="atender-pagina-real" key={k} hidden={(k === 'produtos' ? 'servicos' : k) !== PASSOS_ATENDER[etapaAtiva].id}>{blocos[k]}</div>)}
+      {usaVeiculo && <div className="atender-pagina-real" hidden={PASSOS_ATENDER[etapaAtiva].id !== 'cliente'}>{blocos.veiculo}</div>}
 
-      <div className="atender-conclusao-real" hidden={passos[etapaAtiva].id !== 'cliente'}>
+      <div className="atender-conclusao-real" hidden={PASSOS_ATENDER[etapaAtiva].id !== 'cliente'}>
       <div className="form-grade">
         {!auto && (
           <Campo rotulo={`${Rot('profissional')}${marca('profissional')}`}>
@@ -345,9 +338,9 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
       <div className="acoes atender-acoes-real">
         <Btn onClick={aoFechar} data-testid="atender-cancelar">Cancelar</Btn>
         {etapaAtiva > 0 && <Btn type="button" onClick={() => setEtapaAtiva(etapaAtiva - 1)} data-testid="atender-voltar">← Voltar</Btn>}
-        {etapaAtiva === 0 && <Btn variante="primario" type="button" onClick={() => focarBloco('quando', 1)} data-testid="atender-prox-quando">Próximo →</Btn>}
-        {etapaAtiva === 1 && <Btn variante="primario" type="button" onClick={() => focarBloco('cliente', 2)} data-testid="atender-prox-cliente">Próximo →</Btn>}
-        {passos[etapaAtiva].id === 'cliente' && <Btn variante="primario" type="submit" disabled={enviando || bloqueado} data-testid="salvar-atender">{enviando ? 'Salvando…' : tipo === 'futuro' ? 'Agendar' : 'Registrar'}</Btn>}
+        {etapaAtiva === 0 && <Btn variante="primario" type="button" onClick={() => setEtapaAtiva(1)} data-testid="atender-prox-quando">Próximo →</Btn>}
+        {etapaAtiva === 1 && <Btn variante="primario" type="button" onClick={() => setEtapaAtiva(2)} data-testid="atender-prox-cliente">Próximo →</Btn>}
+        {PASSOS_ATENDER[etapaAtiva].id === 'cliente' && <Btn variante="primario" type="submit" disabled={enviando || bloqueado} data-testid="salvar-atender">{enviando ? 'Salvando…' : tipo === 'futuro' ? 'Agendar' : 'Registrar'}</Btn>}
       </div>
     </form>
   );

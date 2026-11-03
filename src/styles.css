@@ -897,6 +897,7 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
 .atender-real { display: grid; gap: 12px; width: 100%; max-width: 720px; min-width: 0; max-height: calc(100dvh - 32px); overflow-y: auto; margin-inline: auto; padding: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
 .atender-real-topo { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .atender-real-titulo { margin: 0; font-size: 16px; }
+.atender-passos-real { margin: 4px 0 8px; }
 .atender-conclusao-real:not([hidden]) { display: grid; gap: 14px; min-width: 0; }
 .atender-acoes-real { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding-top: 4px; }
 .atender-acoes-real .btn-primario { margin-left: auto; }
