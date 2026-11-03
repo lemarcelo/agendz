@@ -110,6 +110,29 @@ class AgendaTest extends BaseApi {
     }
 
     @Test
+    void existenciaDeFuturosRespeitaProfissionalLojaECancelamento() throws Exception {
+        String servico = servico(APEX, davi, "Lavagem", 80, 60, 0);
+        String ag = marcarOk(davi, pabloId, ids(servico), t, "");
+        String rota = "/api/agendamentos/existem-futuros";
+        mvc.perform(get(rota).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).param("aPartirDe", t.minusSeconds(1).toString()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.existem").value(true));
+        mvc.perform(get(rota).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).param("aPartirDe", t.plusSeconds(1).toString()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.existem").value(false));
+        mvc.perform(get(rota).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).param("aPartirDe", t.minusSeconds(1).toString()).param("profissionalId", marceloId.toString()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.existem").value(false));
+        mvc.perform(get(rota).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(marcelo)).param("aPartirDe", t.minusSeconds(1).toString()).param("profissionalId", pabloId.toString()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.existem").value(false));
+        mvc.perform(get(rota).with(host(DALFORNO)).header(HttpHeaders.AUTHORIZATION, bearer(alan)).param("aPartirDe", t.minusSeconds(1).toString()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.existem").value(false));
+        jdbc.update("update agendamento set inicio = inicio + interval '800 days', fim_servico = fim_servico + interval '800 days', fim_ocupado = fim_ocupado + interval '800 days' where id = ?::uuid", ag);
+        mvc.perform(get(rota).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).param("aPartirDe", t.plus(400, ChronoUnit.DAYS).toString()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.existem").value(true));
+        mudarStatus(APEX, davi, ag, "cancelado").andExpect(status().isOk());
+        mvc.perform(get(rota).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).param("aPartirDe", t.minusSeconds(1).toString()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.existem").value(false));
+    }
+
+    @Test
     void totalEDuracaoSaemDosServicosECongelam() throws Exception {
         String a = servico(APEX, davi, "Lavagem", 80, 60, 10), b = servico(APEX, davi, "Cera", 50, 30, 0);
         String ag = id(marcar(APEX, davi, corpo(clienteApex, pabloId, ids(a, b), t, "")).andExpect(status().isCreated())

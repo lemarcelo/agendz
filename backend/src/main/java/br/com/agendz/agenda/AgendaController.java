@@ -202,11 +202,29 @@ public class AgendaController {
 
     // ---------------------------------------------------------------- leitura
 
+    public record ExistemFuturos(boolean existem) {}
+
+    @GetMapping("/api/agendamentos/existem-futuros")
+    public ExistemFuturos existemFuturos(@RequestParam Instant aPartirDe,
+            @RequestParam(required = false) UUID profissionalId, @AuthenticationPrincipal Jwt jwt) {
+        UUID proprio = somenteDe(jwt);
+        UUID filtro = proprio != null ? proprio : profissionalId;
+        Boolean existem = banco.naLoja(jdbc -> {
+            String sql = "select exists(select 1 from agendamento where inicio >= ? and status in ('a_confirmar','confirmado','concluido')"
+                    + (filtro == null ? "" : " and profissional_id = ?") + ")";
+            return filtro == null ? jdbc.queryForObject(sql, Boolean.class, utc(aPartirDe))
+                    : jdbc.queryForObject(sql, Boolean.class, utc(aPartirDe), filtro);
+        });
+        return new ExistemFuturos(Boolean.TRUE.equals(existem));
+    }
+
     @GetMapping("/api/agendamentos")
-    public List<Agendamento> listar(@RequestParam Instant de, @RequestParam Instant ate, @AuthenticationPrincipal Jwt jwt) {
+    public List<Agendamento> listar(@RequestParam Instant de, @RequestParam Instant ate,
+            @RequestParam(defaultValue = "0") int deslocamento, @AuthenticationPrincipal Jwt jwt) {
         if (!ate.isAfter(de) || Duration.between(de, ate).toDays() > 366) {
             throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe um período válido de até 366 dias.");
         }
+        if (deslocamento < 0 || deslocamento > 1000000) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Página inválida.");
         UUID so = somenteDe(jwt);
         return banco.naLoja(jdbc -> {
             List<Object> args = new ArrayList<>(List.of(utc(ate), utc(de)));
@@ -215,12 +233,14 @@ public class AgendaController {
                 filtro = " and a.profissional_id = ?";
                 args.add(so);
             }
+            List<Object> argsPagina = new ArrayList<>(args);
+            argsPagina.add(deslocamento);
             List<Agendamento> base = jdbc.query(
                     "select a.id, a.cliente_id, a.profissional_id, a.inicio, a.fim_servico, a.fim_ocupado, a.status, a.encaixe, a.total, a.origem, a.reagendado, a.motivo_cancelamento, a.nome_avulso, a.motivo_retroativo, a.forma_pagamento, a.cupom_foto::text as cupom_foto, a.plano_assinatura_id, a.plano_nome, "
                             + "a.box_id, (select b.nome from box b where b.id = a.box_id) as box_nome, a.veiculo_id, a.porte, a.veiculo_placa, a.veiculo_marca, a.veiculo_modelo, a.veiculo_cor, "
                             + "(a.status_manual_inicio is not null and a.status_manual_inicio = a.inicio) as status_manual from agendamento a "
-                            + "where a.inicio < ? and a.fim_ocupado > ?" + filtro + " order by a.inicio limit 1000",
-                    (rs, i) -> linha(rs), args.toArray());
+                            + "where a.inicio < ? and a.fim_ocupado > ?" + filtro + " order by a.inicio, a.id limit 1000 offset ?",
+                    (rs, i) -> linha(rs), argsPagina.toArray());
             Map<UUID, List<Item>> itens = new LinkedHashMap<>();
             jdbc.query("select s.agendamento_id, s.servico_id, s.nome, s.preco, s.duracao_min, s.desconto from agendamento_servico s "
                             + "join agendamento a on a.id = s.agendamento_id where a.inicio < ? and a.fim_ocupado > ?" + filtro + " order by s.ordem",
