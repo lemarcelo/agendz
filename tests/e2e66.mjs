@@ -1,3 +1,4 @@
+import { acessarSecao } from './navegacao-real.mjs';
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
 // Suporte (chamados) no site real: a loja e o usuário nunca vão no corpo, abrir chamado e conversar, selo de não lidas no menu (consulta de fundo), erro do
 // servidor (429) aparece na tela, chamado fechado não recebe resposta, dono vê quem abriu, 390 px sem rolagem lateral. Servidor falso.
@@ -62,7 +63,7 @@ async function abrir(viewport, { semSuporte = false } = {}) {
   p.on('dialog', async (d) => { erros.push('DIALOG: ' + d.message()); await d.dismiss(); });
   await p.goto(url);
   await p.getByTestId('login-id').fill('alan'); await p.getByTestId('login-senha').fill('Minha-senha'); await p.getByTestId('login-entrar').click();
-  if (semSuporte) await p.getByTestId('nav-servicos').waitFor(); else await p.getByTestId('nav-suporte').waitFor();
+  if (semSuporte) await p.getByTestId('nav-servicos').waitFor({ state: 'attached' }); else await p.getByTestId('nav-suporte').waitFor({ state: 'attached' });
   return { ctx, p };
 }
 const semRolagem = async (p, onde) => { const l = await p.evaluate(() => ({ doc: document.documentElement.scrollWidth, janela: window.innerWidth })); assert.ok(l.doc <= l.janela, `${onde}: rolagem lateral ${l.doc} > ${l.janela}`); };
@@ -71,8 +72,14 @@ for (const vp of [{ width: 1280, height: 860 }, { width: 390, height: 780 }]) {
   chamado = null; naoLidas = 2; status429 = false; papel = 'profissional'; chamadas.length = 0;
   const { ctx, p } = await abrir(vp);
   const T = (i) => p.getByTestId(i);
+  if (vp.width < 700) assert.equal(await T('menu-badge-suporte').innerText(), '2', 'o menu fechado indica respostas novas');
+  if (!(await T('nav-suporte').isVisible())) await T('menu-alternar-real').click();
   await T('badge-suporte').waitFor();
   assert.equal(await T('badge-suporte').innerText(), '2', 'o selo mostra as respostas novas');
+  const selo = await T('badge-suporte').boundingBox();
+  const rotulo = await T('nav-suporte').locator('span').boundingBox();
+  assert.ok(selo.x >= rotulo.x + rotulo.width - 2 && selo.x - (rotulo.x + rotulo.width) <= 8, 'selo ao lado do texto Suporte');
+  assert.ok(selo.y < rotulo.y + rotulo.height / 2, 'selo alinhado ao alto do texto');
   await T('nav-suporte').click();
   await T('sup-vazio').waitFor();
   // 429 do servidor aparece na tela e não cria nada
@@ -113,7 +120,7 @@ for (const vp of [{ width: 1280, height: 860 }, { width: 390, height: 780 }]) {
 papel = 'dono'; chamado = { assunto: 'Cobrança errada', categoria: 'cobranca', status: 'aberto', msgs: [msg(1, 'cliente', 'Bruno', 'Veio valor errado')] };
 {
   const { ctx, p } = await abrir({ width: 1280, height: 860 });
-  await p.getByTestId('nav-suporte').click();
+  await acessarSecao(p, 'nav-suporte');
   await p.getByTestId('sup-item').waitFor();
   assert.match(await p.getByTestId('sup-item').innerText(), /Bruno/, 'o dono vê quem abriu');
   assert.match(await p.getByTestId('suporte').innerText(), /toda a loja/);

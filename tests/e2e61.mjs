@@ -1,3 +1,4 @@
+import { acessarSecao } from './navegacao-real.mjs';
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
 // Estabelecimento no site real (dist/index-real.html) contra um servidor falso: endereço e localização (colar link do Maps, GPS do aparelho, interruptores
 // desligados de fábrica, mensagens do servidor), comissão geral, localização no WhatsApp do botão Link, endereço opcional na página do cliente e 390 px.
@@ -78,7 +79,7 @@ const ultimo = (m, rota) => chamadas.filter((c) => c.m === m && c.u === rota).at
 {
   const { ctx, p } = await abrir();
   await ctx.grantPermissions(['geolocation']); await ctx.setGeolocation({ latitude: -25.428356, longitude: -49.273251 });
-  await p.getByTestId('nav-estabelecimento').click();
+  await acessarSecao(p, 'nav-estabelecimento');
   await p.getByTestId('loc-form').waitFor();
   assert.equal(await p.getByTestId('loc-no-link').isChecked(), false, 'interruptores nascem desligados');
   assert.equal(await p.getByTestId('loc-no-whatsapp').isChecked(), false);
@@ -113,7 +114,7 @@ const ultimo = (m, rota) => chamadas.filter((c) => c.m === m && c.u === rota).at
   assert.deepEqual(ultimo('PUT', '/api/estabelecimento/comissao').corpo, { comissaoPadrao: 42.5 });
   ok('comissão geral');
   // o botão Link da Agenda manda a localização no WhatsApp
-  await p.getByTestId('nav-agenda').click();
+  await acessarSecao(p, 'nav-agenda');
   await p.getByTestId('agenda-dia').waitFor();
   await p.waitForTimeout(200);
   const aba = ctx.waitForEvent('page', { timeout: 6000 });
@@ -157,7 +158,7 @@ const ultimo = (m, rota) => chamadas.filter((c) => c.m === m && c.u === rota).at
 {
   const n = await abrir({ width: 390, height: 800 });
   await n.p.addStyleTag({ content: '*{font-family:"DejaVu Sans",sans-serif !important}' });
-  await n.p.getByTestId('nav-estabelecimento').click();
+  await acessarSecao(n.p, 'nav-estabelecimento');
   await n.p.getByTestId('loc-form').waitFor();
   await n.p.getByTestId('com-geral').waitFor();
   await semRolagem(n.p, 'estabelecimento 390');
@@ -168,7 +169,7 @@ const ultimo = (m, rota) => chamadas.filter((c) => c.m === m && c.u === rota).at
   // quem só usa a agenda não tem o menu e só recebe o link do mapa
   papel = 'profissional';
   const { ctx, p } = await abrir();
-  await p.getByTestId('nav-agenda').waitFor();
+  await p.getByTestId('nav-agenda').waitFor({ state: 'attached' });
   assert.equal(await p.getByTestId('nav-estabelecimento').count(), 0);
   await ctx.close();
   papel = 'dono';

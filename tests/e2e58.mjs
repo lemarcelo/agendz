@@ -1,3 +1,4 @@
+import { acessarSecao } from './navegacao-real.mjs';
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
 // Relatórios do proprietário no site real (dist/index-real.html) contra um servidor falso: totais, listas, troca de período (mês e De/Até com erro na tela),
 // resposta velha não sobrescreve a nova, menu só para o dono e 390 px com fonte larga sem rolagem lateral.
@@ -56,7 +57,7 @@ const semRolagem = async (p, onde) => { const l = await p.evaluate(() => ({ doc:
 
 {
   const { ctx, p } = await abrir();
-  await p.getByTestId('nav-relatorios').click();
+  await acessarSecao(p, 'nav-relatorios');
   await p.getByTestId('rel-total').waitFor();
   assert.match(await textoDe(p, 'rel-total'), /R\$\s?175,00/);
   assert.equal(await textoDe(p, 'rel-atendimentos'), '3');
@@ -85,7 +86,7 @@ const semRolagem = async (p, onde) => { const l = await p.evaluate(() => ({ doc:
   await ctx.close();
   const n = await abrir({ width: 390, height: 800 });
   await n.p.addStyleTag({ content: '*{font-family:"DejaVu Sans",sans-serif !important}' });
-  await n.p.getByTestId('nav-relatorios').click();
+  await acessarSecao(n.p, 'nav-relatorios');
   await n.p.getByTestId('rel-total').waitFor();
   await semRolagem(n.p, 'relatórios 390');
   await n.ctx.close();
@@ -94,7 +95,7 @@ const semRolagem = async (p, onde) => { const l = await p.evaluate(() => ({ doc:
 {
   papel = 'profissional';
   const { ctx, p } = await abrir();
-  await p.getByTestId('nav-agenda').waitFor();
+  await p.getByTestId('nav-agenda').waitFor({ state: 'attached' });
   assert.equal(await p.getByTestId('nav-relatorios').count(), 0, 'só o proprietário vê Relatórios');
   await ctx.close();
   papel = 'dono';

@@ -1,3 +1,4 @@
+import { acessarSecao } from './navegacao-real.mjs';
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
 // 5e-2: remarcar pelo link e avisos do painel no site real (dist/index-real.html) contra um servidor falso: "Remarcar" em Meus agendamentos (dias e horários
 // pelo token do próprio horário, no cabeçalho), horário tomado mostra a mensagem do servidor, menos de 24 h explica sem chamar o servidor, o horário remarcado
@@ -115,7 +116,7 @@ const deHoje = (m, u) => chamadas.filter((c) => c.m === m && c.u === u);
 {
   const { ctx, p } = await abrir({ width: 1280, height: 860 }, '');
   await p.getByTestId('login-id').fill('alan'); await p.getByTestId('login-senha').fill('Minha-senha'); await p.getByTestId('login-entrar').click();
-  await p.getByTestId('nav-avisos').click(); await p.getByTestId('avisos-real').waitFor();
+  await acessarSecao(p, 'nav-avisos'); await p.getByTestId('avisos-real').waitFor();
   await p.getByTestId(`aviso-${AV1}`).waitFor();
   assert.match(await p.getByTestId('avisos-novos').innerText(), /2 novos/);
   assert.match(await p.getByTestId(`aviso-${AV1}`).innerText(), /Maria Souza pediu horário/);
@@ -132,7 +133,7 @@ const deHoje = (m, u) => chamadas.filter((c) => c.m === m && c.u === u);
   const pedidosAntes = deHoje('GET', '/api/avisos').length;
   const { ctx, p } = await abrir({ width: 1280, height: 860 }, '');
   await p.getByTestId('login-id').fill('alan'); await p.getByTestId('login-senha').fill('Minha-senha'); await p.getByTestId('login-entrar').click();
-  await p.getByTestId('nav-estabelecimento').click(); await p.getByTestId('tela-estabelecimento').waitFor();
+  await acessarSecao(p, 'nav-estabelecimento'); await p.getByTestId('tela-estabelecimento').waitFor();
   await p.waitForFunction(() => !document.querySelector('[data-testid="avisos-real"]'));
   await p.waitForTimeout(800);
   assert.equal(deHoje('GET', '/api/avisos').length, pedidosAntes, 'sem a seção Agenda o painel não pede avisos (evita 403 no console)');
@@ -156,7 +157,7 @@ const deHoje = (m, u) => chamadas.filter((c) => c.m === m && c.u === u);
   const { ctx: c2, p: p2 } = await abrir({ width: 390, height: 800 }, '');
   await p2.addStyleTag({ content: '*{font-family:"DejaVu Sans",sans-serif !important}' });
   await p2.getByTestId('login-id').fill('alan'); await p2.getByTestId('login-senha').fill('Minha-senha'); await p2.getByTestId('login-entrar').click();
-  await p2.getByTestId('nav-avisos').click(); await p2.getByTestId('avisos-real').waitFor();
+  await acessarSecao(p2, 'nav-avisos'); await p2.getByTestId('avisos-real').waitFor();
   const l = await p2.evaluate(() => ({ doc: document.documentElement.scrollWidth, janela: window.innerWidth }));
   assert.ok(l.doc <= l.janela, `avisos: rolagem lateral ${l.doc} > ${l.janela}`);
   ok('390 px com fonte larga: sem rolagem lateral');

@@ -7,6 +7,8 @@ const estado = {};
 let ags = [];
 const srv = await subirServidor((c, { json }) => {
   if (c.u === '/api/profissionais') return json(200, [{ id: id(1), nome: 'Ana', papel: 'dono', atende: true }]);
+  if (c.u === '/api/usuarios/me/menu') return json(200, { recolhido: false });
+  if (c.u === '/api/agendamentos/existem-futuros') return json(200, { existem: false });
   if (c.u === '/api/estabelecimento/regras-atendimento') return json(200, { futuro: [], local: [] });
   if (c.u === '/api/estabelecimento/local') return json(200, {});
   if (c.u === '/api/boxes') return json(200, [{ id: id(60), nome: 'Box 1', ativo: true }]);
@@ -34,7 +36,7 @@ try {
         const maisDias = await p.getByTestId('proximos-mais').boundingBox();
         const areaAgenda = await p.locator('.agenda-proximos-real').boundingBox();
         assert.ok(maisDias.width <= 220, `botão de mais dias esticado: ${maisDias.width}px`);
-        assert.ok(Math.abs(maisDias.x - areaAgenda.x) <= 2, 'botão deve acompanhar a margem da lista');
+        assert.ok(Math.abs((maisDias.x + maisDias.width / 2) - (areaAgenda.x + areaAgenda.width / 2)) <= 2, 'botão centralizado na área dos próximos');
         assert.ok(maisDias.height >= 44, 'botão deve ser confortável para toque');
         if (process.env.AGENDZ_REVISAO_VISUAL) await p.screenshot({ animations: 'disabled', path: `shots-revisao/${tipo}-${width}-${tema}-agenda.png` });
         const principal = await p.locator('.app-real .principal').boundingBox();
@@ -43,10 +45,9 @@ try {
         if (width > 900) {
           const marcaTopo = await p.getByTestId('marca-inicio-real').boundingBox();
           const menuTopo = await p.locator('.app-real .nav').boundingBox();
-          assert.ok(menuTopo.x >= marcaTopo.x + marcaTopo.width - 1, 'menu deve ficar ao lado da marca no computador');
-          assert.ok(menuTopo.y < marcaTopo.y + marcaTopo.height, 'menu deve iniciar na mesma linha da marca');
-          assert.ok(Math.abs((menuTopo.y + menuTopo.height / 2) - (marcaTopo.y + marcaTopo.height / 2)) <= 2, 'marca e menu devem estar centralizados verticalmente');
-          assert.ok(cabecalho.height <= 140, `topo excessivamente alto: ${cabecalho.height}`);
+          assert.ok(cabecalho.x <= 1 && cabecalho.width <= 221, 'menu lateral à esquerda');
+          assert.ok(menuTopo.y >= marcaTopo.y + marcaTopo.height, 'navegação abaixo da marca');
+          assert.ok(menuTopo.x >= cabecalho.x && menuTopo.x + menuTopo.width <= cabecalho.x + cabecalho.width + 1, 'menu dentro da barra lateral');
         }
         for (const el of await p.locator('.app-real .topo button:visible').all()) {
           const rect = await el.boundingBox();
@@ -58,9 +59,14 @@ try {
           assert.ok(a.right <= b.x + 1 || b.right <= a.x + 1 || a.bottom <= b.y + 1 || b.bottom <= a.y + 1, 'controles do topo não devem se sobrepor');
         }
         const marca = p.getByTestId('marca-inicio-real');
-        const logo = await marca.locator('img, .marca-icone').boundingBox();
-        const nome = await marca.locator('.marca-nome').boundingBox();
-        assert.ok(nome.y >= logo.y + logo.height, 'nome abaixo da marca');
+        assert.equal(await marca.locator('.marca-nome').count(), 0, 'marca sem nome visível');
+        assert.ok(await marca.locator('img, .marca-icone').isVisible(), 'logo ou ícone visível');
+        if (width <= 900) {
+          const alternar = await p.getByTestId('menu-alternar-real').boundingBox();
+          assert.ok(alternar.x < (await marca.boundingBox()).x, 'botão do menu à esquerda da marca');
+          await p.getByTestId('menu-alternar-real').click();
+          assert.ok((await p.locator('.app-real .nav').boundingBox()).x <= 1, 'menu móvel abre pela esquerda');
+        }
         await p.getByTestId('nav-clientes').click();
         if (process.env.AGENDZ_REVISAO_VISUAL) { await p.getByTestId('tela-clientes').waitFor(); await p.screenshot({ animations: 'disabled', path: `shots-revisao/${tipo}-${width}-${tema}-clientes.png` }); }
         await marca.click();

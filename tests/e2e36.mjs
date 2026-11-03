@@ -1,3 +1,4 @@
+import { acessarSecao } from './navegacao-real.mjs';
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
 // F2 parte 1: site publicado com a API real (dist/index-real.html) contra um servidor falso no mesmo endereço (como o Caddy faz):
 // a loja vem de GET /api/publico/loja (tipo e nome), login real, troca da senha temporária, painel, token só em memória, 390 px.
@@ -123,7 +124,7 @@ async function abrir(viewport = { width: 1280, height: 800 }) {
   await p.getByTestId('login-id').fill('alan');
   await p.getByTestId('login-senha').fill('Minha-senha-nova');
   await p.getByTestId('login-entrar').click();
-  await p.getByTestId('nav-estabelecimento').click(); await p.getByTestId('tela-estabelecimento').waitFor();
+  await acessarSecao(p, 'nav-estabelecimento'); await p.getByTestId('tela-estabelecimento').waitFor();
   await p.reload();
   await p.getByTestId('login-id').waitFor();
   ok('token e senha fora de storage/cookie; sair e recarregar pedem o login');
@@ -143,7 +144,7 @@ async function abrir(viewport = { width: 1280, height: 800 }) {
   await p.getByTestId('login-id').fill('alan'); await p.getByTestId('login-senha').fill('Temporaria-123'); await p.getByTestId('login-entrar').click();
   await p.getByTestId('troca-nova').waitFor(); await semRolagem('troca');
   await p.getByTestId('troca-nova').fill('Minha-senha-nova'); await p.getByTestId('troca-repetir').fill('Minha-senha-nova'); await p.getByTestId('troca-salvar').click();
-  await p.getByTestId('nav-estabelecimento').click(); await p.getByTestId('tela-estabelecimento').waitFor(); await semRolagem('painel');
+  await acessarSecao(p, 'nav-estabelecimento'); await p.getByTestId('tela-estabelecimento').waitFor(); await semRolagem('painel');
   ok('estética: tipo certo e 390 px sem rolagem lateral (login, troca, painel)');
   await ctx.close();
 }

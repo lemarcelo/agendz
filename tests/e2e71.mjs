@@ -4,6 +4,7 @@
 // recusados na tela, imagem que falha mostra aviso, 390 px sem rolagem lateral. Servidor falso (confere Authorization e o conteúdo do que sobe).
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
+import { acessarSecao } from './navegacao-real.mjs';
 import http from 'node:http';
 import { readFileSync } from 'node:fs';
 
@@ -70,7 +71,7 @@ for (const vp of [{ width: 1280, height: 860 }, { width: 390, height: 780 }]) {
   await p.goto(url);
   const T = (i) => p.getByTestId(i);
   await T('login-id').fill('alan'); await T('login-senha').fill('Minha-senha'); await T('login-entrar').click();
-  await T('nav-suporte').click();
+  await acessarSecao(p, 'nav-suporte');
   await T('sup-novo').click();
   await T('sup-assunto').fill('Erro na agenda');
   await T('sup-texto').fill('Veja os prints.');

@@ -1,3 +1,4 @@
+import { acessarSecao } from './navegacao-real.mjs';
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
 // Estética sem box ativo (v120), site real contra um servidor falso: Atender e Link Agenda NÃO abrem; a Agenda avisa na própria tela; o proprietário recebe o botão
 // "Cadastrar boxes" que leva à tela Boxes, quem não é proprietário só lê o aviso; com um box cadastrado tudo volta. 390 px sem rolagem lateral.
@@ -56,7 +57,7 @@ async function abrir(viewport = { width: 1280, height: 860 }) {
   p.on('dialog', async (d) => { erros.push('DIALOG: ' + d.message()); await d.dismiss(); });
   await p.goto(url);
   await p.getByTestId('login-id').fill('x'); await p.getByTestId('login-senha').fill('Minha-senha'); await p.getByTestId('login-entrar').click();
-  await p.getByTestId('nav-agenda').click();
+  await acessarSecao(p, 'nav-agenda');
   await p.getByTestId('agenda-dia').waitFor();
   return { ctx, p, paginasNovas };
 }
@@ -82,7 +83,7 @@ try {
 
   // 2. com um box cadastrado, tudo volta
   boxes = [{ id: BX1, nome: 'Box 1', ativo: true }];
-  await d.p.getByTestId('nav-agenda').click();
+  await acessarSecao(d.p, 'nav-agenda');
   await d.p.getByTestId('agenda-dia').waitFor();
   await d.p.waitForTimeout(400);
   await d.p.getByTestId('atender-abrir').click();

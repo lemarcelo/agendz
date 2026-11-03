@@ -1,3 +1,4 @@
+import { acessarSecao } from './navegacao-real.mjs';
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
 // 5d-4b: Comissões (proprietário) e Meus ganhos no site real (dist/index-real.html) contra um servidor falso: totais, pagamento com confirmação na tela e
 // chave de repetição, cancelar com motivo, restaurar, período De/Até com erro na tela, "Meus ganhos" sem valor cheio e 390 px com fonte larga.
@@ -79,7 +80,7 @@ const semRolagem = async (p, onde) => { const l = await p.evaluate(() => ({ doc:
 // 1. proprietário: totais, detalhes, cancelar com motivo, restaurar e pagar com confirmação na tela
 {
   const { ctx, p } = await abrir();
-  await p.getByTestId('nav-comissoes').click();
+  await acessarSecao(p, 'nav-comissoes');
   await p.getByTestId('com-total').waitFor();
   assert.equal(await p.getByTestId('nav-ganhos').count(), 0, 'proprietário não tem "Meus ganhos"');
   assert.match(await textoDe(p, 'com-total'), /R\$\s?60,00/); assert.match(await textoDe(p, 'com-apagar'), /R\$\s?60,00/);
@@ -120,7 +121,7 @@ const semRolagem = async (p, onde) => { const l = await p.evaluate(() => ({ doc:
 {
   linhas.forEach((l) => { l.paga = false; });
   const { ctx, p } = await abrir();
-  await p.getByTestId('nav-comissoes').click();
+  await acessarSecao(p, 'nav-comissoes');
   await p.getByTestId('com-total').waitFor();
   await p.getByTestId('periodo-livre').click();
   const antes = chamadas.filter((c) => c.u === '/api/comissoes').length;
@@ -143,7 +144,7 @@ const semRolagem = async (p, onde) => { const l = await p.evaluate(() => ({ doc:
   papel = 'profissional';
   const { ctx, p } = await abrir();
   assert.equal(await p.getByTestId('nav-comissoes').count(), 0);
-  await p.getByTestId('nav-ganhos').click();
+  await acessarSecao(p, 'nav-ganhos');
   await p.getByTestId('meu-receber').waitFor();
   assert.match(await textoDe(p, 'meu-receber'), /R\$\s?60,00/); assert.match(await textoDe(p, 'meu-falta'), /R\$\s?60,00/);
   assert.match(await textoDe(p, 'meu-previsto'), /1 agendamento, somando R\$\s?20,00/);
@@ -160,7 +161,7 @@ const semRolagem = async (p, onde) => { const l = await p.evaluate(() => ({ doc:
 {
   const { ctx, p } = await abrir({ width: 390, height: 800 });
   await p.addStyleTag({ content: '*{font-family:"DejaVu Sans",sans-serif !important}' });
-  await p.getByTestId('nav-comissoes').click();
+  await acessarSecao(p, 'nav-comissoes');
   await p.getByTestId('com-total').waitFor();
   await p.getByTestId(`com-detalhe-${KIKO}`).click();
   await semRolagem(p, 'comissões 390');
@@ -168,7 +169,7 @@ const semRolagem = async (p, onde) => { const l = await p.evaluate(() => ({ doc:
   papel = 'profissional';
   const n = await abrir({ width: 390, height: 800 });
   await n.p.addStyleTag({ content: '*{font-family:"DejaVu Sans",sans-serif !important}' });
-  await n.p.getByTestId('nav-ganhos').click();
+  await acessarSecao(n.p, 'nav-ganhos');
   await n.p.getByTestId('meu-receber').waitFor();
   await semRolagem(n.p, 'ganhos 390');
   await n.ctx.close();

@@ -3,12 +3,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { assinaturaDe, codificarZw, decodificarZw, gerarMarcas, lerSegredo, tagDeArquivo } from '../tools/autoria.mjs';
 import { verificarAmbiente, marcar, MARCA } from '../src/domain/autoria.js';
 import { store } from '../src/services/api.js';
 
-const raiz = new URL('..', import.meta.url).pathname;
+const raiz = fileURLToPath(new URL('..', import.meta.url));
 const segredo = lerSegredo(raiz);
 
 test('marca invisível: codifica e decodifica o id, e sobrevive a copiar e colar no meio de um texto', () => {
@@ -51,7 +52,7 @@ test('todo arquivo de src/ tem o cabeçalho de direitos autorais (rode `npm run 
   const faltam = [];
   for (const rel of fs.readdirSync(path.join(raiz, 'src'), { recursive: true })) {
     if (!/\.(js|jsx|css)$/.test(rel)) continue;
-    if (!/^\/\* © \d{4} Marcelo — Agendz\. Todos os direitos reservados[^\n]*ref:[0-9a-f]{10} \*\/\n/.test(fs.readFileSync(path.join(raiz, 'src', rel), 'utf8'))) faltam.push(rel);
+    if (!/^\/\* © \d{4} Marcelo — Agendz\. Todos os direitos reservados[^\n]*ref:[0-9a-f]{10} \*\/\r?\n/.test(fs.readFileSync(path.join(raiz, 'src', rel), 'utf8'))) faltam.push(rel);
   }
   assert.deepEqual(faltam, []);
   assert.ok(fs.existsSync(path.join(raiz, 'LICENSE.md')));

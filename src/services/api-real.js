@@ -692,11 +692,20 @@ function lerAgendamento(d) {
 const soDia = (ts) => (Number.isFinite(ts) ? new Date(ts).toISOString() : null);
 let ultimaTentativa = { assinatura: '', chave: '' };
 export const agenda = {
+  async existemFuturos({ aPartirDe, profissionalId }) {
+    const data = soDia(aPartirDe);
+    if (!data || (profissionalId && !ID.test(String(profissionalId)))) return { ok: false, erro: 'Não foi possível consultar os próximos agendamentos.' };
+    const prof = profissionalId ? `&profissionalId=${encodeURIComponent(profissionalId)}` : '';
+    const r = await chamar('GET', `/api/agendamentos/existem-futuros?aPartirDe=${encodeURIComponent(data)}${prof}`);
+    return r.ok && typeof r.dados?.existem === 'boolean' ? { ok: true, existem: r.dados.existem } : { ok: false, erro: 'Não foi possível consultar os próximos agendamentos.' };
+  },
   // GET /api/agendamentos?de=&ate=  (até 366 dias, 1000 itens; o profissional só recebe os dele)
-  async listar({ de, ate }) {
+  async listar({ de, ate, deslocamento = 0 }) {
     const a = soDia(de), b = soDia(ate);
     if (!a || !b || !(ate > de)) return { ok: false, status: 0, erro: 'Período inválido.' };
-    const r = await chamar('GET', `/api/agendamentos?de=${encodeURIComponent(a)}&ate=${encodeURIComponent(b)}`);
+    if (!Number.isSafeInteger(deslocamento) || deslocamento < 0 || deslocamento > 1000000) return { ok: false, status: 0, erro: 'Página inválida.' };
+    const pagina = deslocamento ? `&deslocamento=${deslocamento}` : '';
+    const r = await chamar('GET', `/api/agendamentos?de=${encodeURIComponent(a)}&ate=${encodeURIComponent(b)}${pagina}`);
     return r.ok ? { ok: true, agendamentos: listaDe(r.dados, 1000).map(lerAgendamento) } : r;
   },
   // GET /api/agendamentos/{id}  (com o histórico: quem, quando, o quê)
@@ -1505,6 +1514,13 @@ const lerMeusDados = (d) => {
     foto: typeof d.foto === 'string' && d.foto.startsWith('data:image/') && d.foto.length <= 30000 ? d.foto : null };
 };
 export const perfil = {
+  async obterMenu() {
+    const r = await chamar('GET', '/api/usuarios/me/menu');
+    return r.ok && typeof r.dados?.recolhido === 'boolean' ? { ok: true, recolhido: r.dados.recolhido } : { ok: false, erro: 'Não foi possível carregar a preferência do menu.' };
+  },
+  async salvarMenu(recolhido) {
+    return chamar('PUT', '/api/usuarios/me/menu', { recolhido: recolhido === true });
+  },
   // GET /api/usuarios/me
   async obter() {
     const r = await chamar('GET', '/api/usuarios/me');

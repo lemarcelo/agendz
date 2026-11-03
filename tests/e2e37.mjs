@@ -1,3 +1,4 @@
+import { acessarSecao } from './navegacao-real.mjs';
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
 // Assistente de primeiro acesso (docs/F3-primeiro-acesso.md): (A) pré-visualização no Artifact/demonstração, nada é gravado;
 // (B) site real (dist/index-real.html) contra um servidor falso: dono novo → troca a senha → serviços → equipe (senhas uma vez) → painel,
@@ -124,7 +125,7 @@ const semRolagem = async (p, nome) => assert.ok(await p.evaluate(() => document.
   const r = await novaPagina();
   await r.p.goto(`${base}?loja=apex`);
   await r.p.getByTestId('demo-davi').click();
-  await r.p.getByTestId('nav-estab').click();
+  await acessarSecao(r.p, 'nav-estab');
   await r.p.getByRole('tab', { name: 'Reconfigurar' }).click();
   assert.match(await r.p.getByTestId('reconfigurar').innerText(), /ninguém da equipe é excluído/);
   const usuariosAntes = await r.p.evaluate(() => document.body.innerText.length);
@@ -179,14 +180,14 @@ const semRolagem = async (p, nome) => assert.ok(await p.evaluate(() => document.
   await r.p.getByTestId('pa-voltar').click();
   await r.p.getByTestId('reconfigurar').waitFor();
   // nada foi gravado: a Equipe não ganhou o Zeca
-  await r.p.getByTestId('nav-equipe').click();
+  await acessarSecao(r.p, 'nav-equipe');
   assert.equal(await r.p.getByText('Zeca Novo').count(), 0);
   await r.ctx.close();
   // quem não é dono não vê a aba
   const q = await novaPagina();
   await q.p.goto(`${base}?loja=apex`);
   await q.p.getByTestId('demo-pablo').click();
-  if (await q.p.getByTestId('nav-estab').count()) { await q.p.getByTestId('nav-estab').click(); assert.equal(await q.p.getByRole('tab', { name: 'Reconfigurar' }).count(), 0); }
+  if (await q.p.getByTestId('nav-estab').count()) { await acessarSecao(q.p, 'nav-estab'); assert.equal(await q.p.getByRole('tab', { name: 'Reconfigurar' }).count(), 0); }
   await q.ctx.close();
   ok('A: Reconfigurar em Estabelecimento (só dono): serviços da loja marcados, equipe só adiciona, expediente atual, nada gravado');
 }
@@ -314,7 +315,7 @@ const url = `http://127.0.0.1:${servidor.address().port}/`;
   await p.getByTestId('pa-concluir').click();
   await p.getByTestId('agenda-real').waitFor(); // ao concluir o assistente cai na Agenda, não no Início
   assert.equal(await p.getByTestId('nav-agenda').getAttribute('aria-current'), 'page');
-  await p.getByTestId('nav-estabelecimento').click(); await p.getByTestId('tela-estabelecimento').waitFor();
+  await acessarSecao(p, 'nav-estabelecimento'); await p.getByTestId('tela-estabelecimento').waitFor();
   assert.ok(chamadas.some((c) => c.u === '/api/onboarding/concluir'), 'concluir foi chamado'); // o Início também lê as regras do Atender, então a última chamada pode ser outra
   // as senhas não ficaram em nenhum storage
   const guardado = await p.evaluate(() => JSON.stringify([Object.entries(localStorage), Object.entries(sessionStorage)]));
@@ -326,7 +327,7 @@ const url = `http://127.0.0.1:${servidor.address().port}/`;
   const n = await novaPagina();
   await n.p.goto(url);
   await n.p.getByTestId('login-id').fill('alan'); await n.p.getByTestId('login-senha').fill('Minha-senha-nova'); await n.p.getByTestId('login-entrar').click();
-  await n.p.getByTestId('nav-estabelecimento').click(); await n.p.getByTestId('tela-estabelecimento').waitFor();
+  await acessarSecao(n.p, 'nav-estabelecimento'); await n.p.getByTestId('tela-estabelecimento').waitFor();
   assert.equal(await n.p.getByTestId('pa').count(), 0);
   ok('B: assistente concluído não volta');
   // reconfigurar: o dono reabre o assistente pelo painel; começa nos serviços, os existentes ficam travados, nada é concluído de novo
@@ -359,7 +360,7 @@ const url = `http://127.0.0.1:${servidor.address().port}/`;
   assert.match(await n.p.getByTestId('pa').locator('h1').innerText(), /Reconfigurar Dalforno/);
   assert.equal(await n.p.getByTestId('pa-marcar-s-barba').isDisabled(), true); // já existe
   await n.p.getByTestId('pa-voltar').click();
-  await n.p.getByTestId('nav-estabelecimento').click(); await n.p.getByTestId('tela-estabelecimento').waitFor();
+  await acessarSecao(n.p, 'nav-estabelecimento'); await n.p.getByTestId('tela-estabelecimento').waitFor();
   await n.p.getByTestId('reconfigurar-abrir').click();
   await n.p.getByTestId('pa-reconf-senha').fill('Minha-senha-nova');
   await n.p.getByTestId('pa-reconf-confirmar').click();
@@ -376,7 +377,7 @@ const url = `http://127.0.0.1:${servidor.address().port}/`;
   await n.p.getByTestId('pa-link').waitFor(); await n.p.getByTestId('pa-pular-link').click();
   await n.p.getByTestId('pa-pronto').waitFor();
   await n.p.getByTestId('pa-concluir').click();
-  await n.p.getByTestId('nav-estabelecimento').click(); await n.p.getByTestId('tela-estabelecimento').waitFor();
+  await acessarSecao(n.p, 'nav-estabelecimento'); await n.p.getByTestId('tela-estabelecimento').waitFor();
   assert.equal(chamadas.filter((c) => c.u === '/api/onboarding/concluir').length, antesConcluir, 'reconfigurar não chama concluir de novo');
   assert.deepEqual(chamadas.filter((c) => c.u === '/api/onboarding/servicos').at(-1).c.itens.map((i) => i.chave), ['s-corte']);
   assert.ok(banco.logins.has('zeca'));

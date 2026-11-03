@@ -1,3 +1,4 @@
+import { acessarSecao } from './navegacao-real.mjs';
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
 // Agenda e avisos do site real se atualizam sozinhos: o que o cliente remarcou ou cancelou pelo link aparece sem recarregar (ao voltar para a aba e a
 // cada 20 s), cartão aberto continua aberto e o cartão mostra a data (dia da semana + dia/mês) em negrito e a hora grande.
@@ -70,7 +71,7 @@ async function abrir(viewport = { width: 1280, height: 860 }, relogio = false) {
   p.on('dialog', async (d) => { erros.push('DIALOG: ' + d.message()); await d.dismiss(); });
   await p.goto(url);
   await p.getByTestId('login-id').fill('alan'); await p.getByTestId('login-senha').fill('Minha-senha'); await p.getByTestId('login-entrar').click();
-  await p.getByTestId('nav-agenda').click();
+  await acessarSecao(p, 'nav-agenda');
   await p.getByTestId('agenda-dia').waitFor();
   return { ctx, p };
 }
@@ -120,7 +121,7 @@ const A1 = id(101), A4 = id(104);
   assert.ok(await p.locator('[data-testid="cartao"]').count() >= 1);
   banco.length = 0; banco.push(...lista);
   // aviso novo aparece em Início sem recarregar
-  await p.getByTestId('nav-avisos').click();
+  await acessarSecao(p, 'nav-avisos');
   await p.getByTestId('avisos-vazio').waitFor();
   avisosServidor = [{ id: id(900), tipo: 'cancelou', texto: 'Bruno cancelou o horário de quinta.', em: '2026-10-28T12:00:00Z', lido: false }];
   await sinal(p);

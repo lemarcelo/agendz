@@ -1,3 +1,4 @@
+import { acessarSecao } from './navegacao-real.mjs';
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
 // 5d-4a: produtos no Atender do site real (dist/index-real.html) contra um servidor falso: venda com serviço, venda só de produto (vendedor), horário futuro
 // que exige serviço, quantidade limitada, vendedor fixo para quem é profissional, produto no detalhe do cartão e 390 px com fonte larga sem rolagem lateral.
@@ -66,7 +67,7 @@ async function abrir(viewport = { width: 1280, height: 860 }) {
   p.on('dialog', async (d) => { erros.push('DIALOG: ' + d.message()); await d.dismiss(); });
   await p.goto(url);
   await p.getByTestId('login-id').fill('alan'); await p.getByTestId('login-senha').fill('Minha-senha'); await p.getByTestId('login-entrar').click();
-  await p.getByTestId('nav-agenda').click();
+  await acessarSecao(p, 'nav-agenda');
   await p.getByTestId('agenda-dia').waitFor();
   return { ctx, p };
 }

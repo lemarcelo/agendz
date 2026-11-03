@@ -39,6 +39,12 @@ const servidor = http.createServer((req, res) => {
     if (u.pathname === '/api/clientes') return json(200, [{ id: BRUNO, nome: 'Bruno Lima', apelido: 'Bruno', telefone: '11999990001' }, { id: CAIO, nome: 'Caio Souza', apelido: '', telefone: '11999990002' }, { id: DEBORA, nome: 'Débora Reis', apelido: '', telefone: '' }]);
     if (u.pathname === '/api/estabelecimento/local' && comMapa) return json(200, { enderecoNoLink: false, localizacaoNoWhatsapp: true, enderecoTexto: 'Rua das Flores, 100', localizacaoUrl: '', localizacaoWhatsappUrl: 'https://maps.example.com/' + 'a'.repeat(150) });
     if (u.pathname === '/api/profissionais') return json(200, [{ id: ALAN, nome: 'Alan', papel: 'dono', atende: true }, { id: KIKO, nome: 'Kiko', papel: 'profissional', atende: true }]);
+    if (u.pathname === '/api/usuarios/me/menu') return json(200, { recolhido: false });
+    if (u.pathname === '/api/agendamentos/existem-futuros') {
+      const de = Date.parse(u.searchParams.get('aPartirDe'));
+      const prof = papel === 'profissional' ? ALAN : u.searchParams.get('profissionalId');
+      return json(200, { existem: banco.some((a) => Date.parse(a.inicio) >= de && a.status !== 'cancelado' && (!prof || a.profissionalId === prof)) });
+    }
     if (u.pathname === '/api/agendamentos' && req.method === 'GET') {
       const de = Date.parse(u.searchParams.get('de')), ate = Date.parse(u.searchParams.get('ate'));
       return json(200, banco.filter((a) => Date.parse(a.inicio) < ate && Date.parse(a.fimOcupado) > de && (papel !== 'profissional' || a.profissionalId === ALAN)));
@@ -72,6 +78,8 @@ async function abrir(viewport = { width: 1280, height: 860 }) {
   p.on('dialog', async (d) => { erros.push('DIALOG: ' + d.message()); await d.dismiss(); });
   await p.goto(url);
   await p.getByTestId('login-id').fill('alan'); await p.getByTestId('login-senha').fill('Minha-senha'); await p.getByTestId('login-entrar').click();
+  await p.getByTestId('nav-agenda').waitFor({ state: 'attached' });
+  if (!(await p.getByTestId('nav-agenda').isVisible())) await p.getByTestId('menu-alternar-real').click();
   await p.getByTestId('nav-agenda').click();
   await p.getByTestId('agenda-dia').waitFor();
   return { ctx, p };
@@ -167,6 +175,8 @@ const textoDe = (p, t) => p.getByTestId(t).innerText();
   // 7. ver mais 7 dias
   await p.getByTestId('proximos-mais').click();
   await p.waitForFunction(() => document.querySelectorAll('[data-testid="cartao-proximo"]').length === 4);
+  await p.getByTestId('proximos-fim').waitFor();
+  assert.equal(await p.getByTestId('proximos-mais').isDisabled(), true, 'sem outros agendamentos futuros, não oferece nova busca');
   ok('ver mais 7 dias traz o agendamento de 10/11');
 
   // 8. calendário: contagem sem cancelados; clicar no dia abre o dia

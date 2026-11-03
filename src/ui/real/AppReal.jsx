@@ -206,9 +206,8 @@ function TrocarSenha({ loja, sessao, senhaEnviada, aoTrocar, aoSair }) {
 function LogoPequena({ loja, aoInicio }) {
   const tipo = TIPOS[loja.tipo];
   return (
-    <button type="button" className="topo-marca topo-marca-real" onClick={aoInicio} aria-label="Ir para o início" data-testid="marca-inicio-real">
+    <button type="button" className="topo-marca topo-marca-real" onClick={aoInicio} aria-label={`Ir para o início — ${loja.nome}`} title={loja.nome} data-testid="marca-inicio-real">
       {logoValida(loja.logo) ? <img className="marca-logo" src={loja.logo} alt="" width={32} height={32} /> : <span className="marca-icone"><Icone n={tipo.visual.iconeMarca} size={18} /></span>}
-      <span className="marca-nome">{loja.nome}</span>
     </button>
   );
 }
@@ -218,6 +217,43 @@ function Painel({ loja, sessao, aoSair, aoMudarMarca }) {
   // Depois de entrar (e de concluir o assistente) a pessoa cai na Agenda, que é o que ela usa todo dia; quem não tem a agenda abre a primeira tela do menu.
   const [aba, setAba] = useState(() => (sessao.papel === 'dono' || (sessao.secoes || []).includes('agenda') ? 'agenda' : (sessao.secoes || []).includes('clientes') ? 'clientes' : 'servicos'));
   const [reconfigurando, setReconfigurando] = useState(false);
+  const [menuAberto, setMenuAberto] = useState(false);
+  const [menuRecolhido, setMenuRecolhido] = useState(false);
+  const [menuDesktop, setMenuDesktop] = useState(() => globalThis.matchMedia('(min-width: 901px)').matches);
+  const [erroMenu, setErroMenu] = useState('');
+  const menuAlterado = useRef(false);
+  const filaMenu = useRef(Promise.resolve());
+  useEffect(() => {
+    const consulta = globalThis.matchMedia('(min-width: 901px)');
+    const atualiza = (e) => { setMenuDesktop(e.matches); setMenuAberto(false); };
+    consulta.addEventListener('change', atualiza);
+    return () => consulta.removeEventListener('change', atualiza);
+  }, []);
+  useEffect(() => {
+    let ativo = true;
+    apiPerfil.obterMenu().then((r) => {
+      if (!ativo || menuAlterado.current) return;
+      if (r.ok) setMenuRecolhido(r.recolhido);
+      else setErroMenu('Não foi possível carregar a preferência do menu.');
+    });
+    return () => { ativo = false; };
+  }, []);
+  const alternarMenu = () => {
+    if (!menuDesktop) { setMenuAberto((v) => !v); return; }
+    const proximo = !menuRecolhido;
+    menuAlterado.current = true;
+    setMenuRecolhido(proximo);
+    setErroMenu('');
+    filaMenu.current = filaMenu.current.then(() => apiPerfil.salvarMenu(proximo)).then((r) => {
+      if (!r.ok) setErroMenu('Não foi possível salvar a preferência do menu. Tente novamente.');
+    });
+  };
+  useEffect(() => {
+    if (!menuAberto) return undefined;
+    const fechar = (e) => { if (e.key === 'Escape') setMenuAberto(false); };
+    globalThis.addEventListener('keydown', fechar);
+    return () => globalThis.removeEventListener('keydown', fechar);
+  }, [menuAberto]);
   // Meu perfil e aviso de agendamento novo: as escolhas de aviso ficam neste aparelho; o cartão novo pulsa na agenda por alguns segundos.
   const [meus, setMeus] = useState(null);
   const [perfilAberto, setPerfilAberto] = useState(false);
@@ -276,12 +312,14 @@ function Painel({ loja, sessao, aoSair, aoMudarMarca }) {
   const comSuporte = dono || (sessao.secoes || []).includes('suporte'); // v119: de fábrica só o proprietário; os outros se ele liberar
   if (comSuporte) itens.push(['suporte', 'Suporte', 'info']);
   return (
-    <div className="app app-real">
-      <header className="topo">
+    <div className={`app app-real${menuRecolhido ? ' menu-recolhido-real' : ''}`}>
+      {menuAberto && <button type="button" className="menu-fundo-real" aria-label="Fechar menu" onClick={() => setMenuAberto(false)} />}
+      <header className={`topo${menuAberto ? ' menu-aberto-real' : ''}`}>
         <LogoPequena loja={loja} aoInicio={() => { setPerfilAberto(false); setFoco(null); setAba(itens[0][0]); }} />
-        <nav className="nav" aria-label="Seções">
+        <button type="button" className="menu-alternar-real" aria-label={chamadosNovos > 0 && !menuDesktop && !menuAberto ? `Alternar menu, ${chamadosNovos} respostas de suporte não lidas` : 'Alternar menu'} aria-expanded={menuDesktop ? !menuRecolhido : menuAberto} aria-controls="menu-secoes-real" onClick={alternarMenu} data-testid="menu-alternar-real"><Icone n={menuAberto ? 'x' : 'menu'} size={20} /><span>Menu</span>{!menuDesktop && !menuAberto && chamadosNovos > 0 && <i className="badge" data-testid="menu-badge-suporte">{chamadosNovos}</i>}</button>
+        <nav id="menu-secoes-real" className="nav" aria-label="Seções">
           {itens.map(([k, r, ic]) => (
-            <button key={k} type="button" className={aba === k ? 'on' : ''} onClick={() => { setAba(k); setFoco(null); }} aria-current={aba === k ? 'page' : undefined} title={r} data-testid={`nav-${k}`}><Icone n={ic} size={17} /><span>{r}</span>{k === 'suporte' && chamadosNovos > 0 && <i className="badge" data-testid="badge-suporte">{chamadosNovos}</i>}</button>
+            <button key={k} type="button" className={aba === k ? 'on' : ''} onClick={() => { setAba(k); setFoco(null); setMenuAberto(false); }} aria-current={aba === k ? 'page' : undefined} title={r} data-testid={`nav-${k}`}><Icone n={ic} size={17} /><span>{r}</span>{k === 'suporte' && chamadosNovos > 0 && <i className="badge" data-testid="badge-suporte">{chamadosNovos}</i>}</button>
           ))}
         </nav>
         <div className="topo-dir">
@@ -294,6 +332,7 @@ function Painel({ loja, sessao, aoSair, aoMudarMarca }) {
           </div>
         </div>
       </header>
+      {erroMenu && <div className="menu-erro-real" role="status">{erroMenu}</div>}
       {(sessao.secoes || []).includes('agenda') && <AlertaAgenda prefs={prefs} aoIr={irParaAgendamento} aoDestacar={destacar} />}
       {perfilAberto && <MeuPerfil aoSair={aoSair} loja={loja} sessao={sessao} dados={meus} prefs={prefs} aoPrefs={setPrefs} aoMudou={(d) => setMeus((antes) => ({ ...(antes || {}), ...d }))} aoFechar={() => setPerfilAberto(false)} />}
       <div className="corpo">

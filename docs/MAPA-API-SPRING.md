@@ -156,7 +156,9 @@ Não existe `GET` por recurso no protótipo: a tela lê o estado inteiro. No Spr
 
 | Função JS | Endpoint | Regra de visibilidade |
 |---|---|---|
-| `agendamentosVisiveis` | `GET /agendamentos?de=&ate=&profissionalId=` | **paginado por período**; esteticista recebe só os seus (o filtro é do servidor, não da tela) |
+| `agendamentosVisiveis` | `GET /api/agendamentos?de=&ate=&deslocamento=` | até 366 dias e 1.000 registros por página; profissional recebe só os seus (filtro no servidor). O site percorre períodos e páginas conforme necessário. |
+| Próximos depois do período | `GET /api/agendamentos/existem-futuros?aPartirDe=&profissionalId=` | Retorna somente `{existem}` para agendamentos ativos posteriores, respeitando loja, permissão e profissional da sessão; permite desabilitar a busca ao chegar ao último. |
+| Menu do painel | `GET/PUT /api/usuarios/me/menu` | Preferência booleana `recolhido` da própria conta na loja; aplicada no computador, independente do menu temporário do celular. |
 | `profissionaisVisiveis` | `GET /esteticistas` | esteticista vê só ele |
 | `avisosDoUsuario` | `GET /avisos` | esteticista só os dele; `vinculo` só quem autoriza |
 | `pedidosVinculoVisiveis` | `GET /clientes/vinculos` | só quem autoriza; **CPF mascarado** |

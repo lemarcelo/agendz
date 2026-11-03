@@ -1,3 +1,4 @@
+import { acessarSecao } from './navegacao-real.mjs';
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
 // Estabelecimento no site real: horário de funcionamento (abrir/fechar dia, outra faixa, copiar, conferência antes de enviar, recusa do servidor, gravação)
 // e logo + cor do tema (enviar PNG, tema aplicado na hora, escolher paleta, remover), só do proprietário; 390 px sem rolagem lateral.
@@ -56,8 +57,8 @@ async function abrir(viewport = { width: 1280, height: 860 }) {
   p.on('dialog', async (d) => { erros.push('DIALOG: ' + d.message()); await d.dismiss(); });
   await p.goto(url);
   await p.getByTestId('login-id').fill('alan'); await p.getByTestId('login-senha').fill('Minha-senha'); await p.getByTestId('login-entrar').click();
-  await p.getByTestId('nav-estabelecimento').waitFor();
-  await p.getByTestId('nav-estabelecimento').click();
+  await p.getByTestId('nav-estabelecimento').waitFor({ state: 'attached' });
+  await acessarSecao(p, 'nav-estabelecimento');
   await p.getByTestId('exp-form').waitFor();
   return { ctx, p };
 }

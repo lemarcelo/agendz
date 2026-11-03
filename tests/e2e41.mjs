@@ -1,3 +1,4 @@
+import { acessarSecao } from './navegacao-real.mjs';
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
 // F2 parte 4: Equipe no site real (dist/index-real.html) contra um servidor falso. As regras de verdade são do servidor (UsuariosTest e
 // EquipeEquivalenciaTest rodam no CI); aqui se confere a tela: menu por perfil e permissão, lista, nova pessoa com senha temporária mostrada uma vez,
@@ -71,7 +72,7 @@ async function abrir(viewport = { width: 1280, height: 800 }) {
   p.on('dialog', async (d) => { erros.push('DIALOG: ' + d.message()); await d.dismiss(); });
   await p.goto(url);
   await p.getByTestId('login-id').fill('davi'); await p.getByTestId('login-senha').fill('qualquer'); await p.getByTestId('login-entrar').click();
-  await p.locator('.nav button').first().waitFor();
+  await p.locator('.nav button').first().waitFor({ state: 'attached' });
   return { ctx, p };
 }
 const semRolagem = async (p, nome) => assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `${nome}: rolagem horizontal em 390 px`);
@@ -80,7 +81,7 @@ const semRolagem = async (p, nome) => assert.ok(await p.evaluate(() => document.
 {
   const { ctx, p } = await abrir();
   assert.equal(await p.getByTestId('nav-equipe').count(), 1);
-  await p.getByTestId('nav-equipe').click();
+  await acessarSecao(p, 'nav-equipe');
   await p.getByTestId('eq-lista').waitFor();
   assert.equal(await p.locator(`[data-testid="senha-${MEU}"], [data-testid="remover-${MEU}"]`).count(), 0, 'ninguém refaz a própria senha nem se remove por aqui');
   await p.getByTestId('nova-pessoa').click();
@@ -201,7 +202,7 @@ const semRolagem = async (p, nome) => assert.ok(await p.evaluate(() => document.
   const { ctx, p } = await abrir({ width: 390, height: 780 });
   await p.addStyleTag({ content: '*{font-family:"DejaVu Sans" !important}' });
   await semRolagem(p, 'início');
-  await p.getByTestId('nav-equipe').click();
+  await acessarSecao(p, 'nav-equipe');
   await p.getByTestId('eq-lista').waitFor(); await semRolagem(p, 'lista');
   await p.getByTestId('nova-pessoa').click();
   assert.match(await p.getByTestId('eq-papel').innerText(), /Barbeiro/);

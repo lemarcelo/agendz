@@ -4,6 +4,7 @@
 // (trava plano novo até quitar), cliente de cadastro incompleto, a ficha não perde o que foi digitado, e quem não tem a seção Planos não vê o bloco nem chama a API.
 // Três lojas × 390 px (fonte larga) e desktop × claro/escuro.
 import assert from 'node:assert/strict';
+import { acessarSecao } from './navegacao-real.mjs';
 import { abrirNavegador, id, ok, subirServidor } from './real-util.mjs';
 
 const BRUNO = id(60), CAIO = id(61), PA = id(70), PB = id(71);
@@ -80,7 +81,7 @@ async function cenario(loja, vp, modo) {
   await T('plano-cli-ir-planos').click();
   await T('tela-planos').waitFor();
   assert.equal(await T('plano-cliente').count(), 0);
-  await T('nav-clientes').click(); await T('cli-lista').waitFor();
+  await acessarSecao(p, 'nav-clientes'); await T('cli-lista').waitFor();
   m.planos = [plano(PA, 'Plano A', 2), plano(PB, 'Plano B', 4)];
 
   // 2. adicionar: 500, 403 e 409 mostram a mensagem do servidor; duplo clique manda uma chamada só; a ficha não perde o que foi digitado

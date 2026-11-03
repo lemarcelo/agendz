@@ -1,3 +1,4 @@
+import { acessarSecao } from './navegacao-real.mjs';
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
 // F2 parte 5c: botão Atender no site real (dist/index-real.html) contra um servidor falso: atendimento local (agora), agendamento futuro, dia anterior
 // com motivo, profissional só lança hoje e como ele mesmo, busca de cliente cadastrado, erro do servidor na tela e 390 px com fonte larga.
@@ -78,7 +79,7 @@ async function abrir(viewport = { width: 1280, height: 860 }) {
   p.on('dialog', async (d) => { erros.push('DIALOG: ' + d.message()); await d.dismiss(); });
   await p.goto(url);
   await p.getByTestId('login-id').fill('alan'); await p.getByTestId('login-senha').fill('Minha-senha'); await p.getByTestId('login-entrar').click();
-  await p.getByTestId('nav-agenda').click();
+  await acessarSecao(p, 'nav-agenda');
   await p.getByTestId('agenda-dia').waitFor();
   return { ctx, p };
 }

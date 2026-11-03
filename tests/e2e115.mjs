@@ -5,6 +5,7 @@
 //  2. página do cliente: o selo que o servidor entrega na abertura volta no pedido (e só ele), sem Authorization.
 // 390 px com fonte larga e desktop × claro/escuro.
 import assert from 'node:assert/strict';
+import { acessarSecao } from './navegacao-real.mjs';
 import { abrirNavegador, id, ok, subirServidor } from './real-util.mjs';
 
 const CORTE = id(50), ALAN = id(1);
@@ -58,7 +59,7 @@ async function configuracao(vp, modo) {
   assert.equal(await T('link-limite').inputValue(), '1');
   // contagem por motivo
   m.link.barrados = { total: 7, porMotivo: { limite_cliente: 4, isca: 2, rapido: 1, selo_invalido: 0, frequencia: 0 } };
-  await T('nav-agenda').click(); await T('nav-estabelecimento').click(); // volta à tela: o cartão lê de novo
+  await acessarSecao(p, 'nav-agenda'); await acessarSecao(p, 'nav-estabelecimento'); // volta à tela: o cartão lê de novo
   await T('link-barrados').waitFor();
   const t = await T('link-barrados').innerText();
   assert.match(t, /barrados nos últimos 30 dias: 7/); assert.match(t, /acima do limite: 4/); assert.match(t, /robô: 2/); assert.match(t, /rápido demais: 1/); assert.doesNotMatch(t, /selo falso/);

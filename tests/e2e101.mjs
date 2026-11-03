@@ -3,6 +3,7 @@
 // serviço do plano), limite de 3, erro do servidor com a mensagem dele, salvar manda a lista inteira, aviso de quantos agendamentos saíram e o resumo na linha da assinatura.
 // Barbearia e estética × 390 px (fonte larga) e desktop × claro/escuro.
 import assert from 'node:assert/strict';
+import { acessarSecao } from './navegacao-real.mjs';
 import { abrirNavegador, id, ok, subirServidor } from './real-util.mjs';
 
 const BRUNO = id(60), ASS = id(101), PLANO = id(70), ALAN = id(1), KIKO = id(2), SRV = id(50), FIXO = id(200);
@@ -96,7 +97,7 @@ async function cenario(loja, vp, modo) {
   assert.match(await T(`fixos-resumo-${ASS}`).innerText(), /nenhum/);
 
   // 6. na ficha do cliente: resumo, botão em Editar plano e volta à ficha sem perder o que foi digitado
-  await T('nav-clientes').click();
+  await acessarSecao(p, 'nav-clientes');
   await T('cli-lista').waitFor();
   await p.getByRole('button', { name: 'Editar Bruno Lima' }).click();
   await T('plano-cli-ativo').waitFor();

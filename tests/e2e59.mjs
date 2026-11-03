@@ -1,3 +1,4 @@
+import { acessarSecao } from './navegacao-real.mjs';
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
 // Estoque no site real (dist/index-real.html) contra um servidor falso: lista com aviso de estoque baixo, novo produto, editar sem mexer no estoque,
 // entrada/saída/contagem com a mensagem do servidor, histórico, remover (desativa quando tem histórico), menu só com permissão e 390 px com fonte larga.
@@ -82,7 +83,7 @@ const semRolagem = async (p, onde) => { const l = await p.evaluate(() => ({ doc:
 
 {
   const { ctx, p } = await abrir();
-  await p.getByTestId('nav-estoque').click();
+  await acessarSecao(p, 'nav-estoque');
   await p.getByTestId('est-lista').waitFor();
   assert.match(await textoDe(p, 'est-baixo'), /Pomada/);
   assert.doesNotMatch(await textoDe(p, 'est-baixo'), /Shampoo/);
@@ -140,7 +141,7 @@ const semRolagem = async (p, onde) => { const l = await p.evaluate(() => ({ doc:
   await ctx.close();
   const n = await abrir({ width: 390, height: 800 });
   await n.p.addStyleTag({ content: '*{font-family:"DejaVu Sans",sans-serif !important}' });
-  await n.p.getByTestId('nav-estoque').click();
+  await acessarSecao(n.p, 'nav-estoque');
   await n.p.getByTestId('est-lista').waitFor();
   await semRolagem(n.p, 'estoque 390');
   await n.p.getByTestId(`est-mover-${P1}`).click();
@@ -155,7 +156,7 @@ const semRolagem = async (p, onde) => { const l = await p.evaluate(() => ({ doc:
 {
   papel = 'profissional';
   const { ctx, p } = await abrir();
-  await p.getByTestId('nav-agenda').waitFor();
+  await p.getByTestId('nav-agenda').waitFor({ state: 'attached' });
   assert.equal(await p.getByTestId('nav-estoque').count(), 0, 'sem a seção estoque não há menu');
   await ctx.close();
   papel = 'dono';

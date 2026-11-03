@@ -1,3 +1,4 @@
+import { acessarSecao } from './navegacao-real.mjs';
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
 // Estética no site real (dist/index-real.html) contra um servidor falso: Atender com veículo do cadastro (preço do porte) e com veículo novo, box escolhido,
 // veículo exigido só com serviço, cartão e ficha com veículo/box, Remarcar com box, tela Boxes do proprietário (salvar, erro do servidor) e 390 px sem rolagem lateral.
@@ -100,7 +101,7 @@ async function abrir(viewport = { width: 1280, height: 860 }) {
   p.on('dialog', async (d) => { erros.push('DIALOG: ' + d.message()); await d.dismiss(); });
   await p.goto(url);
   await p.getByTestId('login-id').fill('davi'); await p.getByTestId('login-senha').fill('Minha-senha'); await p.getByTestId('login-entrar').click();
-  await p.getByTestId('nav-agenda').click();
+  await acessarSecao(p, 'nav-agenda');
   await p.getByTestId('agenda-dia').waitFor();
   return { ctx, p };
 }
@@ -202,7 +203,7 @@ const texto = (p, t) => p.getByTestId(t).innerText();
 // 4. tela Boxes (proprietário): lista, novo, renomear, salvar; erro do servidor aparece; nome repetido barrado na tela
 {
   const { ctx, p } = await abrir();
-  await p.getByTestId('nav-boxes').click();
+  await acessarSecao(p, 'nav-boxes');
   await p.getByTestId('boxes-lista').waitFor();
   assert.equal(await p.locator('[data-testid^="box-linha-"]').count(), 2);
   await p.getByTestId('box-novo').click();
@@ -240,7 +241,7 @@ const texto = (p, t) => p.getByTestId(t).innerText();
   let l = await largura();
   assert.ok(l.doc <= l.janela, `Atender: rolagem lateral ${l.doc} > ${l.janela}`);
   await p.getByTestId('atender-cancelar').click();
-  await p.getByTestId('nav-boxes').click();
+  await acessarSecao(p, 'nav-boxes');
   await p.getByTestId('boxes-lista').waitFor();
   l = await largura();
   assert.ok(l.doc <= l.janela, `Boxes: rolagem lateral ${l.doc} > ${l.janela}`);
@@ -251,7 +252,7 @@ const texto = (p, t) => p.getByTestId(t).innerText();
 // 6. v121: Estabelecimento (estética): placa, modelo, porte e veículo aparecem nas regras do Atender e do link; o dono tira a obrigatoriedade e o corpo leva a lista nova
 {
   const { ctx, p } = await abrir();
-  await p.getByTestId('nav-estabelecimento').click();
+  await acessarSecao(p, 'nav-estabelecimento');
   await p.getByTestId('regras-forma').waitFor(); // o cartão aparece "Carregando…" com o mesmo testid: espera o formulário
   for (const k of ['veiculo', 'placa', 'modelo', 'porte']) assert.equal(await p.getByTestId(`regras-local-${k}`).count(), 1, `${k} é regra do atendimento feito`);
   assert.equal(await p.getByTestId('regras-local-placa').isChecked(), true);
@@ -264,7 +265,7 @@ const texto = (p, t) => p.getByTestId(t).innerText();
   const corpo = ultimo('PUT', '/api/estabelecimento/link-agendamento').corpo;
   assert.equal(corpo.nomeObrigatorio, false); assert.deepEqual(corpo.veiculoObrigatorio, []);
   // sem a exigência, o Atender salva sem os dados do veículo
-  await p.getByTestId('nav-agenda').click(); await p.getByTestId('atender-abrir').click();
+  await acessarSecao(p, 'nav-agenda'); await p.getByTestId('atender-abrir').click();
   await p.getByTestId(`atender-srv-${SRV}`).check();
   await p.getByTestId('atender-prox-quando').click(); await p.getByTestId('atender-prox-cliente').click();
   const antes = chamadas.filter((c) => c.u === '/api/atendimentos').length;
@@ -278,7 +279,7 @@ const texto = (p, t) => p.getByTestId(t).innerText();
 // 7. v122: portes cadastráveis no Estabelecimento (site real): a lista do servidor aparece, o dono cria um porte, reordena e desativa; o corpo leva ids só dos existentes
 {
   const { ctx, p } = await abrir();
-  await p.getByTestId('nav-estabelecimento').click();
+  await acessarSecao(p, 'nav-estabelecimento');
   await p.getByTestId('portes-lista').waitFor();
   assert.equal(await p.getByTestId('portes-lista').locator('li').count(), 5);
   assert.equal(await p.getByTestId('porte-ativo-1').isDisabled(), true, 'o Médio não desativa');
@@ -298,7 +299,7 @@ const texto = (p, t) => p.getByTestId(t).innerText();
   await p.getByTestId('portes-salvar').click();
   assert.match(await p.getByTestId('portes-erro').innerText(), /desative em vez de remover/);
   // o Atender usa a lista da loja: o porte desativado não aparece e o novo sim
-  await p.getByTestId('nav-agenda').click(); await p.getByTestId('atender-abrir').click();
+  await acessarSecao(p, 'nav-agenda'); await p.getByTestId('atender-abrir').click();
   const opcoes = await p.getByTestId('atender-v-porte').locator('option').allInnerTexts();
   assert.ok(opcoes.includes('Van') && !opcoes.includes('Pequeno'), `opções do porte: ${opcoes.join(', ')}`);
   ok('portes: lista do servidor, novo porte, ordem, desativar, erro do servidor e uso no Atender');

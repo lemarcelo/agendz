@@ -298,15 +298,43 @@ export default function Agenda({ ehProprio = false, ehDono = false, ehProprietar
   const de = modo === 'horarios' ? cursor : weekStart(monthStart(cursor));
   const ate = modo === 'horarios' ? addDays(cursor, 1 + diasAdiante) : addDays(de, 42);
   const emFundo = useRef(false); // consulta automática: se falhar, mantém a lista na tela (sem erro) e tenta de novo na próxima
+  const [futurosRestantes, setFuturosRestantes] = useState(null);
+  const [erroFuturos, setErroFuturos] = useState(false);
+  useEffect(() => {
+    if (modo !== 'horarios') return undefined;
+    let ativo = true;
+    setFuturosRestantes(null); setErroFuturos(false);
+    api.existemFuturos({ aPartirDe: ate, profissionalId: selecionado === 'todos' ? null : selecionado }).then((r) => {
+      if (!ativo) return;
+      if (r.ok) setFuturosRestantes(r.existem);
+      else setErroFuturos(true);
+    });
+    return () => { ativo = false; };
+  }, [ate, modo, selecionado, versao]);
   useEffect(() => {
     const n = ++ultima.current;
     const fundo = emFundo.current; emFundo.current = false;
     (async () => {
-      const r = await api.listar({ de, ate });
+      const agendamentos = [];
+      let inicio = de;
+      let r = { ok: true };
+      while (inicio < ate) {
+        const fim = Math.min(addDays(inicio, 365), ate);
+        let deslocamento = 0;
+        do {
+          r = await api.listar({ de: inicio, ate: fim, deslocamento });
+          if (!r.ok || n !== ultima.current) break;
+          agendamentos.push(...r.agendamentos);
+          deslocamento += r.agendamentos.length;
+        } while (r.agendamentos.length === 1000);
+        if (!r.ok || n !== ultima.current) break;
+        inicio = fim;
+      }
       if (n !== ultima.current) return; // chegou resposta de uma consulta antiga
       if (!r.ok) { if (!fundo) { setErro(r.erro); setLista([]); } return; }
       setErro('');
-      setLista((antes) => (antes && JSON.stringify(antes) === JSON.stringify(r.agendamentos) ? antes : r.agendamentos)); // igual: não redesenha
+      const unicos = [...new Map(agendamentos.map((a) => [a.id, a])).values()];
+      setLista((antes) => (antes && JSON.stringify(antes) === JSON.stringify(unicos) ? antes : unicos)); // igual: não redesenha
     })();
   }, [de, ate, versao]);
   // v134: notas para a estrela do cartão. Avaliação nasce depois do atendimento, então basta pedir "a partir do início da lista"; sem permissão (403) ou erro, a estrela fica como antes.
@@ -369,7 +397,6 @@ export default function Agenda({ ehProprio = false, ehDono = false, ehProprietar
   const futuros = visiveis.filter((a) => a.inicio >= addDays(cursor, 1) && ATIVOS.includes(a.status));
   const grupos = agruparPorDia(futuros);
   const agora = Date.now();
-  const temMais = modo === 'horarios' && diasAdiante < 364;
 
   const alterou = (texto, novo) => {
     setAviso(novo && novo.conflitosPendentes && novo.conflitosPendentes.length ? `${texto} Há ${novo.conflitosPendentes.length} agendamento(s) a confirmar no mesmo horário.` : texto);
@@ -435,7 +462,7 @@ export default function Agenda({ ehProprio = false, ehDono = false, ehProprietar
       {lista === null && <p className="muted" role="status" data-testid="agenda-carregando">Carregando…</p>}
       {lista !== null && modo === 'calendario' && <Calendario cursor={cursor} lista={visiveis} aoEscolherDia={(d) => { setModo('horarios'); irPara(d); }} />}
       {lista !== null && modo === 'horarios' && (
-        <>
+        <div className="agenda-paineis-real">
           <div className="agenda-dia-real" data-testid="agenda-dia">
             {doDiaTodos.length === 0 ? <p className="muted vazio" data-testid="agenda-vazio">Nenhum agendamento neste dia.</p> : doDia.map((a) => cartao(a, 'cartao'))}
             {canceladosDia.length > 0 && (
@@ -455,9 +482,11 @@ export default function Agenda({ ehProprio = false, ehDono = false, ehProprietar
                 <div className="agenda-lista-real">{g.lista.map((a) => cartao(a, 'cartao-proximo'))}</div>
               </div>
             ))}
-            {temMais && <div className="agenda-mais-real"><Btn onClick={() => setDiasAdiante(diasAdiante + 7)} data-testid="proximos-mais">Ver mais 7 dias <Icone n="down" size={16} /></Btn></div>}
+            {futurosRestantes === false && grupos.length > 0 && <p className="muted agenda-fim-real" data-testid="proximos-fim">Você chegou ao último agendamento futuro.</p>}
+            {erroFuturos && <p className="muted" role="status">Não foi possível verificar se há mais agendamentos. A consulta será refeita automaticamente.</p>}
+            <div className="agenda-mais-real"><Btn onClick={() => setDiasAdiante((dias) => dias + 7)} disabled={futurosRestantes !== true} data-testid="proximos-mais">Ver mais 7 dias <Icone n="down" size={16} /></Btn></div>
           </div>
-        </>
+        </div>
       )}
     </section>
   );

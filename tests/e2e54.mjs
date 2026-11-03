@@ -1,3 +1,4 @@
+import { acessarSecao } from './navegacao-real.mjs';
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
 // 5d-4c-2: cupons no site real (dist/index-real.html) contra um servidor falso: tela Cupons do proprietário (criar sem enviar chave, ver chave, nova chave e remover
 // com confirmação na tela, mensagem do servidor), aplicar e retirar na ficha do horário (chave errada = mensagem genérica; desconto e valor a pagar), campo de cupom
@@ -112,15 +113,15 @@ async function entrar(viewport = { width: 1280, height: 860 }) {
   p.on('dialog', async (d) => { erros.push('DIALOG: ' + d.message()); await d.dismiss(); });
   await p.goto(url);
   await p.getByTestId('login-id').fill('alan'); await p.getByTestId('login-senha').fill('Minha-senha'); await p.getByTestId('login-entrar').click();
-  await p.getByTestId('nav-estabelecimento').click(); await p.getByTestId('tela-estabelecimento').waitFor();
+  await acessarSecao(p, 'nav-estabelecimento'); await p.getByTestId('tela-estabelecimento').waitFor();
   return { ctx, p };
 }
-const abrirCartao = async (p) => { await p.getByTestId('nav-agenda').click(); await p.getByTestId('cartao').first().waitFor(); await p.getByTestId('cartao-abrir').first().click(); await p.getByTestId('agendamento-detalhe').waitFor(); };
+const abrirCartao = async (p) => { await acessarSecao(p, 'nav-agenda'); await p.getByTestId('cartao').first().waitFor(); await p.getByTestId('cartao-abrir').first().click(); await p.getByTestId('agendamento-detalhe').waitFor(); };
 
 // 1. tela Cupons: vazia, cria (sem enviar chave), vê a chave, nova chave com confirmação, remove com confirmação; erro do servidor aparece
 {
   const { ctx, p } = await entrar();
-  await p.getByTestId('nav-cupons').click();
+  await acessarSecao(p, 'nav-cupons');
   await p.getByTestId('cupom-vazio').waitFor();
   await p.getByTestId('novo-cupom').click();
   await p.getByTestId('cupom-form').waitFor();
@@ -191,7 +192,7 @@ const abrirCartao = async (p) => { await p.getByTestId('nav-agenda').click(); aw
 // 3. Atender: o campo de cupom só no agendamento futuro; chave errada não cria nada; certa vai no corpo
 {
   const { ctx, p } = await entrar();
-  await p.getByTestId('nav-agenda').click(); await p.getByTestId('agenda-dia').waitFor(); await p.getByTestId('atender-abrir').click();
+  await acessarSecao(p, 'nav-agenda'); await p.getByTestId('agenda-dia').waitFor(); await p.getByTestId('atender-abrir').click();
   assert.equal(await p.getByTestId('atender-cupom').count(), 0, 'atendimento de agora não tem cupom');
   await p.getByTestId(`atender-srv-${SRV_CORTE}`).check();
   await p.getByTestId('atender-prox-quando').click();
@@ -221,13 +222,13 @@ const abrirCartao = async (p) => { await p.getByTestId('nav-agenda').click(); aw
   const { ctx, p } = await entrar({ width: 390, height: 800 });
   await p.addStyleTag({ content: '*{font-family:"DejaVu Sans",sans-serif !important}' });
   const larg = async (onde) => { const l = await p.evaluate(() => ({ doc: document.documentElement.scrollWidth, janela: window.innerWidth })); assert.ok(l.doc <= l.janela, `${onde}: rolagem lateral ${l.doc} > ${l.janela}`); };
-  await p.getByTestId('nav-cupons').click();
+  await acessarSecao(p, 'nav-cupons');
   await p.getByTestId(`cupom-${id(777)}`).waitFor();
   await larg('lista de cupons');
   await p.getByTestId('novo-cupom').click(); await p.getByTestId('cupom-form').waitFor();
   await larg('formulário de cupom');
   await p.getByTestId('cupom-cancelar').click();
-  await p.getByTestId('nav-agenda').click(); await p.getByTestId('cartao').first().waitFor(); await p.getByTestId('cartao-abrir').first().click();
+  await acessarSecao(p, 'nav-agenda'); await p.getByTestId('cartao').first().waitFor(); await p.getByTestId('cartao-abrir').first().click();
   await p.getByTestId('acao-cupom').click(); await p.getByTestId('cupom-form-agenda').waitFor();
   await larg('ficha com cupom');
   ok('390 px com fonte larga: sem rolagem lateral');

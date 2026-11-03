@@ -60,7 +60,12 @@ export async function abrirNavegador() {
     await p.goto(url);
     await p.getByTestId('login-id').fill('alan'); await p.getByTestId('login-senha').fill('Minha-senha'); await p.getByTestId('login-entrar').click();
     if (fonteLarga) await p.addStyleTag({ content: '*{font-family:"DejaVu Sans" !important}' });
-    if (aba) await p.getByTestId(`nav-${aba}`).click();
+    if (aba) {
+      const destino = p.getByTestId(`nav-${aba}`);
+      await destino.waitFor({ state: 'attached' });
+      if (!(await destino.isVisible())) await p.getByTestId('menu-alternar-real').click();
+      await destino.click();
+    }
     return { ctx, p };
   };
   const semRolagem = async (p, nome) => { if (!(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))) throw new Error(`${nome}: rolagem horizontal`); };

@@ -1,3 +1,4 @@
+import { acessarSecao } from './navegacao-real.mjs';
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
 // 5d-4c-1: forma de pagamento e regras do Atender no site real (dist/index-real.html) contra um servidor falso: o proprietário muda a forma padrão e os campos
 // obrigatórios no Início; o Atender usa o padrão, marca os obrigatórios com *, manda a forma só no atendimento feito, barra "sem padrão" na tela e mostra a
@@ -87,10 +88,10 @@ async function entrar(viewport = { width: 1280, height: 860 }) {
   p.on('dialog', async (d) => { erros.push('DIALOG: ' + d.message()); await d.dismiss(); });
   await p.goto(url);
   await p.getByTestId('login-id').fill('alan'); await p.getByTestId('login-senha').fill('Minha-senha'); await p.getByTestId('login-entrar').click();
-  await p.getByTestId('nav-estabelecimento').click(); await p.getByTestId('tela-estabelecimento').waitFor();
+  await acessarSecao(p, 'nav-estabelecimento'); await p.getByTestId('tela-estabelecimento').waitFor();
   return { ctx, p };
 }
-const abrirAtender = async (p) => { await p.getByTestId('nav-agenda').click(); await p.getByTestId('agenda-dia').waitFor(); await p.getByTestId('atender-abrir').click(); await p.getByTestId('atender-lista-servicos').waitFor(); };
+const abrirAtender = async (p) => { await acessarSecao(p, 'nav-agenda'); await p.getByTestId('agenda-dia').waitFor(); await p.getByTestId('atender-abrir').click(); await p.getByTestId('atender-lista-servicos').waitFor(); };
 const concluirAtender = async (p) => { await p.getByTestId('atender-prox-quando').click(); await p.getByTestId('atender-prox-cliente').click(); };
 
 // 1. o proprietário vê as regras no Início e muda: o corpo leva só forma e listas; a resposta do servidor volta à tela

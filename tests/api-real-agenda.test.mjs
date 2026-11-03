@@ -26,6 +26,25 @@ test('listar: período em UTC na consulta; período inválido nem sai do cliente
   assert.equal(chamadas.length, 1);
 });
 
+test('próximos: consulta após o período com filtro válido e exige resposta booleana', async () => {
+  const de = Date.parse('2026-11-04T03:00:00Z');
+  servidor({ existem: true });
+  assert.deepEqual(await agenda.existemFuturos({ aPartirDe: de, profissionalId: PROF }), { ok: true, existem: true });
+  assert.match(chamadas[0].url, /existem-futuros/);
+  assert.match(chamadas[0].url, new RegExp(`profissionalId=${PROF}`));
+  assert.equal((await agenda.existemFuturos({ aPartirDe: de, profissionalId: 'invalido' })).ok, false);
+  servidor({ existem: 'não' });
+  assert.equal((await agenda.existemFuturos({ aPartirDe: de })).ok, false);
+});
+
+test('listar: paginação explícita e deslocamento inválido', async () => {
+  servidor([]);
+  await agenda.listar({ de: 1, ate: 2, deslocamento: 1000 });
+  assert.match(chamadas[0].url, /deslocamento=1000/);
+  assert.equal((await agenda.listar({ de: 1, ate: 2, deslocamento: -1 })).ok, false);
+  assert.equal(chamadas.length, 1);
+});
+
 test('leitura defensiva: status desconhecido vira "a confirmar", id ruim some, instante inválido vira nulo, texto é cortado', async () => {
   servidor([{ id: ID, clienteId: 'x', profissionalId: PROF, inicio: 'ontem', status: 'hackeado', total: 'muito', servicos: [{ nome: 'x'.repeat(500), preco: 10, duracaoMin: 30 }],
     conflitosPendentes: [ID, 'lixo'], origem: 'link', historico: [{ em: '2026-10-28T12:00:00Z', autor: 'Alan', campo: 'status', de: 'A confirmar', para: 'Confirmado' }], extra: 'ignorado' }]);

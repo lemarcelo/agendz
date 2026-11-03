@@ -1,3 +1,4 @@
+import { acessarSecao } from './navegacao-real.mjs';
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
 // F2 parte 3: Serviços no site real (dist/index-real.html) contra um servidor falso. As regras de verdade são do servidor (ServicosTest e
 // ServicosEquivalenciaTest rodam no CI); aqui se confere a tela: menu, lista, novo (estética por porte; barbearia preço único), combo, erro do
@@ -89,7 +90,7 @@ async function abrir(viewport = { width: 1280, height: 800 }) {
   p.on('dialog', async (d) => { erros.push('DIALOG: ' + d.message()); await d.dismiss(); });
   await p.goto(url);
   await p.getByTestId('login-id').fill('davi'); await p.getByTestId('login-senha').fill('qualquer'); await p.getByTestId('login-entrar').click();
-  await p.locator('.nav button').first().waitFor();
+  await p.locator('.nav button').first().waitFor({ state: 'attached' });
   return { ctx, p };
 }
 const semRolagem = async (p, nome) => assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `${nome}: rolagem horizontal em 390 px`);
@@ -99,7 +100,7 @@ const portes = async (p, precos, duracoes) => { for (const [i, k] of PORTES.entr
 {
   const { ctx, p } = await abrir();
   assert.equal(await p.getByTestId('nav-servicos').count(), 1);
-  await p.getByTestId('nav-servicos').click();
+  await acessarSecao(p, 'nav-servicos');
   await p.getByTestId('srv-vazio').waitFor();
   await p.getByTestId('novo-servico').click();
   assert.equal(await p.getByTestId('srv-portes').count(), 1, 'estética pede preço e duração por porte');
@@ -186,7 +187,7 @@ const portes = async (p, precos, duracoes) => { for (const [i, k] of PORTES.entr
 {
   papel = 'profissional';
   const { ctx, p } = await abrir();
-  await p.getByTestId('nav-servicos').click();
+  await acessarSecao(p, 'nav-servicos');
   await p.getByTestId('srv-lista').waitFor();
   assert.equal(await p.getByTestId('novo-servico').count(), 0);
   assert.equal(await p.locator('[data-testid^="remover-"]').count(), 0);
@@ -207,7 +208,7 @@ const portes = async (p, precos, duracoes) => { for (const [i, k] of PORTES.entr
   loja = { slug: 'dalforno', nome: 'Dalforno', tipo: 'barbearia', logo: null, temaCor: null, temaCor2: null };
   const { ctx, p } = await abrir({ width: 390, height: 780 });
   await p.addStyleTag({ content: '*{font-family:"DejaVu Sans" !important}' });
-  await p.getByTestId('nav-servicos').click();
+  await acessarSecao(p, 'nav-servicos');
   await p.getByTestId('srv-vazio').waitFor(); await semRolagem(p, 'lista vazia');
   await p.getByTestId('novo-servico').click();
   assert.equal(await p.getByTestId('srv-portes').count(), 0, 'barbearia não tem preço por porte');
@@ -224,7 +225,7 @@ const portes = async (p, precos, duracoes) => { for (const [i, k] of PORTES.entr
   // v123: setas subir/descer gravam a ordem manual (PUT /api/servicos/ordem); com busca ativa as setas somem
   const base = { ...banco[0] };
   banco.push({ ...base, id: id(), codigo: '77', nome: 'Segundo serviço' }, { ...base, id: id(), codigo: '78', nome: 'Terceiro serviço' });
-  await p.getByTestId('nav-clientes').click(); await p.getByTestId('nav-servicos').click();
+  await acessarSecao(p, 'nav-clientes'); await acessarSecao(p, 'nav-servicos');
   await p.getByTestId('srv-lista').waitFor();
   const nomes = () => p.locator('[data-testid="srv-item-nome"]').allInnerTexts();
   const antesOrdem = await nomes();
