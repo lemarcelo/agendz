@@ -202,9 +202,6 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
           ))}
         </ul>
         <p className="muted" data-testid="atender-total">{resumo.qtd ? `${resumo.qtd} serviço${resumo.qtd === 1 ? '' : 's'} · ${resumo.minutos} min · ${fmtMoney(resumo.total)}` : itens.length ? 'Só produtos: registra a venda de agora.' : 'Escolha ao menos um serviço ou um produto.'}</p>
-        <div className="acoes" style={{ marginTop: 6 }}>
-          <Btn variante="primario" type="button" onClick={() => focarBloco('quando', 1)} data-testid="atender-prox-quando">Próximo →</Btn>
-        </div>
       </fieldset>
     ),
     quando: (
@@ -222,9 +219,6 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
         )}
         {bloqueado && <Aviso tipo="erro" data-testid="atender-retro-bloqueado">Lançar um dia anterior é com o proprietário ou a recepção. Peça a eles para registrar.</Aviso>}
         <p className="muted" data-testid="atender-tipo">{tipo === 'futuro' ? 'Agendamento: o horário fica reservado para o cliente.' : 'Atendimento já feito: entra como concluído.'}</p>
-        <div className="acoes" style={{ marginTop: 6 }}>
-          <Btn variante="primario" type="button" onClick={() => focarBloco('cliente', 2)} data-testid="atender-prox-cliente">Próximo →</Btn>
-        </div>
       </fieldset>
     ),
     cliente: (
@@ -299,7 +293,7 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
       {ordem.etapas.filter((k) => k !== 'veiculo').map((k) => <div className="atender-pagina-real" key={k} hidden={(k === 'produtos' ? 'servicos' : k) !== passos[etapaAtiva].id}>{blocos[k]}</div>)}
       {usaVeiculo && <div className="atender-pagina-real" hidden={passos[etapaAtiva].id !== 'cliente'}>{blocos.veiculo}</div>}
 
-      <div hidden={passos[etapaAtiva].id !== 'cliente'}>
+      <div className="atender-conclusao-real" hidden={passos[etapaAtiva].id !== 'cliente'}>
       <div className="form-grade">
         {!auto && (
           <Campo rotulo={`${Rot('profissional')}${marca('profissional')}`}>
@@ -348,9 +342,11 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
 
       {faltam.length > 0 && <p className="muted" data-testid="atender-faltam">Falta preencher: {faltam.join(', ')}.</p>}
       {erro && <Aviso tipo="erro" data-testid="atender-erro">{erro}</Aviso>}
-      <div className="acoes">
+      <div className="acoes atender-acoes-real">
         <Btn onClick={aoFechar} data-testid="atender-cancelar">Cancelar</Btn>
         {etapaAtiva > 0 && <Btn type="button" onClick={() => setEtapaAtiva(etapaAtiva - 1)} data-testid="atender-voltar">← Voltar</Btn>}
+        {etapaAtiva === 0 && <Btn variante="primario" type="button" onClick={() => focarBloco('quando', 1)} data-testid="atender-prox-quando">Próximo →</Btn>}
+        {etapaAtiva === 1 && <Btn variante="primario" type="button" onClick={() => focarBloco('cliente', 2)} data-testid="atender-prox-cliente">Próximo →</Btn>}
         {passos[etapaAtiva].id === 'cliente' && <Btn variante="primario" type="submit" disabled={enviando || bloqueado} data-testid="salvar-atender">{enviando ? 'Salvando…' : tipo === 'futuro' ? 'Agendar' : 'Registrar'}</Btn>}
       </div>
     </form>

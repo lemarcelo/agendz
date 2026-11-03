@@ -33,6 +33,7 @@ try {
         await p.getByTestId('atender-abrir').click();
         const painel = p.getByTestId('atender-form');
         await painel.waitFor();
+        if (process.env.AGENDZ_REVISAO_VISUAL) await p.screenshot({ animations: 'disabled', path: `shots-revisao/${tipo}-${width}-${tema}-servicos.png` });
         assert.equal(await p.getByTestId('atender-janela').getAttribute('aria-modal'), 'true');
         assert.equal(await p.getByTestId('atender-janela').evaluate((el) => getComputedStyle(el).position), 'fixed');
         const caixa = await painel.boundingBox();
@@ -42,11 +43,13 @@ try {
         assert.equal(await p.getByTestId('atender-lista-servicos').isVisible(), true);
         await p.getByTestId(`atender-srv-${id(50)}`).check();
         await p.getByTestId('atender-prox-quando').click();
+        if (process.env.AGENDZ_REVISAO_VISUAL) await p.screenshot({ animations: 'disabled', path: `shots-revisao/${tipo}-${width}-${tema}-quando.png` });
         assert.equal(await p.getByTestId('atender-lista-servicos').isVisible(), false);
         await p.getByTestId('atender-voltar').click();
         assert.equal(await p.getByTestId(`atender-srv-${id(50)}`).isChecked(), true);
         await p.getByTestId('atender-prox-quando').click();
         await p.getByTestId('atender-prox-cliente').click();
+        if (process.env.AGENDZ_REVISAO_VISUAL) await p.screenshot({ animations: 'disabled', path: `shots-revisao/${tipo}-${width}-${tema}-cliente.png` });
         assert.equal(await p.getByTestId('atender-quando-bloco').isVisible(), false);
         assert.equal(await p.getByTestId('salvar-atender').isVisible(), true);
         if (tipo === 'estetica_automotiva') {
