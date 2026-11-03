@@ -115,6 +115,11 @@ input:disabled, select:disabled, textarea:disabled { opacity: .6; }
 .app-real .nav { order: 3; flex-basis: 100%; }
 .app-real .topo-dir { margin-left: auto; }
 .app-real .principal { width: 100%; max-width: 1440px; margin-inline: auto; }
+@media (min-width: 901px) {
+  .app-real .topo { display: grid; grid-template-columns: minmax(0, 150px) minmax(0, 1fr) auto; gap: 12px; }
+  .app-real .nav { order: initial; flex-basis: auto; align-content: center; }
+  .app-real .topo-dir { margin-left: 0; }
+}
 .marca-nome { font-family: var(--fonte-titulo); }
 .marca-icone { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; background: var(--ink); color: var(--ink-fg); flex: none; }
 .topo .marca-icone { background: var(--tema-topo-hover, var(--ink)); color: var(--tema-topo-fg, var(--ink-fg)); }

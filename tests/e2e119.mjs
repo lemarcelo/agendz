@@ -23,8 +23,9 @@ const srv = await subirServidor((c, { json }) => {
 const nav = await abrirNavegador();
 try {
   for (const tipo of ['estetica_automotiva', 'barbearia']) {
-    estado.loja = { slug: 'teste', nome: 'Loja teste', tipo };
-    for (const width of [390, 1366, 1904]) for (const tema of ['light', 'dark']) {
+    estado.loja = { slug: 'teste', nome: tipo === 'barbearia' ? 'Barbearia Dalforno' : 'Apex Estética Automotiva', tipo,
+      logo: tipo === 'barbearia' ? 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+nmZsAAAAASUVORK5CYII=' : null };
+    for (const width of [390, 939, 1366, 1904]) for (const tema of ['light', 'dark']) {
       ags = [];
       const { ctx, p } = await nav.abrir(srv.url, { viewport: { width, height: 1000 }, fonteLarga: true });
       try {
@@ -34,6 +35,14 @@ try {
         const principal = await p.locator('.app-real .principal').boundingBox();
         assert.ok(principal.width <= 1441, 'conteúdo não deve esticar em telas largas');
         const cabecalho = await p.locator('.app-real .topo').boundingBox();
+        if (width > 900) {
+          const marcaTopo = await p.getByTestId('marca-inicio-real').boundingBox();
+          const menuTopo = await p.locator('.app-real .nav').boundingBox();
+          assert.ok(menuTopo.x >= marcaTopo.x + marcaTopo.width - 1, 'menu deve ficar ao lado da marca no computador');
+          assert.ok(menuTopo.y < marcaTopo.y + marcaTopo.height, 'menu deve iniciar na mesma linha da marca');
+          assert.ok(Math.abs((menuTopo.y + menuTopo.height / 2) - (marcaTopo.y + marcaTopo.height / 2)) <= 2, 'marca e menu devem estar centralizados verticalmente');
+          assert.ok(cabecalho.height <= 140, `topo excessivamente alto: ${cabecalho.height}`);
+        }
         for (const el of await p.locator('.app-real .topo button:visible').all()) {
           const rect = await el.boundingBox();
           assert.ok(rect.x >= -1 && rect.x + rect.width <= width + 1 && rect.y >= cabecalho.y - 1 && rect.y + rect.height <= cabecalho.y + cabecalho.height + 1, 'controle do topo fora da tela ou do cabeçalho');
