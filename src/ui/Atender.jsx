@@ -3,7 +3,7 @@ import ListaItens from './ListaItens.jsx';
 import PickerCliente from './PickerCliente.jsx';
 import { porUltimoUso } from '../domain/codigo.js';
 import { servicosNaOrdemDaLoja } from '../domain/ordem-servicos.js';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { agenda, agendamentosVisiveis, planos as apiPlanos } from '../services/api.js';
 import { rotuloMes as rotuloMesPlano } from '../domain/planos.js';
 import { acharClientePorTelefone, CAMPOS_DE_VEICULO, camposObrigatorios, nomeMaisCompleto } from '../domain/engine.js';
@@ -50,7 +50,7 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
   const [etapaAtiva, setEtapaAtiva] = useState(0);
 
   // Limpa erros ao navegar entre as etapas do atendimento
-  useEffect(() => { setErro(''); }, [etapaAtiva]);
+  useEffect(() => { setErros([]); }, [etapaAtiva]);
 
   const inicio = personalizar && data ? tsAt(fromYmd(data), minutos) : null;
   const futuro = inicio != null && inicio > agora + 60000;

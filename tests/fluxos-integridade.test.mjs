@@ -19,7 +19,7 @@ test('anti-leak de erro em wizards: componentes multi-etapa limpam erro na troca
     const temEtapa = /\[\s*(etapa|etapaAtiva)\s*,\s*set(Etapa|EtapaAtiva)\s*\]/.test(conteudo);
     assert.ok(temEtapa, `${arq} deve ter controle de etapa`);
 
-    const limpaErroEmHook = /useEffect\(\s*\(\)\s*=>\s*\{\s*setErro\(''\);\s*\}\s*,\s*\[\s*(etapa|etapaAtiva)\s*\]\s*\)/.test(conteudo);
+    const limpaErroEmHook = /useEffect\(\s*\(\)\s*=>\s*\{\s*setErros?\(\s*(''|\[\])\s*\);\s*\}\s*,\s*\[\s*(etapa|etapaAtiva)\s*\]\s*\)/.test(conteudo);
     assert.ok(limpaErroEmHook, `${arq} deve limpar erro via useEffect na troca de etapa`);
   }
 });
