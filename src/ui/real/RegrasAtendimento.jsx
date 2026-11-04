@@ -32,39 +32,31 @@ export default function RegrasAtendimento() {
 
   if (!regras) return <section className="regras-real" data-testid="regras-real">{erro ? <Aviso tipo="erro" data-testid="regras-erro">{erro}</Aviso> : <p className="muted" role="status">Carregando…</p>}</section>;
 
-  const persistir = (novasRegras) => {
-    regrasRef.current = { ...regrasRef.current, ...novasRegras };
-    setRegras(regrasRef.current);
-    setOk(''); setErro('');
-    setSalvando(true);
-    filaPersistir.current = filaPersistir.current.then(async () => {
-      const atual = { ...regrasRef.current };
-      const r = await api.gravar({
-        formaPagamentoPadrao: atual.formaPagamentoPadrao,
-        camposObrigatorios: { futuro: atual.futuro, local: atual.local },
-        ordemServicos: atual.ordemServicos,
-        profissionalAutomatico: atual.profissionalAutomatico,
-        ordemAtender: atual.ordemAtender,
-      });
-      setSalvando(false);
-      if (!r.ok) { setErro(r.erro); return; }
-      if (r.regras) {
-        regrasRef.current = r.regras;
-        setRegras(r.regras);
-      }
-      setOk('Regras salvas.');
-    });
-    return filaPersistir.current;
-  };
-
   const alternar = (tipo, campo) => {
-    const atual = regrasRef.current;
-    const lista = atual[tipo].includes(campo) ? atual[tipo].filter((x) => x !== campo) : [...atual[tipo], campo];
-    persistir({ ...atual, [tipo]: lista });
+    setOk(''); setErro('');
+    const atual = { ...regrasRef.current, [tipo]: regrasRef.current[tipo].includes(campo) ? regrasRef.current[tipo].filter((x) => x !== campo) : [...regrasRef.current[tipo], campo] };
+    regrasRef.current = atual;
+    setRegras(atual);
   };
   const salvar = async (e) => {
-    e.preventDefault();
-    await persistir(regrasRef.current);
+    if (e) e.preventDefault();
+    if (salvando) return;
+    setSalvando(true); setErro(''); setOk('');
+    const atual = regrasRef.current;
+    const r = await api.gravar({
+      formaPagamentoPadrao: atual.formaPagamentoPadrao,
+      camposObrigatorios: { futuro: atual.futuro, local: atual.local },
+      ordemServicos: atual.ordemServicos,
+      profissionalAutomatico: atual.profissionalAutomatico,
+      ordemAtender: atual.ordemAtender,
+    });
+    setSalvando(false);
+    if (!r.ok) { setErro(r.erro); return; }
+    if (r.regras) {
+      regrasRef.current = r.regras;
+      setRegras(r.regras);
+    }
+    setOk('Regras salvas.');
   };
   const grupo = (tipo, titulo, campos) => (
     <fieldset className="atender-real-bloco" data-testid={`regras-${tipo}`}>
@@ -79,18 +71,18 @@ export default function RegrasAtendimento() {
     <form className="regras-real" onSubmit={salvar} data-testid="regras-real" aria-label="Regras do atendimento">
       <h3>Regras do atendimento</h3>
       <Campo rotulo="Forma de pagamento padrão (atendimento feito)">
-        <select value={regras.formaPagamentoPadrao} onChange={(e) => persistir({ ...regrasRef.current, formaPagamentoPadrao: e.target.value })} data-testid="regras-forma">
+        <select value={regras.formaPagamentoPadrao} onChange={(e) => { setOk(''); setErro(''); const atual = { ...regrasRef.current, formaPagamentoPadrao: e.target.value }; regrasRef.current = atual; setRegras(atual); }} data-testid="regras-forma">
           {FORMAS_PAGAMENTO.map(([k, r]) => <option key={k} value={k}>{r}</option>)}
           <option value="">Sem padrão (perguntar sempre)</option>
         </select>
       </Campo>
       <Campo rotulo="Ordem dos serviços no Atender e no link" dica="Mais usados: os que mais saem ficam em cima. Minha ordem: a que você montou na lista de Serviços (setas).">
-        <select value={regras.ordemServicos} onChange={(e) => persistir({ ...regrasRef.current, ordemServicos: e.target.value })} data-testid="regras-ordem-servicos">
+        <select value={regras.ordemServicos} onChange={(e) => { setOk(''); setErro(''); const atual = { ...regrasRef.current, ordemServicos: e.target.value }; regrasRef.current = atual; setRegras(atual); }} data-testid="regras-ordem-servicos">
           <option value="uso">Mais usados primeiro</option><option value="manual">Minha ordem</option>
         </select>
       </Campo>
-      <label className="check-linha"><input type="checkbox" checked={regras.profissionalAutomatico} onChange={(e) => persistir({ ...regrasRef.current, profissionalAutomatico: e.target.checked })} data-testid="regras-profissional-auto" /><span>Não perguntar quem vai fazer o serviço: o app escolhe quem está com a agenda mais livre (no Atender e no link do cliente)</span></label>
-      <OrdemAtender valor={regras.ordemAtender} padrao={capAtiva('usaVeiculo') ? COMO_A_PAGINA_DO_CLIENTE : PADRAO_PAINEL} usaVeiculo={capAtiva('usaVeiculo')} aoMudar={(v) => persistir({ ...regrasRef.current, ordemAtender: v })} />
+      <label className="check-linha"><input type="checkbox" checked={regras.profissionalAutomatico} onChange={(e) => { setOk(''); setErro(''); const atual = { ...regrasRef.current, profissionalAutomatico: e.target.checked }; regrasRef.current = atual; setRegras(atual); }} data-testid="regras-profissional-auto" /><span>Não perguntar quem vai fazer o serviço: o app escolhe quem está com a agenda mais livre (no Atender e no link do cliente)</span></label>
+      <OrdemAtender valor={regras.ordemAtender} padrao={capAtiva('usaVeiculo') ? COMO_A_PAGINA_DO_CLIENTE : PADRAO_PAINEL} usaVeiculo={capAtiva('usaVeiculo')} aoMudar={(v) => { setOk(''); setErro(''); const atual = { ...regrasRef.current, ordemAtender: v }; regrasRef.current = atual; setRegras(atual); }} />
       {grupo('futuro', 'Campos obrigatórios no agendamento (data futura)', CAMPOS_FUTURO())}
       {grupo('local', 'Campos obrigatórios no atendimento feito (agora ou passado)', CAMPOS_LOCAL())}
       {erro && <Aviso tipo="erro" data-testid="regras-erro">{erro}</Aviso>}

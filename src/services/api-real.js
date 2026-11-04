@@ -466,12 +466,19 @@ export const clientes = {
   async salvar(d) {
     d = d && typeof d === 'object' ? d : {};
     const corpo = {};
+    const edicao = d.id !== undefined && d.id !== null && d.id !== '';
     for (const [k, max] of [['nome', 100], ['apelido', 100], ['telefone', 30], ['cpf', 20], ['nascimento', 10]]) if (typeof d[k] === 'string') corpo[k] = d[k].slice(0, max);
     if (typeof d.semMensagens === 'boolean') corpo.semMensagens = d.semMensagens; // pediu para não receber mensagens (fora da estrela e da fila em lote)
-    if (typeof d.parceiro === 'boolean') corpo.parceiro = d.parceiro;
-    if (d.parceiroDescontoPct !== undefined) corpo.parceiroDescontoPct = d.parceiroDescontoPct === null || d.parceiroDescontoPct === '' ? null : Number(d.parceiroDescontoPct);
+    if (d.parceiro === true) {
+      corpo.parceiro = true;
+      if (d.parceiroDescontoPct !== undefined && d.parceiroDescontoPct !== null && d.parceiroDescontoPct !== '') {
+        corpo.parceiroDescontoPct = Number(d.parceiroDescontoPct);
+      }
+    } else if (edicao && d.parceiro === false) {
+      corpo.parceiro = false;
+      corpo.parceiroDescontoPct = null;
+    }
     if (Array.isArray(d.veiculos)) corpo.veiculos = d.veiculos.slice(0, 50).map((v) => ({ ...(ID.test(String(v && v.id)) ? { id: v.id } : {}), placa: texto(v && v.placa, 16), marca: texto(v && v.marca, 30), modelo: texto(v && v.modelo, 40), cor: texto(v && v.cor, 20), porte: texto(v && v.porte, 16) }));
-    const edicao = d.id !== undefined && d.id !== null && d.id !== '';
     if (edicao && !ID.test(String(d.id))) return { ok: false, status: 0, erro: 'Cliente não encontrado' };
     const r = await chamar(edicao ? 'PUT' : 'POST', edicao ? `/api/clientes/${d.id}` : '/api/clientes', corpo);
     return r.ok ? { ok: true, cliente: lerCliente(r.dados) } : r;

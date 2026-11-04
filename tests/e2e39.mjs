@@ -84,7 +84,7 @@ const semRolagem = async (p, nome) => assert.ok(await p.evaluate(() => document.
 {
   const { ctx, p } = await abrir();
   assert.equal(await p.getByTestId('nav-clientes').count(), 1);
-  assert.equal(await p.locator('[data-testid^="nav-"]').count(), 14, 'só Início, Clientes, Serviços, Equipe, Planos, Cupons, Avaliações, Estabelecimento, Estoque, Relatórios, Comissões, Agenda, Boxes (estética) e Suporte: nada de botão de tela que não existe');
+  assert.equal(await p.locator('[data-testid^="nav-"]').count(), 13, 'só Início, Clientes, Serviços, Equipe, Planos, Cupons, Estabelecimento, Estoque, Relatórios, Comissões, Agenda, Boxes (estética) e Suporte: nada de botão de tela que não existe');
   await acessarSecao(p, 'nav-clientes');
   await p.getByTestId('cli-vazio').waitFor();
   await p.getByTestId('novo-cliente').click();
