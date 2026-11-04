@@ -29,7 +29,7 @@ public class LinkAgendamento {
     public static final int DIAS_MAXIMO = 60;
     public static final int LIMITE_ABERTOS_PADRAO = 3;
     public static final int LIMITE_ABERTOS_MAXIMO = 20;
-    public static final int INTERVALO_MIN_PADRAO = 20;
+    public static final int INTERVALO_MIN_PADRAO = 0;
     public static final int INTERVALO_MIN_MAXIMO = 60;
 
     /** Campos do veículo que o link pode exigir (v121). Lista vazia = o cliente pode pedir sem dizer nada do veículo (vale o porte médio). */
@@ -85,7 +85,7 @@ public class LinkAgendamento {
 
     /** Configuração gravada da loja atual (dentro de uma transação já aberta). */
     public static Config ler(JdbcTemplate jdbc) {
-        List<Config> l = jdbc.query("select link_ativo, link_dias_max, link_telefone_obrigatorio, link_nome_obrigatorio, link_veiculo_obrigatorio, link_limite_abertos, recaptcha_chave_site, recaptcha_segredo, coalesce(link_intervalo_min, 20) from configuracao_loja",
+        List<Config> l = jdbc.query("select link_ativo, link_dias_max, link_telefone_obrigatorio, link_nome_obrigatorio, link_veiculo_obrigatorio, link_limite_abertos, recaptcha_chave_site, recaptcha_segredo, coalesce(link_intervalo_min, 0) from configuracao_loja",
                 (rs, i) -> new Config(rs.getBoolean(1), rs.getInt(2), rs.getBoolean(3), rs.getBoolean(4), veiculoDe(rs.getString(5)), rs.getInt(6), rs.getString(7), rs.getString(8), rs.getInt(9)));
         return l.isEmpty() ? new Config(true, DIAS_PADRAO, true, true, VEICULO_DO_LINK, LIMITE_ABERTOS_PADRAO, null, null, INTERVALO_MIN_PADRAO) : l.get(0);
     }
