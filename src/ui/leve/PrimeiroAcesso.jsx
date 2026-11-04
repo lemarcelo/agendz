@@ -304,7 +304,19 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
         <header className="pa-topo">
           {reconf && aoCancelar && <div className="acoes"><Btn tamanho="sm" onClick={aoCancelar} data-testid="pa-voltar">Voltar</Btn></div>}
           <h1>{reconf ? `Reconfigurar ${nomeLoja || 'sua loja'}` : `Vamos preparar ${nomeLoja || 'sua loja'}`}</h1>
-          {reconf && <p className="muted" data-testid="pa-reconf-nota">Aqui você só adiciona: serviços, produtos e pessoas que já existem continuam como estão e ninguém é excluído. O horário de funcionamento, se você salvar, substitui o atual. Dá para desfazer pelo histórico abaixo (por 30 dias).</p>}
+          {reconf && (
+            <div className="pa-reconf-aviso-perigo" style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.4)', borderRadius: 8, padding: '12px 14px', margin: '10px 0 14px', textAlign: 'left' }}>
+              <b style={{ color: '#ef4444', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                ⚠️ Cuidado: Ação Crítica de Reconfiguração
+              </b>
+              <p style={{ margin: '6px 0 0', fontSize: 13, lineHeight: 1.45, color: 'var(--fg)' }}>
+                Esta tela altera as definições estruturais da sua loja. <b>Mudanças indevidas no expediente ou nas configurações podem desorganizar a grade de horários abertos e impactar o atendimento dos clientes.</b>
+              </p>
+              <p className="muted" style={{ margin: '6px 0 0', fontSize: 12 }} data-testid="pa-reconf-nota">
+                Aqui você só adiciona: serviços, produtos e pessoas que já existem continuam como estão e ninguém é excluído. O horário de funcionamento, se você salvar, substitui o atual. Dá para desfazer pelo histórico abaixo (por 30 dias).
+              </p>
+            </div>
+          )}
           {previa && <Aviso data-testid="pa-previa">Pré-visualização: nada do que você marcar aqui é gravado.</Aviso>}
           {!precisaSenha && <ol className="pa-passos" aria-label="Etapas">
             {etapas.map(([id, nome], i) => <li key={id} className={i === indice ? 'atual' : i < indice ? 'feito' : ''} aria-current={i === indice ? 'step' : undefined} data-testid={`pa-etapa-${id}`}><span>{i + 1}</span> {nome}</li>)}
@@ -316,7 +328,9 @@ export default function PrimeiroAcesso({ tipo, nomeLoja, adaptador, aoConcluir, 
 
         {fase === 'ok' && precisaSenha && (
           <section data-testid="pa-reconf-senha-tela">
-            <p>Para reconfigurar a loja, confirme a sua senha. O que for mudado fica no histórico e dá para desfazer; nada que já foi lançado (agendamentos, clientes, financeiro, comissões) é alterado.</p>
+            <p style={{ fontWeight: 500, color: '#fca5a5' }}>
+              ⚠️ Para evitar reconfigurações acidentais ou não autorizadas, confirme a sua senha do usuário antes de continuar:
+            </p>
             <Campo rotulo="Sua senha"><input type="password" autoComplete="current-password" value={senhaTxt} onChange={(e) => { setSenhaTxt(e.target.value); setErro(''); }} maxLength={100} data-testid="pa-reconf-senha" /></Campo>
             {aviso && <Aviso data-testid="pa-aviso">{aviso}</Aviso>}
             {erro && <Aviso tipo="erro" data-testid="pa-erro">{erro}</Aviso>}

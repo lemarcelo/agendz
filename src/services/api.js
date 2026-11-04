@@ -441,8 +441,10 @@ export const clientes = {
   // POST /clientes  |  PUT /clientes/{id}
   salvar(entrada) {
     if (!R.pode(usuario(), 'clientes')) return semPermissao();
-    const c = { ...pegar(entrada, permitidos(['id', 'nome', 'apelido', 'telefone', 'cpf', 'nascimento', 'veiculos', 'semMensagens'])) };
+    const c = { ...pegar(entrada, permitidos(['id', 'nome', 'apelido', 'telefone', 'cpf', 'nascimento', 'veiculos', 'semMensagens', 'parceiro', 'parceiroDescontoPct'])) };
     if ('semMensagens' in c && typeof c.semMensagens !== 'boolean') return erro('Opção de receber mensagens inválida.');
+    if ('parceiro' in c && typeof c.parceiro !== 'boolean') return erro('Opção de cliente parceiro inválida.');
+    if ('parceiroDescontoPct' in c && c.parceiroDescontoPct !== null && c.parceiroDescontoPct !== '' && (Number(c.parceiroDescontoPct) < 0 || Number(c.parceiroDescontoPct) > 100)) return erro('Desconto de parceiro deve ser entre 0 e 100%.');
     for (const k of ['nome', 'apelido', 'telefone', 'cpf', 'nascimento']) if (k in c && !texto(c[k], 100)) return erro('Texto inválido ou grande demais em ' + k + '.');
     if ('veiculos' in c && !(Array.isArray(c.veiculos) && c.veiculos.length <= LIMITE_VEICULOS && c.veiculos.every((v) => v && typeof v === 'object' && !Array.isArray(v)))) return erro(`Veículos inválidos: no máximo ${LIMITE_VEICULOS} por cliente.`);
     if (c.veiculos) c.veiculos = c.veiculos.map((v) => pegar(v, ['id', 'placa', 'marca', 'modelo', 'cor', 'porte']));
@@ -1115,7 +1117,7 @@ export const estabelecimento = {
       if ('nomeObrigatorio' in l && typeof l.nomeObrigatorio !== 'boolean') return erro('Link de agendamento inválido: nome obrigatório é sim ou não.');
       if ('limiteAbertos' in l && !(Number.isInteger(l.limiteAbertos) && l.limiteAbertos >= 1 && l.limiteAbertos <= PU.MAX_ABERTOS_LINK_TETO)) return erro(`Link de agendamento inválido: de 1 a ${PU.MAX_ABERTOS_LINK_TETO} horários por cliente.`);
       if ('veiculoObrigatorio' in l && !(Array.isArray(l.veiculoObrigatorio) && l.veiculoObrigatorio.length <= 4 && new Set(l.veiculoObrigatorio).size === l.veiculoObrigatorio.length && l.veiculoObrigatorio.every((x) => CAMPOS_VEICULO_EXIGIVEIS.includes(x)))) return erro('Link de agendamento inválido: dados do veículo obrigatórios.');
-      patch.linkAgendamento = { ativo: l.ativo, diasMax: l.diasMax, telefoneObrigatorio: l.telefoneObrigatorio !== false, nomeObrigatorio: l.nomeObrigatorio !== false, veiculoObrigatorio: Array.isArray(l.veiculoObrigatorio) ? [...l.veiculoObrigatorio] : [...PU.VEICULO_DE_FABRICA_NO_LINK], limiteAbertos: Number.isInteger(l.limiteAbertos) ? l.limiteAbertos : PU.MAX_ABERTOS_LINK };
+      patch.linkAgendamento = { ativo: l.ativo, diasMax: l.diasMax, telefoneObrigatorio: l.telefoneObrigatorio !== false, nomeObrigatorio: l.nomeObrigatorio !== false, veiculoObrigatorio: Array.isArray(l.veiculoObrigatorio) ? [...l.veiculoObrigatorio] : [...PU.VEICULO_DE_FABRICA_NO_LINK], limiteAbertos: Number.isInteger(l.limiteAbertos) ? l.limiteAbertos : PU.MAX_ABERTOS_LINK, intervaloMin: Number.isInteger(l.intervaloMin) ? Math.min(60, Math.max(0, l.intervaloMin)) : 20 };
     }
     if ('usaIntegracaoPix' in patch && typeof patch.usaIntegracaoPix !== 'boolean') return erro('Opção de integração Pix inválida.');
     if ('formaPagamentoPadrao' in patch && patch.formaPagamentoPadrao !== '' && !R.formaValida(patch.formaPagamentoPadrao)) return erro('Forma de pagamento padrão inválida.');
@@ -1130,7 +1132,7 @@ export const estabelecimento = {
       if (!ok) return erro('Campos obrigatórios inválidos.');
       patch.camposObrigatorios = { futuro: [...c.futuro], local: [...c.local] };
     }
-    if ('ordemAtender' in patch) { if (!ordemAtenderValida(patch.ordemAtender)) return erro('Ordem do Atender inválida.'); patch.ordemAtender = sanearOrdemAtender(patch.ordemAtender, PADRAO_ARTIFACT); } // v133
+    if ('ordemAtender' in patch) { if (!ordemAtenderValida(patch.ordemAtender)) return erro('A escolha do serviço deve vir antes da escolha do horário.'); patch.ordemAtender = sanearOrdemAtender(patch.ordemAtender, PADRAO_ARTIFACT); } // v133
     if ('profissionalAutomatico' in patch && typeof patch.profissionalAutomatico !== 'boolean') return erro('Escolha automática do profissional: sim ou não.');
     if ('ordemServicos' in patch && !modoOrdemValido(patch.ordemServicos)) return erro('Ordem dos serviços inválida: mais usados primeiro ou a ordem que você definiu.');
     if ('visaoPadrao' in patch && !['dia', 'semana', 'mes'].includes(patch.visaoPadrao)) return erro('Visão padrão inválida.');

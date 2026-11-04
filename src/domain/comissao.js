@@ -16,11 +16,14 @@ const semComissao = (u) => !u || u.papel === 'dono' || u.papel === 'master'; // 
 // Por serviço: base (o que o cliente pagou pelo serviço: valor + acréscimo − cupom), percentual do profissional, comissão e parte do estabelecimento.
 export function comissaoDoAgendamento(st, a) {
   const profissional = st.usuarios.find((u) => u.id === a.profissionalId);
+  const cliente = a.clienteId && st.clientes ? st.clientes.find((c) => c.id === a.clienteId) : null;
+  const ehParceiro = a.parceiro === true || !!(cliente && cliente.parceiro);
+  const pagaComissaoParceiro = st.configuracao?.comissaoParceiro === true;
   const itens = itensDoAgendamento(st, a).map((i) => {
     const sv = st.servicos.find((x) => x.id === i.id);
     const pct = a.comissoes && a.comissoes[i.id] !== undefined ? a.comissoes[i.id] : pctComissao(st, profissional, sv);
     const base = Math.max(0, r2(i.valor + i.acrescimo - (i.desconto || 0)));
-    const comissao = r2((base * pct) / 100);
+    const comissao = (ehParceiro && !pagaComissaoParceiro) ? 0 : r2((base * pct) / 100);
     return { id: i.id, nome: i.nome, base, pct, comissao, casa: r2(base - comissao) };
   });
   // Produto vendido: comissão só se o produto tinha percentual quando foi adicionado (congelado em `p.pct`); sem percentual, tudo fica com o estabelecimento.

@@ -3,7 +3,6 @@
 // temporária e mostra o painel com o menu. Os módulos entram um a um (Clientes na parte 2, Serviços na 3, Equipe na 4; a agenda na seguinte), cada um só
 // quando o servidor tem a regra inteira. Não importa `api.js` (a simulada) nem `hooks.js`: o estado aqui é só o da sessão real, em memória.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { lerHashAvaliar } from '../../domain/link-publico.js';
 import { aparelhos as apiAparelhos, cancelarEspera, carregarLoja, entrar, esperandoRede, onboarding, passkey, perfil as apiPerfil, portes as apiPortes, quandoEsperar, redes as apiRedes, restaurar, sair, sessaoAtual, suporte as apiSuporte, tokenDeRedeConfiavel, trocarSenha } from '../../services/api-real.js';
 import { esquecerSessaoDaRede, lembrarSessaoDaRede, sessaoGuardada } from './sessao-rede.js';
 import { ehCelular, rotuloDoAparelho } from '../../domain/aparelho.js';
@@ -22,8 +21,6 @@ import RegrasAtendimento from './RegrasAtendimento.jsx';
 import Cupons from './Cupons.jsx';
 import Planos from './Planos.jsx';
 import AgendarPublico from './AgendarPublico.jsx';
-import AvaliarPublico from './AvaliarPublico.jsx';
-import Avaliacoes from './Avaliacoes.jsx';
 import LinkAgendamento from './LinkAgendamento.jsx';
 import Avisos from './Avisos.jsx';
 import Suporte from '../leve/Suporte.jsx';
@@ -302,7 +299,6 @@ function Painel({ loja, sessao, aoSair, aoMudarMarca }) {
   if (dono && capAtiva('usaRecursoFisico')) itens.push(['boxes', 'Boxes', 'car']);
   if (dono || (sessao.secoes || []).includes('estabelecimento')) itens.push(['cupons', 'Cupons', 'tag']);
   if (dono || (sessao.secoes || []).includes('planos')) itens.push(['planos', 'Planos', 'ticket']);
-  if (dono || (sessao.secoes || []).includes('avaliacoes') || sessao.papel === 'profissional') itens.push(['avaliacoes', 'Avaliações', 'star']); // o profissional sem a seção vê só as dele (o servidor decide)
   if (dono || (sessao.secoes || []).includes('estoque')) itens.push(['estoque', 'Estoque', 'box']);
   if (dono || (sessao.secoes || []).includes('estabelecimento')) itens.push(['estabelecimento', 'Estabelecimento', 'store']);
   if (dono) itens.push(['relatorios', 'Relatórios', 'list']);
@@ -364,14 +360,13 @@ function Painel({ loja, sessao, aoSair, aoMudarMarca }) {
               <Avisos />
             </section>
           )}
-          {aba === 'agenda' && <Agenda ehProprietario={dono} aoIrBoxes={setAba} destaqueIds={Object.keys(destaques)} foco={foco} recarregar={recarregar} nomeLoja={loja.nome} meuId={sessao.id} ehProprio={sessao.papel === 'profissional'} ehDono={dono || sessao.papel === 'admin' || sessao.papel === 'atendente'} />}
+          {aba === 'agenda' && <Agenda ehProprietario={dono} podeSuporte={dono || (sessao.secoes || []).includes('suporte') || sessao.papel === 'suporte'} aoIrBoxes={setAba} destaqueIds={Object.keys(destaques)} foco={foco} recarregar={recarregar} nomeLoja={loja.nome} meuId={sessao.id} ehProprio={sessao.papel === 'profissional'} ehDono={dono || sessao.papel === 'admin' || sessao.papel === 'atendente'} />}
           {aba === 'clientes' && <Clientes podePlanos={dono || (sessao.secoes || []).includes('planos')} aoIr={setAba} />}
           {aba === 'servicos' && <Servicos ehDono={dono || (sessao.secoes || []).includes('servicos')} />}
           {aba === 'equipe' && dono && <Equipe meuId={sessao.id} />}
           {aba === 'boxes' && dono && <Boxes />}
           {aba === 'cupons' && (dono || (sessao.secoes || []).includes('estabelecimento')) && <Cupons />}
           {aba === 'planos' && (dono || (sessao.secoes || []).includes('planos')) && <Planos />}
-          {aba === 'avaliacoes' && (dono || (sessao.secoes || []).includes('avaliacoes') || sessao.papel === 'profissional') && <Avaliacoes dono={dono} podeLote={dono || (sessao.secoes || []).includes('avaliacoes')} />}
           {aba === 'estoque' && (dono || (sessao.secoes || []).includes('estoque')) && <Estoque ehDono={dono} />}
           {aba === 'estabelecimento' && (dono || (sessao.secoes || []).includes('estabelecimento')) && <Estabelecimento ehDono={dono} aoReconfigurar={() => setReconfigurando(true)} aoMudarMarca={aoMudarMarca} />}
           {aba === 'relatorios' && dono && <Relatorios />}
@@ -465,17 +460,6 @@ export default function AppReal() {
   if (estado.fase === 'carregando') return <><AvisoRede /><main className="login"><div className="login-cartao" role="status" data-testid="carregando"><p className="muted">Carregando…</p></div></main></>;
   if (estado.fase === 'sem-loja') return <Cartao><h1>Loja não encontrada</h1><p className="muted" data-testid="loja-nao-encontrada">O endereço usado não aponta para nenhuma loja do Agendz. Confira o link com o estabelecimento.</p></Cartao>;
   if (estado.fase === 'erro') return <Cartao><h1>Não foi possível abrir</h1><Aviso tipo="erro" data-testid="erro-carga">{estado.erro}</Aviso><Btn variante="primario" onClick={carregar} data-testid="tentar-de-novo">Tentar de novo</Btn></Cartao>;
-  const avaliar = lerHashAvaliar(hash);
-  if (avaliar) {
-    return (
-      <>
-        <AvisoRede />
-        {loja?.emHomologacao && <div className="faixa-homologacao" data-testid="faixa-homologacao">Modo de homologação ativo — lançamentos são de teste; mensagens e cobranças estão desativadas.</div>}
-        {css && <style id="tema-marca">{css}</style>}
-        <AvaliarPublico loja={loja} token={avaliar.token} aoVoltar={sessao ? () => { globalThis.location.hash = ''; } : null} />
-      </>
-    );
-  }
   const publica = PUBLICA.exec(hash);
   if (publica) {
     return (

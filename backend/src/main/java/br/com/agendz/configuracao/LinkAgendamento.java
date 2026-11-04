@@ -29,21 +29,26 @@ public class LinkAgendamento {
     public static final int DIAS_MAXIMO = 60;
     public static final int LIMITE_ABERTOS_PADRAO = 3;
     public static final int LIMITE_ABERTOS_MAXIMO = 20;
+    public static final int INTERVALO_MIN_PADRAO = 20;
+    public static final int INTERVALO_MIN_MAXIMO = 60;
 
     /** Campos do veículo que o link pode exigir (v121). Lista vazia = o cliente pode pedir sem dizer nada do veículo (vale o porte médio). */
     public static final List<String> VEICULO_DO_LINK = List.of("placa", "modelo", "porte");
 
-    public record Config(boolean ativo, int diasMax, boolean telefoneObrigatorio, boolean nomeObrigatorio, List<String> veiculoObrigatorio, int limiteAbertos, String recaptchaChaveSite, String recaptchaSegredo) {
+    public record Config(boolean ativo, int diasMax, boolean telefoneObrigatorio, boolean nomeObrigatorio, List<String> veiculoObrigatorio, int limiteAbertos, String recaptchaChaveSite, String recaptchaSegredo, int intervaloMin) {
+        public Config(boolean ativo, int diasMax, boolean telefoneObrigatorio, boolean nomeObrigatorio, List<String> veiculoObrigatorio, int limiteAbertos, String recaptchaChaveSite, String recaptchaSegredo) {
+            this(ativo, diasMax, telefoneObrigatorio, nomeObrigatorio, veiculoObrigatorio, limiteAbertos, recaptchaChaveSite, recaptchaSegredo, INTERVALO_MIN_PADRAO);
+        }
         public Config(boolean ativo, int diasMax, boolean telefoneObrigatorio, boolean nomeObrigatorio, List<String> veiculoObrigatorio, int limiteAbertos) {
-            this(ativo, diasMax, telefoneObrigatorio, nomeObrigatorio, veiculoObrigatorio, limiteAbertos, null, null);
+            this(ativo, diasMax, telefoneObrigatorio, nomeObrigatorio, veiculoObrigatorio, limiteAbertos, null, null, INTERVALO_MIN_PADRAO);
         }
     }
 
     public record Resposta(boolean ativo, int diasMax, boolean disponivel, boolean telefoneObrigatorio, boolean nomeObrigatorio, List<String> veiculoObrigatorio, List<String> pendencias,
-                           int limiteAbertos, BarradosDoLink.Resumo barrados, String recaptchaChaveSite, boolean recaptchaSegredoConfigurado) {
+                           int limiteAbertos, BarradosDoLink.Resumo barrados, String recaptchaChaveSite, boolean recaptchaSegredoConfigurado, int intervaloMin) {
     }
 
-    public record Corpo(Boolean ativo, Integer diasMax, Boolean telefoneObrigatorio, Boolean nomeObrigatorio, List<String> veiculoObrigatorio, Integer limiteAbertos, String recaptchaChaveSite, String recaptchaSegredo) {
+    public record Corpo(Boolean ativo, Integer diasMax, Boolean telefoneObrigatorio, Boolean nomeObrigatorio, List<String> veiculoObrigatorio, Integer limiteAbertos, String recaptchaChaveSite, String recaptchaSegredo, Integer intervaloMin) {
     }
 
     private final LojaJdbc banco;
@@ -80,18 +85,18 @@ public class LinkAgendamento {
 
     /** Configuração gravada da loja atual (dentro de uma transação já aberta). */
     public static Config ler(JdbcTemplate jdbc) {
-        List<Config> l = jdbc.query("select link_ativo, link_dias_max, link_telefone_obrigatorio, link_nome_obrigatorio, link_veiculo_obrigatorio, link_limite_abertos, recaptcha_chave_site, recaptcha_segredo from configuracao_loja",
-                (rs, i) -> new Config(rs.getBoolean(1), rs.getInt(2), rs.getBoolean(3), rs.getBoolean(4), veiculoDe(rs.getString(5)), rs.getInt(6), rs.getString(7), rs.getString(8)));
-        return l.isEmpty() ? new Config(true, DIAS_PADRAO, true, true, VEICULO_DO_LINK, LIMITE_ABERTOS_PADRAO, null, null) : l.get(0);
+        List<Config> l = jdbc.query("select link_ativo, link_dias_max, link_telefone_obrigatorio, link_nome_obrigatorio, link_veiculo_obrigatorio, link_limite_abertos, recaptcha_chave_site, recaptcha_segredo, coalesce(link_intervalo_min, 20) from configuracao_loja",
+                (rs, i) -> new Config(rs.getBoolean(1), rs.getInt(2), rs.getBoolean(3), rs.getBoolean(4), veiculoDe(rs.getString(5)), rs.getInt(6), rs.getString(7), rs.getString(8), rs.getInt(9)));
+        return l.isEmpty() ? new Config(true, DIAS_PADRAO, true, true, VEICULO_DO_LINK, LIMITE_ABERTOS_PADRAO, null, null, INTERVALO_MIN_PADRAO) : l.get(0);
     }
 
     /** Grava a configuração do link da loja (cria a linha se não existir). Usado pelo PUT e pelo assistente/Reconfigurar (B9a). */
     public static void gravarConfig(JdbcTemplate jdbc, java.util.UUID lojaId, Config n) {
-        jdbc.update("insert into configuracao_loja (loja_id, link_ativo, link_dias_max, link_telefone_obrigatorio, link_nome_obrigatorio, link_veiculo_obrigatorio, link_limite_abertos, recaptcha_chave_site, recaptcha_segredo) values (?::uuid, ?, ?, ?, ?, ?, ?, ?, ?) "
+        jdbc.update("insert into configuracao_loja (loja_id, link_ativo, link_dias_max, link_telefone_obrigatorio, link_nome_obrigatorio, link_veiculo_obrigatorio, link_limite_abertos, recaptcha_chave_site, recaptcha_segredo, link_intervalo_min) values (?::uuid, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
                         + "on conflict (loja_id) do update set link_ativo = excluded.link_ativo, link_dias_max = excluded.link_dias_max, link_telefone_obrigatorio = excluded.link_telefone_obrigatorio, "
                         + "link_nome_obrigatorio = excluded.link_nome_obrigatorio, link_veiculo_obrigatorio = excluded.link_veiculo_obrigatorio, link_limite_abertos = excluded.link_limite_abertos, "
-                        + "recaptcha_chave_site = excluded.recaptcha_chave_site, recaptcha_segredo = excluded.recaptcha_segredo, atualizado_em = now()",
-                lojaId.toString(), n.ativo(), n.diasMax(), n.telefoneObrigatorio(), n.nomeObrigatorio(), String.join(",", n.veiculoObrigatorio()), n.limiteAbertos(), n.recaptchaChaveSite(), n.recaptchaSegredo());
+                        + "recaptcha_chave_site = excluded.recaptcha_chave_site, recaptcha_segredo = excluded.recaptcha_segredo, link_intervalo_min = excluded.link_intervalo_min, atualizado_em = now()",
+                lojaId.toString(), n.ativo(), n.diasMax(), n.telefoneObrigatorio(), n.nomeObrigatorio(), String.join(",", n.veiculoObrigatorio()), n.limiteAbertos(), n.recaptchaChaveSite(), n.recaptchaSegredo(), n.intervaloMin());
     }
 
     /** Mesma conferência do PUT: lista de campos do veículo sem repetição e só com os campos conhecidos. */
@@ -108,7 +113,7 @@ public class LinkAgendamento {
         return banco.naLoja(jdbc -> {
             Config c = ler(jdbc);
             return new Resposta(c.ativo(), c.diasMax(), tipoSuportado(loja), c.telefoneObrigatorio(), c.nomeObrigatorio(), c.veiculoObrigatorio(), pendencias(jdbc, loja), c.limiteAbertos(), BarradosDoLink.resumo(jdbc),
-                    c.recaptchaChaveSite(), c.recaptchaSegredo() != null && !c.recaptchaSegredo().isBlank());
+                    c.recaptchaChaveSite(), c.recaptchaSegredo() != null && !c.recaptchaSegredo().isBlank(), c.intervaloMin());
         });
     }
 
@@ -119,6 +124,7 @@ public class LinkAgendamento {
         if (c == null) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe a configuração do link.");
         if (c.diasMax() != null && (c.diasMax() < 1 || c.diasMax() > DIAS_MAXIMO)) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe de 1 a " + DIAS_MAXIMO + " dias.");
         if (c.limiteAbertos() != null && (c.limiteAbertos() < 1 || c.limiteAbertos() > LIMITE_ABERTOS_MAXIMO)) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe de 1 a " + LIMITE_ABERTOS_MAXIMO + " horários por cliente.");
+        if (c.intervaloMin() != null && (c.intervaloMin() < 0 || c.intervaloMin() > INTERVALO_MIN_MAXIMO)) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe um intervalo de 0 a " + INTERVALO_MIN_MAXIMO + " minutos.");
         if (c.veiculoObrigatorio() != null && (c.veiculoObrigatorio().size() > VEICULO_DO_LINK.size() || new java.util.HashSet<>(c.veiculoObrigatorio()).size() != c.veiculoObrigatorio().size()
                 || !VEICULO_DO_LINK.containsAll(c.veiculoObrigatorio()))) {
             throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Dados do veículo obrigatórios inválidos.");
@@ -137,10 +143,11 @@ public class LinkAgendamento {
                     c.veiculoObrigatorio() == null ? atual.veiculoObrigatorio() : List.copyOf(c.veiculoObrigatorio()),
                     c.limiteAbertos() == null ? atual.limiteAbertos() : c.limiteAbertos(),
                     c.recaptchaChaveSite() == null ? atual.recaptchaChaveSite() : (c.recaptchaChaveSite().isBlank() ? null : c.recaptchaChaveSite().trim()),
-                    c.recaptchaSegredo() == null ? atual.recaptchaSegredo() : (c.recaptchaSegredo().isBlank() ? null : c.recaptchaSegredo().trim()));
+                    c.recaptchaSegredo() == null ? atual.recaptchaSegredo() : (c.recaptchaSegredo().isBlank() ? null : c.recaptchaSegredo().trim()),
+                    c.intervaloMin() == null ? atual.intervaloMin() : c.intervaloMin());
             gravarConfig(jdbc, loja.id(), n);
             return new Resposta(n.ativo(), n.diasMax(), tipoSuportado(loja), n.telefoneObrigatorio(), n.nomeObrigatorio(), n.veiculoObrigatorio(), pendencias(jdbc, loja), n.limiteAbertos(), BarradosDoLink.resumo(jdbc),
-                    n.recaptchaChaveSite(), n.recaptchaSegredo() != null && !n.recaptchaSegredo().isBlank());
+                    n.recaptchaChaveSite(), n.recaptchaSegredo() != null && !n.recaptchaSegredo().isBlank(), n.intervaloMin());
         });
     }
 }

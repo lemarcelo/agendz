@@ -1,6 +1,7 @@
 package br.com.agendz.configuracao;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -49,6 +50,17 @@ public final class OrdemDoAtender {
         return List.copyOf(vistos);
     }
 
+    static List<String> etapas(Object valor, List<String> conhecidos) {
+        List<String> list = new ArrayList<>(lista(valor, conhecidos));
+        int srv = list.indexOf("servicos");
+        int qdo = list.indexOf("quando");
+        if (srv >= 0 && qdo >= 0 && srv > qdo) {
+            list.remove(srv);
+            list.add(qdo, "servicos");
+        }
+        return List.copyOf(list);
+    }
+
     /** Completo e válido a partir de qualquer valor (lixo, parcial ou ausente). */
     public static Map<String, Map<String, List<String>>> sanear(Object valor) {
         Map<?, ?> v = valor instanceof Map<?, ?> m ? m : Map.of();
@@ -56,7 +68,7 @@ public final class OrdemDoAtender {
         for (String t : TIPOS) {
             Map<?, ?> o = v.get(t) instanceof Map<?, ?> m ? m : Map.of();
             Map<String, List<String>> g = new LinkedHashMap<>();
-            g.put("etapas", lista(o.get("etapas"), ETAPAS));
+            g.put("etapas", etapas(o.get("etapas"), ETAPAS));
             g.put("veiculo", lista(o.get("veiculo"), CAMPOS_DO_VEICULO));
             g.put("cliente", lista(o.get("cliente"), CAMPOS_DO_CLIENTE));
             r.put(t, g);
@@ -84,6 +96,12 @@ public final class OrdemDoAtender {
                 }
                 if (!(l instanceof List<?> lst) || lst.size() > 20) return false;
                 for (Object x : lst) if (!(x instanceof String s) || s.length() > 20) return false;
+            }
+            if (m.get("etapas") instanceof List<?> etapasList) {
+                int srv = etapasList.indexOf("servicos");
+                int qdo = etapasList.indexOf("quando");
+                if (srv >= 0 && qdo >= 0 && srv > qdo) return false;
+                if (qdo >= 0 && srv < 0) return false;
             }
         }
         return true;

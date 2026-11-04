@@ -1,6 +1,60 @@
 {
  "descricao": "B9b: saneamento e validação da ordem da tela Atender (src/domain/ordem-atender.js e OrdemDoAtender.java). 'esperado' é o resultado de sanear com a ordem de fábrica do site real.",
  "casos": [
+{
+ "nome": "serviço depois de quando é recusado",
+ "entrada": {
+  "futuro": {
+   "etapas": [
+    "quando",
+    "servicos"
+   ]
+  }
+ },
+ "valida": false,
+ "esperado": {
+  "futuro": {
+   "etapas": [
+    "servicos",
+    "quando",
+    "cliente",
+    "veiculo",
+    "produtos"
+   ],
+   "veiculo": [
+    "placa",
+    "modelo",
+    "marca",
+    "cor",
+    "porte"
+   ],
+   "cliente": [
+    "nome",
+    "telefone"
+   ]
+  },
+  "local": {
+   "etapas": [
+    "cliente",
+    "veiculo",
+    "servicos",
+    "quando",
+    "produtos"
+   ],
+   "veiculo": [
+    "placa",
+    "modelo",
+    "marca",
+    "cor",
+    "porte"
+   ],
+   "cliente": [
+    "nome",
+    "telefone"
+   ]
+  }
+ }
+},
   {
    "nome": "ausente → fábrica",
    "entrada": null,
@@ -207,10 +261,10 @@
    "entrada": {
     "futuro": {
      "etapas": [
-      "quando",
-      "quando",
+      "servicos",
+      "servicos",
       "x",
-      "servicos"
+      "quando"
      ],
      "cliente": [
       "telefone",
@@ -223,8 +277,8 @@
    "esperado": {
     "futuro": {
      "etapas": [
-      "quando",
       "servicos",
+      "quando",
       "cliente",
       "veiculo",
       "produtos"
@@ -269,8 +323,8 @@
     "futuro": {
      "etapas": [
       "produtos",
-      "quando",
       "servicos",
+      "quando",
       "veiculo",
       "cliente"
      ]
@@ -281,8 +335,8 @@
     "futuro": {
      "etapas": [
       "produtos",
-      "quando",
       "servicos",
+      "quando",
       "veiculo",
       "cliente"
      ],

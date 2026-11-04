@@ -445,6 +445,8 @@ function lerCliente(d) {
     id: texto(d.id, 40), nome: texto(d.nome, 100), apelido: texto(d.apelido, 100), telefone: texto(d.telefone, 20), telefoneAnterior: d.telefoneAnterior ? texto(d.telefoneAnterior, 20) : '',
     cpf: d.cpf ? texto(d.cpf, 14) : '', cpfMascarado: d.cpfMascarado ? texto(d.cpfMascarado, 14) : '', nascimento: d.nascimento ? texto(d.nascimento, 10) : '',
     dadosCompletos: d.dadosCompletos === true, semMensagens: d.semMensagens === true, veiculos: listaDe(d.veiculos, 10).map(lerVeiculo),
+    parceiro: d.parceiro === true,
+    parceiroDescontoPct: typeof d.parceiroDescontoPct === 'number' ? d.parceiroDescontoPct : (d.parceiroDescontoPct ? Number(d.parceiroDescontoPct) : null),
   };
 }
 export const clientes = {
@@ -466,6 +468,8 @@ export const clientes = {
     const corpo = {};
     for (const [k, max] of [['nome', 100], ['apelido', 100], ['telefone', 30], ['cpf', 20], ['nascimento', 10]]) if (typeof d[k] === 'string') corpo[k] = d[k].slice(0, max);
     if (typeof d.semMensagens === 'boolean') corpo.semMensagens = d.semMensagens; // pediu para não receber mensagens (fora da estrela e da fila em lote)
+    if (typeof d.parceiro === 'boolean') corpo.parceiro = d.parceiro;
+    if (d.parceiroDescontoPct !== undefined) corpo.parceiroDescontoPct = d.parceiroDescontoPct === null || d.parceiroDescontoPct === '' ? null : Number(d.parceiroDescontoPct);
     if (Array.isArray(d.veiculos)) corpo.veiculos = d.veiculos.slice(0, 50).map((v) => ({ ...(ID.test(String(v && v.id)) ? { id: v.id } : {}), placa: texto(v && v.placa, 16), marca: texto(v && v.marca, 30), modelo: texto(v && v.modelo, 40), cor: texto(v && v.cor, 20), porte: texto(v && v.porte, 16) }));
     const edicao = d.id !== undefined && d.id !== null && d.id !== '';
     if (edicao && !ID.test(String(d.id))) return { ok: false, status: 0, erro: 'Cliente não encontrado' };
@@ -1199,7 +1203,7 @@ export const regras = {
   async gravar({ formaPagamentoPadrao, camposObrigatorios, ordemServicos, profissionalAutomatico, ordemAtender } = {}) {
     const corpo = {};
     if (ordemAtender !== undefined) {
-      if (!ordemAtenderValida(ordemAtender)) return { ok: false, status: 0, erro: 'Ordem do Atender inválida.' };
+      if (!ordemAtenderValida(ordemAtender)) return { ok: false, status: 0, erro: 'A escolha do serviço deve vir antes da escolha do horário.' };
       corpo.ordemAtender = sanearOrdemAtender(ordemAtender, PADRAO_PAINEL); // v133
     }
     if (profissionalAutomatico !== undefined) {
@@ -1234,6 +1238,7 @@ const lerLink = (d) => {
     nomeObrigatorio: d.nomeObrigatorio !== false, veiculoObrigatorio: Array.isArray(d.veiculoObrigatorio) ? d.veiculoObrigatorio.filter((x) => ['placa', 'modelo', 'porte'].includes(x)) : ['placa', 'modelo', 'porte'],
     pendencias: Array.isArray(d.pendencias) ? d.pendencias.filter((x) => typeof x === 'string' && x).slice(0, 5).map((x) => x.slice(0, 300)) : [], // v119: o que falta cadastrar para o cliente ver horários
     limiteAbertos: Number.isInteger(d.limiteAbertos) ? Math.min(20, Math.max(1, d.limiteAbertos)) : 3, // B10: horários à frente que um mesmo cliente pode ter pelo link
+    intervaloMin: Number.isInteger(d.intervaloMin) ? Math.min(60, Math.max(0, d.intervaloMin)) : 20,
     barrados: lerBarrados(d.barrados) };
   if (d.recaptchaChaveSite !== undefined) res.recaptchaChaveSite = typeof d.recaptchaChaveSite === 'string' ? d.recaptchaChaveSite.slice(0, 100) : '';
   if (d.recaptchaSegredoConfigurado !== undefined) res.recaptchaSegredoConfigurado = d.recaptchaSegredoConfigurado === true;
@@ -1254,10 +1259,14 @@ export const linkAgendamento = {
     return r.ok ? { ok: true, link: lerLink(r.dados) } : r;
   },
   // PUT /api/estabelecimento/link-agendamento  { ativo?, diasMax?, telefoneObrigatorio?, nomeObrigatorio?, veiculoObrigatorio?: ['placa','modelo','porte'], limiteAbertos?: 1..20, recaptchaChaveSite?, recaptchaSegredo? }
-  async gravar({ ativo, diasMax, telefoneObrigatorio, nomeObrigatorio, veiculoObrigatorio, limiteAbertos, recaptchaChaveSite, recaptchaSegredo } = {}) {
+  async gravar({ ativo, diasMax, telefoneObrigatorio, nomeObrigatorio, veiculoObrigatorio, limiteAbertos, recaptchaChaveSite, recaptchaSegredo, intervaloMin } = {}) {
     const corpo = {};
     if (recaptchaChaveSite !== undefined) corpo.recaptchaChaveSite = typeof recaptchaChaveSite === 'string' ? recaptchaChaveSite.trim().slice(0, 100) : '';
     if (recaptchaSegredo !== undefined) corpo.recaptchaSegredo = typeof recaptchaSegredo === 'string' ? recaptchaSegredo.trim().slice(0, 150) : '';
+    if (intervaloMin !== undefined) {
+      if (!Number.isInteger(intervaloMin) || intervaloMin < 0 || intervaloMin > 60) return { ok: false, status: 0, erro: 'Informe um intervalo de 0 a 60 minutos.' };
+      corpo.intervaloMin = intervaloMin;
+    }
     if (limiteAbertos !== undefined) {
       if (!Number.isInteger(limiteAbertos) || limiteAbertos < 1 || limiteAbertos > 20) return { ok: false, status: 0, erro: 'Informe de 1 a 20 horários por cliente.' };
       corpo.limiteAbertos = limiteAbertos;
@@ -1318,13 +1327,17 @@ export const comissaoGeral = {
   // GET /api/estabelecimento/comissao  (só o proprietário; sem valor gravado vale 50)
   async obter() {
     const r = await chamar('GET', '/api/estabelecimento/comissao');
-    return r.ok ? { ok: true, comissaoPadrao: numeroOuNulo(r.dados && r.dados.comissaoPadrao) ?? 50 } : r;
+    return r.ok ? { ok: true, comissaoPadrao: numeroOuNulo(r.dados && r.dados.comissaoPadrao) ?? 50, comissaoParceiro: r.dados && r.dados.comissaoParceiro === true } : r;
   },
-  // PUT /api/estabelecimento/comissao  { comissaoPadrao }  (0 a 100)
-  async gravar(valor) {
-    if (typeof valor !== 'number' || !Number.isFinite(valor) || valor < 0 || valor > 100) return { ok: false, status: 0, erro: 'A comissão padrão vai de 0 a 100%.' };
-    const r = await chamar('PUT', '/api/estabelecimento/comissao', { comissaoPadrao: valor });
-    return r.ok ? { ok: true, comissaoPadrao: numeroOuNulo(r.dados && r.dados.comissaoPadrao) ?? valor } : r;
+  // PUT /api/estabelecimento/comissao  { comissaoPadrao, comissaoParceiro }  (0 a 100)
+  async gravar(valor, comissaoParceiro) {
+    const v = typeof valor === 'object' && valor !== null ? valor.comissaoPadrao : valor;
+    const cp = typeof valor === 'object' && valor !== null ? valor.comissaoParceiro : comissaoParceiro;
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > 100) return { ok: false, status: 0, erro: 'A comissão padrão vai de 0 a 100%.' };
+    const corpo = { comissaoPadrao: v };
+    if (typeof cp === 'boolean') corpo.comissaoParceiro = cp;
+    const r = await chamar('PUT', '/api/estabelecimento/comissao', corpo);
+    return r.ok ? { ok: true, comissaoPadrao: numeroOuNulo(r.dados && r.dados.comissaoPadrao) ?? v, comissaoParceiro: r.dados && r.dados.comissaoParceiro === true } : r;
   },
 };
 

@@ -8,6 +8,7 @@ import br.com.agendz.tenant.LojaContext;
 import br.com.agendz.tenant.LojaJdbc;
 import br.com.agendz.validacao.Documentos;
 import br.com.agendz.validacao.Texto;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -43,21 +44,31 @@ public class ClienteService {
     }
 
     /** Linha da lista: CPF só mascarado, sem nascimento. */
-    public record Resumo(UUID id, String nome, String apelido, String telefone, String cpfMascarado, List<Veiculo> veiculos, boolean semMensagens) {
+    public record Resumo(UUID id, String nome, String apelido, String telefone, String cpfMascarado, List<Veiculo> veiculos, boolean semMensagens, boolean parceiro, BigDecimal parceiroDescontoPct) {
+        public Resumo(UUID id, String nome, String apelido, String telefone, String cpfMascarado, List<Veiculo> veiculos, boolean semMensagens) {
+            this(id, nome, apelido, telefone, cpfMascarado, veiculos, semMensagens, false, null);
+        }
     }
 
     /** Ficha: CPF completo e nascimento só quando `dadosCompletos` (dono, quem atende o cliente ou cadastro sem horários). */
     public record Ficha(UUID id, String nome, String apelido, String telefone, String telefoneAnterior, String cpf, String cpfMascarado,
-                        String nascimento, boolean dadosCompletos, List<Veiculo> veiculos, boolean semMensagens) {
+                        String nascimento, boolean dadosCompletos, List<Veiculo> veiculos, boolean semMensagens, boolean parceiro, BigDecimal parceiroDescontoPct) {
+        public Ficha(UUID id, String nome, String apelido, String telefone, String telefoneAnterior, String cpf, String cpfMascarado,
+                     String nascimento, boolean dadosCompletos, List<Veiculo> veiculos, boolean semMensagens) {
+            this(id, nome, apelido, telefone, telefoneAnterior, cpf, cpfMascarado, nascimento, dadosCompletos, veiculos, semMensagens, false, null);
+        }
     }
 
     public record EntradaVeiculo(String id, String placa, String marca, String modelo, String cor, String porte) {
     }
 
-    public record Entrada(String nome, String apelido, String telefone, String cpf, String nascimento, List<EntradaVeiculo> veiculos, Boolean semMensagens) {
+    public record Entrada(String nome, String apelido, String telefone, String cpf, String nascimento, List<EntradaVeiculo> veiculos, Boolean semMensagens, Boolean parceiro, BigDecimal parceiroDescontoPct) {
+        public Entrada(String nome, String apelido, String telefone, String cpf, String nascimento, List<EntradaVeiculo> veiculos, Boolean semMensagens) {
+            this(nome, apelido, telefone, cpf, nascimento, veiculos, semMensagens, null, null);
+        }
     }
 
-    private record Linha(UUID id, String nome, String apelido, String telefoneCif, String telefoneHash, String cpfCif, String cpfHash, String nascimentoCif) {
+    private record Linha(UUID id, String nome, String apelido, String telefoneCif, String telefoneHash, String cpfCif, String cpfHash, String nascimentoCif, boolean parceiro, BigDecimal parceiroDescontoPct) {
     }
 
     private final LojaJdbc banco;
@@ -90,7 +101,7 @@ public class ClienteService {
         String consulta = q;
         String soDigitos = Documentos.digitos(q);
         return banco.naLoja(jdbc -> {
-            List<Linha> linhas = jdbc.query("select id, nome, apelido, telefone_cif, telefone_hash, cpf_cif, cpf_hash, nascimento_cif from cliente order by lower(nome), id limit 2000",
+            List<Linha> linhas = jdbc.query("select id, nome, apelido, telefone_cif, telefone_hash, cpf_cif, cpf_hash, nascimento_cif, parceiro, parceiro_desconto_pct from cliente order by lower(nome), id limit 2000",
                     (rs, i) -> lerLinha(rs));
             Map<UUID, List<Veiculo>> veiculos = veiculosDaLoja(jdbc);
             Set<UUID> optOut = new HashSet<>(jdbc.query("select id from cliente where sem_mensagens", (rs, i) -> rs.getObject(1, UUID.class)));
@@ -100,7 +111,7 @@ public class ClienteService {
                 String cpf = l.cpfCif() == null ? null : cifra.decifrar(l.cpfCif());
                 List<Veiculo> vs = veiculos.getOrDefault(l.id(), List.of());
                 if (!consulta.isEmpty() && !confere(consulta, soDigitos, l, tel, cpf, vs)) continue;
-                saida.add(new Resumo(l.id(), l.nome(), l.apelido(), tel, cpf == null ? null : Documentos.cpfMascarado(cpf), vs, optOut.contains(l.id())));
+                saida.add(new Resumo(l.id(), l.nome(), l.apelido(), tel, cpf == null ? null : Documentos.cpfMascarado(cpf), vs, optOut.contains(l.id()), l.parceiro(), l.parceiroDescontoPct()));
                 if (saida.size() >= 500) break;
             }
             return saida;
@@ -133,12 +144,18 @@ public class ClienteService {
         String nasc = nascimentoOpcional(e.nascimento());
         exigirCamposDaLoja(loja, cpf, nasc);
         List<Veiculo> veiculos = usaVeiculo(loja) && e.veiculos() != null ? veiculosValidos(e.veiculos(), banco.naLoja(PorteController::ids)) : List.of();
+        Boolean parceiro = Boolean.TRUE.equals(e.parceiro());
+        BigDecimal descPct = e.parceiroDescontoPct();
+        if (descPct != null && (descPct.compareTo(BigDecimal.ZERO) < 0 || descPct.compareTo(BigDecimal.valueOf(100)) > 0)) {
+            throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "O desconto de parceiro deve ser entre 0 e 100%.");
+        }
         try {
             return banco.naLoja(jdbc -> {
                 UUID id = jdbc.queryForObject(
-                        "insert into cliente (loja_id, nome, apelido, telefone_cif, telefone_hash, cpf_cif, cpf_hash, nascimento_cif) values (?::uuid, ?, ?, ?, ?, ?, ?, ?) returning id",
+                        "insert into cliente (loja_id, nome, apelido, telefone_cif, telefone_hash, cpf_cif, cpf_hash, nascimento_cif, parceiro, parceiro_desconto_pct) values (?::uuid, ?, ?, ?, ?, ?, ?, ?, ?, ?) returning id",
                         UUID.class, loja.id().toString(), nome, apelido, cifra.cifrar(tel), cifra.hash(loja.id(), "tel", tel),
-                        cpf == null ? null : cifra.cifrar(cpf), cpf == null ? null : cifra.hash(loja.id(), "cpf", cpf), nasc == null ? null : cifra.cifrar(nasc));
+                        cpf == null ? null : cifra.cifrar(cpf), cpf == null ? null : cifra.hash(loja.id(), "cpf", cpf), nasc == null ? null : cifra.cifrar(nasc),
+                        parceiro, parceiro ? descPct : null);
                 for (int i = 0; i < veiculos.size(); i++) inserirVeiculo(jdbc, loja, id, veiculos.get(i), i);
                 if (e.semMensagens() != null) jdbc.update("update cliente set sem_mensagens = ? where id = ?", e.semMensagens(), id);
                 return ficha(jdbc, ator, lerPorId(jdbc, id, false));
@@ -157,6 +174,11 @@ public class ClienteService {
         String cpf = e.cpf() == null ? null : cpfOpcional(e.cpf());          // "" = apagar
         String nasc = e.nascimento() == null ? null : nascimentoOpcional(e.nascimento());
         List<Veiculo> veiculos = usaVeiculo(loja) && e.veiculos() != null ? veiculosValidos(e.veiculos(), banco.naLoja(PorteController::ids)) : null;
+        Boolean novoParceiro = e.parceiro();
+        BigDecimal novoDescPct = e.parceiroDescontoPct();
+        if (novoDescPct != null && (novoDescPct.compareTo(BigDecimal.ZERO) < 0 || novoDescPct.compareTo(BigDecimal.valueOf(100)) > 0)) {
+            throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "O desconto de parceiro deve ser entre 0 e 100%.");
+        }
         try {
             return banco.naLoja(jdbc -> {
                 Linha atual = lerPorId(jdbc, id, true);
@@ -188,11 +210,15 @@ public class ClienteService {
                         nascFinal = novo;
                     }
                 }
-                jdbc.update("update cliente set sem_nome = false, nome = ?, apelido = ?, telefone_cif = ?, telefone_hash = ?, cpf_cif = ?, cpf_hash = ?, nascimento_cif = ?, atualizado_em = now() where id = ?",
+                boolean parcFinal = novoParceiro != null ? novoParceiro : atual.parceiro();
+                BigDecimal descFinal = novoParceiro != null || novoDescPct != null ? (parcFinal ? novoDescPct : null) : atual.parceiroDescontoPct();
+
+                jdbc.update("update cliente set sem_nome = false, nome = ?, apelido = ?, telefone_cif = ?, telefone_hash = ?, cpf_cif = ?, cpf_hash = ?, nascimento_cif = ?, parceiro = ?, parceiro_desconto_pct = ?, atualizado_em = now() where id = ?",
                         nome != null ? nome : atual.nome(), apelido != null ? apelido : atual.apelido(), novoTelCif, novoTelHash,
                         cpfFinal == null ? null : (cpfFinal.equals(cpfAtual) ? atual.cpfCif() : cifra.cifrar(cpfFinal)),
                         cpfFinal == null ? null : cifra.hash(loja.id(), "cpf", cpfFinal),
-                        nascFinal == null ? null : (nascFinal.equals(nascAtual) ? atual.nascimentoCif() : cifra.cifrar(nascFinal)), id);
+                        nascFinal == null ? null : (nascFinal.equals(nascAtual) ? atual.nascimentoCif() : cifra.cifrar(nascFinal)),
+                        parcFinal, descFinal, id);
                 if (veiculos != null) sincronizarVeiculos(jdbc, loja, id, veiculos);
                 if (e.semMensagens() != null) jdbc.update("update cliente set sem_mensagens = ? where id = ?", e.semMensagens(), id); // pedir para não receber mensagens: qualquer um que edita o cadastro
                 return ficha(jdbc, ator, lerPorId(jdbc, id, false));
@@ -224,11 +250,12 @@ public class ClienteService {
 
     private static Linha lerLinha(java.sql.ResultSet rs) throws java.sql.SQLException {
         return new Linha(rs.getObject("id", UUID.class), rs.getString("nome"), rs.getString("apelido"), rs.getString("telefone_cif"), rs.getString("telefone_hash"),
-                rs.getString("cpf_cif"), rs.getString("cpf_hash"), rs.getString("nascimento_cif"));
+                rs.getString("cpf_cif"), rs.getString("cpf_hash"), rs.getString("nascimento_cif"),
+                rs.getBoolean("parceiro"), rs.getBigDecimal("parceiro_desconto_pct"));
     }
 
     private Linha lerPorId(JdbcTemplate jdbc, UUID id, boolean travar) {
-        List<Linha> achados = jdbc.query("select id, nome, apelido, telefone_cif, telefone_hash, cpf_cif, cpf_hash, nascimento_cif from cliente where id = ?" + (travar ? " for update" : ""),
+        List<Linha> achados = jdbc.query("select id, nome, apelido, telefone_cif, telefone_hash, cpf_cif, cpf_hash, nascimento_cif, parceiro, parceiro_desconto_pct from cliente where id = ?" + (travar ? " for update" : ""),
                 (rs, i) -> lerLinha(rs), id);
         if (achados.isEmpty()) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, "Cliente não encontrado");
         return achados.get(0);
@@ -242,7 +269,8 @@ public class ClienteService {
         return new Ficha(l.id(), l.nome(), l.apelido(), cifra.decifrar(l.telefoneCif()), anteriores.isEmpty() ? null : cifra.decifrar(anteriores.get(0)),
                 forte ? cpf : null, cpf == null ? null : Documentos.cpfMascarado(cpf),
                 forte && l.nascimentoCif() != null ? cifra.decifrar(l.nascimentoCif()) : null, forte, veiculosDe(jdbc, l.id()),
-                Boolean.TRUE.equals(jdbc.queryForObject("select sem_mensagens from cliente where id = ?", Boolean.class, l.id())));
+                Boolean.TRUE.equals(jdbc.queryForObject("select sem_mensagens from cliente where id = ?", Boolean.class, l.id())),
+                l.parceiro(), l.parceiroDescontoPct());
     }
 
     // ---------- veículos ----------

@@ -143,7 +143,7 @@ test('linkAgendamento: pendências (o que falta para o cliente ver horários) s�
 test('linkAgendamento: GET e PUT do proprietário; dias fora de 1 a 60 nem saem', async () => {
   servidor({ ativo: false, diasMax: 14, disponivel: false });
   const r = await linkAgendamento.obter();
-  assert.deepEqual(r.link, { ativo: false, diasMax: 14, disponivel: false, telefoneObrigatorio: true, nomeObrigatorio: true, veiculoObrigatorio: ['placa', 'modelo', 'porte'], pendencias: [], limiteAbertos: 3, barrados: { total: 0, porMotivo: { limite_cliente: 0, isca: 0, rapido: 0, selo_invalido: 0, frequencia: 0, captcha: 0 } } }, 'telefone, nome e dados do veículo obrigatórios de fábrica; limite 3 e contagem de barrados');
+  assert.deepEqual(r.link, { ativo: false, diasMax: 14, disponivel: false, telefoneObrigatorio: true, nomeObrigatorio: true, veiculoObrigatorio: ['placa', 'modelo', 'porte'], pendencias: [], limiteAbertos: 3, intervaloMin: 20, barrados: { total: 0, porMotivo: { limite_cliente: 0, isca: 0, rapido: 0, selo_invalido: 0, frequencia: 0, captcha: 0 } } }, 'telefone, nome e dados do veículo obrigatórios de fábrica; limite 3 e contagem de barrados');
   assert.deepEqual([chamadas[0].metodo, chamadas[0].url], ['GET', 'https://loja.teste/api/estabelecimento/link-agendamento']);
   servidor({ ativo: true, diasMax: 20, disponivel: true });
   const g = await linkAgendamento.gravar({ ativo: true, diasMax: 20 });

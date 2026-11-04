@@ -83,6 +83,7 @@ const deHoje = (m, u) => chamadas.filter((c) => c.m === m && c.u === u);
   assert.match(await p.getByTestId(`pub-ag-${AG1}`).innerText(), /Confirmado/);
   await p.getByTestId(`pub-remarcar-${AG1}`).click();
   await p.getByTestId('pub-dia-2026-10-30').waitFor();
+  await p.getByTestId('pub-dia-2026-10-30').click();
   const dias = deHoje('GET', `/api/publico/agendamentos/${AG1}/dias`).at(-1);
   assert.equal(dias.acesso, T1, 'o token DESTE horário vai no cabeçalho'); assert.ok(!dias.q.includes(T1) && dias.auth === '');
   assert.equal(await p.getByTestId(`pub-remarcar-sim-${AG1}`).isDisabled(), true, 'sem escolher horário não dá para enviar');

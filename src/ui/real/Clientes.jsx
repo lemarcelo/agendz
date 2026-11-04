@@ -20,6 +20,8 @@ function FormCliente({ ficha, aoSalvar, aoCancelar, plano }) {
   const [f, setF] = useState({
     nome: ficha.nome || '', apelido: ficha.apelido || '', telefone: ficha.telefone ? fmtTel(ficha.telefone) : '',
     cpf: ficha.cpf ? formatarCpf(ficha.cpf) : '', nascimento: ficha.nascimento || '', veiculos: ficha.veiculos || [],
+    parceiro: ficha.parceiro === true,
+    parceiroDescontoPct: ficha.parceiroDescontoPct !== null && ficha.parceiroDescontoPct !== undefined ? String(ficha.parceiroDescontoPct) : '',
   });
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
@@ -32,6 +34,8 @@ function FormCliente({ ficha, aoSalvar, aoCancelar, plano }) {
     const corpo = { nome: f.nome, apelido: f.apelido, telefone: f.telefone };
     if (completo) { corpo.cpf = f.cpf; corpo.nascimento = f.nascimento; }
     if (veiculos) corpo.veiculos = f.veiculos;
+    corpo.parceiro = f.parceiro;
+    corpo.parceiroDescontoPct = f.parceiro ? (f.parceiroDescontoPct.trim() === '' ? null : Number(f.parceiroDescontoPct.replace(',', '.'))) : null;
     if (!novo) corpo.id = ficha.id;
     const r = await api.salvar(corpo);
     setEnviando(false);
@@ -54,6 +58,29 @@ function FormCliente({ ficha, aoSalvar, aoCancelar, plano }) {
         ) : (
           <Aviso data-testid="cli-dados-restritos">CPF {ficha.cpfMascarado ? <b>{ficha.cpfMascarado}</b> : 'não informado'}. O CPF completo, o nascimento e a troca do telefone são do proprietário e do {rot('profissional')} que atende este cliente.</Aviso>
         )}
+        <fieldset className="conj" data-testid="cli-parceiro-secao">
+          <legend>Parceria</legend>
+          <label className="rotulo-linha" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', margin: '6px 0' }}>
+            <input
+              type="checkbox"
+              checked={f.parceiro}
+              onChange={(e) => setF({ ...f, parceiro: e.target.checked })}
+              data-testid="cli-parceiro"
+            />
+            <span>Cliente parceiro</span>
+          </label>
+          <Campo rotulo="Desconto do parceiro (%)" dica={f.parceiro && !f.parceiroDescontoPct ? 'Sem percentual: desconto total (100% / abono).' : 'Percentual de 1 a 100 aplicado sobre os serviços.'}>
+            <input
+              value={f.parceiroDescontoPct}
+              disabled={!f.parceiro}
+              inputMode="decimal"
+              maxLength={5}
+              onChange={(e) => setF({ ...f, parceiroDescontoPct: e.target.value.replace(/[^0-9.,]/g, '') })}
+              placeholder={f.parceiro ? '100% (abono total)' : 'Desabilitado'}
+              data-testid="cli-parceiro-pct"
+            />
+          </Campo>
+        </fieldset>
         {veiculos && (
           <fieldset className="conj" data-testid="cli-veiculos">
             <legend>Veículos</legend>
@@ -147,7 +174,10 @@ export default function Clientes({ podePlanos = false, aoIr = null }) {
             {lista.map((c) => (
               <li key={c.id} className="cliente-cartao" data-testid={`cli-${c.id}`}>
                 <div className="cliente-dados">
-                  <b data-testid="cli-item-nome">{c.nome}</b>{c.apelido && c.apelido !== c.nome ? <small className="muted"> “{c.apelido}”</small> : null}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                    <b data-testid="cli-item-nome">{c.nome}</b>{c.apelido && c.apelido !== c.nome ? <small className="muted"> “{c.apelido}”</small> : null}
+                    {c.parceiro && <span className="chip chip-p st-amarelo" data-testid={`cli-parceiro-tag-${c.id}`}>Parceiro{c.parceiroDescontoPct ? ` (${c.parceiroDescontoPct}%)` : ''}</span>}
+                  </div>
                   <span className="cliente-linha"><Icone n="phone" size={14} /> {fmtTel(c.telefone)}</span>
                   {c.cpfMascarado ? <span className="cliente-linha muted">CPF {c.cpfMascarado}</span> : null}
                   {veiculos && c.veiculos.length > 0 && <ul className="lista-veiculos" data-testid={`cli-veiculos-${c.id}`}>{c.veiculos.map((v) => <li key={v.id}>{rotuloVeiculo(v)} <small className="muted">{ROTULO_PORTE[v.porte]}</small></li>)}</ul>}

@@ -63,11 +63,13 @@ function salvarReservas(slug, dados) {
 const diaSemana = (ts) => new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'short', day: '2-digit', month: '2-digit' }).format(new Date(ts)).replace('.', '').replace(',', '');
 
 // Dia + horário livres: os dois vêm do servidor, que só devolve o que está livre. `fonte` ({ dias(de, n), horarios(dia) }) troca a consulta (remarcar um horário já marcado).
-function DiaHora({ chave, diasMax, servicoIds, profissionalId, porte, valor, aoEscolher, fonte }) {
+function DiaHora({ chave, diasMax, servicoIds, profissionalId, porte, valor, aoEscolher, fonte, duracaoTotal = 30, dia, aoMudarDia }) {
   const hoje = useMemo(hojeBrasilia, []);
   const [janela, setJanela] = useState(14);
   const [dias, setDias] = useState(null);
-  const [dia, setDia] = useState(null);
+  const [diaLocal, setDiaLocal] = useState(null);
+  const diaEfetivo = dia !== undefined ? dia : diaLocal;
+  const setDia = aoMudarDia || setDiaLocal;
   const [horas, setHoras] = useState(null);
   const [erro, setErro] = useState('');
   const [horaPicker, setHoraPicker] = useState('');
@@ -88,16 +90,50 @@ function DiaHora({ chave, diasMax, servicoIds, profissionalId, porte, valor, aoE
     })();
     return () => { vivo = false; };
   }, [chave, limite]);
-  const diaAtual = dias && (dia && dias.includes(dia) ? dia : dias[0]) || null;
+  const diaAtual = dias && diaEfetivo && dias.includes(diaEfetivo) ? diaEfetivo : null;
   useEffect(() => {
     setHoraPicker('');
     setAvisoHorario(null);
-    if (!diaAtual) { setHoras([]); return undefined; }
+    if (!diaAtual) { setHoras(null); return undefined; }
     let vivo = true;
     setHoras(null);
     (fonte ? fonte.horarios(diaAtual) : publico.horarios({ data: diaAtual, servicoIds, profissionalId, porte })).then((r) => { if (!vivo) return; if (r.ok) setHoras(r.horarios); else { setErro(r.erro); setHoras([]); } });
     return () => { vivo = false; };
   }, [chave, diaAtual]);
+
+  const calcularFim = (horaInicioStr, duracaoMin) => {
+    if (!horaInicioStr || !duracaoMin) return '';
+    const [h, m] = horaInicioStr.split(':').map(Number);
+    const totalMin = h * 60 + m + duracaoMin;
+    const hFim = Math.floor(totalMin / 60) % 24;
+    const mFim = totalMin % 60;
+    return `${String(hFim).padStart(2, '0')}:${String(mFim).padStart(2, '0')}`;
+  };
+
+  const slotsGrid = useMemo(() => {
+    if (!horas) return [];
+    const mapaHoras = new Map();
+    const temposSet = new Set();
+    for (const h of horas) {
+      const txt = horaDe(h.inicio);
+      mapaHoras.set(txt, h);
+      temposSet.add(txt);
+    }
+    const minHora = 8;
+    const maxHora = 19;
+    for (let hr = minHora; hr <= maxHora; hr++) {
+      for (const min of [0, 30]) {
+        if (hr === maxHora && min > 0) continue;
+        const strHora = `${String(hr).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+        temposSet.add(strHora);
+      }
+    }
+    const ordenados = Array.from(temposSet).sort();
+    return ordenados.map((strHora) => ({
+      hora: strHora,
+      livre: mapaHoras.get(strHora) || null
+    }));
+  }, [horas]);
 
   const processarHorario = (txt) => {
     setHoraPicker(txt);
@@ -172,45 +208,101 @@ function DiaHora({ chave, diasMax, servicoIds, profissionalId, porte, valor, aoE
       </div>
       {!dias.length && <p className="muted" data-testid="pub-sem-horarios">Não há horários livres {podeMais ? 'nesses dias. Toque em "Mais dias".' : `nos próximos ${diasMax} dias. Tente outro ${rot('profissional')} ou fale com a loja.`}</p>}
       {erro && <Aviso tipo="erro"><span data-testid="pub-erro-horarios">{erro}</span></Aviso>}
-      {horas && horas.length > 0 && <p className="pub-dia-titulo">{maiuscula1(diaLongo(horas[0].inicio))}</p>}
-      <div className="pub-timepicker" data-testid="pub-timepicker-container">
-        <label htmlFor="pub-input-hora" className="pub-timepicker-rotulo">
-          <Icone n="clock" size={16} />
-          <span>Escolher horário específico:</span>
-        </label>
-        <div className="pub-timepicker-campo">
-          <input
-            id="pub-input-hora"
-            type="time"
-            className="pub-timepicker-input"
-            value={horaPicker}
-            onChange={(e) => processarHorario(e.target.value)}
-            data-testid="pub-time-picker"
-          />
-        </div>
-      </div>
-      {avisoHorario && (
-        <div className="pub-aviso-horario" role="status" data-testid="pub-aviso-horario">
-          <p>{avisoHorario.texto}</p>
-          {avisoHorario.horarioSugerido && (
-            <button
-              type="button"
-              className="pub-hora on"
-              onClick={() => selecionarHora(avisoHorario.horarioSugerido)}
-              data-testid="pub-usar-sugestao"
-            >
-              Usar {horaDe(avisoHorario.horarioSugerido.inicio)}
-            </button>
+      {!diaAtual && dias.length > 0 && <p className="muted pub-instrucao-dia" data-testid="pub-instrucao-dia">Selecione um dia acima para ver os horários disponíveis.</p>}
+      {diaAtual && (
+        <>
+          <p className="pub-dia-titulo">{maiuscula1(diaLongo(new Date(`${diaAtual}T12:00:00Z`).getTime()))}</p>
+          {horas === null && <p className="muted" role="status" data-testid="pub-carregando-horas">Carregando horários do dia…</p>}
+          {horas && (
+            <>
+              {horas.length === 0 ? (
+                <p className="muted" data-testid="pub-sem-vagas-dia">Não há horários disponíveis neste dia que abranjam os serviços selecionados ({duracaoTotal} min).</p>
+              ) : (
+                <div className="pub-grid-dia" role="grid" aria-label="Grade de horários do dia" data-testid="pub-grid-dia">
+                  {slotsGrid.map((slot) => {
+                    if (slot.livre) {
+                      const h = slot.livre;
+                      const selecionado = valor === h.inicio;
+                      return (
+                        <button
+                          key={slot.hora}
+                          type="button"
+                          className={`pub-hora pub-grid-slot pub-grid-livre ${selecionado ? 'on' : ''}`}
+                          aria-pressed={selecionado}
+                          onClick={() => selecionarHora(h)}
+                          data-testid={`pub-hora-${slot.hora.replace(':', '')}`}
+                        >
+                          <div className="pub-grid-slot-col-hora">
+                            <strong className="pub-grid-hora-texto">{slot.hora}</strong>
+                            {duracaoTotal > 0 && (
+                              <small className="pub-grid-termino-texto">até {calcularFim(slot.hora, duracaoTotal)}</small>
+                            )}
+                          </div>
+                          <div className="pub-grid-slot-conteudo">
+                            <span className="pub-grid-tag-livre">
+                              <Icone n="check" size={13} /> Disponível
+                            </span>
+                            {duracaoTotal > 0 && (
+                              <span className="pub-grid-duracao-tag">{duracaoTotal} min</span>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    }
+                    return (
+                      <div
+                        key={slot.hora}
+                        className="pub-grid-slot pub-grid-ocupado"
+                        data-testid={`pub-slot-ocupado-${slot.hora.replace(':', '')}`}
+                        aria-disabled="true"
+                      >
+                        <div className="pub-grid-slot-col-hora">
+                          <span className="pub-grid-hora-texto">{slot.hora}</span>
+                        </div>
+                        <div className="pub-grid-slot-conteudo">
+                          <span className="pub-grid-tag-ocupado">Ocupado</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="pub-timepicker" data-testid="pub-timepicker-container">
+                <label htmlFor="pub-input-hora" className="pub-timepicker-rotulo">
+                  <Icone n="clock" size={16} />
+                  <span>Escolher horário específico:</span>
+                </label>
+                <div className="pub-timepicker-campo">
+                  <input
+                    id="pub-input-hora"
+                    type="time"
+                    className="pub-timepicker-input"
+                    value={horaPicker}
+                    onChange={(e) => processarHorario(e.target.value)}
+                    data-testid="pub-time-picker"
+                  />
+                </div>
+              </div>
+              {avisoHorario && (
+                <div className="pub-aviso-horario" role="status" data-testid="pub-aviso-horario">
+                  <p>{avisoHorario.texto}</p>
+                  {avisoHorario.horarioSugerido && (
+                    <button
+                      type="button"
+                      className="pub-hora on"
+                      onClick={() => selecionarHora(avisoHorario.horarioSugerido)}
+                      data-testid="pub-usar-sugestao"
+                    >
+                      Usar {horaDe(avisoHorario.horarioSugerido.inicio)}
+                    </button>
+                  )}
+                </div>
+              )}
+            </>
           )}
-        </div>
+        </>
       )}
-      <div className="pub-horas" role="group" aria-label="Escolher o horário">
-        {(horas || []).map((h) => (
-          <button type="button" key={h.inicio} className={`pub-hora ${valor === h.inicio ? 'on' : ''}`} aria-pressed={valor === h.inicio} onClick={() => selecionarHora(h)} data-testid={`pub-hora-${horaDe(h.inicio).replace(':', '')}`}>
-            {horaDe(h.inicio)}
-          </button>
-        ))}
-      </div>
     </div>
   );
 }
@@ -226,6 +318,7 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
   const [porte, setPorte] = useState('');
   const [srv, setSrv] = useState([]);
   const [barb, setBarb] = useState(profissionalInicial || '');
+  const [dia, setDia] = useState(null);
   const [escolha, setEscolha] = useState(null);
   const [nome, setNome] = useState(() => (cliente && cliente.nome) || '');
   const [tel, setTel] = useState(() => (cliente && cliente.telefone) || '');
@@ -244,12 +337,15 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
   const placaOk = placaValida(placa);
   const exV = pagina.exigeVeiculo || ['placa', 'modelo', 'porte']; // o que o dono marcou como obrigatório (Estabelecimento > Link)
   const veiculoOk = limparVeiculoComRegras({ placa, modelo, porte }, exV).ok;
-  const estrela = (k) => (exV.includes(k) ? ' *' : '');
+  const estrela = (k) => (exV.includes(k) ? ' *' : ' (opcional)');
   const rotuloPorte = (pagina.portes || []).find((x) => x.id === porte)?.nome || '';
   const textoV = [modelo.trim(), placa && formatarPlaca(placa), rotuloPorte && `porte ${rotuloPorte.toLowerCase()}`].filter(Boolean).join(' · ');
   const chave = `${srv.join(',')}|${barb}|${porte}`;
   const nomeBarb = (id) => pagina.profissionais.find((b) => b.id === id)?.nome || `Qualquer ${rot('profissional')}`;
   const alternar = (id) => { setSrv((l) => (l.includes(id) ? l.filter((x) => x !== id) : l.length >= 5 ? l : [...l, id])); setEscolha(null); };
+
+  // Limpa erro ao mudar de etapa para evitar mensagens residuais (ex.: erro de nome aparecendo na etapa de horário)
+  useEffect(() => { setErro(''); }, [etapa]);
 
   // Avisa antes de pedir: "este horário usa um atendimento do seu plano". Só consulta com o telefone completo; o servidor responde apenas sim ou não.
   useEffect(() => {
@@ -265,7 +361,17 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
 
   const enviar = async () => {
     if (enviando) return;
-    setErro(''); setEnviando(true);
+    setErro('');
+    if (pagina.exigeNome !== false && (!nome || nome.trim().length < 2)) {
+      setErro('Informe o seu nome.');
+      return;
+    }
+    const semTelefone = !pagina.exigeTelefone && String(tel ?? '').replace(/\D/g, '') === '';
+    if (!semTelefone && !telefoneBrasileiro(tel)) {
+      setErro('Informe o telefone com DDD.');
+      return;
+    }
+    setEnviando(true);
     const r = await publico.agendar({ nome, telefone: tel, servicoIds: srv, profissionalId: escolha?.profissionalId || barb, inicio: escolha?.inicio, cupomChave: cupom, site: isca, selo: pagina.selo, captcha: cap.prova, ...(usaVeiculo ? { veiculo: { placa, marca, modelo, cor, porte } } : {}) });
     cap.gasta();
     setEnviando(false);
@@ -339,7 +445,7 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
       {etapa === 1 && (
         <div className="pub-bloco">
           <h2>O que vamos fazer?</h2>
-          {usaVeiculo && <p className="muted" data-testid="pub-veiculo-atual">{textoV || 'Sem dados do veículo'} <button type="button" className="link" onClick={() => setEtapa(0)} data-testid="pub-trocar-veiculo">Trocar</button></p>}
+          {usaVeiculo && <p className="muted" data-testid="pub-veiculo-atual">{textoV || 'Sem dados do veículo'} <button type="button" className="link" onClick={() => { setErro(''); setEtapa(0); }} data-testid="pub-trocar-veiculo">Trocar</button></p>}
           {!pagina.servicos.length && <p className="muted" data-testid="pub-sem-servicos">Nenhum serviço disponível para agendar por aqui. Fale com a loja.</p>}
           <div className="pub-lista">
             {pagina.servicos.map((x) => (
@@ -359,7 +465,7 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
           </>}
           <div className="pub-rodape">
             {servicos.length > 0 && <span className="muted">{fmtDur(duracao)} · {fmtMoney(total)}</span>}
-            {usaVeiculo && <Btn variante="fantasma" onClick={() => setEtapa(0)} data-testid="pub-voltar-0">Voltar</Btn>}
+            {usaVeiculo && <Btn variante="fantasma" onClick={() => { setErro(''); setEtapa(0); }} data-testid="pub-voltar-0">Voltar</Btn>}
             <Btn variante="primario" disabled={!srv.length} onClick={() => setEtapa(2)} data-testid="pub-continuar-1">Escolher horário</Btn>
           </div>
         </div>
@@ -369,10 +475,10 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
         <div className="pub-bloco">
           <h2>Quando?</h2>
           <p className="muted">Só aparecem horários livres. Toque no dia e no horário.</p>
-          <DiaHora chave={chave} diasMax={pagina.diasMax} servicoIds={srv} profissionalId={barb} porte={usaVeiculo ? porte : undefined} valor={escolha?.inicio} aoEscolher={setEscolha} />
+          <DiaHora chave={chave} diasMax={pagina.diasMax} servicoIds={srv} profissionalId={barb} porte={usaVeiculo ? porte : undefined} valor={escolha?.inicio} aoEscolher={setEscolha} duracaoTotal={duracao} dia={dia} aoMudarDia={setDia} />
           {erro && <Aviso tipo="erro"><span data-testid="pub-erro">{erro}</span></Aviso>}
           <div className="pub-rodape">
-            <Btn variante="fantasma" onClick={() => setEtapa(1)} data-testid={`pub-voltar-${1 - desl}`}>Voltar</Btn>
+            <Btn variante="fantasma" onClick={() => { setErro(''); setEtapa(1); }} data-testid={`pub-voltar-${1 - desl}`}>Voltar</Btn>
             <Btn variante="primario" disabled={!escolha} onClick={() => { setErro(''); setEtapa(3); }} data-testid="pub-continuar-2">Continuar</Btn>
           </div>
         </div>
@@ -388,15 +494,15 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
             <span className="muted">{fmtDur(duracao)} · {fmtMoney(total)}</span>
           </div>
           <form className="pub-form" onSubmit={(e) => { e.preventDefault(); enviar(); }} noValidate>
-            <Campo rotulo={pagina.exigeNome === false ? 'Nome, se quiser' : 'Nome'}><input value={nome} onChange={(e) => setNome(e.target.value)} maxLength={60} autoComplete="name" data-testid="pub-nome" /></Campo>
-            <Campo rotulo={pagina.exigeTelefone ? 'Telefone (WhatsApp, com DDD)' : 'Telefone (WhatsApp), se quiser'} dica={pagina.exigeTelefone ? undefined : 'Opcional. Com telefone a loja avisa do seu horário; sem ele, só vê o seu pedido.'}><input type="tel" inputMode="tel" value={tel} onChange={(e) => setTel(formatarTelefone(e.target.value))} maxLength={16} autoComplete="tel" placeholder="(51) 99999-9999" data-testid="pub-tel" /></Campo>
+            <Campo rotulo={pagina.exigeNome === false ? 'Nome (opcional)' : 'Nome'}><input value={nome} onChange={(e) => setNome(e.target.value)} maxLength={60} autoComplete="name" data-testid="pub-nome" /></Campo>
+            <Campo rotulo={pagina.exigeTelefone ? 'Telefone (WhatsApp, com DDD)' : 'Telefone (WhatsApp) (opcional)'} dica={pagina.exigeTelefone ? undefined : 'Opcional. Com telefone a loja avisa do seu horário; sem ele, só vê o seu pedido.'}><input type="tel" inputMode="tel" value={tel} onChange={(e) => setTel(formatarTelefone(e.target.value))} maxLength={16} autoComplete="tel" placeholder="(51) 99999-9999" data-testid="pub-tel" /></Campo>
             {usaPlano && <p className="pub-aviso-plano" role="status" data-testid="pub-usa-plano"><Icone n="ticket" size={14} /> Este horário usa um atendimento do seu plano.</p>}
             <Campo rotulo="Cupom (opcional)"><input value={cupom} onChange={(e) => setCupom(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 14))} maxLength={14} autoComplete="off" autoCapitalize="characters" placeholder="XXXX-XXXX-XXXX" data-testid="pub-cupom" /></Campo>
             <input className="pub-isca" tabIndex={-1} aria-hidden="true" autoComplete="off" name="site" value={isca} onChange={(e) => setIsca(e.target.value)} data-testid="pub-isca" />
             {erro && <Aviso tipo="erro"><span data-testid="pub-erro">{erro}</span></Aviso>}
             {cap.widget}
             <div className="pub-rodape">
-              <Btn variante="fantasma" onClick={() => setEtapa(2)} data-testid={`pub-voltar-${2 - desl}`}>Voltar</Btn>
+              <Btn variante="fantasma" onClick={() => { setErro(''); setEtapa(2); }} data-testid={`pub-voltar-${2 - desl}`}>Voltar</Btn>
               <button type="submit" className="btn btn-primario" disabled={enviando} data-testid="pub-enviar">{enviando ? 'Enviando…' : 'Pedir este horário'}</button>
             </div>
           </form>
@@ -528,7 +634,7 @@ function Meus({ loja, acessos, setAcessos, diasMax, aoSincronizar }) {
                   ? (
                     <>
                       <p>Escolha o novo dia e horário. A loja precisa confirmar de novo.</p>
-                      <DiaHora chave={`r-${a.id}-${a.inicio}`} diasMax={diasMax} fonte={fonteDe(a)} valor={remarcando.escolha?.inicio} aoEscolher={(h) => setRemarcando({ id: a.id, escolha: h })} />
+                      <DiaHora chave={`r-${a.id}-${a.inicio}`} diasMax={diasMax} fonte={fonteDe(a)} valor={remarcando.escolha?.inicio} aoEscolher={(h) => setRemarcando({ id: a.id, escolha: h })} duracaoTotal={a.duracao || 30} />
                       <div className="pub-linha">
                         <Btn tamanho="sm" variante="primario" disabled={!remarcando.escolha || enviando} onClick={() => remarcar(a)} data-testid={`pub-remarcar-sim-${a.id}`}>{enviando ? 'Enviando…' : 'Pedir este horário'}</Btn>
                         <Btn tamanho="sm" onClick={() => setRemarcando(null)} data-testid={`pub-remarcar-nao-${a.id}`}>Voltar</Btn>

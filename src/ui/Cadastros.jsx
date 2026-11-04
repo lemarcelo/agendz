@@ -14,7 +14,6 @@ import { fotoDeExemplo } from './imagem.js';
 import { EditorNotificacoes, EditorPixCancelamento } from './Notif.jsx';
 import { SeletorGrupo, rotuloGrupo } from './Grupo.jsx';
 import { PainelEscala } from './Estabelecimento.jsx';
-import { ListaAvaliacoes } from './Avaliacoes.jsx';
 import FilaMensagens from './FilaMensagens.jsx';
 import { textoUltimo } from './format.js';
 import { toast, useStore } from './hooks.js';
@@ -135,6 +134,8 @@ function FormCliente({ c, onClose, plano }) {
         <Campo rotulo="CPF (opcional)"><input value={f.cpf || ''} inputMode="numeric" onChange={(e) => setF({ ...f, cpf: formatarCpf(e.target.value) })} /></Campo>
         <Campo rotulo="Nascimento (opcional)"><input type="date" value={f.nascimento || ''} onChange={(e) => setF({ ...f, nascimento: e.target.value })} /></Campo>
         <label className="servico-op campo-largo" data-testid="cli-sem-mensagens-rotulo"><input type="checkbox" checked={f.semMensagens === true} onChange={(e) => setF({ ...f, semMensagens: e.target.checked })} data-testid="cli-sem-mensagens" /><span><b>Não quer receber mensagens da loja</b><small className="muted">Fica fora dos pedidos de avaliação e das mensagens em lote.</small></span></label>
+        <label className="servico-op campo-largo"><input type="checkbox" checked={f.parceiro === true} onChange={(e) => setF({ ...f, parceiro: e.target.checked })} data-testid="cli-parceiro-sim" /><span><b>Cliente parceiro</b><small className="muted">Aplica desconto ou abono nos atendimentos.</small></span></label>
+        {f.parceiro && <Campo rotulo="Desconto do parceiro (%)" dica="Sem percentual: desconto total (100% / abono)."><input value={f.parceiroDescontoPct ?? ''} inputMode="decimal" onChange={(e) => setF({ ...f, parceiroDescontoPct: e.target.value })} placeholder="100% (abono total)" /></Campo>}
       </div>
       {capAtiva('usaVeiculo') && <fieldset className="conj" data-testid="cli-veiculos">
         <legend>Veículos</legend>
@@ -310,12 +311,6 @@ function FormServico({ s, user, onClose }) {
         <Btn tamanho="sm" icone="plus" onClick={() => setF({ ...f, materiais: [...(f.materiais || []), { materialId: '', qtd: 1 }] })} disabled={!st.materiais.some((x) => x.tipo !== 'produto')} data-testid="add-material">Adicionar material</Btn>
         {st.materiais.length === 0 && <p className="muted">Cadastre materiais primeiro, na tela Estoque.</p>}
       </fieldset>
-      {s.id && pode(user, 'avaliacoes') && (
-        <fieldset className="conj" data-testid="srv-avaliacoes">
-          <legend>Avaliações deste serviço</legend>
-          <ListaAvaliacoes user={user} filtros={{ servicoId: s.id }} vazio={<p className="muted">Nenhum cliente avaliou este serviço ainda.</p>} />
-        </fieldset>
-      )}
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
     </Modal>
   );
@@ -511,9 +506,12 @@ export function Avisos({ user, onAbrir }) {
       {lista.length === 0 ? <Vazio icone="bell" titulo="Nenhum aviso" texto="Quando um cliente não confirmar o horário, o aviso aparece aqui." /> : (
         <ul className="avisos-lista">
           {lista.map((a) => (
-            <li key={a.id} className={a.lido ? 'lido' : ''}>
+            <li key={a.id} className={`${a.lido ? 'lido' : ''}${a.tipo === 'fraude' ? ' aviso-fraude' : ''}`} data-tipo={a.tipo}>
               <Icon n="alert" size={18} />
-              <div><p>{a.texto}</p><small className="muted">{fmtDateTime(a.em)}</small></div>
+              <div>
+                {a.tipo === 'fraude' && <span className="chip chip-p chip-alerta chip-fraude" data-testid="aviso-chip-fraude">Alerta de Fraude</span>}
+                <p>{a.texto}</p><small className="muted">{fmtDateTime(a.em)}</small>
+              </div>
               <div className="acoes">
                 {a.agendamentoId && <Btn tamanho="sm" onClick={() => onAbrir(a.agendamentoId)}>Abrir agendamento</Btn>}
                 {!a.lido && <Btn tamanho="sm" onClick={() => agenda.marcarAvisoLido(a.id)}>Marcar como lido</Btn>}

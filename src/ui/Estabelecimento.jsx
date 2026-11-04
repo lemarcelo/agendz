@@ -283,8 +283,11 @@ function Reconfigurar({ st }) {
   return (
     <div className="bloco-largo" data-testid="reconfigurar">
       <p>Refaça a configuração do estabelecimento com o assistente: escolha, entre os serviços do tipo da {rot('loja')}, os que você quer poder prestar; crie novas pessoas na equipe; e redefina o horário de funcionamento.</p>
-      <Aviso>Só adiciona: serviços e pessoas que já existem ficam como estão e <b>ninguém da equipe é excluído</b>.</Aviso>
-      <div><Btn variante="primario" onClick={() => setAberto(true)} data-testid="reconfigurar-abrir">Abrir o assistente</Btn></div>
+      <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.4)', borderRadius: 8, padding: '12px 14px', margin: '10px 0 14px' }}>
+        <b style={{ color: '#ef4444', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>⚠️ CUIDADO: ZONA DE RISCO — RECONFIGURAÇÃO GERAL</b>
+        <p style={{ margin: '6px 0 0', fontSize: 13, lineHeight: 1.45 }}>Esta operação reabre as definições estruturais da loja. Só utilize se precisar refazer o expediente ou cadastros de fábrica. Serviços e pessoas que já existem ficam como estão e ninguém da equipe é excluído.</p>
+      </div>
+      <div><Btn tamanho="sm" variante="neutro" onClick={() => setAberto(true)} data-testid="reconfigurar-abrir" style={{ fontSize: 12, padding: '4px 10px', color: 'var(--muted)' }}>Abrir o assistente</Btn></div>
     </div>
   );
 }
@@ -421,6 +424,11 @@ function LinkAgendamentoRegras({ e }) {
       <Campo rotulo="Até quantos dias à frente o cliente pode marcar" dica="De 1 a 60. A antecedência mínima de cada serviço continua valendo.">
         <select value={cfg.diasMax} onChange={(x) => salvar({ diasMax: Number(x.target.value) }, 'Prazo salvo.')} data-testid="link-dias-max">
           {[7, 14, 30, 45, 60].map((d) => <option key={d} value={d}>{d} dias</option>)}
+        </select>
+      </Campo>
+      <Campo rotulo="Intervalo mínimo entre agendamentos (min)" dica="Evita buracos na agenda: o cliente só pode agendar colado a outro horário ou se a sobra for de pelo menos esse tempo.">
+        <select value={cfg.intervaloMin ?? 20} onChange={(x) => salvar({ intervaloMin: Number(x.target.value) }, 'Intervalo salvo.')} data-testid="link-intervalo">
+          {[0, 10, 15, 20, 30, 45, 60].map((d) => <option key={d} value={d}>{d === 0 ? 'Sem intervalo (livre)' : `${d} min`}</option>)}
         </select>
       </Campo>
       <fieldset className="conj" data-testid="recaptcha-loja">

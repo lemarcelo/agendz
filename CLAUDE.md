@@ -43,6 +43,7 @@ Protótipo React 19 + esbuild com API simulada (`src/services/api.js`), que depo
 8. **Estado do app é clonado a cada alteração** (`structuredClone` em `mutate`); nunca altere `state` direto fora de `mutate`.
 9. **Artifact:** um único HTML (`dist/agenda.html`), sem rede (exceto o `<link>` do Google Fonts, com fonte de reserva), tema claro e escuro por tokens, funciona em 390 px sem rolagem horizontal, título "Agendz".
 10. **Autoria:** arquivo novo em `src/` recebe o cabeçalho com `npm run autoria` (o teste estático falha sem ele). A chave `segredo-autoria.txt` (ou `AUTORIA_SEGREDO`) fica **fora do projeto e do zip**; sem chave o build sai sem assinatura verificável.
+11. **Integridade de wizards e isolamento de erros:** Todo fluxo multi-etapa (`AgendarPublico`, `Atender`, cadastros) limpa erros na mudança de etapa (`useEffect` + botões de navegação). Validações de backend/domínio seguem a ordem cronológica estrita das etapas (nunca valida dado pessoal antes de validar horário e serviço). Nenhuma mensagem de erro pode ser exibida em etapa que não contém o campo. Mudanças exigem validação em `tests/fluxos-integridade.test.mjs`.
 
 ## Como verificar (obrigatório antes de dizer que terminou)
 - `npm run verificar` = testes de unidade + estáticos + build + navegador. Tem que passar inteiro.

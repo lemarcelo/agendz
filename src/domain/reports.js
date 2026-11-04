@@ -11,6 +11,12 @@ export const r3 = (n) => Math.round(n * 1000) / 1000;
 // Serviços considerados no valor do agendamento: concluído com confirmação dos serviços conta só o que foi feito.
 export function itensDoAgendamento(st, a) {
   const ids = a.status === STATUS.CONCLUIDO && a.servicosFeitos ? a.servicosFeitos : a.servicoIds;
+  const cliente = a.clienteId && st.clientes ? st.clientes.find((c) => c.id === a.clienteId) : null;
+  const ehParceiro = a.parceiro === true || !!(cliente && cliente.parceiro);
+  const descParceiroPct = a.parceiroDescontoPct !== undefined && a.parceiroDescontoPct !== null
+    ? Number(a.parceiroDescontoPct)
+    : (cliente && cliente.parceiroDescontoPct !== undefined && cliente.parceiroDescontoPct !== null ? Number(cliente.parceiroDescontoPct) : (ehParceiro ? 100 : 0));
+
   const itens = ids.map((id) => {
     const s = st.servicos.find((x) => x.id === id);
     return { id, nome: s ? s.nome : id, valor: r2((a.precos && Object.hasOwn(a.precos, id) ? a.precos[id] : s && servicoNoPorte(s, a.porte).preco) ?? 0), acrescimo: r2(a.acrescimos?.[id] || 0) };
@@ -19,7 +25,21 @@ export function itensDoAgendamento(st, a) {
   const dp = descontosDoPlano(a.planoUso, itens);
   // Cupom aplicado ao agendamento: o desconto sai do serviço (e é recalculado a cada edição de serviços).
   const d = descontosDoCupom(a.cupom, itens.filter((i) => dp[i.id] === undefined));
-  return itens.map((i) => ({ ...i, desconto: r2(dp[i.id] ?? d[i.id] ?? 0), ...(dp[i.id] !== undefined ? { plano: true } : {}) }));
+  return itens.map((i) => {
+    const descCupomOuPlano = dp[i.id] ?? d[i.id] ?? 0;
+    let descParceiro = 0;
+    if (ehParceiro && dp[i.id] === undefined && d[i.id] === undefined) {
+      descParceiro = r2(((i.valor + i.acrescimo) * descParceiroPct) / 100);
+    }
+    const descontoTotal = r2(Math.min(i.valor + i.acrescimo, descCupomOuPlano + descParceiro));
+    return {
+      ...i,
+      desconto: descontoTotal,
+      descontoParceiro: descParceiro,
+      parceiro: ehParceiro,
+      ...(dp[i.id] !== undefined ? { plano: true } : {}),
+    };
+  });
 }
 // Produtos vendidos no atendimento (materiais do tipo "produto"): quantidade e preço congelados ao adicionar. Não entram em desconto de cupom nem em comissão.
 export function produtosDoAgendamento(st, a) {

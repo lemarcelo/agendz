@@ -35,6 +35,18 @@ export function sanearLista(valor, conhecidos, padrao) {
   return saida;
 }
 
+/** As etapas saneadas nunca deixam a escolha do serviço depois do horário. */
+export function sanearEtapas(valor, padrao) {
+  const lista = sanearLista(valor, ETAPAS, padrao);
+  const srv = lista.indexOf('servicos');
+  const qdo = lista.indexOf('quando');
+  if (srv >= 0 && qdo >= 0 && srv > qdo) {
+    lista.splice(srv, 1);
+    lista.splice(qdo, 0, 'servicos');
+  }
+  return lista;
+}
+
 /** { futuro, local } completo e válido a partir de qualquer valor (lixo, parcial ou ausente). */
 export function sanearOrdemAtender(valor, padrao = PADRAO_PAINEL) {
   const v = valor && typeof valor === 'object' && !Array.isArray(valor) ? valor : {};
@@ -42,7 +54,7 @@ export function sanearOrdemAtender(valor, padrao = PADRAO_PAINEL) {
   for (const t of TIPOS_DE_ATENDIMENTO) {
     const o = v[t] && typeof v[t] === 'object' && !Array.isArray(v[t]) ? v[t] : {};
     saida[t] = {
-      etapas: sanearLista(o.etapas, ETAPAS, padrao[t].etapas),
+      etapas: sanearEtapas(o.etapas, padrao[t].etapas),
       veiculo: sanearLista(o.veiculo, CAMPOS_DO_VEICULO, padrao[t].veiculo),
       cliente: sanearLista(o.cliente, CAMPOS_DO_CLIENTE, padrao[t].cliente),
     };
@@ -62,6 +74,12 @@ export function ordemAtenderValida(valor) {
     for (const k of ['etapas', 'veiculo', 'cliente']) {
       if (o[k] === undefined) continue;
       if (!Array.isArray(o[k]) || o[k].length > 20 || !o[k].every((x) => typeof x === 'string' && x.length <= 20)) return false;
+    }
+    if (Array.isArray(o.etapas)) {
+      const srv = o.etapas.indexOf('servicos');
+      const qdo = o.etapas.indexOf('quando');
+      if (srv >= 0 && qdo >= 0 && srv > qdo) return false;
+      if (qdo >= 0 && srv < 0) return false;
     }
   }
   return true;

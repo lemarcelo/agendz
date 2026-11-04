@@ -20,12 +20,12 @@ const fmtDur = (min) => (min < 60 ? `${min} min` : `${Math.floor(min / 60)} h${m
 const veiculoTxt = (v) => (v ? `${v.modelo} · ${v.placa}` : '');
 
 // Dia + horário livres. Os dois vêm de funções que só devolvem o que está livre.
-function DiaHora({ chave, obterDias, obterHorarios, diasMax, valor, aoEscolher, id = 'pub' }) {
+function DiaHora({ chave, obterDias, obterHorarios, diasMax, valor, aoEscolher, id = 'pub', duracaoTotal = 30 }) {
   const snap = useStore();
   const [janela, setJanela] = useState(14);
   const [dia, setDia] = useState(null);
   const dias = useMemo(() => obterDias(hojeTs(), Math.min(janela, diasMax)), [snap.state, chave, janela, diasMax]);
-  const diaAtual = dia && dias.includes(dia) ? dia : dias[0] || null;
+  const diaAtual = dia && dias.includes(dia) ? dia : null;
   const horas = useMemo(() => (diaAtual ? obterHorarios(diaAtual) : []), [snap.state, chave, diaAtual]);
   const podeMais = janela < diasMax;
   const [horaPicker, setHoraPicker] = useState('');
@@ -35,6 +35,40 @@ function DiaHora({ chave, obterDias, obterHorarios, diasMax, valor, aoEscolher, 
     setHoraPicker('');
     setAvisoHorario(null);
   }, [chave, diaAtual]);
+
+  const calcularFim = (horaInicioStr, duracaoMin) => {
+    if (!horaInicioStr || !duracaoMin) return '';
+    const [h, m] = horaInicioStr.split(':').map(Number);
+    const totalMin = h * 60 + m + duracaoMin;
+    const hFim = Math.floor(totalMin / 60) % 24;
+    const mFim = totalMin % 60;
+    return `${String(hFim).padStart(2, '0')}:${String(mFim).padStart(2, '0')}`;
+  };
+
+  const slotsGrid = useMemo(() => {
+    if (!horas) return [];
+    const mapaHoras = new Map();
+    const temposSet = new Set();
+    for (const h of horas) {
+      const txt = fmtHM(h.inicio);
+      mapaHoras.set(txt, h);
+      temposSet.add(txt);
+    }
+    const minHora = 8;
+    const maxHora = 19;
+    for (let hr = minHora; hr <= maxHora; hr++) {
+      for (const min of [0, 30]) {
+        if (hr === maxHora && min > 0) continue;
+        const strHora = `${String(hr).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+        temposSet.add(strHora);
+      }
+    }
+    const ordenados = Array.from(temposSet).sort();
+    return ordenados.map((strHora) => ({
+      hora: strHora,
+      livre: mapaHoras.get(strHora) || null
+    }));
+  }, [horas]);
 
   const processarHorario = (txt) => {
     setHoraPicker(txt);
@@ -106,45 +140,96 @@ function DiaHora({ chave, obterDias, obterHorarios, diasMax, valor, aoEscolher, 
         {podeMais && <button type="button" className="pub-dia pub-mais" onClick={() => setJanela(Math.min(janela + 14, diasMax))} data-testid={`${id}-mais-dias`}><Icon n="plus" size={16} /><small>Mais dias</small></button>}
       </div>
       {!dias.length && <p className="muted" data-testid={`${id}-sem-horarios`}>Não há horários livres {podeMais ? 'nesses dias. Toque em "Mais dias".' : `nos próximos ${diasMax} dias. Tente outro ${rot('profissional')} ou serviço.`}</p>}
-      {diaAtual && <p className="pub-dia-titulo">{maiuscula1(fmtDayLong(diaAtual))}</p>}
-      <div className="pub-timepicker" data-testid="${id}-timepicker-container">
-        <label htmlFor="${id}-input-hora" className="pub-timepicker-rotulo">
-          <Icon n="clock" size={16} />
-          <span>Escolher horário específico:</span>
-        </label>
-        <div className="pub-timepicker-campo">
-          <input
-            id="${id}-input-hora"
-            type="time"
-            className="pub-timepicker-input"
-            value={horaPicker}
-            onChange={(e) => processarHorario(e.target.value)}
-            data-testid="${id}-time-picker"
-          />
-        </div>
-      </div>
-      {avisoHorario && (
-        <div className="pub-aviso-horario" role="status" data-testid="${id}-aviso-horario">
-          <p>{avisoHorario.texto}</p>
-          {avisoHorario.horarioSugerido && (
-            <button
-              type="button"
-              className="pub-hora on"
-              onClick={() => selecionarHora(avisoHorario.horarioSugerido)}
-              data-testid="${id}-usar-sugestao"
-            >
-              Usar {fmtHM(avisoHorario.horarioSugerido.inicio)}
-            </button>
+      {!diaAtual && dias.length > 0 && <p className="muted pub-instrucao-dia" data-testid="pub-instrucao-dia">Selecione um dia acima para ver os horários disponíveis.</p>}
+      {diaAtual && (
+        <>
+          <p className="pub-dia-titulo">{maiuscula1(fmtDayLong(diaAtual))}</p>
+          {horas.length === 0 ? (
+            <p className="muted" data-testid={`${id}-sem-vagas-dia`}>Não há horários disponíveis neste dia que abranjam os serviços selecionados ({duracaoTotal} min).</p>
+          ) : (
+            <div className="pub-grid-dia" role="grid" aria-label="Grade de horários do dia" data-testid="pub-grid-dia">
+              {slotsGrid.map((slot) => {
+                if (slot.livre) {
+                  const h = slot.livre;
+                  const selecionado = valor === h.inicio;
+                  return (
+                    <button
+                      key={slot.hora}
+                      type="button"
+                      className={`pub-hora pub-grid-slot pub-grid-livre ${selecionado ? 'on' : ''}`}
+                      aria-pressed={selecionado}
+                      onClick={() => selecionarHora(h)}
+                      data-testid={`${id}-hora-${slot.hora.replace(':', '')}`}
+                    >
+                      <div className="pub-grid-slot-col-hora">
+                        <strong className="pub-grid-hora-texto">{slot.hora}</strong>
+                        {duracaoTotal > 0 && (
+                          <small className="pub-grid-termino-texto">até {calcularFim(slot.hora, duracaoTotal)}</small>
+                        )}
+                      </div>
+                      <div className="pub-grid-slot-conteudo">
+                        <span className="pub-grid-tag-livre">
+                          <Icon n="check" size={13} /> Disponível
+                        </span>
+                        {duracaoTotal > 0 && (
+                          <span className="pub-grid-duracao-tag">{duracaoTotal} min</span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                }
+                return (
+                  <div
+                    key={slot.hora}
+                    className="pub-grid-slot pub-grid-ocupado"
+                    data-testid={`pub-slot-ocupado-${slot.hora.replace(':', '')}`}
+                    aria-disabled="true"
+                  >
+                    <div className="pub-grid-slot-col-hora">
+                      <span className="pub-grid-hora-texto">{slot.hora}</span>
+                    </div>
+                    <div className="pub-grid-slot-conteudo">
+                      <span className="pub-grid-tag-ocupado">Ocupado</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
-        </div>
+
+          <div className="pub-timepicker" data-testid={`${id}-timepicker-container`}>
+            <label htmlFor={`${id}-input-hora`} className="pub-timepicker-rotulo">
+              <Icon n="clock" size={16} />
+              <span>Escolher horário específico:</span>
+            </label>
+            <div className="pub-timepicker-campo">
+              <input
+                id={`${id}-input-hora`}
+                type="time"
+                className="pub-timepicker-input"
+                value={horaPicker}
+                onChange={(e) => processarHorario(e.target.value)}
+                data-testid={`${id}-time-picker`}
+              />
+            </div>
+          </div>
+          {avisoHorario && (
+            <div className="pub-aviso-horario" role="status" data-testid={`${id}-aviso-horario`}>
+              <p>{avisoHorario.texto}</p>
+              {avisoHorario.horarioSugerido && (
+                <button
+                  type="button"
+                  className="pub-hora on"
+                  onClick={() => selecionarHora(avisoHorario.horarioSugerido)}
+                  data-testid={`${id}-usar-sugestao`}
+                >
+                  Usar {fmtHM(avisoHorario.horarioSugerido.inicio)}
+                </button>
+              )}
+            </div>
+          )}
+        </>
       )}
-      <div className="pub-horas" role="group" aria-label="Escolher o horário">
-        {horas.map((h) => (
-          <button type="button" key={h.inicio} className={`pub-hora ${valor === h.inicio ? 'on' : ''}`} aria-pressed={valor === h.inicio} onClick={() => selecionarHora(h)} data-testid={`${id}-hora-${fmtHM(h.inicio).replace(':', '')}`}>
-            {fmtHM(h.inicio)}
-          </button>
-        ))}
-      </div>
     </div>
   );
 }
@@ -208,7 +293,10 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
   const veiculoOk = limparVeiculoComRegras({ placa, modelo, porte }, exV).ok;
   const rotuloPorte = (cfg.portes || []).find((x) => x.id === porte)?.nome || '';
   const textoV = [modelo.trim(), placa && formatarPlaca(placa), rotuloPorte && `porte ${rotuloPorte.toLowerCase()}`].filter(Boolean).join(' · ');
-  const estrela = (k) => (exV.includes(k) ? ' *' : '');
+  const estrela = (k) => (exV.includes(k) ? ' *' : ' (opcional)');
+
+  // Limpa erro ao mudar de etapa para evitar mensagens residuais
+  useEffect(() => { setErro(''); }, [etapa]);
 
   // Avisa antes de pedir: "este horário usa um atendimento do seu plano". Só consulta com o telefone completo; o servidor responde apenas sim ou não.
   useEffect(() => {
@@ -219,7 +307,17 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
   }, [etapa, tel, srv, escolha]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const enviar = () => {
-    setErro(''); setEnviando(true);
+    setErro('');
+    if (cfg.exigeNome !== false && (!nome || nome.trim().length < 2)) {
+      setErro('Informe o seu nome.');
+      return;
+    }
+    const semTelefone = !cfg.exigeTelefone && String(tel ?? '').replace(/\D/g, '') === '';
+    if (!semTelefone && !telefoneBrasileiro(tel)) {
+      setErro('Informe o telefone com DDD.');
+      return;
+    }
+    setEnviando(true);
     const r = publico.agendar({ nome, telefone: tel, ...(usaVeiculo ? { placa, marca, modelo, cor, ...(porte ? { porte } : {}) } : {}), servicoIds: srv, profissionalId: escolha?.profissionalId || barb, inicio: escolha?.inicio, site: isca });
     setEnviando(false);
     if (!r.ok) { setErro(r.erros[0]); if (/ocupado/.test(r.erros[0])) { setEscolha(null); setEtapa(2); } return; }
@@ -295,7 +393,7 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
       {etapa === 1 && (
         <div className="pub-bloco">
           <h2>O que vamos fazer?</h2>
-          {usaVeiculo && <p className="muted" data-testid="pub-veiculo-atual">{textoV || 'Sem dados do veículo'} <button type="button" className="link" onClick={() => setEtapa(0)} data-testid="pub-trocar-veiculo">Trocar</button></p>}
+          {usaVeiculo && <p className="muted" data-testid="pub-veiculo-atual">{textoV || 'Sem dados do veículo'} <button type="button" className="link" onClick={() => { setErro(''); setEtapa(0); }} data-testid="pub-trocar-veiculo">Trocar</button></p>}
           {categorias.map(([cat, lista]) => (
             <div key={cat} className="pub-cat" role="group" aria-label={cat}>
               {categorias.length > 1 && <h3>{cat}</h3>}
@@ -319,7 +417,7 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
           </>}
           <div className="pub-rodape">
             {servicos.length > 0 && <span className="muted">{multiDia ? 'Vários dias' : dur(duracao)} · {fmtMoney(total)}</span>}
-            {usaVeiculo && <Btn variante="fantasma" onClick={() => setEtapa(0)} data-testid="pub-voltar-0">Voltar</Btn>}
+            {usaVeiculo && <Btn variante="fantasma" onClick={() => { setErro(''); setEtapa(0); }} data-testid="pub-voltar-0">Voltar</Btn>}
             <Btn variante="primario" disabled={!srv.length} onClick={() => setEtapa(2)} data-testid="pub-continuar-1">Escolher horário</Btn>
           </div>
         </div>
@@ -332,10 +430,10 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
           <DiaHora chave={chave} diasMax={cfg.diasMax} valor={escolha?.inicio}
             obterDias={(de, n) => publico.diasLivres({ profissionalId: barb, servicoIds: srv, porte, de, dias: n })}
             obterHorarios={(d) => publico.horarios({ profissionalId: barb, servicoIds: srv, porte, dayTs: d })}
-            aoEscolher={setEscolha} />
+            aoEscolher={setEscolha} duracaoTotal={duracao} />
           {erro && <Aviso tipo="erro">{erro}</Aviso>}
           <div className="pub-rodape">
-            <Btn variante="fantasma" onClick={() => setEtapa(1)} data-testid={`pub-voltar-${1 - desl}`}>Voltar</Btn>
+            <Btn variante="fantasma" onClick={() => { setErro(''); setEtapa(1); }} data-testid={`pub-voltar-${1 - desl}`}>Voltar</Btn>
             <Btn variante="primario" disabled={!escolha} onClick={() => { setErro(''); setEtapa(3); }} data-testid="pub-continuar-2">Continuar</Btn>
           </div>
         </div>
@@ -352,12 +450,12 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
           </div>
           {usaPlano && <p className="pub-aviso-plano" role="status" data-testid="pub-usa-plano"><Icon n="ticket" size={14} /> Este horário usa um atendimento do seu plano.</p>}
           <form className="pub-form" onSubmit={(e) => { e.preventDefault(); enviar(); }} noValidate>
-            <Campo rotulo={cfg.exigeNome === false ? 'Nome, se quiser' : 'Nome'}><input value={nome} onChange={(e) => setNome(e.target.value)} maxLength={60} autoComplete="name" data-testid="pub-nome" /></Campo>
-            <Campo rotulo={cfg.exigeTelefone === false ? 'Telefone (WhatsApp), se quiser' : 'Telefone (WhatsApp)'} dica={cfg.exigeTelefone === false ? 'Opcional. Com telefone avisamos do seu horário e você acompanha por aqui; sem ele, só a loja vê o seu pedido.' : 'Com DDD. Só usamos para falar do seu horário.'}><input type="tel" inputMode="tel" value={tel} onChange={(e) => setTel(formatarTelefone(e.target.value))} maxLength={16} autoComplete="tel" placeholder="(51) 99999-9999" data-testid="pub-telefone" /></Campo>
+            <Campo rotulo={cfg.exigeNome === false ? 'Nome (opcional)' : 'Nome'}><input value={nome} onChange={(e) => setNome(e.target.value)} maxLength={60} autoComplete="name" data-testid="pub-nome" /></Campo>
+            <Campo rotulo={cfg.exigeTelefone === false ? 'Telefone (WhatsApp) (opcional)' : 'Telefone (WhatsApp)'} dica={cfg.exigeTelefone === false ? 'Opcional. Com telefone avisamos do seu horário e você acompanha por aqui; sem ele, só a loja vê o seu pedido.' : 'Com DDD. Só usamos para falar do seu horário.'}><input type="tel" inputMode="tel" value={tel} onChange={(e) => setTel(formatarTelefone(e.target.value))} maxLength={16} autoComplete="tel" placeholder="(51) 99999-9999" data-testid="pub-telefone" /></Campo>
             <input className="pub-isca" tabIndex={-1} aria-hidden="true" autoComplete="off" name="site" value={isca} onChange={(e) => setIsca(e.target.value)} data-testid="pub-isca" />
             {erro && <Aviso tipo="erro"><span data-testid="pub-erro">{erro}</span></Aviso>}
             <div className="pub-rodape">
-              <Btn variante="fantasma" onClick={() => setEtapa(2)} data-testid={`pub-voltar-${2 - desl}`}>Voltar</Btn>
+              <Btn variante="fantasma" onClick={() => { setErro(''); setEtapa(2); }} data-testid={`pub-voltar-${2 - desl}`}>Voltar</Btn>
               <button type="submit" className="btn btn-primario" disabled={enviando} data-testid="pub-enviar">Pedir este horário</button>
             </div>
           </form>

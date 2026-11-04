@@ -8,7 +8,7 @@ import { Aviso, Btn, Icone } from '../leve/mini.jsx';
 import { useAtualizacaoAutomatica } from './atualizar.js';
 
 const quando = (ts) => (ts === null ? '' : new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(ts)));
-const ICONE = { pedido: 'plus', remarcou: 'calendar', cancelou: 'x', fixo: 'calendar' };
+const ICONE = { pedido: 'plus', remarcou: 'calendar', cancelou: 'x', fixo: 'calendar', fraude: 'alert' };
 
 export default function Avisos() {
   const [lista, setLista] = useState(null);
@@ -48,9 +48,12 @@ export default function Avisos() {
       {!lista.length && <p className="muted" data-testid="avisos-vazio">Nenhum aviso. Quando um cliente pedir, remarcar ou cancelar pelo link, aparece aqui.</p>}
       <ul className="avisos-lista-real">
         {lista.map((a) => (
-          <li key={a.id} className={a.lido ? 'lido' : 'novo'} data-testid={`aviso-${a.id}`}>
+          <li key={a.id} className={`${a.lido ? 'lido' : 'novo'}${a.tipo === 'fraude' ? ' aviso-fraude' : ''}`} data-testid={`aviso-${a.id}`} data-tipo={a.tipo}>
             <Icone n={ICONE[a.tipo] || 'bell'} size={16} />
-            <div><span>{a.texto}</span><br /><small className="muted">{quando(a.em)}</small></div>
+            <div>
+              {a.tipo === 'fraude' && <span className="chip chip-p chip-alerta chip-fraude" data-testid="aviso-chip-fraude">Alerta de Fraude</span>}
+              <span>{a.texto}</span><br /><small className="muted">{quando(a.em)}</small>
+            </div>
             {!a.lido && <Btn tamanho="sm" onClick={() => lido(a)} disabled={marcando === a.id} data-testid={`aviso-lido-${a.id}`}>Lido</Btn>}
           </li>
         ))}

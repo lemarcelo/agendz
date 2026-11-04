@@ -2,7 +2,7 @@
 import { pedirAbaEstabelecimento } from './destino.js';
 import React, { useEffect, useLayoutEffect, useState } from 'react';
 import { LOJA_NAO_ENCONTRADA, MODO_DEMO, auth, avisosDoUsuario, equipe, naoLidasDoSuporte, store, suporte } from '../services/api.js';
-import { hashEfetivo, lerHashAgendar, lerHashAvaliar, lerHashPlanos } from '../domain/link-publico.js';
+import { hashEfetivo, lerHashAgendar, lerHashPlanos } from '../domain/link-publico.js';
 import { criarAdaptadorDemo } from '../services/onboarding-demo.js';
 import PrimeiroAcesso from './leve/PrimeiroAcesso.jsx';
 import Suporte from './leve/Suporte.jsx';
@@ -23,8 +23,6 @@ import { PainelWhats } from './Whats.jsx';
 import AgendarPublico from './AgendarPublico.jsx';
 import Planos from './Planos.jsx';
 import PlanosPublico from './PlanosPublico.jsx';
-import Avaliacoes from './Avaliacoes.jsx';
-import AvaliarPublico from './AvaliarPublico.jsx';
 import { toast, useLocal, useMedia, useStore, useToasts, useUser } from './hooks.js';
 import { restaurarOrdens, useOrdem, useTemOrdemPersonalizada } from './ordem.jsx';
 
@@ -108,12 +106,10 @@ function AppDaLoja() {
   const [tema, setTema] = useTema();
   const publica = lerHashAgendar(hash);
   const planosPub = lerHashPlanos(hash);
-  const avaliarPub = lerHashAvaliar(hash);
   // Demonstração: o link traz a loja de quem enviou (#agendar@dalforno); `entrarNaLoja` só age sem loja fixa por build ou endereço.
-  useLayoutEffect(() => { const l = publica?.loja || planosPub?.loja || avaliarPub?.loja; if (MODO_DEMO && l) store.entrarNaLoja(l); }, [publica?.loja, planosPub?.loja, avaliarPub?.loja]);
+  useLayoutEffect(() => { const l = publica?.loja || planosPub?.loja; if (MODO_DEMO && l) store.entrarNaLoja(l); }, [publica?.loja, planosPub?.loja]);
   if (MODO_DEMO && hash === '#primeiro-acesso') return <><TemaMarca /><PreviaPrimeiroAcesso st={st} /></>;
   if (publica) return <><TemaMarca /><AgendarPublico key={st.estabelecimento.nome} profissionalInicial={publica.profissionalId} logado={!!user} aoVoltar={() => { sairDoLink(); }} /></>;
-  if (avaliarPub) return <><TemaMarca /><AvaliarPublico key={`${st.estabelecimento.nome}:${avaliarPub.token}`} token={avaliarPub.token} aoVoltar={user ? () => { sairDoLink(); } : null} /></>;
   if (planosPub) return <><TemaMarca /><PlanosPublico key={st.estabelecimento.nome} aoVoltar={user ? () => { sairDoLink(); } : null} /></>;
   if (!user) return <><TemaMarca /><Login /><Toasts /></>;
   return <><TemaMarca /><Shell user={user} st={st} tema={tema} setTema={setTema} /></>;
@@ -138,7 +134,6 @@ function Shell({ user, st, tema, setTema }) {
     pode(user, 'estoque') && ['estoque', 'Estoque', 'box'],
     pode(user, 'financeiro') && ['financeiro', 'Financeiro', 'wallet'],
     pode(user, 'planos') && ['planos', 'Planos', 'ticket'],
-    (pode(user, 'avaliacoes') || user.papel === 'profissional') && ['avaliacoes', 'Avaliações', 'star'],
     pode(user, 'estabelecimento') && ['estab', 'Estabelecimento', 'store'],
     ehDono(user) && ['equipe', 'Equipe', 'team'],
     user.papel === 'profissional' && ['escala', 'Minha escala', 'clock'],
@@ -191,7 +186,6 @@ function Shell({ user, st, tema, setTema }) {
           {abaAtual === 'estoque' && <Estoque user={user} />}
           {abaAtual === 'financeiro' && <Financeiro user={user} />}
           {abaAtual === 'planos' && <Planos user={user} />}
-          {abaAtual === 'avaliacoes' && <Avaliacoes user={user} />}
           {abaAtual === 'estab' && <Estabelecimento user={user} />}
           {abaAtual === 'equipe' && <Equipe user={user} />}
           {abaAtual === 'escala' && <MinhaEscala user={user} />}

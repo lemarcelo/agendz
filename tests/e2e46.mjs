@@ -96,7 +96,7 @@ const textoDe = (p, t) => p.getByTestId(t).innerText();
   assert.equal(await p.locator('[data-testid="proximo-dia"]').count(), 3);
   assert.match(await textoDe(p, 'agenda-proximos'), /Amanhã/);
   const primeiro = p.locator('[data-testid="cartao"]').first();
-  assert.match(await primeiro.innerText(), /09:00/); assert.match(await primeiro.innerText(), /Termina às 09:45/); assert.match(await primeiro.innerText(), /Bruno/); assert.match(await primeiro.innerText(), /Corte/);
+  assert.match(await primeiro.innerText(), /09:00/); assert.match(await primeiro.innerText(), /t[ée]rmin[ao] às 09:45/i); assert.match(await primeiro.innerText(), /Bruno/); assert.match(await primeiro.innerText(), /Corte/);
   assert.match(await p.locator('[data-testid="cartao"]').nth(1).innerText(), /Caio Souza/, 'sem apelido: o nome');
   assert.equal(await p.locator('[data-testid="cartao"][data-status="cancelado"]').count(), 0, 'cancelado sai da lista do dia');
   assert.equal((await textoDe(p, 'cancelados-resumo')).trim(), 'Cancelado (1)', 'e vira uma linha no fim');

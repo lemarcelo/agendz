@@ -112,12 +112,22 @@ function LocalDaLoja() {
 
 function ComissaoGeral() {
   const [v, setV] = useState(null);
+  const [cp, setCp] = useState(false);
   const [erro, setErro] = useState('');
   const [ok, setOk] = useState('');
   const [enviando, setEnviando] = useState(false);
   useEffect(() => {
     let vivo = true;
-    apiComissao.obter().then((r) => { if (!vivo) return; if (r.ok) setV(txt(r.comissaoPadrao)); else { setErro(r.erro); setV(''); } });
+    apiComissao.obter().then((r) => {
+      if (!vivo) return;
+      if (r.ok) {
+        setV(txt(r.comissaoPadrao));
+        setCp(r.comissaoParceiro === true);
+      } else {
+        setErro(r.erro);
+        setV('');
+      }
+    });
     return () => { vivo = false; };
   }, []);
   if (v === null) return <p className="muted" role="status">Carregando…</p>;
@@ -126,16 +136,20 @@ function ComissaoGeral() {
     if (enviando) return;
     setErro(''); setOk(''); setEnviando(true);
     const n = numero(v);
-    const r = await apiComissao.gravar(n === null ? NaN : n);
+    const r = await apiComissao.gravar(n === null ? NaN : n, cp);
     setEnviando(false);
     if (!r.ok) { setErro(r.erro); return; }
-    setV(txt(r.comissaoPadrao)); setOk('Comissão geral salva.');
+    setV(txt(r.comissaoPadrao));
+    setCp(r.comissaoParceiro === true);
+    setOk('Comissão geral salva.');
   };
   return (
     <form onSubmit={salvar} className="form-grade" data-testid="com-geral-form">
       <fieldset className="conj">
         <Campo rotulo="Comissão geral da loja (%)"><input value={v} inputMode="decimal" onChange={(e) => { setOk(''); setV(e.target.value); }} data-testid="com-geral" /></Campo>
         <p className="muted">Vale quando nem o serviço nem a pessoa têm percentual próprio. O percentual do serviço vence o da pessoa, que vence este. Atendimentos já feitos não mudam.</p>
+        <Interruptor marcado={cp} aoMudar={(val) => { setOk(''); setCp(val); }} testid="com-parceiro">Calcular comissão em atendimentos de parceiros</Interruptor>
+        <p className="muted">Quando ativado, a comissão do profissional é calculada sobre o valor do atendimento de parceiros. Quando desativado, atendimentos de parceiros não geram comissão.</p>
       </fieldset>
       {erro && <Aviso tipo="erro" data-testid="com-geral-erro">{erro}</Aviso>}
       {ok && <Aviso data-testid="com-geral-ok"><span role="status">{ok}</span></Aviso>}
@@ -150,7 +164,6 @@ export default function Estabelecimento({ ehDono, aoReconfigurar, aoMudarMarca }
       <header className="tela-topo"><h1>Estabelecimento</h1></header>
       {ehDono && (
         <>
-          {aoReconfigurar && <div className="acoes"><Btn onClick={aoReconfigurar} data-testid="reconfigurar-abrir">Reconfigurar estabelecimento</Btn></div>}
           <RegrasAtendimento />
           <LinkAgendamento />
         </>
@@ -176,6 +189,14 @@ export default function Estabelecimento({ ehDono, aoReconfigurar, aoMudarMarca }
           <h2 className="est-subtitulo-real">Comissão</h2>
           <ComissaoGeral />
         </>
+      )}
+      {ehDono && aoReconfigurar && (
+        <footer className="est-rodape-reconfigurar" style={{ marginTop: 40, paddingTop: 20, borderTop: '1px solid var(--line)', textAlign: 'center' }}>
+          <p className="muted" style={{ fontSize: 12, marginBottom: 8 }}>Zona de reconfiguração do estabelecimento</p>
+          <Btn tamanho="sm" variante="neutro" onClick={aoReconfigurar} data-testid="reconfigurar-abrir" style={{ fontSize: 12, padding: '4px 10px', color: 'var(--muted)' }}>
+            ⚠️ Reconfigurar estabelecimento
+          </Btn>
+        </footer>
       )}
     </section>
   );

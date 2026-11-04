@@ -49,6 +49,9 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
   const [semPlano, setSemPlano] = useState(false); // o cliente tem plano, mas esta vez a pessoa quer cobrar normal
   const [etapaAtiva, setEtapaAtiva] = useState(0);
 
+  // Limpa erros ao navegar entre as etapas do atendimento
+  useEffect(() => { setErro(''); }, [etapaAtiva]);
+
   const inicio = personalizar && data ? tsAt(fromYmd(data), minutos) : null;
   const futuro = inicio != null && inicio > agora + 60000;
   const passado = inicio != null && !futuro && inicio < agora - 60000;
@@ -56,7 +59,7 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
   const tipo = futuro ? 'futuro' : 'local';
   const obrig = camposObrigatorios(st, tipo);
   const pede = (k) => obrig.includes(k);
-  const marca = (k) => (pede(k) ? ' *' : '');
+  const marca = (k) => (pede(k) ? ' *' : ' (opcional)');
 
   // Últimos usados primeiro (no histórico que este usuário enxerga); quem nunca foi usado vem depois, na ordem do cadastro.
   const visiveis = agendamentosVisiveis(st, user);
@@ -158,10 +161,10 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
   const ordem = sanearOrdemAtender(st.estabelecimento.ordemAtender, padraoOrdem)[futuro ? 'futuro' : 'local']; // v133: ordem escolhida pelo proprietário (Estabelecimento > Regras)
   const camposVeic = {
     placa: (
-                <Campo rotulo={`Placa${obrig.includes('placa') ? ' *' : ''}`} erro={vNovo.placa && !placaValida(vNovo.placa) ? 'Placa inválida (ABC-1234 ou ABC1D23).' : undefined}><input value={vNovo.placa} onChange={(e) => setVNovo({ ...vNovo, placa: e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 8) })} maxLength={8} autoComplete="off" placeholder="ABC1D23" data-testid="atender-placa" /></Campo>
+                <Campo rotulo={`Placa${marca('placa')}`} erro={vNovo.placa && !placaValida(vNovo.placa) ? 'Placa inválida (ABC-1234 ou ABC1D23).' : undefined}><input value={vNovo.placa} onChange={(e) => setVNovo({ ...vNovo, placa: e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 8) })} maxLength={8} autoComplete="off" placeholder="ABC1D23" data-testid="atender-placa" /></Campo>
     ),
     modelo: (
-                <Campo rotulo={`Modelo${obrig.includes('modelo') ? ' *' : ''}`}><input value={vNovo.modelo} onChange={(e) => setVNovo({ ...vNovo, modelo: e.target.value })} maxLength={40} autoComplete="off" placeholder="Ex.: Onix" data-testid="atender-modelo" /></Campo>
+                <Campo rotulo={`Modelo${marca('modelo')}`}><input value={vNovo.modelo} onChange={(e) => setVNovo({ ...vNovo, modelo: e.target.value })} maxLength={40} autoComplete="off" placeholder="Ex.: Onix" data-testid="atender-modelo" /></Campo>
     ),
     marca: (
                 <Campo rotulo="Marca (opcional)"><input value={vNovo.marca} onChange={(e) => setVNovo({ ...vNovo, marca: e.target.value })} maxLength={30} autoComplete="off" data-testid="atender-marca" /></Campo>
@@ -170,7 +173,7 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
                 <Campo rotulo="Cor (opcional)"><input value={vNovo.cor} onChange={(e) => setVNovo({ ...vNovo, cor: e.target.value })} maxLength={20} autoComplete="off" data-testid="atender-cor" /></Campo>
     ),
     porte: (
-                <Campo rotulo={`Porte do veículo${obrig.includes('porte') ? ' *' : ''}`} className="campo-largo" dica={vNovo.porte ? EXEMPLO_PORTE[vNovo.porte] : 'O porte define o preço e a duração dos serviços. Sem porte vale o médio.'}>
+                <Campo rotulo={`Porte do veículo${marca('porte')}`} className="campo-largo" dica={vNovo.porte ? EXEMPLO_PORTE[vNovo.porte] : 'O porte define o preço e a duração dos serviços. Sem porte vale o médio.'}>
                   <div className="pub-portes" role="group" aria-label="Porte do veículo">
                     {portesParaEscolher(vNovo.porte).map(({ id: k }) => (
                       <button
@@ -204,7 +207,7 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
         <Campo rotulo={`Nome${marca('nome')}`}><input value={nome} onChange={(e) => { setNome(e.target.value); if (clienteId && !(tel.length >= 10)) setClienteId(''); }} maxLength={60} placeholder="Nome ou apelido" data-testid="atender-nome" /></Campo>
     ),
     telefone: (
-        <Campo rotulo={`Telefone${pede('telefone') || futuro ? ' *' : ''}`} dica={cadastrado ? undefined : tel.length >= 10 ? 'Número novo: o cadastro do cliente é criado ao registrar.' : futuro ? 'O aviso do horário vai por WhatsApp.' : 'Com o telefone, o cliente fica cadastrado para a próxima vez.'}>
+        <Campo rotulo={`Telefone${pede('telefone') || futuro ? ' *' : ' (opcional)'}`} dica={cadastrado ? undefined : tel.length >= 10 ? 'Número novo: o cadastro do cliente é criado ao registrar.' : futuro ? 'O aviso do horário vai por WhatsApp.' : 'Com o telefone, o cliente fica cadastrado para a próxima vez.'}>
           <input value={telefone} inputMode="tel" autoComplete="off" onChange={(e) => trocaTelefone(e.target.value, nome)} placeholder="(55) 99999-9999" data-testid="atender-telefone" />
           {cadastrado && <span className="msg-ok" data-testid="atender-vinculo">Cliente cadastrado: {cadastrado.semNome ? formatarTelefone(cadastrado.telefone) : cadastrado.apelido || cadastrado.nome}.{atualizaraNome ? ` O nome no cadastro será atualizado para “${nome.trim()}”.` : ''}</span>}
         </Campo>
@@ -324,14 +327,14 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
       <div className="form-grade">
         {ordem.etapas.map((k) => <React.Fragment key={k}>{blocos[k]}</React.Fragment>)}
         {!auto && (
-        <Campo rotulo={`${Rot('profissional')}${marca('profissional')}`}>
+        <Campo rotulo={`${Rot('profissional')}${pede('profissional') ? ' *' : ''}`}>
           <select value={profissionalId} onChange={(e) => setProfissionalId(e.target.value)} disabled={ehProfissional} data-testid="atender-profissional">
             {profissionais.map((b) => <option key={b.id} value={b.id}>{b.apelido || b.nome}</option>)}
           </select>
         </Campo>
         )}
         {futuro && temServico && boxes.length > 0 && (
-          <Campo rotulo="Box" dica={v && v.boxId ? `Vai para o ${nomeBox(st, v.boxId)}.` : 'Automático: o app escolhe um box livre.'}>
+          <Campo rotulo="Box (opcional)" dica={v && v.boxId ? `Vai para o ${nomeBox(st, v.boxId)}.` : 'Automático: o app escolhe um box livre.'}>
             <select value={boxId} onChange={(e) => setBoxId(e.target.value)} data-testid="atender-box">
               <option value="">Automático</option>
               {boxes.map((b) => <option key={b.id} value={b.id}>{b.nome}</option>)}
@@ -347,7 +350,7 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
           </Campo>
         )}
         {!futuro && (
-          <Campo rotulo={`Forma de pagamento${marca('formaPagamento')}`} dica={formaEscolhida === 'pix' && !usaIntegracaoPix(st) ? 'Pix só como registro: sem cobrança nem QR neste estabelecimento.' : 'O valor entra no financeiro na conta desta forma.'}>
+          <Campo rotulo={`Forma de pagamento${pede('formaPagamento') ? ' *' : ''}`} dica={formaEscolhida === 'pix' && !usaIntegracaoPix(st) ? 'Pix só como registro: sem cobrança nem QR neste estabelecimento.' : 'O valor entra no financeiro na conta desta forma.'}>
             <select value={formaEscolhida} onChange={(e) => setForma(e.target.value)} data-testid="atender-forma">
               {!formaPadrao && <option value="">Escolha…</option>}
               {Object.entries(FORMAS_PAGAMENTO).map(([k, r]) => <option key={k} value={k}>{r}</option>)}

@@ -23,7 +23,10 @@ import org.springframework.web.bind.annotation.RestController;
 @PreAuthorize("hasRole('DONO')")
 public class ComissaoGeralController {
 
-    public record Geral(BigDecimal comissaoPadrao) {
+    public record Geral(BigDecimal comissaoPadrao, Boolean comissaoParceiro) {
+        public Geral(BigDecimal comissaoPadrao) {
+            this(comissaoPadrao, false);
+        }
     }
 
     private final LojaJdbc banco;
@@ -38,19 +41,28 @@ public class ComissaoGeralController {
         return v.isEmpty() || !Comissao.valido(v.get(0)) ? Comissao.PADRAO : v.get(0);
     }
 
+    /** Se atendimentos de parceiros geram comissão para os profissionais. */
+    public static boolean comissaoParceiro(LojaJdbc banco) {
+        List<Boolean> v = banco.naLoja(jdbc -> jdbc.query("select comissao_parceiro from configuracao_loja", (rs, i) -> rs.getBoolean(1)));
+        return !v.isEmpty() && Boolean.TRUE.equals(v.get(0));
+    }
+
     @GetMapping("/api/estabelecimento/comissao")
     public Geral ler() {
-        return new Geral(efetiva(banco));
+        return new Geral(efetiva(banco), comissaoParceiro(banco));
     }
 
     @PutMapping("/api/estabelecimento/comissao")
     public Geral gravar(@RequestBody Geral corpo) {
         Loja loja = LojaContext.exigir();
         BigDecimal v = corpo == null ? null : corpo.comissaoPadrao();
-        if (!Comissao.valido(v)) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "A comissão padrão vai de 0 a 100%.");
-        BigDecimal arredondado = v.setScale(2, RoundingMode.HALF_UP);
-        banco.naLoja(jdbc -> jdbc.update("insert into configuracao_loja (loja_id, comissao_padrao) values (?::uuid, ?) "
-                + "on conflict (loja_id) do update set comissao_padrao = excluded.comissao_padrao, atualizado_em = now()", loja.id().toString(), arredondado));
-        return new Geral(arredondado);
+        Boolean cp = corpo == null ? null : corpo.comissaoParceiro();
+        if (v != null && !Comissao.valido(v)) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "A comissão padrão vai de 0 a 100%.");
+        BigDecimal arredondado = v != null ? v.setScale(2, RoundingMode.HALF_UP) : null;
+        banco.naLoja(jdbc -> jdbc.update("insert into configuracao_loja (loja_id, comissao_padrao, comissao_parceiro) values (?::uuid, coalesce(?, 50), coalesce(?, false)) "
+                + "on conflict (loja_id) do update set comissao_padrao = coalesce(?, configuracao_loja.comissao_padrao), "
+                + "comissao_parceiro = coalesce(?, configuracao_loja.comissao_parceiro), atualizado_em = now()",
+                loja.id().toString(), arredondado, cp, arredondado, cp));
+        return new Geral(efetiva(banco), comissaoParceiro(banco));
     }
 }

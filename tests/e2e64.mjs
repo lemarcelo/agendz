@@ -89,6 +89,7 @@ async function abrir(viewport) {
   await p.getByTestId(`pub-srv-${SRV}`).check();
   await p.getByTestId('pub-continuar-1').click();
   await p.getByTestId('pub-dia-2026-10-30').waitFor();
+  await p.getByTestId('pub-dia-2026-10-30').click();
   assert.match(deHoje('GET', '/api/publico/dias').at(-1).q, /&porte=suv/);
   await p.getByTestId('pub-hora-0900').click();
   assert.match(deHoje('GET', '/api/publico/horarios').at(-1).q, /&porte=suv/);

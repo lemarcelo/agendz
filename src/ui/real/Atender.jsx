@@ -10,6 +10,7 @@ import { Rot, capAtiva } from '../../domain/tipos.js';
 import { COMO_A_PAGINA_DO_CLIENTE, PADRAO_PAINEL, sanearOrdemAtender } from '../../domain/ordem-atender.js';
 import { EXEMPLO_PORTE, PORTE_PADRAO, ROTULO_PORTE, portesParaEscolher, rotuloVeiculo } from '../../domain/veiculos.js';
 import { REGRAS_DE_FABRICA, FORMAS_PAGAMENTO, boxesAtivos, camposFaltando, ehRetroativo, exige, faltaItem, exigenciasDoVeiculo, faltaVeiculo, porteDoAtendimento, formaEfetiva, filtrarProdutos, filtrarServicos, qtdValida, resumoDosProdutos, resumoDosServicos, servicoNoPorte, tipoDoAtendimento, vendedorPadrao } from '../../domain/atender-form.js';
+import { ordenarServicos } from '../../domain/ordem-servicos.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
 
 const aoLocal = (ts) => { const d = new Date(ts); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
@@ -56,6 +57,9 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
   const [enviando, setEnviando] = useState(false);
   const [sucesso, setSucesso] = useState(null);
   const [etapaAtiva, setEtapaAtiva] = useState(0);
+
+  // Limpa erros ao navegar entre as etapas do atendimento
+  useEffect(() => { setErro(''); }, [etapaAtiva]);
   const ultima = useRef(0);
 
   useEffect(() => {
@@ -84,7 +88,7 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
   const tipo = tipoDoAtendimento(instante, agora);
   const retro = personalizar && ehRetroativo(inicio, agora);
   const bloqueado = retro && ehProprio;
-  const lista = useMemo(() => filtrarServicos(servicos || [], buscaSrv), [servicos, buscaSrv]);
+  const lista = useMemo(() => filtrarServicos(ordenarServicos(servicos || [], regras.ordemServicos), buscaSrv), [servicos, buscaSrv, regras.ordemServicos]);
   const doCliente = (cliente && cliente.veiculos) || [];
   const veiculoEscolhido = usaVeiculo && veiculoId ? doCliente.find((v) => v.id === veiculoId) || null : null;
   const digitando = usaVeiculo && !veiculoEscolhido;
@@ -97,7 +101,7 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
   const forma = formaEfetiva(regras, formaEscolhida);
   const faltam = camposFaltando(tipo, { nome, telefone, cliente, profissionalId: profId, vendedorId: itens.length ? vendedor : '', temProdutos: itens.length > 0, forma }, regras);
   const auto = regras.profissionalAutomatico === true && !ehProprio; // B9c: o campo some e o servidor escolhe quem está mais livre
-  const marca = (campo) => (exige(regras, tipo, campo) ? ' *' : '');
+  const marca = (campo) => (exige(regras, tipo, campo) ? ' *' : ' (opcional)');
 
   const escolher = (c) => { setCliente(c); setVeiculoId(c.veiculos && c.veiculos.length === 1 ? c.veiculos[0].id : ''); setNome(c.apelido || c.nome); setTelefone(c.telefone ? formatarTelefone(telNacional(c.telefone)) : ''); setBusca(''); setAchados([]); setErro(''); };
   const marcar = (id) => setIds((x) => (x.includes(id) ? x.filter((i) => i !== id) : [...x, id]));
@@ -125,12 +129,12 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
   const padraoOrdem = usaVeiculo ? COMO_A_PAGINA_DO_CLIENTE : PADRAO_PAINEL;
   const ordem = sanearOrdemAtender(regras.ordemAtender, padraoOrdem)[tipo]; // v133: ordem das etapas e dos campos escolhida pelo proprietário (Estabelecimento > Regras)
   const camposVeic = {
-    placa: <Campo rotulo={`Placa${exige(regras, tipo, 'placa') ? ' *' : ''}`}><input value={novoVeic.placa} onChange={(e) => { setNovoVeic({ ...novoVeic, placa: e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 8) }); setErro(''); }} maxLength={8} autoComplete="off" placeholder="ABC1D23" data-testid="atender-v-placa" /></Campo>,
-    modelo: <Campo rotulo={`Modelo${exige(regras, tipo, 'modelo') ? ' *' : ''}`}><input value={novoVeic.modelo} onChange={(e) => setNovoVeic({ ...novoVeic, modelo: e.target.value })} maxLength={40} autoComplete="off" data-testid="atender-v-modelo" /></Campo>,
-    marca: <Campo rotulo="Marca"><input value={novoVeic.marca} onChange={(e) => setNovoVeic({ ...novoVeic, marca: e.target.value })} maxLength={30} autoComplete="off" data-testid="atender-v-marca" /></Campo>,
-    cor: <Campo rotulo="Cor"><input value={novoVeic.cor} onChange={(e) => setNovoVeic({ ...novoVeic, cor: e.target.value })} maxLength={20} autoComplete="off" data-testid="atender-v-cor" /></Campo>,
+    placa: <Campo rotulo={`Placa${marca('placa')}`}><input value={novoVeic.placa} onChange={(e) => { setNovoVeic({ ...novoVeic, placa: e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 8) }); setErro(''); }} maxLength={8} autoComplete="off" placeholder="ABC1D23" data-testid="atender-v-placa" /></Campo>,
+    modelo: <Campo rotulo={`Modelo${marca('modelo')}`}><input value={novoVeic.modelo} onChange={(e) => setNovoVeic({ ...novoVeic, modelo: e.target.value })} maxLength={40} autoComplete="off" data-testid="atender-v-modelo" /></Campo>,
+    marca: <Campo rotulo="Marca (opcional)"><input value={novoVeic.marca} onChange={(e) => setNovoVeic({ ...novoVeic, marca: e.target.value })} maxLength={30} autoComplete="off" data-testid="atender-v-marca" /></Campo>,
+    cor: <Campo rotulo="Cor (opcional)"><input value={novoVeic.cor} onChange={(e) => setNovoVeic({ ...novoVeic, cor: e.target.value })} maxLength={20} autoComplete="off" data-testid="atender-v-cor" /></Campo>,
     porte: (
-      <Campo rotulo={`Porte do veículo${exige(regras, tipo, 'porte') ? ' *' : ''}`} className="campo-largo">
+      <Campo rotulo={`Porte do veículo${marca('porte')}`} className="campo-largo">
         <div className="pub-portes" role="group" aria-label="Porte do veículo">
           {portesParaEscolher(novoVeic.porte).map(({ id: k, nome, exemplo }) => {
             const rot = ROTULO_PORTE[k] || nome;
@@ -298,7 +302,7 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
       <div className="atender-conclusao-real" hidden={PASSOS_ATENDER[etapaAtiva].id !== 'cliente'}>
       <div className="form-grade">
         {!auto && (
-          <Campo rotulo={`${Rot('profissional')}${marca('profissional')}`}>
+          <Campo rotulo={`${Rot('profissional')}${exige(regras, tipo, 'profissional') ? ' *' : ''}`}>
             <select value={profId} onChange={(e) => setProfId(e.target.value)} disabled={ehProprio} data-testid="atender-profissional">
               {profissionais.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
             </select>
@@ -317,7 +321,7 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
       </div>
       {tipo === 'local' && (
         <fieldset className="atender-real-bloco" data-testid="atender-forma-bloco">
-          <legend>{`Forma de pagamento${marca('formaPagamento')}`}</legend>
+          <legend>{`Forma de pagamento${exige(regras, tipo, 'formaPagamento') ? ' *' : ''}`}</legend>
           <div className="acoes">
             {FORMAS_PAGAMENTO.map(([k, r]) => (
               <label key={k} className={`radio-op ${forma === k ? 'on' : ''}`}><input type="radio" name="atender-forma" checked={forma === k} onChange={() => { setFormaEscolhida(k); setErro(''); }} data-testid={`atender-forma-${k}`} />{r}</label>
@@ -327,7 +331,7 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
         </fieldset>
       )}
       {usaBox && tipo === 'futuro' && boxes.length > 0 && (
-        <Campo rotulo="Box">
+        <Campo rotulo="Box (opcional)">
           <select value={boxId} onChange={(e) => { setBoxId(e.target.value); setErro(''); }} data-testid="atender-box">
             <option value="">Automático (um box livre)</option>
             {boxes.map((b) => <option key={b.id} value={b.id}>{b.nome}</option>)}

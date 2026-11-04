@@ -4,10 +4,8 @@
 // devolve, com as mensagens dele. O profissional só recebe os próprios agendamentos (o servidor filtra). Atender (atendimento local e novo agendamento) é o `Atender.jsx` (5c);
 // nas lojas com veículo/porte e box (estética) o Atender pede o veículo e deixa escolher o box; o cartão e a ficha mostram veículo, porte e box.
 // Não importa `api.js`, `hooks.js` nem `common.jsx` (tests/estatico.test.mjs).
-import PedirAvaliacao, { EstrelaAvaliar, NotaDoAtendimento } from './PedirAvaliacao.jsx';
-import { avaliacaoDoPainel } from '../../domain/avaliacoes.js';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { agenda as api, avaliacoes as apiAv, boxes as apiBoxes, clientes as apiClientes, linkAgendamento as apiLink, local as apiLocal, profissionais as apiProf } from '../../services/api-real.js';
+import { agenda as api, boxes as apiBoxes, clientes as apiClientes, linkAgendamento as apiLink, local as apiLocal, profissionais as apiProf } from '../../services/api-real.js';
 import { DIAS_CURTOS, addDays, addMonths, fmtDateTime, fmtDayLong, maiuscula1, fmtDiaMesSemana, fmtHM, fmtMoney, fmtMonthYear, monthStart, sameDay, startOfDay, weekStart, ymd } from '../../domain/time.js';
 import { ATIVOS, ROTULO_STATUS } from '../../domain/rules.js';
 import { agruparPorDia, rotuloCancelados, rotuloDoGrupo, separarCancelados } from '../../domain/agenda-grupos.js';
@@ -32,10 +30,8 @@ const aoLocal = (ts) => { const d = new Date(ts); const p = (n) => String(n).pad
 const doLocal = (v) => { const t = new Date(v).getTime(); return Number.isFinite(t) ? t : null; };
 
 
-function Cartao({ a, nomeCliente, nomeProf, mostraProf, aberto, aoAbrir, aoSegurar, testid, destaque = false, avaliacao = null, children }) {
+function Cartao({ a, nomeCliente, nomeProf, mostraProf, aberto, aoAbrir, aoSegurar, testid, destaque = false, parceiro = false, children }) {
   const v = visual(a);
-  const [pedindo, setPedindo] = useState(false); // painel "Pedir avaliação" (F5 fase 2): só atendimento concluído com serviço; o servidor diz se dá para pedir
-  const podePedir = a.status === 'concluido' && a.servicos.length > 0;
   const toque = useToqueLongo(() => { if (aoSegurar) aoSegurar(a); }); // v119: segurar abre a forma de pagamento (concluído ou futuro; cancelado não)
   const venda = a.produtos.length ? a.produtos.map((p) => `${p.qtd}× ${p.nome}`).join(', ') : '';
   const servicos = a.servicos.map((s) => s.nome).join(' + ') || (venda ? 'Venda de produtos' : 'Sem serviço');
@@ -46,9 +42,10 @@ function Cartao({ a, nomeCliente, nomeProf, mostraProf, aberto, aoAbrir, aoSegur
         <div className="cartao-topo">
           <div className="cartao-quem">
             <span className="cartao-nome" title={nomeCliente} data-testid={`${testid}-cliente`}>{abreviarNome(nomeCliente, 24)}</span>
+            {parceiro && <span className="chip chip-p st-amarelo" data-testid={`${testid}-parceiro`}>Parceiro</span>}
             <span className={`chip chip-p st-${v.cor}`} data-testid={`${testid}-status`}>{v.rotulo}</span>
           </div>
-          <div className={`cartao-quando ${testid === 'cartao' ? 'quando-hoje' : 'quando-proximo'}`}><b className="cartao-data" data-testid="cartao-data">{fmtDiaMesSemana(a.inicio)}</b><strong className="cartao-hora">{fmtHM(a.inicio)}</strong>{Number.isFinite(a.fim) && <small className="cartao-termino-real" data-testid={`${testid}-termino`}>Termina às {fmtHM(a.fim)}</small>}</div>
+          <div className={`cartao-quando ${testid === 'cartao' ? 'quando-hoje' : 'quando-proximo'}`}><b className="cartao-data" data-testid="cartao-data">{fmtDiaMesSemana(a.inicio)}</b><strong className="cartao-hora">{fmtHM(a.inicio)}</strong>{Number.isFinite(a.fim) && <small className="cartao-termino-real" data-testid={`${testid}-termino`}>término às {fmtHM(a.fim)}</small>}</div>
         </div>
         <div className="cartao-servico" title={servicos} data-testid={`${testid}-servico`}>{servicos}</div>
         <div className="cartao-profissional">
@@ -64,9 +61,7 @@ function Cartao({ a, nomeCliente, nomeProf, mostraProf, aberto, aoAbrir, aoSegur
           {a.conflitosPendentes.length > 0 && <span className="chip chip-p chip-alerta" data-testid="cartao-conflito">{a.conflitosPendentes.length === 1 ? '1 a confirmar no mesmo horário' : `${a.conflitosPendentes.length} a confirmar no mesmo horário`}</span>}
         </div>
       </button>
-      {podePedir && <EstrelaAvaliar aberto={pedindo} aoAlternar={() => setPedindo((x) => !x)} avaliacao={avaliacao} />}
       </div>
-      {pedindo && (avaliacao ? <NotaDoAtendimento avaliacao={avaliacao} quem={nomeCliente} aoFechar={() => setPedindo(false)} /> : <PedirAvaliacao a={a} quem={nomeCliente} aoFechar={() => setPedindo(false)} />)}
       {aberto && children}
     </div>
   );
@@ -74,7 +69,69 @@ function Cartao({ a, nomeCliente, nomeProf, mostraProf, aberto, aoAbrir, aoSegur
 
 // Detalhes e ações de um agendamento aberto em modal: status, cancelar com confirmação na tela, remarcar e histórico.
 // `aoAvisar` sobe o aviso de remarcação para a Agenda: o cartão pode sair da lista (outro dia) e levaria o aviso junto.
-function Detalhe({ a, nomeCliente, nomeProf, nomeDe, profissionais, boxes, ehDono, aoFechar, aoAlterar, aoAvisar, cliente = null, loja = null }) {
+function formatarEventoAmigavel(e) {
+  if (!e) return '';
+  const c = String(e.campo || '').toLowerCase().trim();
+  const de = e.de || '';
+  const para = e.para || '';
+
+  const traduzirStatus = (s) => {
+    if (!s) return '';
+    const st = s.toLowerCase();
+    if (st === 'a_confirmar') return 'A confirmar';
+    if (st === 'confirmado') return 'Confirmado';
+    if (st === 'concluido' || st === 'concluído') return 'Concluído';
+    if (st === 'cancelado') return 'Cancelado';
+    return s;
+  };
+
+  if (c === 'status') {
+    const deTrad = traduzirStatus(de);
+    const paraTrad = traduzirStatus(para);
+    if (deTrad && paraTrad) return `Situação alterada de "${deTrad}" para "${paraTrad}"`;
+    if (paraTrad) return `Situação alterada para "${paraTrad}"`;
+    return 'Situação alterada';
+  }
+  if (c === 'criação' || c === 'criacao') {
+    return para ? `Agendamento criado (${para})` : 'Agendamento criado';
+  }
+  if (c === 'data e hora' || c === 'data_hora' || c === 'horario' || c === 'horário') {
+    if (de && para) return `Horário alterado de ${de} para ${para}`;
+    if (para) return `Horário alterado para ${para}`;
+    return 'Horário alterado';
+  }
+  if (c === 'profissional') {
+    if (de && para) return `Profissional alterado de ${de} para ${para}`;
+    if (para) return `Profissional alterado para ${para}`;
+    return 'Profissional alterado';
+  }
+  if (c === 'box') {
+    if (de && para) return `Box alterado de ${de} para ${para}`;
+    if (para) return `Box alterado para ${para}`;
+    return 'Box alterado';
+  }
+  if (c === 'forma de pagamento' || c === 'formapagamento') {
+    if (de && para) return `Forma de pagamento alterada de ${de} para ${para}`;
+    if (para) return `Forma de pagamento alterada para ${para}`;
+    return 'Forma de pagamento alterada';
+  }
+  if (c === 'cupom') {
+    if (para === 'retirado') return `Cupom ${de ? `"${de}" ` : ''}retirado`;
+    return `Cupom aplicado: ${para}`;
+  }
+  if (c === 'horário fixo' || c === 'horario fixo') {
+    return para || 'Criado pelo horário fixo do plano';
+  }
+  if (c === 'lançamento retroativo' || c === 'lancamento retroativo') {
+    return `Lançamento retroativo: ${para}`;
+  }
+  if (c === 'plano') {
+    return para || 'Plano de assinatura aplicado';
+  }
+  return `${e.campo}${de ? ` de ${de}` : ''}${para ? ` para ${para}` : ''}`;
+}
+
+function Detalhe({ a, nomeCliente, nomeProf, nomeDe, profissionais, boxes, ehDono, ehProprietario, podeSuporte, aoFechar, aoAlterar, aoAvisar, cliente = null, loja = null }) {
   const v = visual(a);
   const [hist, setHist] = useState(null);
   const [histAberto, setHistAberto] = useState(false);
@@ -119,6 +176,7 @@ function Detalhe({ a, nomeCliente, nomeProf, nomeDe, profissionais, boxes, ehDon
   };
   const ativoStatus = a.status;
   const podeCupom = (ativoStatus === 'a_confirmar' || ativoStatus === 'confirmado') && a.origem !== 'atendimento'; // atendimento local nunca usa cupom
+  const podeVerHistorico = ehProprietario || podeSuporte;
   const valorFinal = fmtMoney(a.total - a.desconto + a.totalProdutos);
   return (
     <div className="detalhe-fundo-real" role="dialog" aria-modal="true" aria-label="Detalhes do atendimento" data-testid="detalhe-modal"
@@ -133,6 +191,11 @@ function Detalhe({ a, nomeCliente, nomeProf, nomeDe, profissionais, boxes, ehDon
           <div className="detalhe-linha-real">
             <Icone n="team" size={16} />
             <strong className="detalhe-cliente-real">{nomeCliente}</strong>
+            {cliente && cliente.parceiro && (
+              <span className="chip chip-p st-amarelo" data-testid="detalhe-parceiro-chip">
+                Parceiro{cliente.parceiroDescontoPct ? ` (${cliente.parceiroDescontoPct}%)` : ' (abono)'}
+              </span>
+            )}
             <span className={`chip chip-p st-${v.cor}`}>{v.rotulo}</span>
           </div>
           <div className="detalhe-linha-real">
@@ -162,20 +225,54 @@ function Detalhe({ a, nomeCliente, nomeProf, nomeDe, profissionais, boxes, ehDon
             <span>
               <b>{valorFinal}</b>
               {a.cupom && <span data-testid="detalhe-cupom"> · Cupom {a.cupom.nome}: −{fmtMoney(a.desconto)} · a pagar {valorFinal}</span>}
+              {cliente && cliente.parceiro && (
+                <span data-testid="detalhe-parceiro-desconto"> · Parceria: {cliente.parceiroDescontoPct ? `${cliente.parceiroDescontoPct}% de desconto` : 'Abono total (cortesia)'}</span>
+              )}
             </span>
             {podeCupom && a.cupom && !cancelando && !remarcando && <Btn tamanho="sm" disabled={ocupado} onClick={() => executar(() => api.retirarCupom(a.id), 'Cupom retirado.', false)} data-testid="acao-retirar-cupom">Retirar cupom</Btn>}
           </div>
         </div>
         {erro && <Aviso tipo="erro" data-testid="agendamento-erro">{erro}</Aviso>}
         {!cancelando && !remarcando && (
-          <div className="acoes detalhe-acoes-real">
-            {ativoStatus !== 'cancelado' && <Btn tamanho="sm" variante="perigo" disabled={ocupado} onClick={() => setCancelando(true)} data-testid="acao-cancelar">Cancelar</Btn>}
-            {ativoStatus !== 'cancelado' && ativoStatus !== 'concluido' && <Btn variante="remarcar" tamanho="sm" disabled={ocupado} onClick={() => setRemarcando(true)} data-testid="acao-remarcar">Remarcar</Btn>}
-            {ativoStatus === 'a_confirmar' && <Btn variante="primario" tamanho="sm" disabled={ocupado} onClick={mudar('confirmado', 'Agendamento confirmado.')} data-testid="acao-confirmar">Confirmar</Btn>}
-            {ativoStatus === 'concluido' && <Btn tamanho="sm" disabled={ocupado} onClick={mudar('confirmado', 'Agendamento reaberto como confirmado.')} data-testid="acao-reabrir">Reabrir</Btn>}
-            {ativoStatus === 'cancelado' && <Btn variante="primario" tamanho="sm" disabled={ocupado} onClick={mudar('a_confirmar', 'Agendamento reativado.')} data-testid="acao-reativar">Reativar</Btn>}
-            <Btn tamanho="sm" aria-expanded={histAberto} onClick={() => setHistAberto((x) => !x)} data-testid="historico-abrir">Histórico{hist && hist.length > 0 ? ` (${hist.length})` : ''}</Btn>
-            {(ativoStatus === 'a_confirmar' || ativoStatus === 'confirmado') && <Btn variante="concluir" tamanho="sm" disabled={ocupado} onClick={mudar('concluido', 'Agendamento concluído.')} data-testid="acao-concluir">Concluir</Btn>}
+          <div className="detalhe-acoes-real">
+            <div className="detalhe-acoes-secundarias">
+              {ativoStatus !== 'cancelado' && ativoStatus !== 'concluido' && <Btn variante="remarcar" tamanho="sm" disabled={ocupado} onClick={() => setRemarcando(true)} data-testid="acao-remarcar">Remarcar</Btn>}
+              {ativoStatus === 'a_confirmar' && <Btn variante="confirmar" tamanho="sm" disabled={ocupado} onClick={mudar('confirmado', 'Agendamento confirmado.')} data-testid="acao-confirmar">Confirmar</Btn>}
+              {ativoStatus === 'concluido' && <Btn tamanho="sm" disabled={ocupado} onClick={mudar('confirmado', 'Agendamento reaberto como confirmado.')} data-testid="acao-reabrir">Reabrir</Btn>}
+              {ativoStatus === 'cancelado' && <Btn variante="confirmar" tamanho="sm" disabled={ocupado} onClick={mudar('a_confirmar', 'Agendamento reativado.')} data-testid="acao-reativar">Reativar</Btn>}
+            </div>
+            <div className="detalhe-acoes-principais">
+              {ativoStatus !== 'cancelado' && <Btn tamanho="sm" variante="perigo" disabled={ocupado} onClick={() => setCancelando(true)} data-testid="acao-cancelar">Cancelar</Btn>}
+              {(ativoStatus === 'a_confirmar' || ativoStatus === 'confirmado') && <Btn variante="concluir" tamanho="sm" disabled={ocupado} onClick={mudar('concluido', 'Agendamento concluído.')} data-testid="acao-concluir">Concluir</Btn>}
+            </div>
+            {podeVerHistorico && (
+              <div className="detalhe-historico-secao">
+                <button
+                  type="button"
+                  className="detalhe-historico-toggle"
+                  aria-expanded={histAberto}
+                  onClick={() => setHistAberto((x) => !x)}
+                  data-testid="historico-abrir"
+                >
+                  <span>Histórico{hist && hist.length > 0 ? ` (${hist.length})` : ''}</span>
+                  <span className="detalhe-historico-icone">{histAberto ? '▾' : '▸'}</span>
+                </button>
+                {histAberto && (
+                  <div className="detalhe-historico-dropdown">
+                    {hist && hist.length > 0 ? (
+                      <ul data-testid="historico-lista">
+                        {hist.map((e, i) => (
+                          <li key={i}>
+                            <span className="muted">{e.em ? fmtDateTime(e.em) : ''}{e.autor ? ` · ${e.autor}` : ''}: </span>
+                            <span className="detalhe-historico-texto">{formatarEventoAmigavel(e)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : <p className="muted" data-testid="historico-lista">Nenhuma alteração registrada.</p>}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
         {cancelando && (
@@ -206,15 +303,6 @@ function Detalhe({ a, nomeCliente, nomeProf, nomeDe, profissionais, boxes, ehDon
               <Btn variante="primario" tamanho="sm" type="submit" disabled={ocupado} data-testid="remarcar-salvar">{ocupado ? 'Salvando…' : 'Remarcar'}</Btn>
             </div>
           </form>
-        )}
-        {histAberto && (
-          <div className="historico detalhe-historico-real">
-            {hist && hist.length > 0 ? (
-              <ul data-testid="historico-lista">
-                {hist.map((e, i) => <li key={i}><span className="muted">{e.em ? fmtDateTime(e.em) : ''}</span>{e.autor ? ` · ${e.autor}` : ''}: {e.campo}{e.de ? ` de ${e.de}` : ''}{e.para ? ` para ${e.para}` : ''}</li>)}
-              </ul>
-            ) : <p className="muted" data-testid="historico-lista">Nenhuma alteração registrada.</p>}
-          </div>
         )}
       </div>
     </div>
@@ -278,7 +366,7 @@ function AvisoRemarcado({ avisar, aoFechar, aoErro }) {
   );
 }
 
-export default function Agenda({ ehProprio = false, ehDono = false, ehProprietario = false, aoIrBoxes = null, meuId = '', nomeLoja = '', destaqueIds = [], foco = null, recarregar = 0 }) {
+export default function Agenda({ ehProprio = false, ehDono = false, ehProprietario = false, podeSuporte = false, aoIrBoxes = null, meuId = '', nomeLoja = '', destaqueIds = [], foco = null, recarregar = 0 }) {
   const [modo, setModo] = useState('horarios');
   const [cursor, setCursor] = useState(() => startOfDay(Date.now()));
   const [diasAdiante, setDiasAdiante] = useState(7);
@@ -313,10 +401,9 @@ export default function Agenda({ ehProprio = false, ehDono = false, ehProprietar
   const [lojaInfo, setLojaInfo] = useState({ endereco: '', mapaUrl: '' });
   const [localizacaoUrl, setLocalizacaoUrl] = useState(''); // link do mapa: o servidor só o devolve quando a loja ligou o envio da localização no WhatsApp
   const ultima = useRef(0);
-  const [notas, setNotas] = useState(new Map()); // agendamentoId → { nota, texto, em }: só avaliações que o servidor mostra a esta pessoa (anônima sem a regra do Admin não traz o agendamento)
 
   useEffect(() => {
-    apiClientes.listar().then((r) => { if (r.ok) { setClientes(new Map(r.clientes.map((c) => [c.id, c.apelido || c.nome]))); setFichas(new Map(r.clientes.map((c) => [c.id, { nome: c.apelido || c.nome, telefone: c.telefone }]))); } });
+    apiClientes.listar().then((r) => { if (r.ok) { setClientes(new Map(r.clientes.map((c) => [c.id, c.apelido || c.nome]))); setFichas(new Map(r.clientes.map((c) => [c.id, { nome: c.apelido || c.nome, telefone: c.telefone, parceiro: c.parceiro === true, parceiroDescontoPct: c.parceiroDescontoPct }]))); } });
     apiProf.listar().then((r) => { if (r.ok) setProfs(r.profissionais); });
     if (ehDono) apiLink.obter().then((r) => { if (r.ok) setPendLink(r.link.pendencias); });
     apiLocal.obter().then((r) => { if (r.ok) { setLocalizacaoUrl(r.local.localizacaoWhatsappUrl); setLojaInfo(r.local.localizacaoNoWhatsapp ? { endereco: r.local.enderecoTexto, mapaUrl: r.local.localizacaoWhatsappUrl } : { endereco: '', mapaUrl: '' }); } });
@@ -365,23 +452,6 @@ export default function Agenda({ ehProprio = false, ehDono = false, ehProprietar
       setLista((antes) => (antes && JSON.stringify(antes) === JSON.stringify(unicos) ? antes : unicos)); // igual: não redesenha
     })();
   }, [de, ate, versao]);
-  // v134: notas para a estrela do cartão. Avaliação nasce depois do atendimento, então basta pedir "a partir do início da lista"; sem permissão (403) ou erro, a estrela fica como antes.
-  useEffect(() => {
-    let vivo = true;
-    // o servidor exige data inicial E final (até 366 dias): de ontem+1 até amanhã, no máximo 365 dias para trás; intervalo todo no futuro não tem avaliação
-    const hoje = startOfDay(new Date());
-    const ateAv = addDays(hoje, 1);
-    const limite = addDays(ateAv, -365);
-    const deAv = de < limite ? limite : de;
-    if (deAv > ateAv) { setNotas((antes) => (antes.size ? new Map() : antes)); return undefined; }
-    apiAv.listar({ de: ymd(deAv), ate: ymd(ateAv) }).then((r) => {
-      if (!vivo || !r.ok) return;
-      const m = new Map();
-      for (const x of r.avaliacoes) { const info = x.agendamentoId ? avaliacaoDoPainel(x) : null; if (info) m.set(x.agendamentoId, info); }
-      setNotas((antes) => (JSON.stringify([...antes]) === JSON.stringify([...m]) ? antes : m));
-    });
-    return () => { vivo = false; };
-  }, [de, versao]);
   // O cliente pode pedir, remarcar ou cancelar pelo link a qualquer hora: a agenda se atualiza sozinha (aba visível), sem fechar o cartão aberto.
   useAtualizacaoAutomatica(() => { emFundo.current = true; setVersao((v) => v + 1); });
 
@@ -448,12 +518,15 @@ export default function Agenda({ ehProprio = false, ehDono = false, ehProprietar
   const mostrarSeletor = !ehProprio && atendem.length > 1;
   const titulo = modo === 'horarios' ? fmtDayLong(cursor) : fmtMonthYear(cursor);
 
-  const cartao = (a, testid) => (
-    <Cartao key={a.id} a={a} testid={testid} nomeCliente={nomeCliente(a)} nomeProf={nomeProf(a.profissionalId)} mostraProf={!ehProprio && selecionado === 'todos' && atendem.length > 1}
-      aberto={aberto === a.id} aoAbrir={() => setAberto(aberto === a.id ? null : a.id)} aoSegurar={setTrocaForma} destaque={destaqueIds.includes(a.id) || destaqueAtendido === a.id} avaliacao={notas.get(a.id) || null}>
-      <Detalhe a={a} nomeCliente={nomeCliente(a)} nomeProf={nomeProf(a.profissionalId)} nomeDe={nomeProf} profissionais={atendem} boxes={boxes} ehDono={ehDono} aoFechar={() => setAberto(null)} aoAlterar={alterou} aoAvisar={setAvisoRemarcar} cliente={a.clienteId ? fichas.get(a.clienteId) || null : null} loja={{ nome: nomeLoja, ...lojaInfo }} />
-    </Cartao>
-  );
+  const cartao = (a, testid) => {
+    const fichaCli = a.clienteId ? fichas.get(a.clienteId) || null : null;
+    return (
+      <Cartao key={a.id} a={a} testid={testid} nomeCliente={nomeCliente(a)} nomeProf={nomeProf(a.profissionalId)} mostraProf={!ehProprio && selecionado === 'todos' && atendem.length > 1}
+        aberto={aberto === a.id} aoAbrir={() => setAberto(aberto === a.id ? null : a.id)} aoSegurar={setTrocaForma} destaque={destaqueIds.includes(a.id) || destaqueAtendido === a.id} parceiro={!!(fichaCli && fichaCli.parceiro)}>
+        <Detalhe a={a} nomeCliente={nomeCliente(a)} nomeProf={nomeProf(a.profissionalId)} nomeDe={nomeProf} profissionais={atendem} boxes={boxes} ehDono={ehDono} ehProprietario={ehProprietario} podeSuporte={podeSuporte} aoFechar={() => setAberto(null)} aoAlterar={alterou} aoAvisar={setAvisoRemarcar} cliente={fichaCli} loja={{ nome: nomeLoja, ...lojaInfo }} />
+      </Cartao>
+    );
+  };
 
   return (
     <section className="tela agenda-real" data-testid="agenda-real">

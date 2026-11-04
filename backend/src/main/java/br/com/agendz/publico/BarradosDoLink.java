@@ -20,7 +20,7 @@ public class BarradosDoLink {
     public static final int DIAS_GUARDADOS = 30;
 
     public enum Motivo {
-        LIMITE_CLIENTE("limite_cliente"), ISCA("isca"), RAPIDO("rapido"), SELO_INVALIDO("selo_invalido"), FREQUENCIA("frequencia"), CAPTCHA("captcha");
+        LIMITE_CLIENTE("limite_cliente"), ISCA("isca"), RAPIDO("rapido"), SELO_INVALIDO("selo_invalido"), FREQUENCIA("frequencia"), CAPTCHA("captcha"), FRAUDE("fraude");
 
         public final String codigo;
 

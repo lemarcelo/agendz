@@ -5,7 +5,10 @@ import br.com.agendz.clientes.ClienteService.Entrada;
 import br.com.agendz.clientes.ClienteService.Ficha;
 import br.com.agendz.clientes.ClienteService.Resumo;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Size;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -31,11 +34,12 @@ public class ClienteController {
 
     public record NovoCliente(@Size(max = 100) String nome, @Size(max = 100) String apelido, @Size(max = 30) String telefone,
                               @Size(max = 20) String cpf, @Size(max = 10) String nascimento,
-                              @Size(max = 50) List<@Valid VeiculoEntrada> veiculos, Boolean semMensagens) {
+                              @Size(max = 50) List<@Valid VeiculoEntrada> veiculos, Boolean semMensagens,
+                              Boolean parceiro, @DecimalMin("0.0") @DecimalMax("100.0") BigDecimal parceiroDescontoPct) {
         Entrada paraEntrada() {
             return new Entrada(nome, apelido, telefone, cpf, nascimento,
                     veiculos == null ? null : veiculos.stream().map(v -> v == null ? null : new ClienteService.EntradaVeiculo(v.id(), v.placa(), v.marca(), v.modelo(), v.cor(), v.porte())).toList(),
-                    semMensagens);
+                    semMensagens, parceiro, parceiroDescontoPct);
         }
     }
 

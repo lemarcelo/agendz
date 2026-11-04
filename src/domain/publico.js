@@ -157,19 +157,19 @@ export function agendarPorLink(s, d, agora) {
   const cfg = configLink(s);
   if (!cfg.ativo || semBoxAtivo(s)) return { ok: false, erros: [ERRO_DESLIGADO] };
   if (d.site) return { ok: false, erros: ['Não foi possível agendar. Tente de novo.'] }; // campo isca preenchido: robô
-  let nome = limparTexto(String(d.nome ?? ''), 60).trim();
-  if (cfg.nomeObrigatorio ? nome.length < 2 : nome.length === 1) return { ok: false, erros: ['Informe o seu nome.'] };
-  // Sem telefone só quando o dono tirou a obrigatoriedade: o pedido fica sem cadastro (só o nome), sem aviso por WhatsApp e sem acesso pelo link depois. Telefone digitado sempre precisa ser válido.
-  const semTelefone = !cfg.telefoneObrigatorio && String(d.telefone ?? '').replace(/\D/g, '') === '';
-  if (!semTelefone && !telefoneBrasileiro(d.telefone)) return { ok: false, erros: ['Informe o telefone com DDD.'] };
-  const nac = semTelefone ? null : telefoneNacional(d.telefone);
-  if (nac && !s.estabelecimento.ddds.includes(Number(nac.slice(0, 2)))) return { ok: false, erros: ['Esse DDD está fora da área de atendimento.'] };
+  // Validação em ordem estrita de etapas (0: veículo -> 1: serviços -> 2: dia e horário -> 3: dados pessoais)
   const usaVeiculo = cap(s.estabelecimento, 'usaVeiculo');
   const lv = usaVeiculo ? limparVeiculoComRegras({ placa: d.placa, marca: d.marca, modelo: d.modelo, cor: d.cor, porte: d.porte }, cfg.veiculoObrigatorio) : { ok: true, veiculo: null };
   if (!lv.ok) return { ok: false, erros: [lv.erro] };
   if (lv.veiculo?.porte && !porteAtivo(lv.veiculo.porte)) return { ok: false, erros: ['Escolha o porte do veículo.'] };
   { const e = errosServicoIds(s, d.servicoIds, { ativos: true }); if (e) return { ok: false, erros: [e] }; }
   if (!Number.isInteger(d.inicio) || d.inicio > agora + cfg.diasMax * DIA) return { ok: false, erros: ['Escolha um dia e um horário.'] };
+  let nome = limparTexto(String(d.nome ?? ''), 60).trim();
+  if (cfg.nomeObrigatorio ? nome.length < 2 : nome.length === 1) return { ok: false, erros: ['Informe o seu nome.'] };
+  const semTelefone = !cfg.telefoneObrigatorio && String(d.telefone ?? '').replace(/\D/g, '') === '';
+  if (!semTelefone && !telefoneBrasileiro(d.telefone)) return { ok: false, erros: ['Informe o telefone com DDD.'] };
+  const nac = semTelefone ? null : telefoneNacional(d.telefone);
+  if (nac && !s.estabelecimento.ddds.includes(Number(nac.slice(0, 2)))) return { ok: false, erros: ['Esse DDD está fora da área de atendimento.'] };
   const candidatos = candidatosDoLink(s, d.profissionalId, d.inicio);
   const profissional = candidatos.find((u) => horarioLivre(s, { profissionalId: u.id, inicio: d.inicio, servicoIds: d.servicoIds, porte: lv.veiculo?.porte, agora }));
   if (!profissional) return { ok: false, erros: [ERRO_HORARIO] };

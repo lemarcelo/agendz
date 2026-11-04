@@ -128,7 +128,7 @@ test('guardrails visuais e PWA por loja: modal da agenda, alça do OrdemAtender 
     assert.ok(agenda.includes(tid), `Agenda.jsx precisa manter data-testid="${tid}"`);
   }
   assert.ok(!agenda.includes('data-testid="acao-cupom"'), 'modal de detalhes da Agenda não deve exibir botão Aplicar cupom (acao-cupom)');
-  assert.ok(agenda.includes('Termina às'), 'cartão da Agenda deve exibir previsão "Termina às HH:MM"');
+  assert.ok(/t[ée]rmin[ao] às/i.test(agenda), 'cartão da Agenda deve exibir previsão de término ("término às HH:MM")');
   assert.ok(agenda.indexOf('data-testid="acao-cancelar"') < agenda.indexOf('data-testid="acao-concluir"'), 'no modal da Agenda, Cancelar deve vir à esquerda e Concluir à direita');
   const css = ler('src/styles.css');
   assert.ok(/\.btn-concluir\s*\{[^}]*background:\s*transparent/.test(css) && /\.btn-remarcar\s*\{[^}]*background:\s*transparent/.test(css), 'botões coloridos (.btn-concluir e .btn-remarcar) devem seguir o padrão outline (background: transparent) igual ao .btn-perigo');
