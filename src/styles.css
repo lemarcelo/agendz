@@ -289,8 +289,8 @@ input:disabled, select:disabled, textarea:disabled { opacity: .6; }
 .modal-fundo { position: fixed; inset: 0; z-index: 80; background: rgba(10, 10, 10, .5); display: grid; place-items: center; padding: 16px; }
 .modal { width: min(var(--larg, 560px), 100%); max-height: calc(100vh - 32px); background: var(--surface); border-radius: 14px; box-shadow: var(--sombra); display: flex; flex-direction: column; }
 .modal-topo { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; padding: 16px 18px 6px; }
-.modal-corpo { padding: 8px 18px 18px; overflow: auto; display: grid; gap: 14px; align-content: start; }
-.modal-rodape { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.modal-corpo { padding: 8px 18px 18px; overflow: auto; display: grid; gap: 14px; align-content: start; flex: 1 1 auto; min-height: 0; }
+.modal-rodape { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--line); flex-wrap: wrap; flex: none; position: relative; z-index: 2; background: var(--surface); }
 
 /* formulário do agendamento */
 .seletor-hora { display: inline-flex; align-items: center; gap: 6px; background: var(--surface-2); border-radius: 12px; padding: 6px 10px; align-self: flex-start; }
@@ -774,6 +774,10 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
 
 /* Agenda no celular: status numa linha só, aviso e filtro compactos */
 @media (max-width: 700px) {
+  .tela-topo .btn { white-space: normal; text-align: center; max-width: 100%; }
+  .card-serv-topo .chip { white-space: normal; }
+  .grade-cards { max-width: 100%; }
+  .card-serv { max-width: 100%; overflow: hidden; }
   .legenda { flex-wrap: nowrap; overflow-x: auto; margin-inline: -16px; padding-inline: 16px; scrollbar-width: none; gap: 3px; }
   .legenda .marc { flex: none; }
   .legenda .chip .ponto, .legenda .chip .ico { display: none; } /* 9 marcadores numa linha só: a cor do botão já diz o status */
