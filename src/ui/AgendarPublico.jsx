@@ -25,7 +25,7 @@ function DiaHora({ chave, obterDias, obterHorarios, diasMax, valor, aoEscolher, 
   const [janela, setJanela] = useState(14);
   const [dia, setDia] = useState(null);
   const dias = useMemo(() => obterDias(hojeTs(), Math.min(janela, diasMax)), [snap.state, chave, janela, diasMax]);
-  const diaAtual = dia && dias.includes(dia) ? dia : null;
+  const diaAtual = dia && dias.includes(dia) ? dia : dias[0] || null;
   const horas = useMemo(() => (diaAtual ? obterHorarios(diaAtual) : []), [snap.state, chave, diaAtual]);
   const podeMais = janela < diasMax;
   const [horaPicker, setHoraPicker] = useState('');

@@ -110,20 +110,22 @@ test('ordenarMenuPorUso e registrarUsoMenu: mais usados nos últimos 7 dias vêm
   // Sem histórico: mantém a ordem padrão
   assert.deepEqual(ordenarMenuPorUso(menu, {}), menu);
 
-  // Registra acessos em clientes e estoque
-  let hist = registrarUsoMenu({}, 'clientes', t0);
-  hist = registrarUsoMenu(hist, 'clientes', t0 + dia);
-  hist = registrarUsoMenu(hist, 'estoque', t0 + 2 * dia);
-  hist = registrarUsoMenu(hist, 'estoque', t0 + 3 * dia);
-  hist = registrarUsoMenu(hist, 'estoque', t0 + 4 * dia);
+  // Registra 9 acessos em servicos (< 10 cliques: NÃO atinge o threshold de 10)
+  let hist = {};
+  for (let i = 0; i < 9; i++) hist = registrarUsoMenu(hist, 'servicos', t0 + i * 1000);
 
-  // No dia 4: estoque (3) > clientes (2) > não usados intactos (agenda, servicos, equipe, estabelecimento)
+  // Menos de 10 cliques: servicos não sobe, mantém a ordem original intacta
+  assert.deepEqual(ordenarMenuPorUso(menu, hist, t0 + 10000), menu);
+
+  // Registra 10 acessos em clientes e 12 em estoque (ambos >= 10 cliques)
+  for (let i = 0; i < 10; i++) hist = registrarUsoMenu(hist, 'clientes', t0 + dia + i * 1000);
+  for (let i = 0; i < 12; i++) hist = registrarUsoMenu(hist, 'estoque', t0 + 2 * dia + i * 1000);
+
+  // No dia 4: estoque (12 >= 10) > clientes (10 >= 10) > não qualificados intactos (agenda, servicos com 9, equipe, estabelecimento)
   const ord1 = ordenarMenuPorUso(menu, hist, t0 + 4 * dia);
   assert.deepEqual(ord1, ['estoque', 'clientes', 'agenda', 'servicos', 'equipe', 'estabelecimento']);
 
-  // Passam mais de 7 dias sem usar clientes: os acessos de clientes caducam da janela (7 dias em relação a t0 + 9 * dia)
-  // t0 + 1 * dia (último uso de clientes) < t0 + 9 * dia - 7 * dia (= t0 + 2 * dia), logo clientes caduca
-  // estoque foi usado em t0 + 4 * dia >= t0 + 9 * dia - 7 * dia, logo estoque segue recente
+  // Passam mais de 7 dias sem usar clientes: os acessos de clientes caducam da janela
   const ord2 = ordenarMenuPorUso(menu, hist, t0 + 9 * dia);
   assert.deepEqual(ord2, ['estoque', 'agenda', 'clientes', 'servicos', 'equipe', 'estabelecimento']);
 

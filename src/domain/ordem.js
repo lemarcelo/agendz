@@ -78,10 +78,12 @@ export function registrarUsoMenu(historico, id, agora = Date.now(), janelaMs = D
   return base;
 }
 
+export const MINIMO_CLIQUES_MENU = 10;
+
 // Ordena os itens do menu:
-// 1. Quem teve uso nos últimos 7 dias fica primeiro, ordenado pela quantidade de acessos na janela (mais usado primeiro; desempate pelo uso mais recente).
-// 2. Itens sem uso na janela NÃO mudam de posição entre si: preservam exatamente a ordem que tinham na lista anterior (ou padrão).
-export function ordenarMenuPorUso(itens, historico, agora = Date.now(), janelaMs = DIAS_USO_MENU_MS) {
+// 1. Quem teve pelo menos 10 acessos nos últimos 7 dias fica primeiro, ordenado pela quantidade de acessos (mais usado primeiro; desempate pelo uso mais recente).
+// 2. Itens com menos de 10 acessos na janela NÃO sobem e preservam a ordem original relativa.
+export function ordenarMenuPorUso(itens, historico, agora = Date.now(), janelaMs = DIAS_USO_MENU_MS, minCliques = MINIMO_CLIQUES_MENU) {
   if (!Array.isArray(itens)) return [];
   const corte = agora - janelaMs;
   const contagens = new Map();
@@ -90,7 +92,7 @@ export function ordenarMenuPorUso(itens, historico, agora = Date.now(), janelaMs
   for (const [k, lista] of Object.entries(historico || {})) {
     if (!Array.isArray(lista)) continue;
     const recentes = lista.filter((ts) => typeof ts === 'number' && ts >= corte);
-    if (recentes.length > 0) {
+    if (recentes.length >= minCliques) {
       contagens.set(k, recentes.length);
       ultimos.set(k, Math.max(...recentes));
     }
@@ -103,7 +105,7 @@ export function ordenarMenuPorUso(itens, historico, agora = Date.now(), janelaMs
     const item = itens[i];
     const id = Array.isArray(item) ? item[0] : (typeof item === 'object' && item !== null ? item.id : item);
     const qtd = contagens.get(id) || 0;
-    if (qtd > 0) {
+    if (qtd >= minCliques) {
       usados.push({ item, id, qtd, ultimo: ultimos.get(id) || 0, pos: i });
     } else {
       semUso.push(item);

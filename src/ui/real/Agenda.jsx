@@ -242,7 +242,7 @@ function Detalhe({ a, nomeCliente, nomeProf, nomeDe, profissionais, boxes, ehDon
               {ativoStatus === 'cancelado' && <Btn variante="confirmar" tamanho="sm" disabled={ocupado} onClick={mudar('a_confirmar', 'Agendamento reativado.')} data-testid="acao-reativar">Reativar</Btn>}
             </div>
             <div className="detalhe-acoes-principais">
-              {ativoStatus !== 'cancelado' && <Btn tamanho="sm" variante="perigo" disabled={ocupado} onClick={() => setCancelando(true)} data-testid="acao-cancelar">Cancelar</Btn>}
+              {ativoStatus !== 'cancelado' && <Btn tamanho="sm" variante="perigo" disabled={ocupado} onClick={() => setCancelando(true)} data-testid="acao-cancelar">Cancelar atendimento</Btn>}
               {(ativoStatus === 'a_confirmar' || ativoStatus === 'confirmado') && <Btn variante="concluir" tamanho="sm" disabled={ocupado} onClick={mudar('concluido', 'Agendamento concluído.')} data-testid="acao-concluir">Concluir</Btn>}
             </div>
             {podeVerHistorico && (

@@ -29,5 +29,11 @@ Use ao criar ou alterar telas do Agendz. Antes de editar, identifique comportame
 6. **Alternância de Modelos em Revisões**:
    - Modelos mais leves (Flash) executam tarefas diretas de código sob testes rigorosos.
    - **Antes de pedir autorização para push/deploy**, faça a revisão final com modelo mais analítico (Claude ou Gemini Pro), verificando integridade de regras, simetria visual por código e ausência de regressões.
+7. **Ações Suaves e Comportamento do Menu Principal**:
+   - **Padrão Desktop (PC)**: O menu lateral inicia **recolhido por padrão** (`68px`), exibindo apenas ícones e alinhamento compacto. Não há persistência de estado aberto/recolhido por usuário no backend.
+   - **Expansão e Recolhimento Suaves**: Ao passar o mouse (`hover`), o menu expande suavemente para largura total (`220px`), revelando rótulos com transição suave `cubic-bezier(0.16, 1, 0.3, 1)` de `0.28s` e fade-in de texto (`opacity` e `max-width`). Ao selecionar qualquer item de navegação, o menu recolhe suavemente de imediato.
+   - **Ordem Programada por Uso Sem Pulos Visuais**:
+     - Apenas itens com pelo menos 10 acessos nos últimos 7 dias sobem para o topo (`qtd >= 10`). Itens com menos de 10 cliques não contabilizam para subir e mantêm a ordem base.
+     - A ordem exibida na interface permanece congelada enquanto o menu estiver aberto ou sob o cursor (`menuHover` / `menuAberto` ativos): a reorganização programada ocorre **exclusivamente quando o menu está recolhido** (fora do campo visual ativo). Quando o usuário abre ou passa o mouse de novo, os itens já se encontram na nova disposição, eliminando qualquer salto ou deslocamento brusco na frente do usuário.
 
 O desktop pode usar navegação lateral e o celular menu recolhível quando aprovados para a tela; mantenha todas as opções acessíveis, sem alterar regras ou permissões. Padrões visuais aprovados não substituem testes de funcionalidade.

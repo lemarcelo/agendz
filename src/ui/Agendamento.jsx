@@ -471,7 +471,7 @@ export function GavetaAgendamento({ id, user, onClose, onRemarcar }) {
           {ativo && (
             <div className="acoes">
               {!local && a.status !== STATUS.CONCLUIDO && <Btn variante="primario" icone="repeat" onClick={() => onRemarcar(a.id)} data-testid="acao-remarcar">Remarcar</Btn>}
-              {!confirmaCancel ? <Btn variante="perigo" icone="x" onClick={() => setConfirmaCancel(true)} data-testid="acao-cancelar">Cancelar</Btn> : (
+              {!confirmaCancel ? <Btn variante="perigo" icone="x" onClick={() => setConfirmaCancel(true)} data-testid="acao-cancelar">Cancelar atendimento</Btn> : (
                 <span className="confirmar-cancel">
                   <b>Cancelar este horário?</b>
                   <Btn variante="perigo" tamanho="sm" onClick={() => { if (executa(agenda.cancelar(a.id), 'Agendamento cancelado.')) setConfirmaCancel(false); }} data-testid="acao-cancelar-sim">Sim, cancelar</Btn>

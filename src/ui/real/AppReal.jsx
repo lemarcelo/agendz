@@ -216,35 +216,17 @@ function Painel({ loja, sessao, aoSair, aoMudarMarca }) {
   const [aba, setAba] = useState(() => (sessao.papel === 'dono' || (sessao.secoes || []).includes('agenda') ? 'agenda' : (sessao.secoes || []).includes('clientes') ? 'clientes' : 'servicos'));
   const [reconfigurando, setReconfigurando] = useState(false);
   const [menuAberto, setMenuAberto] = useState(false);
-  const [menuRecolhido, setMenuRecolhido] = useState(false);
+  const [menuHover, setMenuHover] = useState(false);
   const [menuDesktop, setMenuDesktop] = useState(() => globalThis.matchMedia('(min-width: 901px)').matches);
-  const [erroMenu, setErroMenu] = useState('');
-  const menuAlterado = useRef(false);
-  const filaMenu = useRef(Promise.resolve());
   useEffect(() => {
     const consulta = globalThis.matchMedia('(min-width: 901px)');
-    const atualiza = (e) => { setMenuDesktop(e.matches); setMenuAberto(false); };
+    const atualiza = (e) => { setMenuDesktop(e.matches); setMenuAberto(false); setMenuHover(false); };
     consulta.addEventListener('change', atualiza);
     return () => consulta.removeEventListener('change', atualiza);
   }, []);
-  useEffect(() => {
-    let ativo = true;
-    apiPerfil.obterMenu().then((r) => {
-      if (!ativo || menuAlterado.current) return;
-      if (r.ok) setMenuRecolhido(r.recolhido);
-      else setErroMenu('Não foi possível carregar a preferência do menu.');
-    });
-    return () => { ativo = false; };
-  }, []);
   const alternarMenu = () => {
     if (!menuDesktop) { setMenuAberto((v) => !v); return; }
-    const proximo = !menuRecolhido;
-    menuAlterado.current = true;
-    setMenuRecolhido(proximo);
-    setErroMenu('');
-    filaMenu.current = filaMenu.current.then(() => apiPerfil.salvarMenu(proximo)).then((r) => {
-      if (!r.ok) setErroMenu('Não foi possível salvar a preferência do menu. Tente novamente.');
-    });
+    setMenuHover((v) => !v);
   };
   useEffect(() => {
     if (!menuAberto) return undefined;
@@ -308,7 +290,7 @@ function Painel({ loja, sessao, aoSair, aoMudarMarca }) {
   const comSuporte = dono || (sessao.secoes || []).includes('suporte'); // v119: de fábrica só o proprietário; os outros se ele liberar
   if (comSuporte) itens.push(['suporte', 'Suporte', 'info']);
 
-  // Ordem do menu: os mais usados nos últimos 7 dias vêm primeiro; os que não forem usados mantêm sua ordem relativa
+  // Ordem do menu: apenas itens com >= 10 cliques sobem; ordem só atualiza ao recolher (sem saltos)
   const chaveUso = `uso-menu:${loja.slug}:${sessao.id}`;
   const [historicoUso, setHistoricoUso] = useState(() => {
     try {
@@ -316,26 +298,47 @@ function Painel({ loja, sessao, aoSair, aoMudarMarca }) {
       return s ? JSON.parse(s) : {};
     } catch { return {}; }
   });
+  const estaRecolhido = !menuAberto && (!menuDesktop || !menuHover);
+  const [itensExibidos, setItensExibidos] = useState(() => ordenarMenuPorUso(itens, historicoUso));
+
+  useEffect(() => {
+    if (estaRecolhido) {
+      const nova = ordenarMenuPorUso(itens, historicoUso);
+      const mudou = nova.length !== itensExibidos.length || nova.some((it, idx) => it[0] !== itensExibidos[idx]?.[0]);
+      if (mudou) {
+        setItensExibidos(nova);
+      }
+    }
+  }, [estaRecolhido, itens, historicoUso]);
+
   const selecionarAba = (k) => {
     setAba(k);
     setFoco(null);
     setMenuAberto(false);
+    setMenuHover(false);
+    if (typeof document !== 'undefined' && document.activeElement?.blur) {
+      document.activeElement.blur();
+    }
     const novo = registrarUsoMenu(historicoUso, k);
     setHistoricoUso(novo);
     try { globalThis.localStorage?.setItem(chaveUso, JSON.stringify(novo)); } catch {}
   };
-  const itensOrdenados = useMemo(() => ordenarMenuPorUso(itens, historicoUso), [itens, historicoUso]);
 
   if (reconfigurando) return <PrimeiroAcesso modo="reconfigurar" tipo={loja.tipo} nomeLoja={loja.nome} adaptador={onboarding} aoConcluir={() => setReconfigurando(false)} aoCancelar={() => setReconfigurando(false)} />;
 
   return (
-    <div className={`app app-real${menuRecolhido ? ' menu-recolhido-real' : ''}`}>
+    <div className={`app app-real${!menuHover ? ' menu-recolhido-real' : ''}`}>
       {menuAberto && <button type="button" className="menu-fundo-real" aria-label="Fechar menu" onClick={() => setMenuAberto(false)} />}
-      <header className={`topo${menuAberto ? ' menu-aberto-real' : ''}`}>
-        <LogoPequena loja={loja} aoInicio={() => { setPerfilAberto(false); setFoco(null); selecionarAba(itensOrdenados[0][0]); }} />
-        <button type="button" className="menu-alternar-real" aria-label={chamadosNovos > 0 && !menuDesktop && !menuAberto ? `Alternar menu, ${chamadosNovos} respostas de suporte não lidas` : 'Alternar menu'} aria-expanded={menuDesktop ? !menuRecolhido : menuAberto} aria-controls="menu-secoes-real" onClick={alternarMenu} data-testid="menu-alternar-real"><Icone n={menuAberto ? 'x' : 'menu'} size={20} /><span>Menu</span>{!menuDesktop && !menuAberto && chamadosNovos > 0 && <i className="badge" data-testid="menu-badge-suporte">{chamadosNovos}</i>}</button>
+      <header
+        className={`topo${menuAberto ? ' menu-aberto-real' : ''}${menuHover ? ' menu-hover-ativo' : ''}`}
+        onMouseEnter={() => setMenuHover(true)}
+        onMouseLeave={() => setMenuHover(false)}
+        onMouseMove={() => { if (!menuHover) setMenuHover(true); }}
+      >
+        <LogoPequena loja={loja} aoInicio={() => { setPerfilAberto(false); setFoco(null); selecionarAba(itensExibidos[0][0]); }} />
+        <button type="button" className="menu-alternar-real" aria-label={chamadosNovos > 0 && !menuDesktop && !menuAberto ? `Alternar menu, ${chamadosNovos} respostas de suporte não lidas` : 'Alternar menu'} aria-expanded={menuDesktop ? menuHover : menuAberto} aria-controls="menu-secoes-real" onClick={alternarMenu} data-testid="menu-alternar-real"><Icone n={menuAberto ? 'x' : 'menu'} size={20} /><span>Menu</span>{!menuDesktop && !menuAberto && chamadosNovos > 0 && <i className="badge" data-testid="menu-badge-suporte">{chamadosNovos}</i>}</button>
         <nav id="menu-secoes-real" className="nav" aria-label="Seções">
-          {itensOrdenados.map(([k, r, ic]) => (
+          {itensExibidos.map(([k, r, ic]) => (
             <button key={k} type="button" className={aba === k ? 'on' : ''} onClick={() => selecionarAba(k)} aria-current={aba === k ? 'page' : undefined} title={r} data-testid={`nav-${k}`}><Icone n={ic} size={17} /><span>{r}</span>{k === 'suporte' && chamadosNovos > 0 && <i className="badge" data-testid="badge-suporte">{chamadosNovos}</i>}</button>
           ))}
         </nav>
@@ -349,7 +352,6 @@ function Painel({ loja, sessao, aoSair, aoMudarMarca }) {
           </div>
         </div>
       </header>
-      {erroMenu && <div className="menu-erro-real" role="status">{erroMenu}</div>}
       {(sessao.secoes || []).includes('agenda') && <AlertaAgenda prefs={prefs} aoIr={irParaAgendamento} aoDestacar={destacar} />}
       {perfilAberto && <MeuPerfil aoSair={aoSair} loja={loja} sessao={sessao} dados={meus} prefs={prefs} aoPrefs={setPrefs} aoMudou={(d) => setMeus((antes) => ({ ...(antes || {}), ...d }))} aoFechar={() => setPerfilAberto(false)} />}
       <div className="corpo">

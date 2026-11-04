@@ -90,7 +90,7 @@ function DiaHora({ chave, diasMax, servicoIds, profissionalId, porte, valor, aoE
     })();
     return () => { vivo = false; };
   }, [chave, limite]);
-  const diaAtual = dias && diaEfetivo && dias.includes(diaEfetivo) ? diaEfetivo : null;
+  const diaAtual = dias && diaEfetivo && dias.includes(diaEfetivo) ? diaEfetivo : (dias && dias.length ? dias[0] : null);
   useEffect(() => {
     setHoraPicker('');
     setAvisoHorario(null);

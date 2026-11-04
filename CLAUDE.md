@@ -1,5 +1,8 @@
 # Agendz: regras fixas do projeto
 
+> ⛔ **BLOQUEIO TEMPORÁRIO DO CLAUDE (Até sexta-feira, 06/11/2026):** Uso proibido de Claude. Utilize Gemini ou GPT.
+
+
 > **Retomando o trabalho? Leia primeiro `docs/ESTADO-DO-PROJETO.md`** (estado, VPS no ar, decisões, em aberto e próximos passos).
 
 Protótipo React 19 + esbuild com API simulada (`src/services/api.js`), que depois vira React + Spring Boot. O documento vivo é `prompt-agendz-regras.md` (fora desta pasta quando entregue em zip; mantenha a cópia ao lado do projeto).
