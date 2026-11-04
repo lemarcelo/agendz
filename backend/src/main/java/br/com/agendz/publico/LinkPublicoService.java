@@ -156,7 +156,6 @@ public class LinkPublicoService {
     private final Cifra cifra;
     private final BarradosDoLink barrados;
     private static final ObjectMapper JSON = new ObjectMapper();
-    private final java.util.Map<String, List<Instant>> horariosFalsosPorIp = new java.util.concurrent.ConcurrentHashMap<>();
 
     public LinkPublicoService(LojaJdbc banco, Clock relogio, EscalaService escalas, ClienteService clientes, CupomService cupons, ComissaoService comissoes, LimitePublico limite, Ocupacao ocupacao, PlanoService planos, Cifra cifra, BarradosDoLink barrados) {
         this.banco = banco;
@@ -212,12 +211,7 @@ public class LinkPublicoService {
             if (!cfg.ativo()) return List.<Horario>of();
             List<Svc> servicos = servicosDoLink(jdbc, ids(servicoIds), porteDoPedido(jdbc, loja, porte, cfg.veiculoObrigatorio().contains("porte")));
             Base base = base(jdbc, loja, profissionalId);
-            List<Horario> lista = horariosDoDia(jdbc, cfg, base, dia, servicos, relogio.instant(), false, null);
-            List<Instant> falsos = horariosFalsosPorIp.get(loja.id() + ":" + ip);
-            if (falsos != null && !falsos.isEmpty()) {
-                return lista.stream().filter(h -> !falsos.contains(h.inicio())).toList();
-            }
-            return lista;
+return horariosDoDia(jdbc, cfg, base, dia, servicos, relogio.instant(), false, null);
         });
     }
 
@@ -305,23 +299,28 @@ public class LinkPublicoService {
                 Instant faixaIni = dia.atTime(f.ini() / 60, f.ini() % 60).atZone(Fuso.BRASIL).toInstant();
                 Instant faixaFim = dia.atTime(f.fim() / 60, f.fim() % 60).atZone(Fuso.BRASIL).toInstant();
 
-                // Candidatos inteligentes: início de expediente, término de ocupação anterior, encaixe perfeito e passos periódicos
                 Set<Integer> candidatosMin = new TreeSet<>();
-                candidatosMin.add(f.ini());
-                for (Ocupado o : ocupados) {
-                    if (o.fimOcupado().isAfter(faixaIni) && o.fimOcupado().isBefore(faixaFim)) {
-                        long minFim = Duration.between(diaIni, o.fimOcupado()).toMinutes();
-                        candidatosMin.add((int) minFim);
+                if (cfg.intervaloMin() > 0) {
+                    candidatosMin.add(f.ini());
+                    for (Ocupado o : ocupados) {
+                        if (o.fimOcupado().isAfter(faixaIni) && o.fimOcupado().isBefore(faixaFim)) {
+                            long minFim = Duration.between(diaIni, o.fimOcupado()).toMinutes();
+                            candidatosMin.add((int) minFim);
+                        }
+                        if (o.inicio().isAfter(faixaIni) && o.inicio().isBefore(faixaFim)) {
+                            long minIni = Duration.between(diaIni, o.inicio()).toMinutes();
+                            candidatosMin.add((int) (minIni - duracao));
+                        }
                     }
-                    if (o.inicio().isAfter(faixaIni) && o.inicio().isBefore(faixaFim)) {
-                        long minIni = Duration.between(diaIni, o.inicio()).toMinutes();
-                        candidatosMin.add((int) (minIni - duracao));
+                    int passo = Math.min(cfg.intervaloMin(), 30);
+                    if (passo <= 0) passo = 15;
+                    for (int t = f.ini(); t + duracao <= f.fim(); t += passo) {
+                        candidatosMin.add(t);
                     }
-                }
-                int passo = cfg.intervaloMin() > 0 ? Math.min(cfg.intervaloMin(), 30) : 30;
-                if (passo <= 0) passo = 15;
-                for (int t = f.ini(); t + duracao <= f.fim(); t += passo) {
-                    candidatosMin.add(t);
+                } else {
+                    for (int t = f.ini(); t + duracao <= f.fim(); t += PASSO_MIN) {
+                        candidatosMin.add(t);
+                    }
                 }
 
                 for (int t : candidatosMin) {
@@ -392,30 +391,6 @@ public class LinkPublicoService {
         return idade.compareTo(TEMPO_MINIMO) < 0 ? BarradosDoLink.Motivo.RAPIDO : null;
     }
 
-    private String sanitizarIp(String ip) {
-        if (ip == null || ip.isBlank()) return "desconhecido";
-        String s = ip.replaceAll("[^a-zA-Z0-9.:_-]", "").trim();
-        return s.length() > 45 ? s.substring(0, 45) : s;
-    }
-
-    private void registrarAvisoFraude(UUID lojaId, String texto) {
-        try {
-            banco.naLojaIndependente(lojaId, jdbc -> {
-                AvisosPainel.criar(jdbc, lojaId, null, null, "fraude", texto);
-                return 1;
-            });
-        } catch (RuntimeException e) {
-            // auxilio: nunca derruba a resposta
-        }
-    }
-
-    private Criado sucessoSemGravar(UUID lojaId, String ip, Pedido p) {
-        if (ip != null && p.inicio() != null) {
-            horariosFalsosPorIp.computeIfAbsent(lojaId + ":" + ip, k -> new java.util.concurrent.CopyOnWriteArrayList<>()).add(p.inicio());
-        }
-        return sucessoSemGravar(p);
-    }
-
     /**
      * Resposta de sucesso que NÃO grava nada, só para sinal claro de robô: parece um pedido comum (serviços e profissional pedidos), mas o id e o token não existem.
      * Cliente comum nunca recebe isto: passou do limite, ele ouve a verdade.
@@ -450,8 +425,7 @@ public class LinkPublicoService {
         BarradosDoLink.Motivo sinal = sinalDeRobo(loja, p, relogio.instant());
         if (sinal != null) {
             barrados.registrar(loja.id(), sinal, ipHash, telHash);
-            registrarAvisoFraude(loja.id(), "Tentativa de robô ou requisição suspeita neutralizada (IP: " + sanitizarIp(ip) + ").");
-            return sucessoSemGravar(loja.id(), ip, p);
+            return sucessoSemGravar(p);
         }
         String nome = p.nome() == null ? "" : Texto.limpar(p.nome()).trim();
         // nome em branco só vale se o dono tirou a obrigatoriedade (conferido de novo dentro da transação); uma letra só nunca vale
@@ -469,8 +443,7 @@ public class LinkPublicoService {
                 && (!comCupom || limite.liberar("cupom-loja:" + loja.id(), 30, Duration.ofMinutes(15)));
         if (!liberado) {
             barrados.registrar(loja.id(), BarradosDoLink.Motivo.FREQUENCIA, ipHash, telHash);
-            registrarAvisoFraude(loja.id(), "Tentativa de ocupação excessiva da agenda neutralizada (IP: " + sanitizarIp(ip) + "). Agendamento falso simulado.");
-            return sucessoSemGravar(loja.id(), ip, p);
+            throw new ErroDeNegocio(HttpStatus.TOO_MANY_REQUESTS, ERRO_MUITOS);
         }
         return banco.naLoja(jdbc -> {
             Instant agora = relogio.instant();

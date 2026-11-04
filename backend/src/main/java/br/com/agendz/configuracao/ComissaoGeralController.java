@@ -57,6 +57,7 @@ public class ComissaoGeralController {
         Loja loja = LojaContext.exigir();
         BigDecimal v = corpo == null ? null : corpo.comissaoPadrao();
         Boolean cp = corpo == null ? null : corpo.comissaoParceiro();
+        if (v == null && cp == null) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "A comissão padrão vai de 0 a 100%.");
         if (v != null && !Comissao.valido(v)) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "A comissão padrão vai de 0 a 100%.");
         BigDecimal arredondado = v != null ? v.setScale(2, RoundingMode.HALF_UP) : null;
         banco.naLoja(jdbc -> jdbc.update("insert into configuracao_loja (loja_id, comissao_padrao, comissao_parceiro) values (?::uuid, coalesce(?, 50), coalesce(?, false)) "

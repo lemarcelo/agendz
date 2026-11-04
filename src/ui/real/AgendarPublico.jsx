@@ -344,7 +344,6 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
   const nomeBarb = (id) => pagina.profissionais.find((b) => b.id === id)?.nome || `Qualquer ${rot('profissional')}`;
   const alternar = (id) => { setSrv((l) => (l.includes(id) ? l.filter((x) => x !== id) : l.length >= 5 ? l : [...l, id])); setEscolha(null); };
 
-  // Limpa erro ao mudar de etapa para evitar mensagens residuais (ex.: erro de nome aparecendo na etapa de horário)
   useEffect(() => { setErro(''); }, [etapa]);
 
   // Avisa antes de pedir: "este horário usa um atendimento do seu plano". Só consulta com o telefone completo; o servidor responde apenas sim ou não.
@@ -377,8 +376,13 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
     setEnviando(false);
     if (!r.ok) {
       cap.verificar(r);
-      setErro(r.erro);
-      if (r.status === 409 && /ocupado/.test(r.erro)) { setEscolha(null); setEtapa(2); }
+      if (r.status === 409 && /ocupado/.test(r.erro)) {
+        setEscolha(null);
+        setEtapa(2);
+        setTimeout(() => setErro(r.erro), 10);
+      } else {
+        setErro(r.erro);
+      }
       return;
     }
     if (r.token) aoCriar({ id: r.agendamento.id, token: r.token }, { id: r.agendamento.id, inicio: r.agendamento.inicio, fim: r.agendamento.fim, servicos: r.agendamento.servicos, profissional: r.agendamento.profissional }, { nome, telefone: tel });
@@ -495,7 +499,7 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
           </div>
           <form className="pub-form" onSubmit={(e) => { e.preventDefault(); enviar(); }} noValidate>
             <Campo rotulo={pagina.exigeNome === false ? 'Nome (opcional)' : 'Nome'}><input value={nome} onChange={(e) => setNome(e.target.value)} maxLength={60} autoComplete="name" data-testid="pub-nome" /></Campo>
-            <Campo rotulo={pagina.exigeTelefone ? 'Telefone (WhatsApp, com DDD)' : 'Telefone (WhatsApp) (opcional)'} dica={pagina.exigeTelefone ? undefined : 'Opcional. Com telefone a loja avisa do seu horário; sem ele, só vê o seu pedido.'}><input type="tel" inputMode="tel" value={tel} onChange={(e) => setTel(formatarTelefone(e.target.value))} maxLength={16} autoComplete="tel" placeholder="(51) 99999-9999" data-testid="pub-tel" /></Campo>
+            <Campo rotulo={pagina.exigeTelefone ? 'Telefone (WhatsApp, com DDD)' : 'Telefone (WhatsApp) (opcional)'} dica={pagina.exigeTelefone ? undefined : 'Opcional, se quiser. Com telefone a loja avisa do seu horário; sem ele, só vê o seu pedido.'}><input type="tel" inputMode="tel" value={tel} onChange={(e) => setTel(formatarTelefone(e.target.value))} maxLength={16} autoComplete="tel" placeholder="(51) 99999-9999" data-testid="pub-tel" /></Campo>
             {usaPlano && <p className="pub-aviso-plano" role="status" data-testid="pub-usa-plano"><Icone n="ticket" size={14} /> Este horário usa um atendimento do seu plano.</p>}
             <Campo rotulo="Cupom (opcional)"><input value={cupom} onChange={(e) => setCupom(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 14))} maxLength={14} autoComplete="off" autoCapitalize="characters" placeholder="XXXX-XXXX-XXXX" data-testid="pub-cupom" /></Campo>
             <input className="pub-isca" tabIndex={-1} aria-hidden="true" autoComplete="off" name="site" value={isca} onChange={(e) => setIsca(e.target.value)} data-testid="pub-isca" />
