@@ -49,8 +49,8 @@ class LojaPorEnderecoTest extends BaseIntegracao {
     void manifestoEIconeDoAppSaemComNomeELogoDaLoja() throws Exception {
         mvc.perform(get("/api/publico/manifest.webmanifest").with(host("dalforno.agendz.io")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.name").value("Barbearia Dal Forno"))
-                .andExpect(jsonPath("$.short_name").value("Barbearia Dal Forno"))
+                .andExpect(jsonPath("$.name").value("Barbearia Dalforno"))
+                .andExpect(jsonPath("$.short_name").value("Barbearia Dalforno"))
                 .andExpect(jsonPath("$.theme_color").value("#0b0d10"))
                 .andExpect(jsonPath("$.icons[0].src").value("/api/publico/icone"))
                 .andExpect(jsonPath("$.icons[0].type").value("image/jpeg"));

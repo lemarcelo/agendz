@@ -121,6 +121,8 @@ const A200 = id(300), A201 = id(301), A202 = id(302); // ag(n) cria o id 100 + n
   // o pulso acaba sozinho
   await p.clock.runFor(10000);
   await p.waitForFunction((i) => !document.querySelector(`[data-id="${i}"]`)?.hasAttribute('data-destaque'), A200);
+  await p.getByTestId('detalhe-fechar').click();
+  await p.getByTestId('detalhe-modal').waitFor({ state: 'detached' });
   ok('o cartão para de pulsar depois de alguns segundos');
 
   // Meu perfil: escolhas valem na hora
