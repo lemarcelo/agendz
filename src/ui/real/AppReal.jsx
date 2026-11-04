@@ -290,7 +290,6 @@ function Painel({ loja, sessao, aoSair, aoMudarMarca }) {
     setPerfilAberto(false); setAba('agenda');
     if (id) { destacar([id]); setFoco({ id, n: Date.now() }); }
   };
-  if (reconfigurando) return <PrimeiroAcesso modo="reconfigurar" tipo={loja.tipo} nomeLoja={loja.nome} adaptador={onboarding} aoConcluir={() => setReconfigurando(false)} aoCancelar={() => setReconfigurando(false)} />;
   const papel = sessao.papel === 'dono' ? 'Proprietário' : rotulo({ tipo: loja.tipo }, 'profissional', { capitalizado: true });
   // O menu mostra só o que a pessoa pode usar (o servidor confere de novo em cada rota). Serviços todo perfil pode ler; Equipe é do proprietário.
   const dono = sessao.papel === 'dono';
@@ -330,6 +329,8 @@ function Painel({ loja, sessao, aoSair, aoMudarMarca }) {
     try { globalThis.localStorage?.setItem(chaveUso, JSON.stringify(novo)); } catch {}
   };
   const itensOrdenados = useMemo(() => ordenarMenuPorUso(itens, historicoUso), [itens, historicoUso]);
+
+  if (reconfigurando) return <PrimeiroAcesso modo="reconfigurar" tipo={loja.tipo} nomeLoja={loja.nome} adaptador={onboarding} aoConcluir={() => setReconfigurando(false)} aoCancelar={() => setReconfigurando(false)} />;
 
   return (
     <div className={`app app-real${menuRecolhido ? ' menu-recolhido-real' : ''}`}>
