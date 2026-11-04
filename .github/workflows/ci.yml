@@ -83,12 +83,14 @@ jobs:
         run: node tools/rodar-testes-tipo.mjs barbearia e2e
 
   backend:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: backend
     steps:
       - uses: actions/checkout@v4
+      - name: Garantir Docker ativo para Testcontainers
+        run: sudo systemctl restart docker || true
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

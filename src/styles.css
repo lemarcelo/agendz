@@ -1363,7 +1363,7 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
   }
   .app-real .topo-dir { order: 1; margin-left: auto; }
   .app-real .nav {
-    display: flex;
+    display: none;
     position: fixed;
     z-index: 82;
     inset: 0 auto 0 0;
@@ -1378,16 +1378,9 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
     gap: 4px;
     box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
     border-right: 1px solid var(--line);
-    transform: translateX(-100%);
-    visibility: hidden;
-    pointer-events: none;
-    transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.28s;
-    will-change: transform;
   }
   .app-real .menu-aberto-real .nav {
-    transform: translateX(0);
-    visibility: visible;
-    pointer-events: auto;
+    display: flex;
   }
   .app-real .nav button {
     flex: none;

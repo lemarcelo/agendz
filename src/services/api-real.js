@@ -1335,7 +1335,7 @@ export const comissaoGeral = {
     const cp = typeof valor === 'object' && valor !== null ? valor.comissaoParceiro : comissaoParceiro;
     if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > 100) return { ok: false, status: 0, erro: 'A comissão padrão vai de 0 a 100%.' };
     const corpo = { comissaoPadrao: v };
-    if (typeof cp === 'boolean') corpo.comissaoParceiro = cp;
+    if (cp === true) corpo.comissaoParceiro = true;
     const r = await chamar('PUT', '/api/estabelecimento/comissao', corpo);
     return r.ok ? { ok: true, comissaoPadrao: numeroOuNulo(r.dados && r.dados.comissaoPadrao) ?? v, comissaoParceiro: r.dados && r.dados.comissaoParceiro === true } : r;
   },
