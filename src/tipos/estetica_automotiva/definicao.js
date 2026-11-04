@@ -5,7 +5,7 @@ export const DEFINICAO = Object.freeze({
   nome: 'Estética automotiva',
   capacidades: Object.freeze({ usaVeiculo: true, precoPorPorte: true, usaRecursoFisico: true, multiDia: true, prontoParaRetirada: true }),
   rotulos: Object.freeze({
-    profissional: Object.freeze({ s: 'esteticista', p: 'esteticistas', g: 'm' }),
+    profissional: Object.freeze({ s: 'esteticista automotivo', p: 'esteticistas automotivos', g: 'm' }),
     recurso: Object.freeze({ s: 'box', p: 'boxes', g: 'm' }),
     loja: Object.freeze({ s: 'loja', p: 'lojas', g: 'f' }),
     atendimento: Object.freeze({ s: 'serviço', p: 'serviços', g: 'm' }),

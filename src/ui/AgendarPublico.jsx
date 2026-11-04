@@ -28,6 +28,73 @@ function DiaHora({ chave, obterDias, obterHorarios, diasMax, valor, aoEscolher, 
   const diaAtual = dia && dias.includes(dia) ? dia : dias[0] || null;
   const horas = useMemo(() => (diaAtual ? obterHorarios(diaAtual) : []), [snap.state, chave, diaAtual]);
   const podeMais = janela < diasMax;
+  const [horaPicker, setHoraPicker] = useState('');
+  const [avisoHorario, setAvisoHorario] = useState(null);
+
+  useEffect(() => {
+    setHoraPicker('');
+    setAvisoHorario(null);
+  }, [chave, diaAtual]);
+
+  const processarHorario = (txt) => {
+    setHoraPicker(txt);
+    setAvisoHorario(null);
+    if (!txt || !/^([01]\d|2[0-3]):[0-5]\d$/.test(txt)) {
+      aoEscolher(null);
+      return;
+    }
+    const [hD, mD] = txt.split(':').map(Number);
+    const minD = hD * 60 + mD;
+
+    if (!horas || horas.length === 0) {
+      aoEscolher(null);
+      setAvisoHorario({
+        tipo: 'vazio',
+        texto: 'Não há horários disponíveis neste dia que abranjam os serviços selecionados.'
+      });
+      return;
+    }
+
+    const exato = horas.find((h) => fmtHM(h.inicio) === txt);
+    if (exato) {
+      aoEscolher(exato);
+      setAvisoHorario(null);
+      return;
+    }
+
+    let maisProximo = null;
+    let menorDiff = Infinity;
+    for (const h of horas) {
+      const [hH, hM] = fmtHM(h.inicio).split(':').map(Number);
+      const minH = hH * 60 + hM;
+      const diff = Math.abs(minH - minD);
+      if (diff < menorDiff) {
+        menorDiff = diff;
+        maisProximo = h;
+      }
+    }
+
+    aoEscolher(null);
+    if (maisProximo) {
+      setAvisoHorario({
+        tipo: 'ocupado',
+        horarioSugerido: maisProximo,
+        texto: `O horário ${txt} não está disponível. O mais próximo neste dia é ${fmtHM(maisProximo.inicio)}.`
+      });
+    } else {
+      setAvisoHorario({
+        tipo: 'vazio',
+        texto: 'Não há horários disponíveis neste dia que abranjam os serviços selecionados.'
+      });
+    }
+  };
+
+  const selecionarHora = (h) => {
+    setHoraPicker(fmtHM(h.inicio));
+    setAvisoHorario(null);
+    aoEscolher(h);
+  };
+
   return (
     <div className="pub-diahora">
       <div className="pub-dias" role="group" aria-label="Escolher o dia">
@@ -40,9 +107,40 @@ function DiaHora({ chave, obterDias, obterHorarios, diasMax, valor, aoEscolher, 
       </div>
       {!dias.length && <p className="muted" data-testid={`${id}-sem-horarios`}>Não há horários livres {podeMais ? 'nesses dias. Toque em "Mais dias".' : `nos próximos ${diasMax} dias. Tente outro ${rot('profissional')} ou serviço.`}</p>}
       {diaAtual && <p className="pub-dia-titulo">{maiuscula1(fmtDayLong(diaAtual))}</p>}
+      <div className="pub-timepicker" data-testid="${id}-timepicker-container">
+        <label htmlFor="${id}-input-hora" className="pub-timepicker-rotulo">
+          <Icon n="clock" size={16} />
+          <span>Escolher horário específico:</span>
+        </label>
+        <div className="pub-timepicker-campo">
+          <input
+            id="${id}-input-hora"
+            type="time"
+            className="pub-timepicker-input"
+            value={horaPicker}
+            onChange={(e) => processarHorario(e.target.value)}
+            data-testid="${id}-time-picker"
+          />
+        </div>
+      </div>
+      {avisoHorario && (
+        <div className="pub-aviso-horario" role="status" data-testid="${id}-aviso-horario">
+          <p>{avisoHorario.texto}</p>
+          {avisoHorario.horarioSugerido && (
+            <button
+              type="button"
+              className="pub-hora on"
+              onClick={() => selecionarHora(avisoHorario.horarioSugerido)}
+              data-testid="${id}-usar-sugestao"
+            >
+              Usar {fmtHM(avisoHorario.horarioSugerido.inicio)}
+            </button>
+          )}
+        </div>
+      )}
       <div className="pub-horas" role="group" aria-label="Escolher o horário">
         {horas.map((h) => (
-          <button type="button" key={h.inicio} className={`pub-hora ${valor === h.inicio ? 'on' : ''}`} aria-pressed={valor === h.inicio} onClick={() => aoEscolher(h)} data-testid={`${id}-hora-${fmtHM(h.inicio).replace(':', '')}`}>
+          <button type="button" key={h.inicio} className={`pub-hora ${valor === h.inicio ? 'on' : ''}`} aria-pressed={valor === h.inicio} onClick={() => selecionarHora(h)} data-testid={`${id}-hora-${fmtHM(h.inicio).replace(':', '')}`}>
             {fmtHM(h.inicio)}
           </button>
         ))}

@@ -70,6 +70,8 @@ function DiaHora({ chave, diasMax, servicoIds, profissionalId, porte, valor, aoE
   const [dia, setDia] = useState(null);
   const [horas, setHoras] = useState(null);
   const [erro, setErro] = useState('');
+  const [horaPicker, setHoraPicker] = useState('');
+  const [avisoHorario, setAvisoHorario] = useState(null);
   const limite = Math.min(janela, diasMax);
   useEffect(() => {
     let vivo = true;
@@ -88,12 +90,74 @@ function DiaHora({ chave, diasMax, servicoIds, profissionalId, porte, valor, aoE
   }, [chave, limite]);
   const diaAtual = dias && (dia && dias.includes(dia) ? dia : dias[0]) || null;
   useEffect(() => {
+    setHoraPicker('');
+    setAvisoHorario(null);
     if (!diaAtual) { setHoras([]); return undefined; }
     let vivo = true;
     setHoras(null);
     (fonte ? fonte.horarios(diaAtual) : publico.horarios({ data: diaAtual, servicoIds, profissionalId, porte })).then((r) => { if (!vivo) return; if (r.ok) setHoras(r.horarios); else { setErro(r.erro); setHoras([]); } });
     return () => { vivo = false; };
   }, [chave, diaAtual]);
+
+  const processarHorario = (txt) => {
+    setHoraPicker(txt);
+    setAvisoHorario(null);
+    setErro('');
+    if (!txt || !/^([01]\d|2[0-3]):[0-5]\d$/.test(txt)) {
+      aoEscolher(null);
+      return;
+    }
+    const [hD, mD] = txt.split(':').map(Number);
+    const minD = hD * 60 + mD;
+
+    if (!horas || horas.length === 0) {
+      aoEscolher(null);
+      setAvisoHorario({
+        tipo: 'vazio',
+        texto: 'Não há horários disponíveis neste dia que abranjam os serviços selecionados.'
+      });
+      return;
+    }
+
+    const exato = horas.find((h) => horaDe(h.inicio) === txt);
+    if (exato) {
+      aoEscolher(exato);
+      setAvisoHorario(null);
+      return;
+    }
+
+    let maisProximo = null;
+    let menorDiff = Infinity;
+    for (const h of horas) {
+      const [hH, hM] = horaDe(h.inicio).split(':').map(Number);
+      const minH = hH * 60 + hM;
+      const diff = Math.abs(minH - minD);
+      if (diff < menorDiff) {
+        menorDiff = diff;
+        maisProximo = h;
+      }
+    }
+
+    aoEscolher(null);
+    if (maisProximo) {
+      setAvisoHorario({
+        tipo: 'ocupado',
+        horarioSugerido: maisProximo,
+        texto: `O horário ${txt} não está disponível. O mais próximo neste dia é ${horaDe(maisProximo.inicio)}.`
+      });
+    } else {
+      setAvisoHorario({
+        tipo: 'vazio',
+        texto: 'Não há horários disponíveis neste dia que abranjam os serviços selecionados.'
+      });
+    }
+  };
+
+  const selecionarHora = (h) => {
+    setHoraPicker(horaDe(h.inicio));
+    setAvisoHorario(null);
+    aoEscolher(h);
+  };
   const podeMais = limite < diasMax;
   if (dias === null) return <p className="muted" role="status" data-testid="pub-carregando">Procurando horários livres…</p>;
   return (
@@ -109,9 +173,40 @@ function DiaHora({ chave, diasMax, servicoIds, profissionalId, porte, valor, aoE
       {!dias.length && <p className="muted" data-testid="pub-sem-horarios">Não há horários livres {podeMais ? 'nesses dias. Toque em "Mais dias".' : `nos próximos ${diasMax} dias. Tente outro ${rot('profissional')} ou fale com a loja.`}</p>}
       {erro && <Aviso tipo="erro"><span data-testid="pub-erro-horarios">{erro}</span></Aviso>}
       {horas && horas.length > 0 && <p className="pub-dia-titulo">{maiuscula1(diaLongo(horas[0].inicio))}</p>}
+      <div className="pub-timepicker" data-testid="pub-timepicker-container">
+        <label htmlFor="pub-input-hora" className="pub-timepicker-rotulo">
+          <Icone n="clock" size={16} />
+          <span>Escolher horário específico:</span>
+        </label>
+        <div className="pub-timepicker-campo">
+          <input
+            id="pub-input-hora"
+            type="time"
+            className="pub-timepicker-input"
+            value={horaPicker}
+            onChange={(e) => processarHorario(e.target.value)}
+            data-testid="pub-time-picker"
+          />
+        </div>
+      </div>
+      {avisoHorario && (
+        <div className="pub-aviso-horario" role="status" data-testid="pub-aviso-horario">
+          <p>{avisoHorario.texto}</p>
+          {avisoHorario.horarioSugerido && (
+            <button
+              type="button"
+              className="pub-hora on"
+              onClick={() => selecionarHora(avisoHorario.horarioSugerido)}
+              data-testid="pub-usar-sugestao"
+            >
+              Usar {horaDe(avisoHorario.horarioSugerido.inicio)}
+            </button>
+          )}
+        </div>
+      )}
       <div className="pub-horas" role="group" aria-label="Escolher o horário">
         {(horas || []).map((h) => (
-          <button type="button" key={h.inicio} className={`pub-hora ${valor === h.inicio ? 'on' : ''}`} aria-pressed={valor === h.inicio} onClick={() => aoEscolher(h)} data-testid={`pub-hora-${horaDe(h.inicio).replace(':', '')}`}>
+          <button type="button" key={h.inicio} className={`pub-hora ${valor === h.inicio ? 'on' : ''}`} aria-pressed={valor === h.inicio} onClick={() => selecionarHora(h)} data-testid={`pub-hora-${horaDe(h.inicio).replace(':', '')}`}>
             {horaDe(h.inicio)}
           </button>
         ))}

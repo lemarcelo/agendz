@@ -46,7 +46,7 @@ test('capacidades: a estética usa veículo, porte, box, vários dias e retirada
 
 test('rótulos e artigos: singular, plural, maiúscula e gênero de cada tipo', () => {
   const e = { tipo: 'estetica_automotiva' }; const b = { tipo: 'barbearia' };
-  assert.equal(rotulo(e, 'profissional'), 'esteticista');
+  assert.equal(rotulo(e, 'profissional'), 'esteticista automotivo');
   assert.equal(rotulo(b, 'profissional'), 'barbeiro');
   assert.equal(rotulo(b, 'profissional', { plural: true }), 'barbeiros');
   assert.equal(rotulo(b, 'profissional', { capitalizado: true }), 'Barbeiro');
@@ -62,7 +62,7 @@ test('tipo ativo: os atalhos seguem o tipo da loja do store e voltam ao padrão'
   try {
     store.reiniciar();
     assert.equal(tipoAtivo(), 'estetica_automotiva');
-    assert.deepEqual([rot('profissional'), Rot('profissional'), rots('profissional'), Rots('profissional')], ['esteticista', 'Esteticista', 'esteticistas', 'Esteticistas']);
+    assert.deepEqual([rot('profissional'), Rot('profissional'), rots('profissional'), Rots('profissional')], ['esteticista automotivo', 'Esteticista automotivo', 'esteticistas automotivos', 'Esteticistas automotivos']);
     definirTipoAtivo({ tipo: 'barbearia' });
     assert.equal(capAtiva('usaVeiculo'), false);
     assert.deepEqual([rot('profissional'), Rot('profissional'), rots('profissional'), Rots('profissional')], ['barbeiro', 'Barbeiro', 'barbeiros', 'Barbeiros']);

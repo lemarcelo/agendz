@@ -748,6 +748,13 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
 .pub-horas { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px; }
 .pub-hora { min-height: 44px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface); font-weight: 600; font-variant-numeric: tabular-nums; }
 .pub-hora.on { background: var(--tema-btn, var(--ink)); color: var(--tema-btn-fg, var(--ink-fg)); border-color: var(--tema-btn-borda, var(--ink)); }
+.pub-timepicker { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--surface-2); border-radius: 10px; padding: 10px 14px; flex-wrap: wrap; margin-block: 4px; }
+.pub-timepicker-rotulo { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; }
+.pub-timepicker-campo { display: flex; align-items: center; gap: 8px; }
+.pub-timepicker-input { min-height: 40px; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); font-weight: 600; font-size: 15px; }
+.pub-aviso-horario { background: var(--amarelo-bg, #261f0e); color: var(--amarelo, #f6ad55); border: 1px solid var(--amarelo-borda, #744210); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; margin-block: 4px; }
+.pub-aviso-horario p { margin: 0; }
+.pub-aviso-horario .pub-hora { align-self: flex-start; }
 .pub-resumo { display: grid; gap: 2px; background: var(--surface-2); border-radius: 12px; padding: 12px; }
 .pub-aviso-plano { display: flex; gap: 8px; align-items: center; margin: 0; background: var(--verde-bg); color: var(--verde); border-radius: 12px; padding: 12px; font-weight: 600; }
 .pub-form { display: grid; gap: 12px; }
