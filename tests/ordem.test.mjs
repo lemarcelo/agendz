@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { aplicarOrdem, chaveOrdem, ehOrdemPadrao, moverPara, moverPasso, sanearOrdem } from '../src/domain/ordem.js';
+import { aplicarOrdem, chaveOrdem, ehOrdemPadrao, moverPara, moverPasso, ordenarMenuPorUso, registrarUsoMenu, sanearOrdem } from '../src/domain/ordem.js';
 import { CHAVES_MARCADORES, casaMarcadores, contarMarcadores, marcadoresDe } from '../src/domain/marcadores.js';
 
 const PAD = ['a', 'b', 'c', 'd'];
@@ -100,3 +100,35 @@ test('a tela usa a ordem só com contexto fixo do código e nunca coloca html vi
     for (const m of src(f).matchAll(/<Abas [^>]*>/g)) assert.match(m[0], /ordem="/, `${f}: <Abas> sem ordem`);
   }
 });
+
+// ---------- mais usados nos últimos 7 dias ----------
+test('ordenarMenuPorUso e registrarUsoMenu: mais usados nos últimos 7 dias vêm primeiro, mantendo a ordem relativa dos não usados', () => {
+  const t0 = 1000000000000;
+  const dia = 86400000;
+  const menu = ['agenda', 'clientes', 'servicos', 'equipe', 'estoque', 'estabelecimento'];
+
+  // Sem histórico: mantém a ordem padrão
+  assert.deepEqual(ordenarMenuPorUso(menu, {}), menu);
+
+  // Registra acessos em clientes e estoque
+  let hist = registrarUsoMenu({}, 'clientes', t0);
+  hist = registrarUsoMenu(hist, 'clientes', t0 + dia);
+  hist = registrarUsoMenu(hist, 'estoque', t0 + 2 * dia);
+  hist = registrarUsoMenu(hist, 'estoque', t0 + 3 * dia);
+  hist = registrarUsoMenu(hist, 'estoque', t0 + 4 * dia);
+
+  // No dia 4: estoque (3) > clientes (2) > não usados intactos (agenda, servicos, equipe, estabelecimento)
+  const ord1 = ordenarMenuPorUso(menu, hist, t0 + 4 * dia);
+  assert.deepEqual(ord1, ['estoque', 'clientes', 'agenda', 'servicos', 'equipe', 'estabelecimento']);
+
+  // Passam mais de 7 dias sem usar clientes: os acessos de clientes caducam da janela (7 dias em relação a t0 + 9 * dia)
+  // t0 + 1 * dia (último uso de clientes) < t0 + 9 * dia - 7 * dia (= t0 + 2 * dia), logo clientes caduca
+  // estoque foi usado em t0 + 4 * dia >= t0 + 9 * dia - 7 * dia, logo estoque segue recente
+  const ord2 = ordenarMenuPorUso(menu, hist, t0 + 9 * dia);
+  assert.deepEqual(ord2, ['estoque', 'agenda', 'clientes', 'servicos', 'equipe', 'estabelecimento']);
+
+  // Passam 20 dias sem usar nenhum: todos caducam da janela de 7 dias e a ordem original permanece inalterada
+  const ord3 = ordenarMenuPorUso(menu, hist, t0 + 20 * dia);
+  assert.deepEqual(ord3, menu);
+});
+

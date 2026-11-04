@@ -37,6 +37,7 @@ import { definirPortes } from '../../domain/veiculos.js';
 import { cssDaMarca, logoValida } from '../../domain/tema.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
 import { useCaptcha } from './Captcha.jsx';
+import { ordenarMenuPorUso, registrarUsoMenu } from '../../domain/ordem.js';
 
 // Faixa fixa no alto: a ação foi pedida mas o aparelho está sem internet; ela é enviada sozinha quando a conexão voltar (ou cancelada aqui).
 function AvisoRede() {
@@ -311,15 +312,34 @@ function Painel({ loja, sessao, aoSair, aoMudarMarca }) {
   if (dono || (sessao.secoes || []).includes('agenda')) itens.push(['avisos', 'Avisos', 'bell']);
   const comSuporte = dono || (sessao.secoes || []).includes('suporte'); // v119: de fábrica só o proprietário; os outros se ele liberar
   if (comSuporte) itens.push(['suporte', 'Suporte', 'info']);
+
+  // Ordem do menu: os mais usados nos últimos 7 dias vêm primeiro; os que não forem usados mantêm sua ordem relativa
+  const chaveUso = `uso-menu:${loja.slug}:${sessao.id}`;
+  const [historicoUso, setHistoricoUso] = useState(() => {
+    try {
+      const s = globalThis.localStorage?.getItem(chaveUso);
+      return s ? JSON.parse(s) : {};
+    } catch { return {}; }
+  });
+  const selecionarAba = (k) => {
+    setAba(k);
+    setFoco(null);
+    setMenuAberto(false);
+    const novo = registrarUsoMenu(historicoUso, k);
+    setHistoricoUso(novo);
+    try { globalThis.localStorage?.setItem(chaveUso, JSON.stringify(novo)); } catch {}
+  };
+  const itensOrdenados = useMemo(() => ordenarMenuPorUso(itens, historicoUso), [itens, historicoUso]);
+
   return (
     <div className={`app app-real${menuRecolhido ? ' menu-recolhido-real' : ''}`}>
       {menuAberto && <button type="button" className="menu-fundo-real" aria-label="Fechar menu" onClick={() => setMenuAberto(false)} />}
       <header className={`topo${menuAberto ? ' menu-aberto-real' : ''}`}>
-        <LogoPequena loja={loja} aoInicio={() => { setPerfilAberto(false); setFoco(null); setAba(itens[0][0]); }} />
+        <LogoPequena loja={loja} aoInicio={() => { setPerfilAberto(false); setFoco(null); selecionarAba(itensOrdenados[0][0]); }} />
         <button type="button" className="menu-alternar-real" aria-label={chamadosNovos > 0 && !menuDesktop && !menuAberto ? `Alternar menu, ${chamadosNovos} respostas de suporte não lidas` : 'Alternar menu'} aria-expanded={menuDesktop ? !menuRecolhido : menuAberto} aria-controls="menu-secoes-real" onClick={alternarMenu} data-testid="menu-alternar-real"><Icone n={menuAberto ? 'x' : 'menu'} size={20} /><span>Menu</span>{!menuDesktop && !menuAberto && chamadosNovos > 0 && <i className="badge" data-testid="menu-badge-suporte">{chamadosNovos}</i>}</button>
         <nav id="menu-secoes-real" className="nav" aria-label="Seções">
-          {itens.map(([k, r, ic]) => (
-            <button key={k} type="button" className={aba === k ? 'on' : ''} onClick={() => { setAba(k); setFoco(null); setMenuAberto(false); }} aria-current={aba === k ? 'page' : undefined} title={r} data-testid={`nav-${k}`}><Icone n={ic} size={17} /><span>{r}</span>{k === 'suporte' && chamadosNovos > 0 && <i className="badge" data-testid="badge-suporte">{chamadosNovos}</i>}</button>
+          {itensOrdenados.map(([k, r, ic]) => (
+            <button key={k} type="button" className={aba === k ? 'on' : ''} onClick={() => selecionarAba(k)} aria-current={aba === k ? 'page' : undefined} title={r} data-testid={`nav-${k}`}><Icone n={ic} size={17} /><span>{r}</span>{k === 'suporte' && chamadosNovos > 0 && <i className="badge" data-testid="badge-suporte">{chamadosNovos}</i>}</button>
           ))}
         </nav>
         <div className="topo-dir">

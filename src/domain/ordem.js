@@ -58,3 +58,60 @@ export const ehOrdemPadrao = (padrao, lista) => padrao.length === lista.length &
 
 // Chave da preferência: sempre por usuário e por tela. O contexto é texto fixo do código, nunca digitado por quem usa.
 export const chaveOrdem = (contexto, usuarioId) => `ordem:${contexto}:${usuarioId}`;
+
+// Janela de 7 dias para ranquear os itens mais usados do menu
+export const DIAS_USO_MENU_MS = 7 * 86400000;
+
+// Registra um uso do item no histórico de acessos (com timestamps). Remove registros mais velhos que a janela para não crescer indefinidamente.
+export function registrarUsoMenu(historico, id, agora = Date.now(), janelaMs = DIAS_USO_MENU_MS) {
+  if (typeof id !== 'string' || !id) return historico && typeof historico === 'object' ? { ...historico } : {};
+  const base = historico && typeof historico === 'object' ? { ...historico } : {};
+  const corte = agora - janelaMs;
+  const lista = Array.isArray(base[id]) ? base[id].filter((ts) => typeof ts === 'number' && ts >= corte) : [];
+  lista.push(agora);
+  base[id] = lista;
+  for (const k of Object.keys(base)) {
+    if (k !== id && Array.isArray(base[k])) {
+      base[k] = base[k].filter((ts) => typeof ts === 'number' && ts >= corte);
+    }
+  }
+  return base;
+}
+
+// Ordena os itens do menu:
+// 1. Quem teve uso nos últimos 7 dias fica primeiro, ordenado pela quantidade de acessos na janela (mais usado primeiro; desempate pelo uso mais recente).
+// 2. Itens sem uso na janela NÃO mudam de posição entre si: preservam exatamente a ordem que tinham na lista anterior (ou padrão).
+export function ordenarMenuPorUso(itens, historico, agora = Date.now(), janelaMs = DIAS_USO_MENU_MS) {
+  if (!Array.isArray(itens)) return [];
+  const corte = agora - janelaMs;
+  const contagens = new Map();
+  const ultimos = new Map();
+
+  for (const [k, lista] of Object.entries(historico || {})) {
+    if (!Array.isArray(lista)) continue;
+    const recentes = lista.filter((ts) => typeof ts === 'number' && ts >= corte);
+    if (recentes.length > 0) {
+      contagens.set(k, recentes.length);
+      ultimos.set(k, Math.max(...recentes));
+    }
+  }
+
+  const usados = [];
+  const semUso = [];
+
+  for (let i = 0; i < itens.length; i++) {
+    const item = itens[i];
+    const id = Array.isArray(item) ? item[0] : (typeof item === 'object' && item !== null ? item.id : item);
+    const qtd = contagens.get(id) || 0;
+    if (qtd > 0) {
+      usados.push({ item, id, qtd, ultimo: ultimos.get(id) || 0, pos: i });
+    } else {
+      semUso.push(item);
+    }
+  }
+
+  usados.sort((a, b) => b.qtd - a.qtd || b.ultimo - a.ultimo || a.pos - b.pos);
+
+  return [...usados.map((u) => u.item), ...semUso];
+}
+
