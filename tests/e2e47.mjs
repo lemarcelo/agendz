@@ -31,6 +31,9 @@ const servidor = http.createServer((req, res) => {
     const c = corpo ? JSON.parse(corpo) : null;
     chamadas.push({ m: req.method, u: u.pathname, q: u.search, corpo: c });
     if (u.pathname === '/api/publico/loja') return json(200, { slug: 'dalforno', nome: 'Dalforno', tipo: tipoLoja, logo: null, temaCor: null, temaCor2: null });
+    if (u.pathname === '/api/publico/agendar') return json(200, { ativo: true, diasMax: 30, servicos: [], profissionais: [] });
+    if (u.pathname === '/api/publico/dias') return json(200, ['2026-11-03', '2026-11-04']);
+    if (u.pathname === '/api/publico/horarios') return json(200, [{ inicio: `${u.searchParams.get('data')}T13:00:00.000Z`, profissionalId: ALAN }, { inicio: `${u.searchParams.get('data')}T14:00:00.000Z`, profissionalId: ALAN }]);
     if (u.pathname === '/api/auth/login') return json(200, { token: 'tok', id: papel === 'profissional' ? KIKO : ALAN, nome: 'Alan', papel, deveTrocarSenha: false, onboardingPendente: false, secoes: ['agenda', 'clientes'] });
     if (u.pathname === '/api/clientes') {
       const q = (u.searchParams.get('q') || '').toLowerCase();
@@ -266,6 +269,22 @@ const textoDe = (p, t) => p.getByTestId(t).innerText();
   ok('estética: o botão Atender existe e o formulário pede o veículo');
   await ctx.close();
   tipoLoja = 'barbearia';
+}
+
+// O Atender compartilha a grade do link, mantendo a escolha manual para encaixes e retroativos.
+{
+  const { ctx, p } = await abrir({ width: 390, height: 860 });
+  await p.getByTestId('atender-abrir').click();
+  await p.getByTestId(`atender-srv-${SRV_CORTE}`).check();
+  await p.getByTestId('atender-prox-quando').click(); await p.getByTestId('atender-quando').click();
+  await p.getByTestId('pub-hora-1000').click();
+  assert.equal(await p.getByTestId('atender-data').inputValue(), '2026-11-03T10:00');
+  await p.getByTestId('pub-dia-2026-11-04').click();
+  assert.equal(await p.getByTestId('atender-data').inputValue(), '', 'trocar o dia limpa a hora anterior');
+  await p.getByTestId('pub-hora-1100').click();
+  assert.equal(await p.getByTestId('atender-data').inputValue(), '2026-11-04T11:00');
+  assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  await ctx.close();
 }
 
 // Atendido: data passada, botões sem sobreposição e envio do horário escolhido.

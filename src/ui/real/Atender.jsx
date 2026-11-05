@@ -3,7 +3,7 @@
 // A regra toda (cliente por telefone, conflito, expediente, dia anterior com motivo, quem pode lançar) está no servidor (POST /api/atendimentos);
 // a tela mostra as mensagens dele. Produtos (5d-4a): venda com serviço ou só de produto (só no atendimento de agora), com vendedor; forma de pagamento (5d-4c) é a escolhida ou o padrão da loja e os campos obrigatórios vêm das regras da loja. Não importa `api.js`, `hooks.js` nem `common.jsx`.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { agenda as api, boxes as apiBoxes, clientes as apiClientes, produtos as apiProdutos, regras as apiRegras, servicos as apiServicos } from '../../services/api-real.js';
+import { agenda as api, boxes as apiBoxes, clientes as apiClientes, produtos as apiProdutos, publico, regras as apiRegras, servicos as apiServicos } from '../../services/api-real.js';
 import { fmtMoney, startOfDay } from '../../domain/time.js';
 import { validarQuando } from '../../domain/validar-quando.js';
 import { formatarTelefone, somenteDigitos } from '../../domain/rules.js';
@@ -13,6 +13,7 @@ import { EXEMPLO_PORTE, PORTE_PADRAO, ROTULO_PORTE, portesParaEscolher, rotuloVe
 import { REGRAS_DE_FABRICA, FORMAS_PAGAMENTO, boxesAtivos, camposFaltando, ehRetroativo, exige, faltaItem, exigenciasDoVeiculo, faltaVeiculo, porteDoAtendimento, formaEfetiva, filtrarProdutos, filtrarServicos, qtdValida, resumoDosProdutos, resumoDosServicos, servicoNoPorte, tipoDoAtendimento, vendedorPadrao } from '../../domain/atender-form.js';
 import { ordenarServicos } from '../../domain/ordem-servicos.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
+import { DiaHora } from './AgendarPublico.jsx';
 
 const aoLocal = (ts) => { const d = new Date(ts); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
 const doLocal = (v) => { const t = new Date(v).getTime(); return Number.isFinite(t) ? t : null; };
@@ -28,6 +29,8 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
   const [personalizar, setPersonalizar] = useState(false);
   const [modoQuando, setModoQuando] = useState('agora');
   const [quando, setQuando] = useState(() => aoLocal(Math.ceil(agora / 3600000) * 3600000));
+  const [diaAtender, setDiaAtender] = useState(null);
+  const [diasDoLink, setDiasDoLink] = useState(30);
   const [busca, setBusca] = useState('');
   const [achados, setAchados] = useState([]);
   const [cliente, setCliente] = useState(null);
@@ -74,6 +77,7 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
   useEffect(() => { let vivo = true; apiRegras.obter().then((r) => { if (vivo && r.ok) setRegras(r.regras); }); return () => { vivo = false; }; }, []);
   useEffect(() => { if (!usaBox) return undefined; let vivo = true; apiBoxes.listar().then((r) => { if (vivo && r.ok) setBoxes(boxesAtivos(r.boxes)); }); return () => { vivo = false; }; }, [usaBox]);
   useEffect(() => { let vivo = true; apiProdutos.listar().then((r) => { if (vivo) setProdutos(r.ok ? r.produtos : []); }); return () => { vivo = false; }; }, []);
+  useEffect(() => { if (modoQuando !== 'data') return undefined; let vivo = true; publico.pagina().then((r) => { if (vivo && r.ok) setDiasDoLink(r.pagina.diasMax); }); return () => { vivo = false; }; }, [modoQuando]);
   useEffect(() => {
     const q = busca.trim();
     if (q.length < 2) { setAchados([]); return undefined; }
@@ -103,6 +107,14 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
   const forma = formaEfetiva(regras, formaEscolhida);
   const faltam = camposFaltando(tipo, { nome, telefone, cliente, profissionalId: profId, vendedorId: itens.length ? vendedor : '', temProdutos: itens.length > 0, forma }, regras);
   const auto = regras.profissionalAutomatico === true && !ehProprio; // B9c: o campo some e o servidor escolhe quem está mais livre
+  const filtroHorario = `${ids.join(',')}|${auto ? '' : profId}|${usaVeiculo ? porte : ''}`;
+  const filtroAnterior = useRef(filtroHorario);
+  useEffect(() => {
+    if (filtroAnterior.current !== filtroHorario) {
+      filtroAnterior.current = filtroHorario;
+      if (modoQuando === 'data') { setQuando(''); setDiaAtender(null); }
+    }
+  }, [filtroHorario, modoQuando]);
   const marca = (campo) => (exige(regras, tipo, campo) ? ' *' : ' (opcional)');
 
   const escolher = (c) => { setCliente(c); setVeiculoId(c.veiculos && c.veiculos.length === 1 ? c.veiculos[0].id : ''); setNome(c.apelido || c.nome); setTelefone(c.telefone ? formatarTelefone(telNacional(c.telefone)) : ''); setBusca(''); setAchados([]); setErro(''); };
@@ -216,9 +228,14 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
         <div className="acoes">
           <button type="button" className={`btn btn-quando${modoQuando === 'atendido' ? ' btn-on' : ''}`} aria-pressed={modoQuando === 'atendido'} onClick={() => { setModoQuando('atendido'); setPersonalizar(true); setQuando(aoLocal(Math.floor((Date.now() - 60000) / 300000) * 300000)); setErro(''); }} data-testid="atender-atendido">Atendido</button>
           <button type="button" className={`btn btn-quando${!personalizar ? ' btn-on' : ''}`} aria-pressed={!personalizar} onClick={() => { setModoQuando('agora'); setPersonalizar(false); setErro(''); }} data-testid="atender-agora"><Icone n="clock" size={15} />Agora</button>
-          <button type="button" className={`btn btn-quando${modoQuando === 'data' ? ' btn-on' : ''}`} aria-pressed={modoQuando === 'data'} onClick={() => { setModoQuando('data'); setPersonalizar(true); setErro(''); }} data-testid="atender-quando"><Icone n="calendar" size={15} />Escolher data</button>
+          <button type="button" className={`btn btn-quando${modoQuando === 'data' ? ' btn-on' : ''}`} aria-pressed={modoQuando === 'data'} onClick={() => { if (modoQuando !== 'data') { setQuando(''); setDiaAtender(null); } setModoQuando('data'); setPersonalizar(true); setErro(''); }} data-testid="atender-quando"><Icone n="calendar" size={15} />Escolher data</button>
         </div>
-        {personalizar && <Campo rotulo="Data e hora"><input type="datetime-local" step={300} max={modoQuando === 'atendido' ? aoLocal(Date.now()) : undefined} value={quando} onChange={(e) => { setQuando(e.target.value); setErro(''); }} data-testid="atender-data" /></Campo>}
+        {modoQuando === 'data' && ids.length > 0 && ids.length <= 5 && <>
+          <p className="muted">Escolha um horário disponível como na página de agendamento. Para encaixes, serviços não oferecidos no link ou datas anteriores, use o campo manual abaixo.</p>
+          <DiaHora chave={filtroHorario} diasMax={diasDoLink} servicoIds={ids} profissionalId={auto ? '' : profId} porte={usaVeiculo ? porte : undefined} valor={inicio} duracaoTotal={resumo.minutos} dia={diaAtender} aoMudarDia={setDiaAtender} aoEscolher={(h) => { setQuando(h ? aoLocal(h.inicio) : ''); setErro(''); }} />
+        </>}
+        {modoQuando === 'data' && ids.length > 5 && <p className="muted">A consulta de horários aceita até cinco serviços. Escolha a data e a hora no campo abaixo.</p>}
+        {personalizar && <Campo rotulo={modoQuando === 'data' ? 'Data e hora (escolha manual)' : 'Data e hora'}><input type="datetime-local" step={300} max={modoQuando === 'atendido' ? aoLocal(Date.now()) : undefined} value={quando} onChange={(e) => { setQuando(e.target.value); setErro(''); }} data-testid="atender-data" /></Campo>}
         {retro && !bloqueado && (
           <Campo rotulo="Motivo do lançamento de um dia anterior">
             <input type="text" maxLength={300} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Por que não foi registrado na hora? (fica no histórico)" data-testid="atender-motivo-retro" />

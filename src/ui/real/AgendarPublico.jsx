@@ -63,7 +63,7 @@ function salvarReservas(slug, dados) {
 const diaSemana = (ts) => new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'short', day: '2-digit', month: '2-digit' }).format(new Date(ts)).replace('.', '').replace(',', '');
 
 // Dia + horário livres: os dois vêm do servidor, que só devolve o que está livre. `fonte` ({ dias(de, n), horarios(dia) }) troca a consulta (remarcar um horário já marcado).
-function DiaHora({ chave, diasMax, servicoIds, profissionalId, porte, valor, aoEscolher, fonte, duracaoTotal = 30, dia, aoMudarDia }) {
+export function DiaHora({ chave, diasMax, servicoIds, profissionalId, porte, valor, aoEscolher, fonte, duracaoTotal = 30, dia, aoMudarDia }) {
   const hoje = useMemo(hojeBrasilia, []);
   const [janela, setJanela] = useState(14);
   const [dias, setDias] = useState(null);
@@ -200,7 +200,7 @@ function DiaHora({ chave, diasMax, servicoIds, profissionalId, porte, valor, aoE
     <div className="pub-diahora">
       <div className="pub-dias" role="group" aria-label="Escolher o dia">
         {dias.map((d) => (
-          <button type="button" key={d} className={`pub-dia ${d === diaAtual ? 'on' : ''}`} aria-pressed={d === diaAtual} onClick={() => setDia(d)} data-testid={`pub-dia-${d}`}>
+          <button type="button" key={d} className={`pub-dia ${d === diaAtual ? 'on' : ''}`} aria-pressed={d === diaAtual} onClick={() => { if (d !== diaAtual) aoEscolher(null); setDia(d); }} data-testid={`pub-dia-${d}`}>
             <small>{dowDe(d)}</small><b>{diaDe(d)}</b><small>{mesDe(d)}</small>
           </button>
         ))}
