@@ -17,3 +17,7 @@ Esta é uma configuração proposta e ainda não implantada nem validada na VPS.
 - H_PROXY_CIDR deve conter somente a sub-rede da rede Docker em que está o Caddy de entrada, confirmada por inspeção no momento do deploy. O gateway confia nos cabeçalhos encaminhados por essa sub-rede; todos os serviços com acesso a ela fazem parte desse limite de confiança. Validar IP real e tentativas de forjar cabeçalhos antes de abrir a homologação.
 
 - Na pasta própria de homologação, o script preparar-homologacao.sh pode criar o .env privado a partir de duas imagens fixadas por digest ou commit completo; ele não inicia serviços e não substitui credenciais existentes. Confira o valor de H_PROXY_CIDR e a rede antes de usar. Nunca copie o .env de produção.
+
+- Os jobs candidato-homologacao dos dois repositórios preparam versões somente após o CI passar, para branches homologacao/* e com a variável HOMOLOGACAO_AUTOMATICA=true em cada repositório. Eles guardam imagens e arquivos identificados pelo commit na VPS; não ativam serviços. Exigem VPS_KNOWN_HOSTS para verificar o servidor. Uma falha no envio pode deixar um diretório incompleto, sem o arquivo pronto, que deve ser inspecionado antes de nova tentativa.
+
+- Os candidatos ficam em /opt/agendz/homologacao/candidatos, separados dos arquivos ativos; cada repositório guarda sua versão pelo SHA completo. Isso exige acesso de escrita ao diretório /opt/agendz, sem sudo no job.
