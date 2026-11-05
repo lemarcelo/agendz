@@ -86,6 +86,7 @@ const remarcarPara = async (p, hora, destino, { prof } = {}) => {
   await T(p, 'cancelar-sim').click();
   await p.waitForFunction(() => /Agendamento cancelado/.test(document.querySelector('[data-testid="agenda-aviso"]')?.textContent || ''));
   assert.equal(await T(p, 'agendamento-erro').count(), 0, 'o erro antigo some');
+  await p.locator('[data-testid="cartao"]', { hasText: '09:00' }).waitFor({ state: 'detached' });
   assert.equal(await p.locator('[data-testid="cartao"]', { hasText: '09:00' }).count(), 0, 'o cartão sai da lista do dia');
   assert.match(await texto(p, 'cancelados-resumo'), /Cancelados \(2\)/);
   assert.match(await texto(p, 'agenda-aviso'), /Agendamento cancelado/, 'o aviso continua depois do cartão sair');

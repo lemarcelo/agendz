@@ -130,9 +130,9 @@ class AtendimentoTest extends BaseApi {
     @Test
     void localNaoConflitaComConfirmadoEJaAconteceu() throws Exception {
         Instant hora = Instant.now().minus(3, ChronoUnit.HOURS).truncatedTo(ChronoUnit.MINUTES);
-        atender(APEX, davi, corpo(pabloId, ",\"telefone\":\"53999000004\",\"inicio\":\"" + hora + "\"")).andExpect(status().isCreated());
+        atender(APEX, davi, corpo(pabloId, ",\"telefone\":\"53999000004\",\"motivoRetroativo\":\"Lançamento para teste\",\"inicio\":\"" + hora + "\"")).andExpect(status().isCreated());
         // outro no mesmo horário, mesmo profissional: é histórico, não há conflito
-        atender(APEX, davi, corpo(pabloId, ",\"telefone\":\"53999000005\",\"inicio\":\"" + hora + "\"")).andExpect(status().isCreated())
+        atender(APEX, davi, corpo(pabloId, ",\"telefone\":\"53999000005\",\"motivoRetroativo\":\"Lançamento para teste\",\"inicio\":\"" + hora + "\"")).andExpect(status().isCreated())
                 .andExpect(jsonPath("$.status").value("concluido"));
     }
 

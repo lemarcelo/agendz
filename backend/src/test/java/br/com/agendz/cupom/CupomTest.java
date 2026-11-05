@@ -329,9 +329,13 @@ class CupomTest extends BaseApi {
         String[] c = cupomPercentual("25%", 25, 5, 1); // lavagem 80 → desconto 20 → base 60 → 50% = 30
         String ag = agendar();
         aplicar(davi, ag, c[1]).andExpect(status().isOk());
-        // o atendimento acontece hoje, já concluído
-        jdbc.update("update agendamento set status = 'concluido', inicio = now() - interval '30 minutes', fim_servico = now() - interval '5 minutes', fim_ocupado = now() - interval '5 minutes' where id = ?::uuid", ag);
-        pedir(APEX, davi, get("/api/comissoes?de=" + hoje() + "&ate=" + hoje())).andExpect(status().isOk())
+        // Usa um dia anterior completo para não depender da hora em que o teste roda.
+        LocalDate dia = hoje().minusDays(2);
+        Instant inicio = dia.atTime(12, 0).atZone(Fuso.BRASIL).toInstant();
+        java.sql.Timestamp inicioSql = java.sql.Timestamp.from(inicio);
+        java.sql.Timestamp fimSql = java.sql.Timestamp.from(inicio.plus(25, ChronoUnit.MINUTES));
+        jdbc.update("update agendamento set status = 'concluido', inicio = ?, fim_servico = ?, fim_ocupado = ? where id = ?::uuid", inicioSql, fimSql, fimSql, ag);
+        pedir(APEX, davi, get("/api/comissoes?de=" + dia + "&ate=" + dia)).andExpect(status().isOk())
                 .andExpect(jsonPath("$.profissionais[0].base").value(60.0)).andExpect(jsonPath("$.profissionais[0].comissao").value(30.0)).andExpect(jsonPath("$.profissionais[0].casa").value(30.0));
     }
 

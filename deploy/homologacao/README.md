@@ -15,3 +15,5 @@ Esta é uma configuração proposta e ainda não implantada nem validada na VPS.
 - O encadeamento dos dois Caddy precisa preservar com segurança o IP real do cliente: as APIs usam X-Forwarded-For para controles de acesso e auditoria. Validar o comportamento e a confiança no proxy de entrada antes de publicar; não confiar cegamente em cabeçalhos enviados pelo navegador.
 
 - H_PROXY_CIDR deve conter somente a sub-rede da rede Docker em que está o Caddy de entrada, confirmada por inspeção no momento do deploy. O gateway confia nos cabeçalhos encaminhados por essa sub-rede; todos os serviços com acesso a ela fazem parte desse limite de confiança. Validar IP real e tentativas de forjar cabeçalhos antes de abrir a homologação.
+
+- Na pasta própria de homologação, o script preparar-homologacao.sh pode criar o .env privado a partir de duas imagens fixadas por digest ou commit completo; ele não inicia serviços e não substitui credenciais existentes. Confira o valor de H_PROXY_CIDR e a rede antes de usar. Nunca copie o .env de produção.
