@@ -27,3 +27,5 @@ A primeira instalação está na VPS, com dois bancos, APIs e um gateway própri
 - A configuração local agora exige acionamento manual para publicar produção, salvo se DEPLOY_PRODUCAO_AUTOMATICO for explicitamente definido como true. O site faz o CI antes de publicar; as APIs verificam um CI aprovado no mesmo commit da main. Essa proteção ainda não está ativa na produção até os workflows serem incorporados à main. Não acione promoção sem aprovação específica do Marcelo.
 
 - O gateway participa de duas redes. Nunca use os nomes genéricos api ou admin-api em seu Caddy: eles também existem na rede de produção. Use os aliases exclusivos agendz-homologacao-api e agendz-homologacao-admin-api, execute o teste de isolamento e confirme a resolução no Docker antes de publicar qualquer alteração.
+
+- atualizar-site-homologacao.sh instala apenas o site de um candidato completo e guarda cópia do index anterior; não atualiza APIs nem bancos. A atualização automática das APIs e a promoção integral ainda precisam ser implementadas e testadas.
