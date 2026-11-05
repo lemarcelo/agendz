@@ -31,6 +31,13 @@ test('sanearPortes: nome 2–20 sem repetir, o Médio fica e ativo, ao menos um'
   assert.ok(r.ok); assert.deepEqual(r.portes.map((x) => [x.id, x.nome, x.ativo]), [['medio', 'Compacto', true], ['pt1', 'Van', false]]);
 });
 
+test('portes recusam tipos inválidos e fatores não finitos', () => {
+  const criar = () => 'pt1';
+  for (const extra of [{ nome: 12 }, { ativo: null }, { exemplo: 3 }, { fator: NaN }, { fator: Infinity }]) {
+    assert.equal(sanearPortes([{ id: 'medio', nome: 'Médio', ...extra }], criar).ok, false);
+  }
+  assert.equal(sanearPortes([{ id: 'medio', nome: 'Médio', exemplo: null, fator: null }], criar).ok, true);
+});
 test('registro: ids, rótulos e ativos acompanham a lista; valorDoPorte cai no médio', () => {
   definirPortes([{ id: 'medio', nome: 'Médio', exemplo: '' }, { id: 'pt2', nome: 'Van', ativo: false }]);
   assert.deepEqual([...PORTES], ['medio', 'pt2']); assert.equal(ROTULO_PORTE.pt2, 'Van');

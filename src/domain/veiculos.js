@@ -1,7 +1,12 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
 // Veículos do cliente: porte (que define preço e duração do serviço) e placa (antiga ABC-1234 ou Mercosul ABC1D23), sempre validada.
 // Sem consulta de placa em base externa: a validação é só de formato.
+import * as z from 'zod/mini';
 import { limparTexto } from './texto.js';
+
+const textoVeiculoSchema = z.string();
+const booleanoVeiculoSchema = z.boolean();
+const numeroVeiculoSchema = z.number();
 
 // Portes da loja (v122): o dono cadastra em Estabelecimento > Portes. Sem cadastro valem os cinco de fábrica. `PORTES` (todos os ids, ativos ou não, na ordem do dono),
 // `ROTULO_PORTE` e `EXEMPLO_PORTE` são atualizados NO LUGAR por `definirPortes` (quem importou continua vendo a lista atual); `portesAtivos()` é o que se oferece para escolher.
@@ -63,7 +68,7 @@ export function sanearPortes(entrada, novoId) {
   for (const x of entrada) {
     if (!x || typeof x !== 'object' || Array.isArray(x)) return { ok: false, erro: 'Porte inválido.' };
     if (x.id !== undefined && x.id !== null && x.id !== '' && !(typeof x.id === 'string' && /^[a-z0-9-]{2,24}$/.test(x.id))) return { ok: false, erro: 'Porte inválido.' };
-    if (typeof x.nome !== 'string' || (x.exemplo !== undefined && x.exemplo !== null && typeof x.exemplo !== 'string') || (x.ativo !== undefined && typeof x.ativo !== 'boolean')) return { ok: false, erro: 'Porte inválido.' };
+    if (!textoVeiculoSchema.safeParse(x.nome).success || (x.exemplo !== undefined && x.exemplo !== null && !textoVeiculoSchema.safeParse(x.exemplo).success) || (x.ativo !== undefined && !booleanoVeiculoSchema.safeParse(x.ativo).success)) return { ok: false, erro: 'Porte inválido.' };
     const nome = limparTexto(x.nome, 20).trim();
     if (nome.length < 2) return { ok: false, erro: 'O nome do porte tem de 2 a 20 letras.' };
     if (vistos.has(nome.toLowerCase())) return { ok: false, erro: `O porte “${nome}” aparece duas vezes.` };
@@ -71,7 +76,7 @@ export function sanearPortes(entrada, novoId) {
     const id = x.id || novoId();
     if (ids.has(id)) return { ok: false, erro: 'Porte repetido.' };
     ids.add(id);
-    if (x.fator !== undefined && x.fator !== null && (typeof x.fator !== 'number' || !Number.isFinite(x.fator))) return { ok: false, erro: 'Porte inválido.' };
+    if (x.fator !== undefined && x.fator !== null && !numeroVeiculoSchema.safeParse(x.fator).success) return { ok: false, erro: 'Porte inválido.' };
     let fator = x.fator === undefined || x.fator === null ? fatorPadrao(id) : r2(x.fator);
     if (id === PORTE_PADRAO) fator = 1; // o Médio é a base
     if (fator < FATOR_MIN || fator > FATOR_MAX) return { ok: false, erro: `O fator do porte ${nome} vai de 0,10 a 10.` };
@@ -104,7 +109,7 @@ export const chavePlaca = normalizarPlaca;
 // Veículo vindo de fora (formulário, link, WhatsApp). Devolve { ok, veiculo } ou { ok: false, erro }. Marca e cor são opcionais; placa, modelo e porte, não.
 export function limparVeiculo(v) {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return { ok: false, erro: 'Informe o veículo.' };
-  for (const k of ['placa', 'marca', 'modelo', 'cor']) if (v[k] !== undefined && v[k] !== null && typeof v[k] !== 'string') return { ok: false, erro: 'Dados do veículo inválidos.' };
+  for (const k of ['placa', 'marca', 'modelo', 'cor']) if (v[k] !== undefined && v[k] !== null && !textoVeiculoSchema.safeParse(v[k]).success) return { ok: false, erro: 'Dados do veículo inválidos.' };
   if (!placaValida(v.placa)) return { ok: false, erro: 'Placa inválida. Use o formato antigo (ABC-1234) ou Mercosul (ABC1D23).' };
   const modelo = limparTexto(String(v.modelo ?? ''), 40).trim();
   if (modelo.length < 2) return { ok: false, erro: 'Informe o modelo do veículo.' };
@@ -129,7 +134,7 @@ export function limparVeiculoComRegras(v, exigir = EXIGE_TUDO_DO_VEICULO) {
     const falta = [['placa', 'Informe a placa do veículo.'], ['modelo', 'Informe o modelo do veículo.'], ['porte', 'Escolha o porte do veículo.']].find(([k]) => pede(k));
     return falta ? { ok: false, erro: falta[1] } : { ok: true, veiculo: null, completo: false };
   }
-  for (const k of ['placa', 'marca', 'modelo', 'cor', 'porte']) if (v[k] !== undefined && v[k] !== null && typeof v[k] !== 'string') return { ok: false, erro: 'Dados do veículo inválidos.' };
+  for (const k of ['placa', 'marca', 'modelo', 'cor', 'porte']) if (v[k] !== undefined && v[k] !== null && !textoVeiculoSchema.safeParse(v[k]).success) return { ok: false, erro: 'Dados do veículo inválidos.' };
   if (vazioV(v.placa) ? pede('placa') : !placaValida(v.placa)) return { ok: false, erro: vazioV(v.placa) ? 'Informe a placa do veículo.' : 'Placa inválida. Use o formato antigo (ABC-1234) ou Mercosul (ABC1D23).' };
   const modelo = limparTexto(String(v.modelo ?? ''), 40).trim();
   if (pede('modelo') ? modelo.length < 2 : modelo.length === 1) return { ok: false, erro: 'Informe o modelo do veículo.' };
