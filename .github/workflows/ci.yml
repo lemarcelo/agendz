@@ -188,6 +188,9 @@ jobs:
           npm ci --no-audit --no-fund
           AGENDZ_DOMINIO=agendz.io node build.mjs --real
           docker build -t "agendz-homologacao-api:$GITHUB_SHA" backend
+          git ls-tree -r "$GITHUB_SHA" -- backend/src/main/resources/db/migration > migracoes.tree
+          [ -s migracoes.tree ]
+          sha256sum migracoes.tree | awk '{print $1}' > dist/migracoes.sha256
       - name: Guardar versão candidata na VPS
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
@@ -213,7 +216,7 @@ jobs:
           else
             ssh "${opts[@]}" "$VPS_USER@$VPS_HOST" "mkdir '$destino'"
             docker save "agendz-homologacao-api:$GITHUB_SHA" | gzip | ssh "${opts[@]}" "$VPS_USER@$VPS_HOST" 'gunzip | docker load'
-            scp "${opts[@]}" dist/index-real.html dist/sw.js dist/manifest.webmanifest dist/icone.svg "$VPS_USER@$VPS_HOST:$destino/"
+            scp "${opts[@]}" dist/index-real.html dist/sw.js dist/manifest.webmanifest dist/icone.svg dist/migracoes.sha256 "$VPS_USER@$VPS_HOST:$destino/"
             tar -cf - deploy/homologacao | ssh "${opts[@]}" "$VPS_USER@$VPS_HOST" "tar -xf - -C '$destino'"
             ssh "${opts[@]}" "$VPS_USER@$VPS_HOST" "docker image inspect --format '{{.Id}}' 'agendz-homologacao-api:$GITHUB_SHA' > '$destino/image-id' && touch '$destino/pronto'"
           fi

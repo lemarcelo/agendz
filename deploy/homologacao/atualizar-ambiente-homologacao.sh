@@ -18,6 +18,9 @@ exec 9>"$raiz/atualizacao.lock"
 flock -w 180 9 || { echo 'Outra atualização está em andamento.' >&2; exit 1; }
 cd "$ambiente"
 [ "$(pwd -P)" = "$raiz/ambiente" ] || { echo 'Diretório de homologação inválido.' >&2; exit 1; }
+[ -f "migracoes-$1.sha256" ] && [ -f "$candidato/migracoes.sha256" ] || { echo 'Identificação das migrações ausente; revisão necessária.' >&2; exit 1; }
+grep -Eq '^[0-9a-f]{64}$' "migracoes-$1.sha256" && grep -Eq '^[0-9a-f]{64}$' "$candidato/migracoes.sha256" || { echo 'Identificação das migrações inválida.' >&2; exit 1; }
+cmp -s "migracoes-$1.sha256" "$candidato/migracoes.sha256" || { echo 'Há migrações novas; atualização automática bloqueada para revisão e backup.' >&2; exit 1; }
 docker image inspect "$imagem" >/dev/null
 esperado=$(cat "$candidato/image-id")
 [[ "$esperado" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo 'Identificador de imagem inválido.' >&2; exit 1; }

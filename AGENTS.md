@@ -8,3 +8,5 @@ Leia também `CLAUDE.md` deste repositório e as orientações do workspace, qua
 - Homologação usa bancos, volumes, rede, segredos e domínios próprios. O gateway deve usar os aliases exclusivos `agendz-homologacao-api` e `agendz-homologacao-admin-api`; nunca os nomes genéricos da produção. Valide `tests-jest/homologacao-isolamento.test.mjs` e a resolução real no Docker.
 - O WhatsApp aberto manualmente no navegador deve funcionar em homologação; use contatos fictícios ou autorizados. As APIs de homologação permanecem isoladas de integrações externas até que haja configuração de teste apropriada.
 - Envie candidatos para branches `homologacao/*` e aguarde os testes. Não publique produção nem integre em `main` sem aprovação específica. Enquanto as proteções novas não estiverem na `main`, um push nela ainda pode publicar produção e sobrescrever o roteamento de homologação.
+
+- Uma mudança nas migrações bloqueia a atualização automática de homologação: revise a alteração e prepare backup antes de atualizar. Voltar a imagem não desfaz migrações do banco.

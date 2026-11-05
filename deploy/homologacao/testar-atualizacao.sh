@@ -20,6 +20,8 @@ for f in sw.js manifest.webmanifest icone.svg; do printf 'novo' > "$raiz/candida
 for tipo in agendz admin; do
   touch "$raiz/candidatos/$tipo/$new/pronto"
   printf 'sha256:%064d\n' 0 > "$raiz/candidatos/$tipo/$new/image-id"
+  printf '%064d\n' 1 > "$raiz/candidatos/$tipo/$new/migracoes.sha256"
+  printf '%064d\n' 1 > "$raiz/ambiente/migracoes-$tipo.sha256"
 done
 cat > "$base/bin/docker" <<'EOF'
 #!/usr/bin/env bash
@@ -56,6 +58,12 @@ grep -q "^H_AGENDZ_IMAGE=agendz-homologacao-api:$new$" "$raiz/ambiente/.env"
 grep -q '^SEGREDO=valor-ficticio$' "$raiz/ambiente/.env"
 grep -q 'faixa-homologacao nova' "$raiz/ambiente/site/index.html"
 antes=$(sha256sum "$raiz/ambiente/.env" | cut -d ' ' -f 1)
+printf '%064d\n' 2 > "$raiz/candidatos/admin/$new/migracoes.sha256"
+if bash "$base/atualizar-teste.sh" admin "$new" >/dev/null 2>&1; then
+  echo 'Uma migração nova deveria bloquear a atualização.' >&2; exit 1
+fi
+test "$antes" = "$(sha256sum "$raiz/ambiente/.env" | cut -d ' ' -f 1)"
+printf '%064d\n' 1 > "$raiz/candidatos/admin/$new/migracoes.sha256"
 if TESTE_FALHAR_UMA_VEZ="$base/falhou" bash "$base/atualizar-teste.sh" admin "$new" >/dev/null 2>&1; then
   echo 'A falha simulada deveria interromper a atualização.' >&2; exit 1
 fi

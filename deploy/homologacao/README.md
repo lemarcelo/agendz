@@ -33,3 +33,5 @@ A primeira instalação está na VPS, com dois bancos, APIs e um gateway própri
 - Por pedido do Marcelo, os botões de WhatsApp continuam funcionando no navegador em homologação. Abrir uma conversa não envia por si só, mas a pessoa pode enviar manualmente: use contatos fictícios ou autorizados. A rede interna bloqueia integrações externas das APIs, não a navegação do dispositivo do usuário.
 
 - atualizar-ambiente-homologacao.sh atualiza um serviço por vez, preserva os volumes e recusa automaticamente alterações no Compose ou no Caddy: essas alterações de infraestrutura exigem validação separada. O teste testar-atualizacao.sh simula falhas da API e da troca do site sem usar Docker real.
+
+- A atualização automática compara a impressão das migrações da versão candidata com a versão instalada e para se houver diferença ou identificação ausente. Migrações exigem backup e revisão separados; voltar a imagem não desfaz mudanças no banco.
