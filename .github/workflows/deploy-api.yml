@@ -1,36 +1,47 @@
 name: Deploy da API
 # Publica a imagem da API no GHCR e atualiza a VPS. Só roda quando a variável de repositório DEPLOY_API for "true" (Settings > Secrets and variables > Actions > Variables)
-# e os segredos VPS_HOST e VPS_SSH_KEY existirem. Nada mais é manual: o passo da VPS roda `preparar-api.sh` (gera POSTGRES_PASSWORD, JWT_SEGREDO, CIFRA_CHAVE e CIFRA_PEPPER sozinho, sem mostrar,
+# O acionamento manual exige CI aprovado para o mesmo commit. O automático só roda com DEPLOY_PRODUCAO_AUTOMATICO=true. O passo da VPS roda `preparar-api.sh` (gera segredos sem mostrar,
 # na primeira vez) e entra no GitHub Packages com o token do próprio job (o pacote pode continuar privado; o login é desfeito no fim).
 on:
   workflow_run:
     workflows: [CI]
     types: [completed]
     branches: [main]
+  workflow_dispatch:
 
 env:
   TZ: America/Sao_Paulo
 
 jobs:
   api:
-    if: github.event.workflow_run.conclusion == 'success' && vars.DEPLOY_API == 'true'
+    if: vars.DEPLOY_API == 'true' && ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && vars.DEPLOY_PRODUCAO_AUTOMATICO == 'true'))
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      actions: read
       packages: write
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0
+      - name: Conferir CI aprovado para este commit
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHA_VALIDAR: ${{ github.sha }}
+        run: |
+          aprovado=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=main&status=success&per_page=100" --jq "[.workflow_runs[] | select(.head_sha == \"$SHA_VALIDAR\")] | length")
+          [ "$aprovado" -gt 0 ] || { echo 'Não há CI aprovado para este commit da main.'; exit 1; }
       - name: Mudou algo do servidor desde o último deploy bem-sucedido?
         id: mudou
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SHA: ${{ github.event.workflow_run.head_sha }}
+          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
         run: |
           # Commit só de documentação ou de tela (nada em backend/ nem deploy/) não precisa refazer a imagem nem mexer na VPS.
           # Compara com o último deploy que deu certo (não com o commit anterior), então um deploy que falhou antes é refeito neste.
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then echo "deploy=true" >> "$GITHUB_OUTPUT"; exit 0; fi
           ULT=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/deploy-api.yml/runs?status=success&per_page=1" --jq '.workflow_runs[0].head_sha // empty' || true)
           if [ -z "$ULT" ] || ! git cat-file -e "$ULT^{commit}" 2>/dev/null; then echo "Sem deploy anterior conhecido: faz o deploy."; echo "deploy=true" >> "$GITHUB_OUTPUT"; exit 0; fi
           if git diff --quiet "$ULT" "$SHA" -- backend deploy; then
@@ -55,7 +66,7 @@ jobs:
           push: true
           tags: |
             ghcr.io/lemarcelo/agendz-api:latest
-            ghcr.io/lemarcelo/agendz-api:${{ github.event.workflow_run.head_sha }}
+            ghcr.io/lemarcelo/agendz-api:${{ github.event.workflow_run.head_sha || github.sha }}
       - name: Atualiza a VPS
         if: steps.mudou.outputs.deploy == 'true'
         env:

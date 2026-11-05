@@ -2,6 +2,12 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
+    inputs:
+      publicar_producao:
+        description: Publicar o site em produção após os testes
+        type: boolean
+        default: false
 
 env:
   TZ: America/Sao_Paulo   # as regras usam o horário local da loja (ex.: aviso às 9h); o runner vem em UTC
@@ -107,8 +113,8 @@ jobs:
 
   deploy:
     # Publica o site na VPS depois que front e backend passam, só no main. Sem os segredos VPS_HOST e VPS_SSH_KEY, o passo é pulado (CI segue verde).
-    needs: [testes, navegador, barbearia, backend]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [testes, navegador, barbearia, backend, auditoria]
+    if: github.ref == 'refs/heads/main' && ((github.event_name == 'push' && vars.DEPLOY_PRODUCAO_AUTOMATICO == 'true') || (github.event_name == 'workflow_dispatch' && inputs.publicar_producao == true))
     runs-on: ubuntu-latest
     env:
       TEM_CHAVE: ${{ secrets.VPS_SSH_KEY != '' && secrets.VPS_HOST != '' }}

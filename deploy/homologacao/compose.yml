@@ -18,6 +18,10 @@ services:
   api:
     image: ${H_AGENDZ_IMAGE:?Informe a imagem imutável da API de homologação}
     restart: unless-stopped
+    networks:
+      default:
+        aliases:
+          - agendz-homologacao-api
     depends_on:
       db:
         condition: service_healthy
@@ -53,6 +57,10 @@ services:
   admin-api:
     image: ${H_ADMIN_IMAGE:?Informe a imagem imutável da API Admin de homologação}
     restart: unless-stopped
+    networks:
+      default:
+        aliases:
+          - agendz-homologacao-admin-api
     depends_on:
       admin-db:
         condition: service_healthy
