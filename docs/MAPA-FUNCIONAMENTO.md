@@ -21,7 +21,7 @@ Permissão: `pode()` lê `permissoes` (true/false) por cima de `PERMISSOES_PADRA
 
 ## 2. Menu por perfil (igual no Artifact e no site real)
 
-Um ícone distinto por aba (`tests/menu-icones.test.mjs`). **Não existe aba "Início"**: depois de entrar (e ao concluir o assistente) abre a **Agenda**; quem não tem Agenda abre Clientes, ou Serviços.
+Um ícone distinto por aba (`tests-jest/menu-icones.test.mjs`). **Não existe aba "Início"**: depois de entrar (e ao concluir o assistente) abre a **Agenda**; quem não tem Agenda abre Clientes, ou Serviços.
 
 | Aba | Ícone | dono/master | admin | atendente | profissional |
 |---|---|---|---|---|---|

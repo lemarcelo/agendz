@@ -1,0 +1,31 @@
+{
+  servers {
+    trusted_proxies static {$H_PROXY_CIDR}
+    trusted_proxies_strict
+  }
+}
+:80 {
+  @admin host h-admin.agendz.io
+  handle @admin {
+    handle /interno/* {
+      respond 404
+    }
+    handle {
+      reverse_proxy admin-api:8080
+    }
+  }
+  handle {
+    root * /srv/site
+    handle /interno/* {
+      respond 404
+    }
+    handle /api/* {
+      reverse_proxy api:8080
+    }
+    handle {
+      header Cache-Control "no-cache"
+      try_files {path} /index.html
+      file_server
+    }
+  }
+}

@@ -22,7 +22,7 @@ import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
-/** Os MESMOS casos de tests/planos-equivalencia.test.mjs (equivalencia/planos.json), sem banco: cota, acúmulo, adiantamento, intervalo, atraso, dívida e desconto. */
+/** Os MESMOS casos de tests-jest/planos-equivalencia.test.mjs (equivalencia/planos.json), sem banco: cota, acúmulo, adiantamento, intervalo, atraso, dívida e desconto. */
 class PlanosEquivalenciaTest {
 
     private static JsonNode raiz() throws Exception {

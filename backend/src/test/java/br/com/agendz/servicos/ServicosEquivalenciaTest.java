@@ -22,7 +22,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MvcResult;
 
 /**
- * Equivalência simulada × real: os MESMOS casos de tests/servicos-equivalencia.test.mjs (arquivo equivalencia/servicos.json) rodam no servidor,
+ * Equivalência simulada × real: os MESMOS casos de tests-jest/servicos-equivalencia.test.mjs (arquivo equivalencia/servicos.json) rodam no servidor,
  * na loja da estética (Apex). Cada caso começa sem serviços; só o último passo é conferido. "@n" = id do serviço criado no passo n.
  */
 class ServicosEquivalenciaTest extends BaseApi {

@@ -20,7 +20,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MvcResult;
 
 /**
- * Equivalência simulada × real: os MESMOS casos de tests/produtos-equivalencia.test.mjs (arquivo equivalencia/produtos.json) rodam no servidor,
+ * Equivalência simulada × real: os MESMOS casos de tests-jest/produtos-equivalencia.test.mjs (arquivo equivalencia/produtos.json) rodam no servidor,
  * na loja da estética (Apex). Cada caso começa sem produtos; só o último passo é conferido. "@n" = id do produto criado no passo n.
  */
 class ProdutosEquivalenciaTest extends BaseApi {

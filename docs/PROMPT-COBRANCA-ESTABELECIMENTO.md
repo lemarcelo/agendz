@@ -30,7 +30,7 @@
 - Estética: o esteticista também tem a lista; o box continua sendo recurso à parte (`escolherBox`).
 
 ## 5. Testes e segurança (obrigatórios)
-Unidade de cobrança por tipo (box na estética, profissional na barbearia, nenhum `if` de tipo); contagem ignora box/profissional inativo; pro rata em 5/15/35 dias com relógio fixo; dono lê, profissional 403; valor e preço só do servidor; IDOR (profissional A não edita serviços do B; loja A não lê cobrança da B); serviço fora da lista do profissional recusado em Atender, remarcar, link e WhatsApp; e2e da aba (estética e barbearia, 390 px com fonte larga); `tests/tipos.test.mjs` sem texto fixo; `docs/MAPA-API-SPRING.md` e o prompt vivo atualizados.
+Unidade de cobrança por tipo (box na estética, profissional na barbearia, nenhum `if` de tipo); contagem ignora box/profissional inativo; pro rata em 5/15/35 dias com relógio fixo; dono lê, profissional 403; valor e preço só do servidor; IDOR (profissional A não edita serviços do B; loja A não lê cobrança da B); serviço fora da lista do profissional recusado em Atender, remarcar, link e WhatsApp; e2e da aba (estética e barbearia, 390 px com fonte larga); `tests-jest/tipos.test.mjs` sem texto fixo; `docs/MAPA-API-SPRING.md` e o prompt vivo atualizados.
 
 ## 6. Perguntas (padrão entre parênteses)
 1. Estética: cobrar **só por box**, o esteticista não paga? (sim)

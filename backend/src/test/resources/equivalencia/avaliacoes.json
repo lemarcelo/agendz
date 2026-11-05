@@ -1,5 +1,5 @@
 {
- "descricao": "Casos das regras puras de avaliação executados em tests/avaliacoes-equivalencia.test.mjs (domain/avaliacoes.js) e AvaliacoesEquivalenciaTest (AvaliacaoRegras.java). repetirTexto/repetir trocam o texto por 'a' repetido N vezes.",
+ "descricao": "Casos das regras puras de avaliação executados em tests-jest/avaliacoes-equivalencia.test.mjs (domain/avaliacoes.js) e AvaliacoesEquivalenciaTest (AvaliacaoRegras.java). repetirTexto/repetir trocam o texto por 'a' repetido N vezes.",
  "validar": [
   {
    "nome": "só a nota",

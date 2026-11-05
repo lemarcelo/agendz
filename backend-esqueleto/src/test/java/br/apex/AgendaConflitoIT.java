@@ -17,7 +17,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 
-/** Espelha tests/conflitos.test.mjs. O protótipo garante "nunca dois confirmados no mesmo horário" em memória; aqui é no banco, sob concorrência. */
+/** Espelha tests-jest/conflitos.test.mjs. O protótipo garante "nunca dois confirmados no mesmo horário" em memória; aqui é no banco, sob concorrência. */
 class AgendaConflitoIT extends IntegrationTestBase {
 
     @Test @DisplayName("dois clientes confirmam o MESMO horário ao mesmo tempo: só um fica confirmado, o outro é cancelado por conflito")

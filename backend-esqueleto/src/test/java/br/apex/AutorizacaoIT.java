@@ -11,7 +11,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 
-/** Espelha tests/security.test.mjs: autorização na API (não só na tela), IDOR e mass assignment. */
+/** Espelha tests-jest/security.test.mjs: autorização na API (não só na tela), IDOR e mass assignment. */
 class AutorizacaoIT extends IntegrationTestBase {
 
     @Test @DisplayName("esteticista não vê, remarca, cancela nem cobra agendamento de outro esteticista (404, não 403)")

@@ -11,7 +11,7 @@ import java.util.regex.Pattern;
 
 /**
  * Regras PURAS das avaliações (espelho de `src/domain/avaliacoes.js`; os mesmos casos rodam nos dois lados: `equivalencia/avaliacoes.json`, `AvaliacoesEquivalenciaTest`
- * e `tests/avaliacoes-equivalencia.test.mjs`). Não conhece banco nem requisição. Spec: docs/F5-avaliacoes.md.
+ * e `tests-jest/avaliacoes-equivalencia.test.mjs`). Não conhece banco nem requisição. Spec: docs/F5-avaliacoes.md.
  */
 public final class AvaliacaoRegras {
 

@@ -12,6 +12,7 @@ import PushAvisos from './PushAvisos.jsx';
 import { fotoValida, FOTO_MAX } from '../../domain/foto.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
 import { gravarPrefs, tocarBipe, vibrar } from './alerta.js';
+import { useTravaScroll } from '../travaScroll.js';
 
 export const LADO_FOTO = 96;
 
@@ -46,6 +47,7 @@ const OPCOES = [
 ];
 
 export default function MeuPerfil({ loja, sessao, dados, prefs, aoPrefs, aoMudou, aoFechar, aoSair }) {
+  useTravaScroll(true);
   const [f, setF] = useState(() => ({ nome: dados?.nome || '', apelido: dados?.apelido || '', email: dados?.email || '', telefone: dados?.telefone || '', nascimento: dados?.nascimento || '' }));
   const [carregado, setCarregado] = useState(!!dados);
   const [msg, setMsg] = useState('');

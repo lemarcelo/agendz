@@ -1,6 +1,6 @@
 # F1: a loja (tipo, dados, marca) vem do endereço usado (DNS/URL)
 
-Status: **projeto + protótipo + esqueleto Spring com Gate 3 no CI (`backend/`)** (`src/domain/tenant.js`, `src/services/lojas-demo.js`, `tests/tenant.test.mjs`, `tests/e2e33.mjs`). O Spring Boot, o Caddy e o banco são da F1.
+Status: **projeto + protótipo + esqueleto Spring com Gate 3 no CI (`backend/`)** (`src/domain/tenant.js`, `src/services/lojas-demo.js`, `tests-jest/tenant.test.mjs`, `tests/e2e33.mjs`). O Spring Boot, o Caddy e o banco são da F1.
 
 ## Regra
 Quem decide a loja é **o endereço**, nunca um campo que o navegador escreve. Da loja saem o **tipo** (imutável), os **dados**, a **marca** (logo, cores) e as **permissões**. Endereço desconhecido = "loja não encontrada"; **nunca** cai em loja padrão (em produção).

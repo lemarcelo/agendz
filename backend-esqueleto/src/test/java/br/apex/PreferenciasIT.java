@@ -11,7 +11,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 
-/** Espelha tests/ordem.test.mjs: a ordem de menus, abas, colunas e marcadores é preferência do próprio usuário e nunca é confiada. */
+/** Espelha tests-jest/ordem.test.mjs: a ordem de menus, abas, colunas e marcadores é preferência do próprio usuário e nunca é confiada. */
 class PreferenciasIT extends IntegrationTestBase {
 
     @Test @DisplayName("cada usuário grava e lê só a própria ordem; a rota nunca recebe o id de outro usuário")

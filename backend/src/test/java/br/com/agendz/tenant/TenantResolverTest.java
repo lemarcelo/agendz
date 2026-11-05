@@ -10,7 +10,7 @@ import java.util.Optional;
 import java.util.function.Function;
 import org.junit.jupiter.api.Test;
 
-/** Espelho de tests/tenant.test.mjs: a regra é a mesma do protótipo. */
+/** Espelho de tests-jest/tenant.test.mjs: a regra é a mesma do protótipo. */
 class TenantResolverTest {
 
     private final Function<String, Optional<String>> banco =

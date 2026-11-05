@@ -27,7 +27,7 @@ import org.springframework.test.web.servlet.ResultActions;
 
 /**
  * Clientes (F2 parte 2): validação igual à da API simulada, CPF/telefone/nascimento cifrados no banco, busca, duplicidade, veículos por capacidade,
- * CPF completo e troca de telefone só para quem pode, e isolamento entre lojas. Espelha tests/clientes-equivalencia.test.mjs no lado do navegador.
+ * CPF completo e troca de telefone só para quem pode, e isolamento entre lojas. Espelha tests-jest/clientes-equivalencia.test.mjs no lado do navegador.
  */
 class ClientesTest extends BaseApi {
 

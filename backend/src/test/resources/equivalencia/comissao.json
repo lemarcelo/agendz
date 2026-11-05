@@ -1,5 +1,5 @@
 {
- "descricao": "Ordem da comissão (v91): serviço > funcionário > estabelecimento; dono/master sem percentual próprio = 100. Vazio (null) = herdar; 0 = sem comissão. Executado na simulada (tests/comissao-equivalencia.test.mjs, pctComissao) e no servidor (ComissaoEquivalenciaTest, Comissao.percentual). Percentual fora de 0 a 100 é ignorado.",
+ "descricao": "Ordem da comissão (v91): serviço > funcionário > estabelecimento; dono/master sem percentual próprio = 100. Vazio (null) = herdar; 0 = sem comissão. Executado na simulada (tests-jest/comissao-equivalencia.test.mjs, pctComissao) e no servidor (ComissaoEquivalenciaTest, Comissao.percentual). Percentual fora de 0 a 100 é ignorado.",
  "casos": [
   {
    "nome": "só o geral do estabelecimento",

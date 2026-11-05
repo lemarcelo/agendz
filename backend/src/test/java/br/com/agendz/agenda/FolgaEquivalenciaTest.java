@@ -12,7 +12,7 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.TestFactory;
 
-/** B9c: os MESMOS casos de equivalencia/folga.json que tests/profissional-auto.test.mjs roda na API simulada (ordem do mais livre para o menos livre). */
+/** B9c: os MESMOS casos de equivalencia/folga.json que tests-jest/profissional-auto.test.mjs roda na API simulada (ordem do mais livre para o menos livre). */
 class FolgaEquivalenciaTest {
 
     private static final long H = 3_600_000L;

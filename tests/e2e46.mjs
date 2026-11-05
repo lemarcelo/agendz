@@ -205,9 +205,16 @@ const textoDe = (p, t) => p.getByTestId(t).innerText();
   assert.equal(await textoDe(p, 'mes-cont-2026-10-28'), '2');
   assert.match(await textoDe(p, 'agenda-titulo'), /outubro de 2026/i);
   await p.getByTestId('mes-dia-2026-10-31').click();
-  await p.getByTestId('agenda-dia').waitFor();
-  assert.match(await textoDe(p, 'agenda-titulo'), /31 de outubro/);
-  await p.waitForFunction(() => document.querySelectorAll('[data-testid="cartao"]').length === 1);
+  await p.getByTestId('calendario-dia-modal').waitFor();
+  assert.equal(await p.getByTestId('aba-calendario').getAttribute('aria-selected'), 'true');
+  await p.waitForFunction(() => document.querySelectorAll('[data-testid="calendario-cartao"]').length === 1);
+  await p.getByTestId('calendario-cartao').getByRole('button').first().click();
+  await p.getByTestId('detalhe-modal').waitFor();
+  await p.keyboard.press('Escape');
+  assert.equal(await p.getByTestId('detalhe-modal').count(), 0);
+  assert.equal(await p.getByTestId('calendario-dia-modal').isVisible(), true);
+  await p.keyboard.press('Escape');
+  assert.equal(await p.getByTestId('calendario-dia-modal').count(), 0);
   ok('calendário: contagem por dia e clique abre o dia');
   await ctx.close();
 }
@@ -369,7 +376,8 @@ for (const [w, h] of [[1280, 860], [390, 800]]) {
   assert.match(await textoDe(p, 'forma-erro'), /cancelado não tem forma/);
   assert.equal(await p.getByTestId('forma-pagamento').count(), 1, 'recusado: a janela fica');
   negarForma = false;
-  await p.getByTestId('forma-fechar').click(); await p.getByTestId('forma-pagamento').waitFor({ state: 'detached' });
+  if (w < 700) await p.touchscreen.tap(3, 3); else await p.mouse.click(3, 3);
+  await p.getByTestId('forma-pagamento').waitFor({ state: 'detached' });
   // soltar cedo ou rolar não abre; clique curto abre os detalhes
   if (w >= 700) await segurar(200); else await segurar(650, 40);
   assert.equal(await p.getByTestId('forma-pagamento').count(), 0, `${w}: soltou cedo/rolou: nada abre`);
@@ -401,6 +409,63 @@ for (const [w, h] of [[1366, 820], [1920, 1000], [390, 800]]) {
   await ctx.close();
 }
 
+// Histórico e calendário: posição estável, teclado e telas em dois tamanhos.
+for (const w of [390, 1366]) {
+  const { ctx, p } = await abrir({ width: w, height: 860 });
+  await p.getByTestId('cartao').first().getByTestId('cartao-abrir').click();
+  const modal = p.getByTestId('agendamento-detalhe');
+  const topo = (await modal.boundingBox()).y;
+  await p.getByTestId('historico-abrir').click();
+  await p.getByTestId('historico-lista').waitFor();
+  await p.waitForTimeout(350);
+  assert.ok(Math.abs((await modal.boundingBox()).y - topo) < 2, 'o topo do modal permanece fixo');
+  assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  if (process.env.AGENDZ_SHOTS) await p.screenshot({ path: process.env.AGENDZ_SHOTS + '/historico-' + w + '-v2.png' });
+  await p.getByTestId('detalhe-fechar').click();
+  await p.getByTestId('aba-calendario').click();
+  await p.getByTestId('mes-dia-2026-10-28').click();
+  await p.getByTestId('calendario-dia-modal').waitFor();
+  if (process.env.AGENDZ_SHOTS) await p.screenshot({ path: process.env.AGENDZ_SHOTS + '/calendario-' + w + '-v2.png' });
+  await p.getByTestId('calendario-dia-fechar').click();
+  assert.equal(await p.getByTestId('aba-calendario').getAttribute('aria-selected'), 'true');
+  await ctx.close();
+}
+// A página e seus painéis ficam sob o modal, que fecha ao tocar fora.
+for (const w of [390, 1366]) {
+  const { ctx, p } = await abrir({ width: w, height: 780 });
+  await p.evaluate(() => { const extra = document.createElement('div'); extra.style.height = '1800px'; document.body.appendChild(extra); window.scrollTo(0, 350); });
+  await p.waitForTimeout(100);
+  const antes = await p.evaluate(() => window.scrollY);
+  assert.ok(antes > 0, 'a página já estava rolada');
+  await p.getByTestId('atender-abrir').evaluate(el => el.click());
+  await p.getByTestId('atender-janela').waitFor();
+  assert.equal(await p.evaluate(() => !!document.elementFromPoint(3, 3)?.closest('[data-testid="atender-janela"]')), true, 'o fundo cobre a navegação');
+  await p.mouse.move(3, 3); await p.mouse.wheel(0, 700); await p.waitForTimeout(150);
+  assert.equal(await p.evaluate(() => window.scrollY), antes, 'rolagem externa ficou travada');
+  assert.notEqual(await p.evaluate(() => getComputedStyle(document.body).touchAction), 'none', 'toque pode rolar o conteúdo interno');
+  await p.evaluate(() => { const el = document.querySelector('.atender-real'); const extra = document.createElement('div'); extra.style.height = '1800px'; el.appendChild(extra); });
+  const caixa = await p.locator('.atender-real').boundingBox();
+  await p.mouse.move(caixa.x + caixa.width / 2, caixa.y + caixa.height / 2); await p.mouse.wheel(0, 400); await p.waitForTimeout(200);
+  assert.ok(await p.locator('.atender-real').evaluate(el => el.scrollTop > 0), 'conteúdo interno pode rolar');
+  assert.equal(await p.evaluate(() => window.scrollY), antes);
+  if (w === 390) await p.touchscreen.tap(3, 3); else await p.mouse.click(3, 3);
+  await p.getByTestId('atender-janela').waitFor({ state: 'detached' });
+  assert.equal(await p.evaluate(() => window.scrollY), antes, 'posição da página foi preservada');
+  await p.getByTestId('aba-calendario').evaluate(el => el.click());
+  await p.getByTestId('mes-dia-2026-10-28').waitFor();
+  await p.getByTestId('mes-dia-2026-10-28').evaluate(el => el.click());
+  await p.getByTestId('calendario-dia-modal').waitFor();
+  await p.getByTestId('calendario-cartao').first().getByRole('button').first().click();
+  await p.getByTestId('detalhe-modal').waitFor();
+  if (w === 390) await p.touchscreen.tap(3, 3); else await p.mouse.click(3, 3);
+  await p.getByTestId('detalhe-modal').waitFor({ state: 'detached' });
+  assert.equal(await p.getByTestId('calendario-dia-modal').isVisible(), true, 'modal de baixo continua aberto');
+  assert.equal(await p.evaluate(() => document.body.classList.contains('trava-scroll-modal')), true);
+  if (w === 390) await p.touchscreen.tap(3, 3); else await p.mouse.click(3, 3);
+  await p.getByTestId('calendario-dia-modal').waitFor({ state: 'detached' });
+  await p.waitForFunction(() => !document.body.classList.contains('trava-scroll-modal'));
+  await ctx.close();
+}
 await b.close(); servidor.close();
 assert.deepEqual(erros, [], erros.join('\n'));
 console.log('e2e46 ok');

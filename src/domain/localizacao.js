@@ -26,5 +26,5 @@ export function coordenadasDeTexto(texto) {
 }
 
 // Parte de um link https depois de "https://" (vazio se não for https ou tiver espaço). Quem monta o href escreve `https://${caminhoHttps(url)}`, então nunca sai
-// javascript: nem http: (regra de tests/security.test.mjs).
+// javascript: nem http: (regra de tests-jest/security.test.mjs).
 export const caminhoHttps = (url) => { const m = /^https:\/\/([^\s]{1,300})$/.exec(String(url ?? '')); return m ? m[1] : ''; };

@@ -28,7 +28,7 @@ Projeto: `/home/claude/agendz` (React 19 + esbuild, API simulada `src/services/a
 
 ## Contrato visual do Artifact
 - Um único HTML, sem rede (exceto Google Fonts com reserva), < 16 MB, 390 px sem rolagem horizontal (margem 16 px, filhos flex/grid com `min-width: 0`), sem `alert/confirm/prompt/window.print`. `localStorage` só para conveniência, com try/catch.
-- Tema por tipo via `<html data-tipo>` e `src/tipos/<tipo>/tema.css`: estética escura por padrão (claro só em `[data-theme="light"]`, sem `prefers-color-scheme`); barbearia segue o sistema (creme/latão, alterna automático → escuro → claro). Cor de marca só por `src/domain/tema.js` (contraste ≥ 4,5, `tests/tema.test.mjs`).
+- Tema por tipo via `<html data-tipo>` e `src/tipos/<tipo>/tema.css`: estética escura por padrão (claro só em `[data-theme="light"]`, sem `prefers-color-scheme`); barbearia segue o sistema (creme/latão, alterna automático → escuro → claro). Cor de marca só por `src/domain/tema.js` (contraste ≥ 4,5, `tests-jest/tema.test.mjs`).
 - Marca: a logo da loja; **sem logo, o ícone do tipo** (`visual.iconeMarca`), nunca a logo de outra loja. Não existe ícone de letra em texto.
 - Reaproveite `src/ui/common.jsx` (`Btn`, `Campo`, `Modal`, `Aviso`, `Icon`, `Interruptor`, `StatusChip`); listas ordenáveis usam `Abas ordem`/`Tabela id`/`useOrdem`; números com `tabular-nums`.
 - Antes de publicar: capturas (computador e celular, escuro e claro, os dois tipos), **olhar as imagens**, `npm run verificar-tudo`.

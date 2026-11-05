@@ -20,6 +20,7 @@ import { montarLinkAgendamento } from '../../domain/link-publico.js';
 import { numeroWhatsapp, textoConvite, textoReagendamento } from '../../domain/whatsapp.js';
 import { abrirWhatsapp } from '../whatsapp.js';
 import Atender from './Atender.jsx';
+import { useTravaScroll } from '../travaScroll.js';
 import AvisoSemBox from '../leve/AvisoSemBox.jsx';
 import { useAtualizacaoAutomatica } from './atualizar.js';
 
@@ -135,6 +136,9 @@ function Detalhe({ a, nomeCliente, nomeProf, nomeDe, profissionais, boxes, ehDon
   const v = visual(a);
   const [hist, setHist] = useState(null);
   const [histAberto, setHistAberto] = useState(false);
+  const [topoHistorico, setTopoHistorico] = useState(null);
+  const detalheRef = useRef(null);
+  useEffect(() => { const anterior = document.activeElement; detalheRef.current?.focus(); return () => { if (anterior?.isConnected) anterior.focus(); }; }, []);
   const [erro, setErro] = useState('');
   const [ocupado, setOcupado] = useState(false);
   const [cancelando, setCancelando] = useState(false);
@@ -181,8 +185,8 @@ function Detalhe({ a, nomeCliente, nomeProf, nomeDe, profissionais, boxes, ehDon
   return (
     <div className="detalhe-fundo-real" role="dialog" aria-modal="true" aria-label="Detalhes do atendimento" data-testid="detalhe-modal"
       onClick={(e) => { if (e.target === e.currentTarget && aoFechar) aoFechar(); }}
-      onKeyDown={(e) => { if (e.key === 'Escape' && aoFechar) aoFechar(); }}>
-      <div className="cartao-detalhe detalhe-modal-real" data-testid="agendamento-detalhe">
+      onKeyDown={(e) => { if (e.key === 'Escape' && aoFechar) { e.stopPropagation(); aoFechar(); } }}>
+      <div ref={detalheRef} tabIndex={-1} className="cartao-detalhe detalhe-modal-real" data-testid="agendamento-detalhe" style={topoHistorico === null ? undefined : { position: 'fixed', top: topoHistorico, left: '50%', transform: 'translateX(-50%)', width: 'calc(100% - 32px)', maxHeight: `calc(100dvh - ${topoHistorico + 16}px)` }}>
         <div className="detalhe-topo-real">
           <h3 className="detalhe-titulo-real">Detalhes do atendimento</h3>
           <Btn tamanho="sm" onClick={aoFechar} aria-label="Fechar detalhes" data-testid="detalhe-fechar"><Icone n="x" size={16} /></Btn>
@@ -251,14 +255,14 @@ function Detalhe({ a, nomeCliente, nomeProf, nomeDe, profissionais, boxes, ehDon
                   type="button"
                   className="detalhe-historico-toggle"
                   aria-expanded={histAberto}
-                  onClick={() => setHistAberto((x) => !x)}
+                  onClick={() => { if (topoHistorico === null && detalheRef.current) setTopoHistorico(detalheRef.current.getBoundingClientRect().top); setHistAberto((x) => !x); }}
                   data-testid="historico-abrir"
                 >
                   <span>Histórico{hist && hist.length > 0 ? ` (${hist.length})` : ''}</span>
                   <span className="detalhe-historico-icone">{histAberto ? '▾' : '▸'}</span>
                 </button>
-                {histAberto && (
-                  <div className="detalhe-historico-dropdown">
+                <div className={`detalhe-historico-animacao${histAberto ? ' aberta' : ''}`} aria-hidden={!histAberto} inert={!histAberto}>
+                  <div className="detalhe-historico-animacao-conteudo"><div className="detalhe-historico-dropdown">
                     {hist && hist.length > 0 ? (
                       <ul data-testid="historico-lista">
                         {hist.map((e, i) => (
@@ -269,8 +273,8 @@ function Detalhe({ a, nomeCliente, nomeProf, nomeDe, profissionais, boxes, ehDon
                         ))}
                       </ul>
                     ) : <p className="muted" data-testid="historico-lista">Nenhuma alteração registrada.</p>}
-                  </div>
-                )}
+                  </div></div>
+                </div>
               </div>
             )}
           </div>
@@ -368,6 +372,9 @@ function AvisoRemarcado({ avisar, aoFechar, aoErro }) {
 
 export default function Agenda({ ehProprio = false, ehDono = false, ehProprietario = false, podeSuporte = false, aoIrBoxes = null, meuId = '', nomeLoja = '', destaqueIds = [], foco = null, recarregar = 0 }) {
   const [modo, setModo] = useState('horarios');
+  const [diaModal, setDiaModal] = useState(null);
+  const diaModalRef = useRef(null);
+  useEffect(() => { if (diaModal === null) return undefined; const anterior = document.activeElement; diaModalRef.current?.focus(); return () => { if (anterior?.isConnected) anterior.focus(); }; }, [diaModal]);
   const [cursor, setCursor] = useState(() => startOfDay(Date.now()));
   const [diasAdiante, setDiasAdiante] = useState(7);
   const [selecionado, setSelecionado] = useState('todos');
@@ -396,6 +403,7 @@ export default function Agenda({ ehProprio = false, ehDono = false, ehProprietar
   const semBox = capAtiva('usaRecursoFisico') && boxesPronto && boxes.length === 0;
   const [pendLink, setPendLink] = useState([]); // só o proprietário: o que falta cadastrar para o link do cliente ter horários
   const [trocaForma, setTrocaForma] = useState(null); // agendamento cuja forma de pagamento está sendo trocada (segurar o cartão)
+  useTravaScroll(atendendo || !!trocaForma || diaModal !== null);
   const [avisoRemarcar, setAvisoRemarcar] = useState(null); // { tel, texto } | { semTelefone }: fica na Agenda porque o cartão pode sair da lista ao mudar de dia
   const [fichas, setFichas] = useState(new Map()); // id → { nome, telefone }: só para avisar o cliente pelo WhatsApp (quem não lê Clientes fica sem o aviso)
   const [lojaInfo, setLojaInfo] = useState({ endereco: '', mapaUrl: '' });
@@ -543,7 +551,7 @@ export default function Agenda({ ehProprio = false, ehDono = false, ehProprietar
         <Btn variante="primario" tamanho="sm" onClick={() => { if (semBox) { setSemBoxAberto(true); return; } setAtendendo(true); setAviso(''); }} disabled={atendendo || atendem.length === 0} data-testid="atender-abrir"><Icone n="plus" size={15} />Atender</Btn>
       </div>
       {semBox && semBoxAberto && <AvisoSemBox podeCadastrar={ehProprietario && !!aoIrBoxes} aoCadastrar={() => aoIrBoxes('boxes')} aoFechar={() => setSemBoxAberto(false)} />}
-      {atendendo && <div className="atender-fundo-real" role="dialog" aria-modal="true" aria-label="Atender" data-testid="atender-janela" onKeyDown={(e) => { if (e.key === 'Escape') setAtendendo(false); }}>
+      {atendendo && <div className="atender-fundo-real" role="dialog" aria-modal="true" aria-label="Atender" data-testid="atender-janela" onClick={(e) => { if (e.target === e.currentTarget) setAtendendo(false); }} onKeyDown={(e) => { if (e.key === 'Escape') setAtendendo(false); }}>
         <Atender profissionais={atendem} equipe={profs} meuId={meuId} ehProprio={ehProprio} aoSalvar={atendeu} aoFechar={() => setAtendendo(false)} />
       </div>}
       {mostrarSeletor && (
@@ -561,7 +569,13 @@ export default function Agenda({ ehProprio = false, ehDono = false, ehProprietar
       )}
       {avisoRemarcar && <AvisoRemarcado avisar={avisoRemarcar} aoFechar={() => setAvisoRemarcar(null)} aoErro={setErro} />}
       {lista === null && <p className="muted" role="status" data-testid="agenda-carregando">Carregando…</p>}
-      {lista !== null && modo === 'calendario' && <Calendario cursor={cursor} lista={visiveis} aoEscolherDia={(d) => { setModo('horarios'); irPara(d); }} />}
+      {lista !== null && modo === 'calendario' && <Calendario cursor={cursor} lista={visiveis} aoEscolherDia={(d) => { setAberto(null); setDiaModal(startOfDay(d)); }} />}
+      {diaModal !== null && <div className="detalhe-fundo-real" role="dialog" aria-modal="true" aria-label={fmtDayLong(diaModal)} data-testid="calendario-dia-modal" onClick={(e) => { if (e.target === e.currentTarget) { setAberto(null); setDiaModal(null); } }} onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setAberto(null); setDiaModal(null); } }}>
+        <div ref={diaModalRef} tabIndex={-1} className="cartao-detalhe detalhe-modal-real agenda-calendario-modal">
+          <div className="detalhe-topo-real"><h3>{fmtDayLong(diaModal)}</h3><button type="button" className="btn" aria-label="Fechar" data-testid="calendario-dia-fechar" onClick={() => { setAberto(null); setDiaModal(null); }}>×</button></div>
+          <div className="agenda-lista-real">{visiveis.filter((a) => a.inicio >= diaModal && a.inicio < addDays(diaModal, 1)).length ? visiveis.filter((a) => a.inicio >= diaModal && a.inicio < addDays(diaModal, 1)).map((a) => cartao(a, 'calendario-cartao')) : <p className="muted" data-testid="calendario-dia-vazio">Nenhum agendamento neste dia.</p>}</div>
+        </div>
+      </div>}
       {lista !== null && modo === 'horarios' && (
         <div className="agenda-paineis-real">
           <div className="agenda-dia-real" data-testid="agenda-dia">

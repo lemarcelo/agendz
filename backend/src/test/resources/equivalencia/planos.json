@@ -1,5 +1,5 @@
 {
- "descricao": "Planos de serviço (v111): cota mensal derivada, acúmulo, adiantamento, intervalo, atraso, dívida e desconto. Roda em tests/planos-equivalencia.test.mjs (src/domain/planos.js) e em PlanosEquivalenciaTest (planos/PlanoRegras). Horários em hora local da loja, sem fuso.",
+ "descricao": "Planos de serviço (v111): cota mensal derivada, acúmulo, adiantamento, intervalo, atraso, dívida e desconto. Roda em tests-jest/planos-equivalencia.test.mjs (src/domain/planos.js) e em PlanosEquivalenciaTest (planos/PlanoRegras). Horários em hora local da loja, sem fuso.",
  "casos": [
   {
    "nome": "mês pago sem uso: restam os 2 cortes",

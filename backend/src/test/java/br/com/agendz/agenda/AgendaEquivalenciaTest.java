@@ -32,7 +32,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 
 /**
  * Equivalência simulada × real da agenda (F2 parte 5a): os MESMOS casos de equivalencia/agenda.json que a API simulada executa em
- * tests/agenda-equivalencia.test.mjs. Cenário na barbearia Dalforno (sem veículo nem box). Só o último passo é conferido.
+ * tests-jest/agenda-equivalencia.test.mjs. Cenário na barbearia Dalforno (sem veículo nem box). Só o último passo é conferido.
  */
 class AgendaEquivalenciaTest extends BaseApi {
 

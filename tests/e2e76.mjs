@@ -265,11 +265,11 @@ for (const [rotulo, status, hora] of [['sem acesso a Clientes (403)', 403, '09:0
     assert.equal(await texto(p, 'mes-cont-2026-11-02'), '40');
     await semRolagem(p, `calendário ${vp.width}`);
     await T(p, 'mes-dia-2026-11-02').click();
-    await p.waitForFunction(() => document.querySelectorAll('[data-testid="cartao"]').length === 40);
+    await p.waitForFunction(() => document.querySelectorAll('[data-testid="calendario-cartao"]').length === 40);
     await semRolagem(p, `40 cartões ${vp.width}`);
-    const estouro = await p.evaluate(() => [...document.querySelectorAll('[data-testid="cartao"]')].filter((e) => e.scrollWidth > e.clientWidth + 1).length);
+    const estouro = await p.evaluate(() => [...document.querySelectorAll('[data-testid="calendario-cartao"]')].filter((e) => e.scrollWidth > e.clientWidth + 1).length);
     assert.equal(estouro, 0, `${vp.width}: nenhum cartão com texto para fora`);
-    await abrirCartao(p, '08:00'); await T(p, 'acao-remarcar').click();
+    await p.getByTestId('calendario-cartao').first().getByRole('button').first().click(); await T(p, 'acao-remarcar').click();
     await semRolagem(p, `remarcar aberto ${vp.width}`);
     await ctx.close();
     ok(`40 cartões com nome enorme em ${vp.width} px: sem rolagem lateral nem texto para fora`);

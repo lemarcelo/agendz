@@ -1,0 +1,89 @@
+# Ambiente isolado de teste; não publicar portas de banco ou APIs.
+name: agendz-homologacao
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: agendz_homologacao
+      POSTGRES_USER: agendz_homologacao
+      POSTGRES_PASSWORD: ${H_DB_PASSWORD:?Defina H_DB_PASSWORD}
+    volumes:
+      - db_homologacao:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agendz_homologacao -d agendz_homologacao"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  api:
+    image: ${H_AGENDZ_IMAGE:?Informe a imagem imutável da API de homologação}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      AGENDZ_DB_URL: jdbc:postgresql://db:5432/agendz_homologacao
+      AGENDZ_DB_USER: agendz_homologacao
+      AGENDZ_DB_PASSWORD: ${H_DB_PASSWORD:?Defina H_DB_PASSWORD}
+      JWT_SEGREDO: ${H_JWT_SEGREDO:?Defina H_JWT_SEGREDO}
+      CIFRA_CHAVE: ${H_CIFRA_CHAVE:?Defina H_CIFRA_CHAVE}
+      CIFRA_PEPPER: ${H_CIFRA_PEPPER:?Defina H_CIFRA_PEPPER}
+      INTERNO_CHAVE: ${H_INTERNO_CHAVE:?Defina H_INTERNO_CHAVE}
+      ADMIN_INTERNO_URL: http://admin-api:8080
+      AGENDZ_DOMINIOS_BASE: agendz.io
+      AGENDZ_PERMITIR_QUERY: "false"
+      VAPID_PUBLICA: ""
+      VAPID_PRIVADA: ""
+      RECAPTCHA_CHAVE_SITE: ""
+      RECAPTCHA_SEGREDO: ""
+  admin-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: agendz_admin_homologacao
+      POSTGRES_USER: agendz_admin_homologacao
+      POSTGRES_PASSWORD: ${H_ADMIN_DB_PASSWORD:?Defina H_ADMIN_DB_PASSWORD}
+    volumes:
+      - admin_db_homologacao:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agendz_admin_homologacao -d agendz_admin_homologacao"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  admin-api:
+    image: ${H_ADMIN_IMAGE:?Informe a imagem imutável da API Admin de homologação}
+    restart: unless-stopped
+    depends_on:
+      admin-db:
+        condition: service_healthy
+    environment:
+      ADMIN_DB_URL: jdbc:postgresql://admin-db:5432/agendz_admin_homologacao
+      ADMIN_DB_USER: agendz_admin_homologacao
+      ADMIN_DB_PASSWORD: ${H_ADMIN_DB_PASSWORD:?Defina H_ADMIN_DB_PASSWORD}
+      ADMIN_JWT_SEGREDO: ${H_ADMIN_JWT_SEGREDO:?Defina H_ADMIN_JWT_SEGREDO}
+      ADMIN_CIFRA_CHAVE: ${H_ADMIN_CIFRA_CHAVE:?Defina H_ADMIN_CIFRA_CHAVE}
+      AGENDZ_INTERNO_URL: http://api:8080
+      AGENDZ_INTERNO_CHAVE: ${H_INTERNO_CHAVE:?Defina H_INTERNO_CHAVE}
+      JAVA_TOOL_OPTIONS: -Xmx256m
+  gateway:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      H_PROXY_CIDR: ${H_PROXY_CIDR:?Informe a sub-rede de entrada confiável}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./site:/srv/site:ro
+    networks:
+      default: {}
+      proxy:
+        aliases:
+          - agendz-homologacao-web
+networks:
+  default:
+    internal: true # APIs e bancos sem acesso direto a serviços externos.
+  proxy:
+    external: true
+    name: agendz_default
+volumes:
+  db_homologacao:
+  admin_db_homologacao:

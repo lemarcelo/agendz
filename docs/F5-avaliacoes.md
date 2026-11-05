@@ -15,7 +15,7 @@ Pedido do dono (resumo): avaliação do atendimento pelo próprio cliente; estre
 10. **Privacidade:** o painel nunca mostra CPF; telefone mascarado na lista da fila; token nunca em log; texto do cliente escapado; texto de avaliação nunca vira HTML. Dados em `MAPA-DADOS-PESSOAIS.md`.
 
 ## Onde mexe
-- `src/domain/avaliacoes.js` (puro: validar, resumir, filtrar, fila de mensagens) + `tests/avaliacoes.test.mjs`.
+- `src/domain/avaliacoes.js` (puro: validar, resumir, filtrar, fila de mensagens) + `tests-jest/avaliacoes.test.mjs`.
 - `api.js`: `avaliacoes.pedir|listar|resumo|ocultar`, `publico.avaliar|dadosAvaliacao`, `mensagens.fila` (+ `docs/MAPA-API-SPRING.md`).
 - UI Artifact: estrela no card concluído (`ui/Agenda.jsx`), `ui/Avaliacoes.jsx`, `ui/AvaliarPublico.jsx` (`#avaliar`), aba em Serviços, fila em Mensagens.
 - Servidor: migração **V39** (`avaliacao`, `avaliacao_acesso`; `configuracao_loja`/`loja_regra_plataforma.avaliacao_mostra_anonimo`), `avaliacoes/`, rota pública sem login com limite (`LimitePublico`), `Permissoes` seção `avaliacoes`, Admin: regra no `RegrasDaLoja`.
@@ -24,7 +24,7 @@ Pedido do dono (resumo): avaliação do atendimento pelo próprio cliente; estre
 - Testes (lição do remarcar): estrela em cliente com telefone, **sem telefone**, **sem cadastro**, card que sai da lista; anônimo com a regra ligada e desligada (DTO sem identidade); token errado/vencido/reusado; permissão por seção e por usuário; profissional só vê as suas; 390 px e desktop; claro/escuro; textos conferidos.
 
 ## Fase 1 (Artifact) feita em 30/10/2026 (v116)
-`domain/avaliacoes.js` (puro) + `tests/avaliacoes.test.mjs` (domínio e API simulada), `api.js` (`avaliacoes.*`, `mensagens.*`, `publico.dadosAvaliacao|avaliar`, `store.simularAdmin` só na demonstração), UI (`ui/PedirAvaliacao.jsx`, `ui/Avaliacoes.jsx`, `ui/AvaliarPublico.jsx`, `ui/FilaMensagens.jsx`, estrela em `ui/Agenda.jsx`, aba **Mensagens em lote**, avaliações no cadastro do serviço, caixa `semMensagens` no cadastro do cliente), `tests/e2e78.mjs`. Mapa: `MAPA-API-SPRING.md` 10p.
+`domain/avaliacoes.js` (puro) + `tests-jest/avaliacoes.test.mjs` (domínio e API simulada), `api.js` (`avaliacoes.*`, `mensagens.*`, `publico.dadosAvaliacao|avaliar`, `store.simularAdmin` só na demonstração), UI (`ui/PedirAvaliacao.jsx`, `ui/Avaliacoes.jsx`, `ui/AvaliarPublico.jsx`, `ui/FilaMensagens.jsx`, estrela em `ui/Agenda.jsx`, aba **Mensagens em lote**, avaliações no cadastro do serviço, caixa `semMensagens` no cadastro do cliente), `tests/e2e78.mjs`. Mapa: `MAPA-API-SPRING.md` 10p.
 
 Decisões tomadas sem confirmação:
 - A fila em lote exige a seção `avaliacoes` (dono, master e quem o dono liberar); o profissional sem a seção não a vê.
@@ -37,7 +37,7 @@ Decisões tomadas sem confirmação:
 
 ## Fase 2 (feita na v127; o que sobrou está no fim)
 - **Servidor:** migração V39 (`avaliacao`, `avaliacao_acesso` com `hash`, `fila_mensagem` e `fila_mensagem_item`, `cliente.sem_mensagens`, `agendamento.avaliacao_pedida_em/por`, `loja_regra_plataforma.avaliacao_mostra_anonimo`) com RLS como as demais; pacote `avaliacoes/` (service, controller, DTO sem identidade no anônimo); `Permissoes` seção `avaliacoes`; rotas públicas com token em `X-Acesso` e `LimitePublico`; `ClienteService` aceita `semMensagens`; testes Java equivalentes a `avaliacoes.test.mjs` (token vencido/errado/reusado, anônimo com a regra ligada e desligada sem identidade no JSON, profissional só as dele, fila: telefone/duplicado/limite 200/período) e casos em `equivalencia/avaliacoes.json`.
-- **Site real:** `api-real.js` (`avaliacoes.*`, `mensagens.*`, `publico.*`), `ui/real/Avaliacoes.jsx`, `ui/real/AvaliarPublico.jsx`, estrela no cartão (`ui/real/Agenda.jsx`), aba de lote em Mensagens (hoje o site real não tem Mensagens), item no menu com o ícone `star` (`tests/menu-icones.test.mjs`), `semMensagens` na ficha do cliente; `tests/api-real-avaliacoes.test.mjs` e e2e equivalente a `e2e78`.
+- **Site real:** `api-real.js` (`avaliacoes.*`, `mensagens.*`, `publico.*`), `ui/real/Avaliacoes.jsx`, `ui/real/AvaliarPublico.jsx`, estrela no cartão (`ui/real/Agenda.jsx`), aba de lote em Mensagens (hoje o site real não tem Mensagens), item no menu com o ícone `star` (`tests-jest/menu-icones.test.mjs`), `semMensagens` na ficha do cliente; `tests-jest/api-real-avaliacoes.test.mjs` e e2e equivalente a `e2e78`.
 - **Admin (`agendz-admin`):** chave "Mostrar dados de quem avalia como anônimo" nas regras da loja, com motivo e linha do tempo; `RegrasDaLoja` aplica no servidor da loja.
 - **Meta/WhatsApp oficial:** quando existir a API por loja (v100), a fila pode virar envio automático; até lá fica um clique por pessoa.
 

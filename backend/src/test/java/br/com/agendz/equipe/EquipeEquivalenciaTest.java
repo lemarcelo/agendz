@@ -21,7 +21,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MvcResult;
 
 /**
- * Equivalência simulada × real: os MESMOS casos de tests/equipe-equivalencia.test.mjs (arquivo equivalencia/equipe.json) rodam no servidor, na loja da
+ * Equivalência simulada × real: os MESMOS casos de tests-jest/equipe-equivalencia.test.mjs (arquivo equivalencia/equipe.json) rodam no servidor, na loja da
  * estética (Apex). Cada caso começa sem as pessoas de teste (apelido "Eq..."); só o último passo é conferido. "@n" = id da pessoa criada no passo n.
  */
 class EquipeEquivalenciaTest extends BaseApi {

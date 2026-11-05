@@ -35,6 +35,7 @@ import { cssDaMarca, logoValida } from '../../domain/tema.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
 import { useCaptcha } from './Captcha.jsx';
 import { ordenarMenuPorUso, registrarUsoMenu } from '../../domain/ordem.js';
+import '../travaScroll.js';
 
 // Faixa fixa no alto: a ação foi pedida mas o aparelho está sem internet; ela é enviada sozinha quando a conexão voltar (ou cancelada aqui).
 function AvisoRede() {

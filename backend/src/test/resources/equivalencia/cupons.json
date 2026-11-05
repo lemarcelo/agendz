@@ -1,5 +1,5 @@
 {
-  "descricao": "Cupons (5d-4c-2): quanto cada serviço desconta e como a chave é lida. Roda em tests/cupons-equivalencia.test.mjs (src/domain/cupons.js) e em CupomEquivalenciaTest (cupom/CupomRegras).",
+  "descricao": "Cupons (5d-4c-2): quanto cada serviço desconta e como a chave é lida. Roda em tests-jest/cupons-equivalencia.test.mjs (src/domain/cupons.js) e em CupomEquivalenciaTest (cupom/CupomRegras).",
   "descontos": [
     { "nome": "10% em todos os serviços", "tipo": "percentual", "servicoIds": [], "percentual": 10, "valor": null, "itens": [{ "id": "a", "valor": 45 }, { "id": "b", "valor": 35 }], "esperado": { "a": 4.5, "b": 3.5 } },
     { "nome": "100% = de graça, nunca passa do preço", "tipo": "percentual", "servicoIds": [], "percentual": 100, "valor": null, "itens": [{ "id": "a", "valor": 45 }], "esperado": { "a": 45 } },

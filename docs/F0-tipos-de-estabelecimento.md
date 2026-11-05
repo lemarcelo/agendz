@@ -45,7 +45,7 @@ O dono apaga ou edita tudo depois; o exemplo só evita começar do zero.
 1. `npm run verificar` passa **nos dois tipos** (matriz).
 2. Nenhuma tela ou mensagem tem "Esteticista", "Box", "Veículo" ou "carro" escrito fixo fora do catálogo (teste estático com lista de exceções).
 3. Cada tipo mostra os seus menus, formulários, rótulos e link do cliente; a tela Estabelecimento exibe o tipo só para leitura.
-4. Teste novo `tests/tipos.test.mjs` cobre: catálogo válido, tipo inválido recusado na criação, **tentativa de mudar o tipo recusada** (dono, master e API), tipo exibido só para leitura.
+4. Teste novo `tests-jest/tipos.test.mjs` cobre: catálogo válido, tipo inválido recusado na criação, **tentativa de mudar o tipo recusada** (dono, master e API), tipo exibido só para leitura.
 5. Adicionar um tipo de teste só no catálogo funciona sem alterar nenhuma tela.
 
 ## Modelo técnico

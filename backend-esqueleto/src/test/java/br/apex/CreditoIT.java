@@ -17,7 +17,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 
-/** Espelha tests/credito.test.mjs e acerto.test.mjs. O crédito só nasce da revisão do esteticista; o cliente só gasta. */
+/** Espelha tests-jest/credito.test.mjs e acerto.test.mjs. O crédito só nasce da revisão do esteticista; o cliente só gasta. */
 class CreditoIT extends IntegrationTestBase {
 
     /** Agendamento cancelado com Pix pago de R$ 40: o ponto de partida para o esteticista decidir o destino do valor. */

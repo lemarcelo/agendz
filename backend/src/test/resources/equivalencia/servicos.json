@@ -1,5 +1,5 @@
 {
- "descricao": "Casos de validação de serviço executados na API simulada (tests/servicos-equivalencia.test.mjs) e no servidor (ServicosEquivalenciaTest) na loja da estética automotiva. Passos em ordem; só o último é conferido, os anteriores precisam dar certo. '@n' = id do serviço criado no passo n. Nomes de campo são os da API real (duracaoMin, intervaloMin); a simulada usa duracao e intervalo.",
+ "descricao": "Casos de validação de serviço executados na API simulada (tests-jest/servicos-equivalencia.test.mjs) e no servidor (ServicosEquivalenciaTest) na loja da estética automotiva. Passos em ordem; só o último é conferido, os anteriores precisam dar certo. '@n' = id do serviço criado no passo n. Nomes de campo são os da API real (duracaoMin, intervaloMin); a simulada usa duracao e intervalo.",
  "casos": [
   {
    "nome": "nome vazio",

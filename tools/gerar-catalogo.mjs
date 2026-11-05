@@ -1,7 +1,7 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
 // Gera backend/src/main/resources/catalogo/<tipo>.json: o expediente sugerido e os serviços de exemplo de cada tipo, para o assistente de primeiro acesso marcar.
 // Vêm dos seeds do front (src/tipos/<tipo>/seed.js), a fonte única. Rode `node tools/gerar-catalogo.mjs` depois de mudar um seed;
-// tests/catalogo.test.mjs falha se os arquivos divergirem. Combos ficam de fora (dependem de componentes que o servidor ainda não tem).
+// tests-jest/catalogo.test.mjs falha se os arquivos divergirem. Combos ficam de fora (dependem de componentes que o servidor ainda não tem).
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { criarEstadoBarbearia } from '../src/tipos/barbearia/seed.js';
 import { criarEstadoInicial } from '../src/tipos/estetica_automotiva/seed.js';

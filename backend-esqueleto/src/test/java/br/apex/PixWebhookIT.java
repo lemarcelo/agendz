@@ -13,7 +13,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 
-/** Espelha tests/conflitos.test.mjs (Pix pago duas vezes gera um só crédito) e o item "webhook do banco" da segurança. */
+/** Espelha tests-jest/conflitos.test.mjs (Pix pago duas vezes gera um só crédito) e o item "webhook do banco" da segurança. */
 class PixWebhookIT extends IntegrationTestBase {
 
     private String corpoPix(String txid, String e2eid, String cpf, String valor) throws Exception {

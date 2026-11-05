@@ -1,5 +1,5 @@
 {
- "descricao": "Casos de validação do cadastro de produto executados na API simulada (tests/produtos-equivalencia.test.mjs, estoque.salvarMaterial com tipo produto) e no servidor (ProdutosEquivalenciaTest, POST/PUT /api/produtos) na loja da estética (Apex). Passos em ordem; só o último é conferido, os anteriores precisam dar certo. '@n' = id do produto criado no passo n. O estoque inicial só vale na criação. Regras só do servidor (permissão, comissão só do dono, isolamento) ficam em ProdutosTest.",
+ "descricao": "Casos de validação do cadastro de produto executados na API simulada (tests-jest/produtos-equivalencia.test.mjs, estoque.salvarMaterial com tipo produto) e no servidor (ProdutosEquivalenciaTest, POST/PUT /api/produtos) na loja da estética (Apex). Passos em ordem; só o último é conferido, os anteriores precisam dar certo. '@n' = id do produto criado no passo n. O estoque inicial só vale na criação. Regras só do servidor (permissão, comissão só do dono, isolamento) ficam em ProdutosTest.",
  "casos": [
   {
    "nome": "nome vazio",

@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
-/** Os MESMOS casos de tests/cupons-equivalencia.test.mjs (equivalencia/cupons.json), sem banco: desconto de cada serviço e leitura da chave. */
+/** Os MESMOS casos de tests-jest/cupons-equivalencia.test.mjs (equivalencia/cupons.json), sem banco: desconto de cada serviço e leitura da chave. */
 class CupomEquivalenciaTest {
 
     private static JsonNode raiz() throws Exception {

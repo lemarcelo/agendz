@@ -1,7 +1,7 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:be6aa6cbf4 */
 :root {
   /* Agendz: tema escuro por padrão (preto + verde→lima da logo). O claro é opcional e entra por data-theme="light"; não segue o sistema. */
-  --nota-1: #ff6b6b; --nota-2: #ff9a3c; --nota-3: #ffd23f; --nota-4: #a5d94a; --nota-5: #4ade80; --nota-fg: #141414; /* cor da estrela do cartão por nota (v134); texto do número com contraste ≥ 4,5 (tests/estrela-nota.test.mjs) */
+  --nota-1: #ff6b6b; --nota-2: #ff9a3c; --nota-3: #ffd23f; --nota-4: #a5d94a; --nota-5: #4ade80; --nota-fg: #141414; /* cor da estrela do cartão por nota (v134); texto do número com contraste ≥ 4,5 (tests-jest/estrela-nota.test.mjs) */
   --bg: #0d0f12; --surface: #15181c; --surface-2: #1c2025; --surface-3: #262b32;
   --fg: #e9edf2; --muted: #9aa4b1; --line: #272c33; --line-strong: #3b424b;
   --ink: #4ada54; --ink-fg: #0b1209; --acento: #a6e452; --focus: #d9e652;
@@ -1609,3 +1609,44 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
   }
 }
 
+/* Trava Geral de Scroll em Modais e Sobreposições (Scroll Lock & Anti-Chaining) */
+html.trava-scroll-modal,
+body.trava-scroll-modal {
+  overflow: hidden !important;
+  overscroll-behavior: contain !important;
+
+}
+
+.modal-fundo,
+.detalhe-fundo-real,
+.atender-fundo-real,
+.perfil-fundo-real,
+[role="dialog"],
+[aria-modal="true"] {
+  overscroll-behavior: contain !important;
+}
+
+/* Expansão do histórico sem deslocar o topo do modal. */
+.detalhe-historico-animacao { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows .25s ease, opacity .2s ease; }
+.detalhe-historico-animacao.aberta { grid-template-rows: 1fr; opacity: 1; }
+.detalhe-historico-animacao-conteudo { min-height: 0; overflow: hidden; }
+.detalhe-historico-dropdown { overscroll-behavior: contain; }
+@media (prefers-reduced-motion: reduce) { .detalhe-historico-animacao { transition: none; } }
+
+.agenda-calendario-modal { overscroll-behavior: contain; }
+
+@media (max-width: 480px) { .grupo-hora .btn-quando { flex: 1 1 0; min-width: 0; padding: 8px 4px; font-size: 13px; } }
+
+/* Ações legíveis e alinhadas também nas telas estreitas. */
+.detalhe-acoes-principais .btn { width: min(40%, 180px); white-space: normal; }
+@media (max-width: 480px) { .atender-real #atender-bloco-quando .acoes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; } .atender-real #atender-bloco-quando .btn-quando { min-width: 0; padding: 8px 2px; gap: 3px; font-size: 12px; } }
+
+.detalhe-acoes-principais .btn { min-height: 46px; }
+@media (max-width: 480px) { .atender-real #atender-bloco-quando .btn-quando svg { display: none; } }
+
+/* A sobreposição fica acima da navegação e a rolagem permanece no modal. */
+.detalhe-fundo-real, .atender-fundo-real, .perfil-fundo-real, .gaveta-fundo { z-index: 120; }
+.gaveta { z-index: 121; }
+.modal-fundo { z-index: 130; }
+.modal-corpo, .detalhe-modal-real, .atender-real, .perfil-real, .gaveta-corpo { overscroll-behavior: contain; }
+@supports (-webkit-touch-callout: none) { body.trava-scroll-modal { position: fixed; top: var(--trava-scroll-top); width: 100%; } }

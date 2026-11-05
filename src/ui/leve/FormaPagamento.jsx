@@ -9,7 +9,7 @@ export default function FormaPagamento({ quem, atual = '', aoEscolher, aoFechar 
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
   const caixa = useRef(null);
-  const abertoEm = useRef(typeof performance !== 'undefined' ? performance.now() : 0); // o clique que o toque longo gera ao soltar o dedo cai no fundo da janela recém-aberta: não fecha
+  const toqueNoFundo = useRef(false); // Exige um novo toque no fundo, sem confundir com o toque longo que abriu o modal.
   useEffect(() => {
     caixa.current?.focus();
     const tecla = (e) => { if (e.key === 'Escape') aoFechar(); };
@@ -26,7 +26,7 @@ export default function FormaPagamento({ quem, atual = '', aoEscolher, aoFechar 
     aoFechar();
   };
   return (
-    <div className="modal-fundo" onClick={(e) => { if (e.target === e.currentTarget && performance.now() - abertoEm.current > 700) aoFechar(); }} data-testid="forma-fundo">
+    <div className="modal-fundo" onPointerDown={(e) => { toqueNoFundo.current = e.target === e.currentTarget; }} onClick={(e) => { if (toqueNoFundo.current && e.target === e.currentTarget) aoFechar(); toqueNoFundo.current = false; }} data-testid="forma-fundo">
       <div className="modal" style={{ '--larg': '380px' }} role="dialog" aria-modal="true" aria-label="Forma de pagamento" tabIndex={-1} ref={caixa} data-testid="forma-pagamento">
         <div className="modal-topo"><b>Forma de pagamento</b></div>
         <div className="modal-corpo">

@@ -36,4 +36,12 @@ Use ao criar ou alterar telas do Agendz. Antes de editar, identifique comportame
      - Apenas itens com pelo menos 10 acessos nos últimos 7 dias sobem para o topo (`qtd >= 10`). Itens com menos de 10 cliques não contabilizam para subir e mantêm a ordem base.
      - A ordem exibida na interface permanece congelada enquanto o menu estiver aberto ou sob o cursor (`menuHover` / `menuAberto` ativos): a reorganização programada ocorre **exclusivamente quando o menu está recolhido** (fora do campo visual ativo). Quando o usuário abre ou passa o mouse de novo, os itens já se encontram na nova disposição, eliminando qualquer salto ou deslocamento brusco na frente do usuário.
 
+**Movimento e expansão de conteúdo:** ao abrir históricos, acordeões ou detalhes dentro de um modal, preserve a posição do topo e expanda para baixo com transição curta e suave. Limite a altura ao espaço visível e permita rolagem interna quando necessário; não desloque o fundo nem o foco. Respeite `prefers-reduced-motion` e garanta acesso por teclado e estados expandido/recolhido. Verifique em celular e computador com conteúdo curto e longo, inclusive a posição do modal antes e depois da abertura.
+
+8. **Bloqueio Obrigatório de Scroll Externo em Modais (Scroll Lock & Anti-Chaining)**:
+   - **Regra Geral**: Toda e qualquer sobreposição na tela (modal, diálogo de confirmação, drawer ou bottom sheet) deve travar imediatamente a rolagem da página externa (document.body com overflow: hidden ou container principal travado).
+   - **Isolamento de Rolagem Interna**: O container do modal e o backdrop devem conter overscroll-behavior: contain para impedir que o scroll interno encadeie para o fundo ao atingir o topo ou o fim do conteúdo (*scroll chaining*).
+   - **Restauração Limpa**: Ao fechar o modal (por botão, clique no backdrop ou tecla Escape), o scroll do fundo deve ser restaurado de imediato, sem saltos de posição.
+   - **Validação Automatizada por Código**: Validar em teste Playwright que window.scrollY não se altera ao disparar mouse.wheel() com o modal aberto e que document.body recebe a trava enquanto o modal existir no DOM.
+
 O desktop pode usar navegação lateral e o celular menu recolhível quando aprovados para a tela; mantenha todas as opções acessíveis, sem alterar regras ou permissões. Padrões visuais aprovados não substituem testes de funcionalidade.

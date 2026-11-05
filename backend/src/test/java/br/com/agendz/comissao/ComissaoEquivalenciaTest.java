@@ -9,7 +9,7 @@ import java.io.InputStream;
 import java.math.BigDecimal;
 import org.junit.jupiter.api.Test;
 
-/** Os MESMOS casos de tests/comissao-equivalencia.test.mjs (equivalencia/comissao.json), sem banco: a ordem serviço > funcionário > estabelecimento. */
+/** Os MESMOS casos de tests-jest/comissao-equivalencia.test.mjs (equivalencia/comissao.json), sem banco: a ordem serviço > funcionário > estabelecimento. */
 class ComissaoEquivalenciaTest {
 
     private static BigDecimal numero(JsonNode n) {

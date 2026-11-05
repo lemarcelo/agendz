@@ -16,7 +16,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 
-/** Espelha tests/cancelar.test.mjs, security.test.mjs (porta do WhatsApp) e coerencia.test.mjs (remetente estrangeiro, remarcar+cancelar). */
+/** Espelha tests-jest/cancelar.test.mjs, security.test.mjs (porta do WhatsApp) e coerencia.test.mjs (remetente estrangeiro, remarcar+cancelar). */
 class WhatsAppSeguroIT extends IntegrationTestBase {
 
     private String agendamentoDoMarcelo(int dias) throws Exception {

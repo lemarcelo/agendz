@@ -13,7 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-/** Os MESMOS casos de tests/avaliacoes-equivalencia.test.mjs (equivalencia/avaliacoes.json), sem banco: nota, texto, anonimato, motivo, modelo, média, período e WhatsApp. */
+/** Os MESMOS casos de tests-jest/avaliacoes-equivalencia.test.mjs (equivalencia/avaliacoes.json), sem banco: nota, texto, anonimato, motivo, modelo, média, período e WhatsApp. */
 class AvaliacoesEquivalenciaTest {
 
     private static JsonNode raiz() throws Exception {

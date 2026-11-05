@@ -11,7 +11,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 
-/** Espelha tests/security.test.mjs (login, recuperação) e coerencia.test.mjs (teto de pedidos de código). */
+/** Espelha tests-jest/security.test.mjs (login, recuperação) e coerencia.test.mjs (teto de pedidos de código). */
 class AuthSecurityIT extends IntegrationTestBase {
 
     private void login(String id, String senha, int esperado) throws Exception {

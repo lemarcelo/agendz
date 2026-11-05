@@ -4,22 +4,25 @@
   "type": "module",
   "scripts": {
     "build": "node build.mjs && node build.mjs --real",
-    "test": "node tools/rodar-testes.mjs",
+    "test": "node tools/rodar-testes.mjs && npm run test:jest",
     "e2e": "node tests/run-e2e.mjs",
-    "estatico": "node --test tests/estatico.test.mjs",
+    "estatico": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --runInBand --runTestsByPath tests/estatico.test.mjs",
     "verificar": "npm test && npm run build && npm run e2e",
     "autoria": "node tools/marcar-fonte.mjs",
     "verificar-autoria": "node tools/verificar-autoria.mjs",
     "testar:barbearia": "node tools/rodar-testes-tipo.mjs barbearia",
     "importar:barbearia": "node tools/importar-testes-barbearia.mjs",
-    "verificar-tudo": "npm run verificar && npm run testar:barbearia"
+    "verificar-tudo": "npm run verificar && npm run testar:barbearia",
+    "test:jest": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --runInBand"
   },
   "dependencies": {
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",
+    "jest": "^30.5.2",
     "playwright": "^1.56.0"
   },
   "license": "UNLICENSED"

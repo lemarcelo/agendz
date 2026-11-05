@@ -5,6 +5,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { agenda as api, boxes as apiBoxes, clientes as apiClientes, produtos as apiProdutos, regras as apiRegras, servicos as apiServicos } from '../../services/api-real.js';
 import { fmtMoney, startOfDay } from '../../domain/time.js';
+import { validarQuando } from '../../domain/validar-quando.js';
 import { formatarTelefone, somenteDigitos } from '../../domain/rules.js';
 import { Rot, capAtiva } from '../../domain/tipos.js';
 import { COMO_A_PAGINA_DO_CLIENTE, PADRAO_PAINEL, sanearOrdemAtender } from '../../domain/ordem-atender.js';
@@ -25,6 +26,7 @@ const PASSOS_ATENDER = [
 export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSalvar, aoFechar }) {
   const agora = Date.now();
   const [personalizar, setPersonalizar] = useState(false);
+  const [modoQuando, setModoQuando] = useState('agora');
   const [quando, setQuando] = useState(() => aoLocal(Math.ceil(agora / 3600000) * 3600000));
   const [busca, setBusca] = useState('');
   const [achados, setAchados] = useState([]);
@@ -110,7 +112,7 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
   const enviar = async (e) => {
     e.preventDefault();
     if (enviando) return;
-    if (personalizar && inicio === null) { setErro('Informe a data e a hora.'); return; }
+    if (personalizar) { const problema = validarQuando(inicio, modoQuando, Date.now()); if (problema) { setErro(problema); return; } }
     if (falta) { setErro(falta); return; }
     if (tipo === 'local' && !forma) { setErro('Escolha a forma de pagamento.'); return; }
     setEnviando(true); setErro('');
@@ -212,10 +214,11 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
       <fieldset className="atender-real-bloco" id="atender-bloco-quando" data-testid="atender-quando-bloco">
         <legend>Quando</legend>
         <div className="acoes">
-          <button type="button" className={`btn btn-quando${!personalizar ? ' btn-on' : ''}`} aria-pressed={!personalizar} onClick={() => { setPersonalizar(false); setErro(''); }} data-testid="atender-agora"><Icone n="clock" size={15} />Agora</button>
-          <button type="button" className={`btn btn-quando${personalizar ? ' btn-on' : ''}`} aria-pressed={personalizar} onClick={() => { setPersonalizar(true); setErro(''); }} data-testid="atender-quando"><Icone n="calendar" size={15} />Escolher data</button>
+          <button type="button" className={`btn btn-quando${modoQuando === 'atendido' ? ' btn-on' : ''}`} aria-pressed={modoQuando === 'atendido'} onClick={() => { setModoQuando('atendido'); setPersonalizar(true); setQuando(aoLocal(Math.floor((Date.now() - 60000) / 300000) * 300000)); setErro(''); }} data-testid="atender-atendido">Atendido</button>
+          <button type="button" className={`btn btn-quando${!personalizar ? ' btn-on' : ''}`} aria-pressed={!personalizar} onClick={() => { setModoQuando('agora'); setPersonalizar(false); setErro(''); }} data-testid="atender-agora"><Icone n="clock" size={15} />Agora</button>
+          <button type="button" className={`btn btn-quando${modoQuando === 'data' ? ' btn-on' : ''}`} aria-pressed={modoQuando === 'data'} onClick={() => { setModoQuando('data'); setPersonalizar(true); setErro(''); }} data-testid="atender-quando"><Icone n="calendar" size={15} />Escolher data</button>
         </div>
-        {personalizar && <Campo rotulo="Data e hora"><input type="datetime-local" step={300} value={quando} onChange={(e) => { setQuando(e.target.value); setErro(''); }} data-testid="atender-data" /></Campo>}
+        {personalizar && <Campo rotulo="Data e hora"><input type="datetime-local" step={300} max={modoQuando === 'atendido' ? aoLocal(Date.now()) : undefined} value={quando} onChange={(e) => { setQuando(e.target.value); setErro(''); }} data-testid="atender-data" /></Campo>}
         {retro && !bloqueado && (
           <Campo rotulo="Motivo do lançamento de um dia anterior">
             <input type="text" maxLength={300} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Por que não foi registrado na hora? (fica no histórico)" data-testid="atender-motivo-retro" />

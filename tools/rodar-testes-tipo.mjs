@@ -11,8 +11,11 @@ const env = { ...process.env, AGENDZ_TIPO: tipo };
 const arquivos = readdirSync(pasta);
 let falhas = 0;
 if (etapa === 'tudo' || etapa === 'unidade') {
-  const u = arquivos.filter((f) => /\.test\.mjs$/.test(f)).map((f) => `${pasta}/${f}`);
-  const r = spawnSync('node', ['--test', ...u], { env, stdio: 'inherit' });
+  const pastaJest = `tests-jest-${tipo}`;
+  const args = existsSync(pastaJest)
+    ? ['--experimental-vm-modules', './node_modules/jest/bin/jest.js', '--runInBand', '--testMatch', `**/${pastaJest}/**/*.test.mjs`]
+    : ['--test', ...arquivos.filter((f) => /\.test\.mjs$/.test(f)).map((f) => `${pasta}/${f}`)];
+  const r = spawnSync('node', args, { env, stdio: 'inherit' });
   if (r.status !== 0) falhas++;
 }
 if (etapa === 'tudo' || etapa === 'build') {

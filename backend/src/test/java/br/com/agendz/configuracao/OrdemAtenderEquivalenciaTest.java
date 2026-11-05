@@ -12,7 +12,7 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.TestFactory;
 
-/** B9b: os MESMOS casos de equivalencia/ordem-atender.json que tests/ordem-atender.test.mjs roda na API simulada. */
+/** B9b: os MESMOS casos de equivalencia/ordem-atender.json que tests-jest/ordem-atender.test.mjs roda na API simulada. */
 class OrdemAtenderEquivalenciaTest {
 
     @TestFactory

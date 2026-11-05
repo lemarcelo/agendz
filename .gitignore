@@ -17,3 +17,4 @@ smoke-relatorio.*
 shots-revisao/
 tests/*.png
 *.png
+deploy/homologacao/site/

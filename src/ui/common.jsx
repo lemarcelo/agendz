@@ -5,6 +5,7 @@ import { useOrdem } from './ordem.jsx';
 import { coresDaEquipe, corDaPessoa, fotoValida } from '../domain/foto.js';
 import { useStore } from './hooks.js';
 import { P } from './icones.js';
+import { useTravaScroll } from './travaScroll.js';
 
 
 export function Icon({ n, size = 18, className = '', stroke = 2 }) {

@@ -1,5 +1,5 @@
 {
- "descricao": "Casos de validação de cliente executados na API simulada (tests/clientes-equivalencia.test.mjs) e no servidor (ClientesEquivalenciaTest). Cada caso roda numa loja da estética automotiva sem clientes; só o último passo é conferido, os anteriores precisam dar certo.",
+ "descricao": "Casos de validação de cliente executados na API simulada (tests-jest/clientes-equivalencia.test.mjs) e no servidor (ClientesEquivalenciaTest). Cada caso roda numa loja da estética automotiva sem clientes; só o último passo é conferido, os anteriores precisam dar certo.",
  "casos": [
   {
    "nome": "nome vazio",

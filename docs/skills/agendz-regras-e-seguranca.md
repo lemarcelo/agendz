@@ -34,4 +34,4 @@ Fonte da verdade: `/home/claude/prompt-agendz-regras.md`. **Leia a seção antes
 9. **Isolamento entre lojas (Gate 3, F1):** usuário/token da loja A pedindo id da loja B → 404; token A com `Host` da B → 403; `Host` desconhecido → 404; `X-Forwarded-Host` de fora ignorado; arquivo da A no host da B → 404; consulta sem `app.loja_id` devolve zero linhas (RLS). Nenhum dado, link, token, cupom, mensagem ou arquivo atravessa lojas.
 
 ## Fluxo
-Domínio → `api.js` → tela; teste de domínio do caso novo e do conflito (inclua a operação no fuzz de `tests/conflitos.test.mjs` se mexe em horário, box ou dinheiro); prompt + histórico; `npm run verificar-tudo`. Relate falhas de segurança com: o que acontecia, impacto, correção.
+Domínio → `api.js` → tela; teste de domínio do caso novo e do conflito (inclua a operação no fuzz de `tests-jest/conflitos.test.mjs` se mexe em horário, box ou dinheiro); prompt + histórico; `npm run verificar-tudo`. Relate falhas de segurança com: o que acontecia, impacto, correção.

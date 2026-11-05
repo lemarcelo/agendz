@@ -16,7 +16,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MvcResult;
 
 /**
- * Equivalência simulada × real: os MESMOS casos de src/../tests/clientes-equivalencia.test.mjs (arquivo equivalencia/clientes.json) rodam no servidor.
+ * Equivalência simulada × real: os MESMOS casos de src/../tests-jest/clientes-equivalencia.test.mjs (arquivo equivalencia/clientes.json) rodam no servidor.
  * Cada caso começa sem clientes na loja da estética (Apex); só o último passo é conferido.
  */
 class ClientesEquivalenciaTest extends BaseApi {

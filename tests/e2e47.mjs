@@ -268,6 +268,26 @@ const textoDe = (p, t) => p.getByTestId(t).innerText();
   tipoLoja = 'barbearia';
 }
 
+// Atendido: data passada, botões sem sobreposição e envio do horário escolhido.
+for (const w of [390, 1366]) {
+  const { ctx, p } = await abrir({ width: w, height: 860 });
+  await p.getByTestId('atender-abrir').click();
+  await p.getByTestId(`atender-srv-${SRV_CORTE}`).check();
+  await p.getByTestId('atender-prox-quando').click();
+  const caixas = await Promise.all(['atender-atendido', 'atender-agora', 'atender-quando'].map(id => p.getByTestId(id).boundingBox()));
+  assert.ok(caixas.every(x => x && x.x >= 0 && x.x + x.width <= w));
+  for (let i = 1; i < caixas.length; i++) assert.ok(caixas[i-1].x + caixas[i-1].width <= caixas[i].x + 1 || caixas[i-1].y + caixas[i-1].height <= caixas[i].y + 1);
+  await p.getByTestId('atender-atendido').click();
+  assert.equal(await p.getByTestId('atender-atendido').getAttribute('aria-pressed'), 'true');
+  assert.match(await textoDe(p, 'atender-tipo'), /Atendimento já feito/);
+  if (process.env.AGENDZ_SHOTS) await p.screenshot({ path: process.env.AGENDZ_SHOTS + '/atendido-' + w + '-v2.png' });
+  await p.getByTestId('atender-prox-cliente').click();
+  await p.getByTestId('atender-telefone').fill('(11) 98888-7777');
+  await p.getByTestId('salvar-atender').click();
+  await p.getByTestId('atender-sucesso').waitFor();
+  assert.ok(ultimo().corpo.inicio, 'o horário passado é enviado');
+  await ctx.close();
+}
 await b.close(); servidor.close();
 assert.deepEqual(erros, [], erros.join('\n'));
 console.log('e2e47 ok');

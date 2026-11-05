@@ -18,7 +18,7 @@ Reaproveita o catálogo de capacidades; nenhuma tela pergunta "é psicologia?" (
 | **novo** `recorrencia` | sim | horário fixo semanal/quinzenal: gera as próximas N sessões (padrão 8), cada uma passa por `validarHorario` |
 | **novo** `pacientesPrivados` | sim | cada profissional só vê **os próprios** pacientes (seção 6) |
 | **novo** `usaProdutos`, `usaEstoque`, `usaCupom` | **não** | esconde Produtos, Material/estoque e Cupons; comissão vira "Repasse" (`vocab`) e continua opcional |
-Capacidade nova entra em **todos** os tipos (os atuais com o valor que já têm de fato) e no teste `tests/tipos.test.mjs`.
+Capacidade nova entra em **todos** os tipos (os atuais com o valor que já têm de fato) e no teste `tests-jest/tipos.test.mjs`.
 
 ## 3. Rótulos e vocabulário
 - `profissional`: **terapeuta** (cobre psicólogo, psicoterapeuta e terapeuta, vale para homem e mulher; se o artigo depender de `g`, evite frases com artigo ou acrescente `g: 'n'` tratado em `artigo()` sem quebrar `m`/`f`). `recurso`: sala. `loja`: consultório. `atendimento`: sessão. **Novo rótulo `cliente`: paciente** (nos outros tipos continua "cliente"; troque os textos fixos por `rot('cliente')`, com teste que procura "cliente" fixo, como já se faz com "esteticista").
@@ -59,13 +59,13 @@ Saber que alguém é paciente de psicólogo já é **dado de saúde, sensível**
 - **P0 Especificação:** este documento aprovado; atualizar `docs/F0-tipos-de-estabelecimento.md` (D1/D2 com a coluna Psicologia e as capacidades novas) e `docs/EQUIVALENCIA-BARBEARIA.md` (nada muda para os tipos atuais).
 - **P1 Tipo no catálogo:** `src/tipos/psicologia/` (definicao, seed fictício, templates, tema.css, catalogo.js), linha em `tipos.js`, rótulo `cliente`, capacidades novas em todos os tipos, esconder Produtos/Estoque/Cupons por capacidade, loja de demonstração (`lojas-demo.js`: "Consultório Aurora", nomes e pacientes **fictícios**), `tests/psicologia.test.mjs` + `tests/e2e39.mjs` (computador e 390 px com fonte larga, claro e escuro), Artifact republicado.
 - **P2 Modalidade online:** link do profissional, campo na sessão, lembrete com link, testes (link nunca em log/aviso).
-- **P3 Casal/família e horário fixo:** acompanhantes e recorrência com conflitos, testes em `tests/conflitos.test.mjs`.
+- **P3 Casal/família e horário fixo:** acompanhantes e recorrência com conflitos, testes em `tests-jest/conflitos.test.mjs`.
 - **P4 Sigilo:** pacientes privados por profissional, log sem dados pessoais, aceite LGPD, anonimizar, palavras proibidas nas mensagens, teste de IDOR entre terapeutas. **Nenhum cliente real deste tipo antes da P4 e do contrato de operador.**
 - **P5 (opcional, só se o Marcelo pedir):** grupo com vagas, pacotes de avaliação, recibo simples.
 - **P6 (opcional, só com decisão e revisão jurídica):** prontuário/evolução cifrado por campo, visível só ao autor, auditoria de leitura, prazo de guarda e exclusão.
 
 ## 9. Testes obrigatórios (além dos de cada fase)
-`tests/tipos.test.mjs` (sem texto fixo "cliente", "barbeiro" ou "esteticista" onde há rótulo); mensagens sem palavra proibida; dois terapeutas da mesma loja não se veem; log sem nome; link público sem quem ocupa; conflito de sessão e sala; recorrência com conflito; capacidade desligada esconde Produtos/Cupom/Estoque na UI **e** recusa na API; catálogo gerado igual ao seed+extras; 390 px sem rolagem lateral.
+`tests-jest/tipos.test.mjs` (sem texto fixo "cliente", "barbeiro" ou "esteticista" onde há rótulo); mensagens sem palavra proibida; dois terapeutas da mesma loja não se veem; log sem nome; link público sem quem ocupa; conflito de sessão e sala; recorrência com conflito; capacidade desligada esconde Produtos/Cupom/Estoque na UI **e** recusa na API; catálogo gerado igual ao seed+extras; 390 px sem rolagem lateral.
 
 ## 10. Decisões já tomadas (diga se discorda) e pendências do Marcelo
 - Nome do tipo na tela: **Psicologia e terapia**; slug `psicologia`; rótulo do profissional **terapeuta**, do cliente **paciente**.

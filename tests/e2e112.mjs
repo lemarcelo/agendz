@@ -1,7 +1,7 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
 // B6 (site real, servidor falso): mais de um proprietário. Promover, rebaixar ou cadastrar proprietário pede a SENHA de quem faz (campo `eq-confirma-senha`);
 // refazer a senha de outro proprietário também; perfil sem proprietário não pede. Senha errada = 403 do servidor e a sessão continua. As regras de verdade estão em UsuariosTest.
-// O mesmo fluxo no Artifact está em tests/proprietarios.test.mjs (unidade) e na parte 2 deste arquivo.
+// O mesmo fluxo no Artifact está em tests-jest/proprietarios.test.mjs (unidade) e na parte 2 deste arquivo.
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import http from 'node:http';

@@ -17,7 +17,7 @@ import java.util.TreeMap;
 import java.util.UUID;
 
 /**
- * Regras puras dos planos de serviço, espelho de src/domain/planos.js (mesmos casos em equivalencia/planos.json, rodados em tests/planos-equivalencia.test.mjs
+ * Regras puras dos planos de serviço, espelho de src/domain/planos.js (mesmos casos em equivalencia/planos.json, rodados em tests-jest/planos-equivalencia.test.mjs
  * e em PlanosEquivalenciaTest). Não conhece banco nem requisição. O saldo é sempre DERIVADO: quem chama traz os meses pagos e os horários que gastaram corte.
  * Meses são 'AAAA-MM' (como no simulador); os horários são lidos no fuso da loja.
  */

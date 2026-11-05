@@ -59,7 +59,7 @@ test('CPF completo não é exibido onde só o mascarado deve aparecer (pedidos d
 test('toda função de escrita do painel confere permissão ou sessão', () => {
   const t = ler('src/services/api.js');
   // Isentos de propósito: porta pública do WhatsApp (valida o telefone do remetente), login/recuperação, simulador do banco e relógio.
-  const isentos = new Set(['whatsapp', 'auth', 'store', 'bancoSimulado', 'publico']); // publico: sem sessão, por token pessoal e limites (ver tests/publico.test.mjs)
+  const isentos = new Set(['whatsapp', 'auth', 'store', 'bancoSimulado', 'publico']); // publico: sem sessão, por token pessoal e limites (ver tests-jest/publico.test.mjs)
   const ok = /exigir\(|R\.pode\(|podeAutorizarVinculo|podeEscopo|usuario\(\)|semPermissao|decidir\(|meuAgendamento|daCobranca|=== sessao/;
   const problemas = [];
   for (const bloco of t.matchAll(/^export const (\w+) = \{\n([\s\S]*?)\n\};$/gm)) {
@@ -80,7 +80,8 @@ test('todo arquivo de teste está no npm test (nenhum fica de fora)', () => {
   const cmd = pkg.scripts.test;
   const usaGlob = /tests\/\*\*?\/?\*?\.test\.mjs|tests\/\*\.test\.mjs/.test(cmd) || /node --test\s*$/.test(cmd.trim()) || /rodar-testes\.mjs/.test(cmd);
   if (!usaGlob) for (const f of feitos) assert.ok(cmd.includes(f), `${f} não roda no npm test`);
-  assert.ok(feitos.length >= 6);
+  assert.ok(feitos.length + readdirSync(join(raiz, 'tests-jest')).filter((f) => f.endsWith('.test.mjs')).length >= 6);
+  assert.match(cmd, /test:jest/);
 });
 
 test('todo e2e existente é executado pelo run-e2e (padrão e2e*.mjs)', () => {

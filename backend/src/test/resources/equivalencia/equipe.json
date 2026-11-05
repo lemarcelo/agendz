@@ -1,5 +1,5 @@
 {
- "descricao": "Casos de validação do cadastro da equipe executados na API simulada (tests/equipe-equivalencia.test.mjs) e no servidor (EquipeEquivalenciaTest). Passos em ordem; só o último é conferido, os anteriores precisam dar certo. '@n' = id da pessoa criada no passo n. A senha não entra aqui: no servidor ela é gerada e devolvida uma vez; a simulada recebe uma senha fixa do executor. Regras só do servidor (CPF com dígito verificador, telefone com DDD, senha temporária, refazer senha) ficam em UsuariosTest.",
+ "descricao": "Casos de validação do cadastro da equipe executados na API simulada (tests-jest/equipe-equivalencia.test.mjs) e no servidor (EquipeEquivalenciaTest). Passos em ordem; só o último é conferido, os anteriores precisam dar certo. '@n' = id da pessoa criada no passo n. A senha não entra aqui: no servidor ela é gerada e devolvida uma vez; a simulada recebe uma senha fixa do executor. Regras só do servidor (CPF com dígito verificador, telefone com DDD, senha temporária, refazer senha) ficam em UsuariosTest.",
  "casos": [
   {
    "nome": "nome vazio",

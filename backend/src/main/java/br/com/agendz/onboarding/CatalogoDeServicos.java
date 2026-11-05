@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * Serviços de exemplo de cada tipo de estabelecimento, para o assistente de primeiro acesso. Os arquivos `catalogo/<tipo>.json` são GERADOS
- * dos seeds do front (`node tools/gerar-catalogo.mjs`; `tests/catalogo.test.mjs` falha se divergirem). O servidor só aceita chaves daqui,
+ * dos seeds do front (`node tools/gerar-catalogo.mjs`; `tests-jest/catalogo.test.mjs` falha se divergirem). O servidor só aceita chaves daqui,
  * e só do tipo da loja (tipo vem da loja do Host, nunca do corpo).
  */
 @Component

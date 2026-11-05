@@ -1,0 +1,5 @@
+# TRECHO PARA REVISÃO: inserir no Caddy de entrada somente após conferência e autorização.
+h-estetica.agendz.io, h-barbearia.agendz.io, h-admin.agendz.io {
+  import seguranca
+  reverse_proxy agendz-homologacao-web:80
+}
