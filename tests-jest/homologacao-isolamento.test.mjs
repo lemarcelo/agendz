@@ -15,3 +15,9 @@ test('o gateway de homologação usa nomes exclusivos para as duas APIs', () => 
   assert.doesNotMatch(caddy, /reverse_proxy (?:api|admin-api):8080/);
   assert.match(compose, /networks:\s*\n\s*default:\s*\n\s*internal:\s*true/);
 });
+
+test('o proxy de produção encaminha os três domínios de homologação ao gateway exclusivo', () => {
+  const caddy = readFileSync('deploy/Caddyfile', 'utf8');
+  assert.match(caddy, /h-estetica\.\{\$DOMINIO\}, h-barbearia\.\{\$DOMINIO\}, h-admin\.\{\$DOMINIO\}\s*\{\s*import seguranca\s*reverse_proxy agendz-homologacao-web:80\s*\}/);
+  assert.doesNotMatch(caddy, /DOMININIO/);
+});

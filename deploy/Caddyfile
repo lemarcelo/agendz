@@ -81,7 +81,7 @@ https:// {
 }
 
 # Homologação isolada: apenas o gateway próprio recebe estes hosts.
-h-estetica.{$DOMININIO}, h-barbearia.{$DOMINIO}, h-admin.{$DOMINIO} {
+h-estetica.{$DOMINIO}, h-barbearia.{$DOMINIO}, h-admin.{$DOMINIO} {
   import seguranca
   reverse_proxy agendz-homologacao-web:80
 }
