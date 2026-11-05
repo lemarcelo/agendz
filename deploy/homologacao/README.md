@@ -18,7 +18,7 @@ A primeira instalação está na VPS, com dois bancos, APIs e um gateway própri
 
 - Na pasta própria de homologação, o script preparar-homologacao.sh pode criar o .env privado a partir de duas imagens fixadas por digest ou commit completo; ele não inicia serviços e não substitui credenciais existentes. Confira o valor de H_PROXY_CIDR e a rede antes de usar. Nunca copie o .env de produção.
 
-- Os jobs candidato-homologacao dos dois repositórios preparam versões somente após o CI passar, para branches homologacao/* e com a variável HOMOLOGACAO_AUTOMATICA=true em cada repositório. Eles guardam imagens e arquivos identificados pelo commit na VPS; não ativam serviços. Exigem VPS_KNOWN_HOSTS para verificar o servidor. Uma falha no envio pode deixar um diretório incompleto, sem o arquivo pronto, que deve ser inspecionado antes de nova tentativa.
+- Os jobs candidato-homologacao dos dois repositórios preparam versões somente após o CI passar, para branches homologacao/* e com a variável HOMOLOGACAO_AUTOMATICA=true em cada repositório. Eles guardam imagens e arquivos identificados pelo commit na VPS. Com HOMOLOGACAO_ATUALIZAR_AUTOMATICO=true, chamam o atualizador instalado na VPS após os testes; ele verifica a identidade da imagem, serializa atualizações e tenta restaurar a versão anterior se houver falha. Exigem VPS_KNOWN_HOSTS para verificar o servidor. Uma falha no envio pode deixar um diretório incompleto, sem o arquivo pronto, que deve ser inspecionado antes de nova tentativa.
 
 - Os candidatos ficam em /opt/agendz/homologacao/candidatos, separados dos arquivos ativos; cada repositório guarda sua versão pelo SHA completo. Isso exige acesso de escrita ao diretório /opt/agendz, sem sudo no job.
 
@@ -28,4 +28,8 @@ A primeira instalação está na VPS, com dois bancos, APIs e um gateway própri
 
 - O gateway participa de duas redes. Nunca use os nomes genéricos api ou admin-api em seu Caddy: eles também existem na rede de produção. Use os aliases exclusivos agendz-homologacao-api e agendz-homologacao-admin-api, execute o teste de isolamento e confirme a resolução no Docker antes de publicar qualquer alteração.
 
-- atualizar-site-homologacao.sh instala apenas o site de um candidato completo e guarda cópia do index anterior; não atualiza APIs nem bancos. A atualização automática das APIs e a promoção integral ainda precisam ser implementadas e testadas.
+- atualizar-site-homologacao.sh instala apenas o site de um candidato completo e guarda cópia do index anterior; não atualiza APIs nem bancos. O atualizador de ambiente separado também atualiza as APIs preservando os bancos; a promoção integral para produção ainda precisa ser validada.
+
+- Por pedido do Marcelo, os botões de WhatsApp continuam funcionando no navegador em homologação. Abrir uma conversa não envia por si só, mas a pessoa pode enviar manualmente: use contatos fictícios ou autorizados. A rede interna bloqueia integrações externas das APIs, não a navegação do dispositivo do usuário.
+
+- atualizar-ambiente-homologacao.sh atualiza um serviço por vez, preserva os volumes e recusa automaticamente alterações no Compose ou no Caddy: essas alterações de infraestrutura exigem validação separada. O teste testar-atualizacao.sh simula falhas da API e da troca do site sem usar Docker real.
