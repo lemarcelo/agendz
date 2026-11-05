@@ -109,13 +109,19 @@ const remarcarPara = async (p, hora, destino, { prof } = {}) => {
   atraso = 250;
   const antes = srv.quantas('PUT', '/status');
   await abrirCartao(p, '12:00'); await T(p, 'acao-cancelar').click();
-  await T(p, 'cancelar-sim').dblclick();
+  await Promise.all([
+    p.waitForResponse((r) => r.request().method() === 'PUT' && /\/status$/.test(new URL(r.url()).pathname)),
+    T(p, 'cancelar-sim').dblclick(),
+  ]);
   await p.waitForFunction(() => /Agendamento cancelado/.test(document.querySelector('[data-testid="agenda-aviso"]')?.textContent || ''));
   assert.equal(srv.quantas('PUT', '/status') - antes, 1, 'duplo clique em cancelar = uma chamada');
   await T(p, 'cancelados-resumo').click();
   await cartaoDe(p, '15:00').locator('[data-testid="cartao-abrir"]').click();
   const antes2 = srv.quantas('PUT', '/status');
-  await T(p, 'acao-reativar').dblclick();
+  await Promise.all([
+    p.waitForResponse((r) => r.request().method() === 'PUT' && /\/status$/.test(new URL(r.url()).pathname)),
+    T(p, 'acao-reativar').dblclick(),
+  ]);
   await p.waitForFunction(() => /reativado/.test(document.querySelector('[data-testid="agenda-aviso"]')?.textContent || ''));
   assert.equal(srv.quantas('PUT', '/status') - antes2, 1, 'duplo clique em reativar = uma chamada');
   await p.waitForFunction(() => [...document.querySelectorAll('[data-testid="cartao"][data-status="a_confirmar"]')].some((e) => /15:00/.test(e.textContent)), null, { timeout: 4000 }); // voltou para a lista como "a confirmar"
