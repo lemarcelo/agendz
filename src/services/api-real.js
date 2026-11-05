@@ -192,6 +192,11 @@ export const aparelhos = {
 
 // ---------- aviso com o app fechado (v130; regras no servidor: br.com.agendz.push): cada pessoa cuida só dos próprios aparelhos ----------
 export const push = {
+  async situacao(endpoint) {
+    if (typeof endpoint !== 'string' || !/^https:\/\//.test(endpoint) || endpoint.length > 600) return { ok: false, status: 0, erro: 'Aparelho inválido.' };
+    const r = await chamar('POST', '/api/push/situacao', { endpoint });
+    return r.ok ? { ok: true, inscrito: r.dados?.inscrito === true, id: ID_REDE.test(String(r.dados?.id)) ? r.dados.id : '' } : r;
+  },
   // GET /api/push/chave → { chave } pública (VAPID). 503 = recurso desligado neste servidor.
   async chave() {
     const r = await chamar('GET', '/api/push/chave');

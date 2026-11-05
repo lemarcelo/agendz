@@ -35,6 +35,7 @@ const servidor = http.createServer((req, res) => {
     if (u.pathname === '/api/auth/login') return json(200, sessao);
     if (u.pathname === '/api/push/chave') return estado.desligado ? json(503, { mensagem: 'Aviso com o app fechado ainda não está ligado neste servidor.' }) : json(200, { chave: CHAVE });
     if (u.pathname === '/api/push/inscricoes' && req.method === 'GET') return json(200, estado.itens);
+    if (u.pathname === '/api/push/situacao' && req.method === 'POST') return json(200, estado.itens.some((x) => x.id === MEU) ? { inscrito: true, id: MEU } : { inscrito: false });
     if (u.pathname === '/api/push/inscricoes' && req.method === 'POST') {
       let it = estado.itens.find((x) => x.id === MEU);
       if (!it) { it = { id: MEU, aparelho: c.aparelho || '', criadoEm: '2026-10-31T10:00:00Z', ultimoEnvio: null }; estado.itens.push(it); }
@@ -132,7 +133,7 @@ try {
   await p.getByTestId('push-ativar').click();
   await p.getByTestId('push-erro').waitFor();
   assert.match(await p.getByTestId('push-erro').innerText(), /bloqueou/);
-  assert.equal(feitas('POST', '/api/push/inscricoes').length, 2, 'nada novo foi ao servidor (só os dois da cena A: ligar e o reenvio do desligar)');
+  assert.equal(feitas('POST', '/api/push/inscricoes').length, 1, 'a recusa não registra aparelho nem transfere inscrições');
   assert.equal(await p.getByTestId('push-ativar').count(), 0);
   assert.equal(await p.getByTestId('push-bloqueado').count(), 1);
   await p.context().close();

@@ -79,6 +79,12 @@ public class Inscricoes {
         return banco.naLoja(jdbc -> itens(jdbc.query("select id, aparelho, criado_em, ultimo_envio from push_inscricao where usuario_id = ? order by criado_em, id", (rs, i) -> linha(rs), usuarioId)));
     }
 
+    /** Confere o aparelho atual sem devolver seu endpoint ao navegador. */
+    public Item doAparelho(UUID usuarioId, String endpoint) {
+        return banco.naLoja(jdbc -> itens(jdbc.query("select id, aparelho, criado_em, ultimo_envio from push_inscricao where usuario_id = ? and endpoint = ?",
+                (rs, i) -> linha(rs), usuarioId, endpoint))).stream().findFirst().orElse(null);
+    }
+
     public void remover(UUID usuarioId, UUID id) {
         int n = banco.naLoja(jdbc -> jdbc.update("delete from push_inscricao where id = ? and usuario_id = ?", id, usuarioId));
         if (n == 0) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, "Aparelho não encontrado.");

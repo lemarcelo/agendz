@@ -32,8 +32,11 @@ export default function PushAvisos({ janela }) {
   const recarregar = useCallback(async () => {
     const r = await push.listar();
     setItens(r.ok ? r.itens : []);
-    if (estadoDoPush(j) !== 'sem-suporte') setLigado(!!(await inscricaoLocal(j)));
-    else setLigado(false);
+    if (estadoDoPush(j) !== 'sem-suporte') {
+      const sub = await inscricaoLocal(j);
+      const atual = sub ? await push.situacao(sub.endpoint) : null;
+      setLigado(!!atual?.ok && atual.inscrito);
+    } else setLigado(false);
   }, [j]);
   useEffect(() => {
     let vivo = true;
@@ -77,11 +80,9 @@ export default function PushAvisos({ janela }) {
     try {
       const sub = await inscricaoLocal(j);
       if (sub) {
-        const corpo = corpoDaInscricao(sub, '');
-        if (corpo) { // reenviar a mesma inscrição devolve o id dela no servidor (mesmo endpoint = mesma linha)
-          const r = await push.inscrever(corpo);
-          if (r.ok && r.id) await push.remover(r.id);
-        }
+        const r = await push.situacao(sub.endpoint);
+        if (!r.ok) throw new Error('Não foi possível conferir este aparelho.');
+        if (r.inscrito && r.id) { const apagou = await push.remover(r.id); if (!apagou.ok) throw new Error(apagou.erro); }
         await sub.unsubscribe();
       }
       setMsg('Avisos desligados neste aparelho.');

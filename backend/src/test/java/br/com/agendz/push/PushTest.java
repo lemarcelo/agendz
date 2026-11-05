@@ -189,6 +189,16 @@ class PushTest extends BaseApi {
     // ---------------------------------------------------------------- testes
 
     @Test
+    void situacaoDoAparelhoRespeitaPessoaELoja() throws Exception {
+        Aparelho a = Aparelho.novo();
+        inscrever(colaborador, a, "Teste").andExpect(status().isCreated());
+        String corpo = "{\"endpoint\":\"" + a.endpoint() + "\"}";
+        como(post("/api/push/situacao"), OFFBOX, colaborador, corpo).andExpect(status().isOk()).andExpect(jsonPath("$.inscrito").value(true)).andExpect(jsonPath("$.id").exists());
+        como(post("/api/push/situacao"), OFFBOX, dono, corpo).andExpect(status().isOk()).andExpect(jsonPath("$.inscrito").value(false)).andExpect(jsonPath("$.id").doesNotExist());
+        como(post("/api/push/situacao"), DALFORNO, alan, corpo).andExpect(status().isOk()).andExpect(jsonPath("$.inscrito").value(false));
+    }
+
+    @Test
     void chavePublicaSoComLoginEComRecursoLigado() throws Exception {
         assertTrue(config.ligado());
         mvc.perform(get("/api/push/chave").with(host(OFFBOX))).andExpect(status().isUnauthorized());

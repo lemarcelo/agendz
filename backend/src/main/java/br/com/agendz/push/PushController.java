@@ -40,6 +40,8 @@ public class PushController {
     public record Inscrever(@NotBlank @Size(max = 600) String endpoint, @NotNull @Valid Chaves keys, @Size(max = 60) String aparelho) {
     }
 
+    public record Aparelho(@NotBlank @Size(max = 600) String endpoint) {}
+
     private final PushConfig config;
     private final Inscricoes inscricoes;
     private final EntregaPush entrega;
@@ -72,6 +74,12 @@ public class PushController {
     public Inscricoes.Item inscrever(@Valid @RequestBody Inscrever d, @AuthenticationPrincipal Jwt jwt) {
         exigirLigado();
         return inscricoes.inscrever(UUID.fromString(jwt.getSubject()), d.endpoint(), d.keys().p256dh(), d.keys().auth(), d.aparelho());
+    }
+
+    @PostMapping("/api/push/situacao")
+    public Map<String, Object> situacao(@Valid @RequestBody Aparelho a, @AuthenticationPrincipal Jwt jwt) {
+        Inscricoes.Item item = inscricoes.doAparelho(UUID.fromString(jwt.getSubject()), a.endpoint());
+        return item == null ? Map.of("inscrito", false) : Map.of("inscrito", true, "id", item.id());
     }
 
     @DeleteMapping("/api/push/inscricoes/{id}")

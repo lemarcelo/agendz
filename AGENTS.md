@@ -11,3 +11,5 @@ Leia também `CLAUDE.md` deste repositório e as orientações do workspace, qua
 
 - Uma mudança nas migrações bloqueia a atualização automática de homologação: revise a alteração e prepare backup antes de atualizar. Voltar a imagem não desfaz migrações do banco.
 - Ao migrar limites de texto para Zod, confira a contagem de caracteres especiais e emojis: algumas verificações do Zod podem divergir de String.length. Preserve o contrato e teste os limites.
+
+- Antes de executar testes locais de implementação, confira as mensagens mais recentes desta conversa e eventuais itens pendentes disponibilizados pelo ambiente; incorpore alterações compatíveis e agrupe sua validação em uma única rodada apropriada. Não afirme ter conferido filas que não estejam acessíveis e não adie testes necessários quando não houver mensagens disponíveis.
