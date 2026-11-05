@@ -27,7 +27,7 @@ esperado=$(cat "$candidato/image-id")
 [ "$(docker image inspect "$imagem" --format '{{.Id}}')" = "$esperado" ] || { echo 'A imagem não corresponde ao candidato.' >&2; exit 1; }
 bash verificar-isolamento.sh
 if [ "$1" = agendz ]; then
-  cmp -s compose.yml "$candidato/deploy/homologacao/compose.yml" && cmp -s Caddyfile "$candidato/deploy/homologacao/Caddyfile" || { echo 'A configuração de infraestrutura mudou; revisão necessária antes da atualização.' >&2; exit 1; }
+  cmp -s compose.yml "$candidato/deploy/homologacao/compose.yml" && cmp -s Caddyfile "$candidato/deploy/homologacao/Caddyfile" && cmp -s proxy-push.mjs "$candidato/deploy/homologacao/proxy-push.mjs" || { echo 'A configuração de infraestrutura mudou; revisão necessária antes da atualização.' >&2; exit 1; }
   for f in index-real.html sw.js manifest.webmanifest icone.svg; do [ -s "$candidato/$f" ] || { echo "Arquivo ausente: $f" >&2; exit 1; }; done
   grep -q 'faixa-homologacao' "$candidato/index-real.html" || { echo 'Identificação de homologação ausente.' >&2; exit 1; }
   [ -d site ] && [ ! -L site ] || { echo 'Diretório do site inválido.' >&2; exit 1; }

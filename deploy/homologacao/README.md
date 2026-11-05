@@ -12,6 +12,8 @@ A primeira instalação está na VPS, com dois bancos, APIs e um gateway própri
 
 - A rede interna da homologação bloqueia a saída direta das APIs e bancos para a internet. Isso impede integrações externas e também significa que recursos que dependam delas não funcionarão até existir uma liberação controlada. O gateway participa da rede de entrada apenas para receber as requisições; validar o isolamento efetivo na VPS antes de liberar o acesso.
 
+- O serviço `push-egress` é uma liberação controlada exclusivamente para Web Push: aceita somente CONNECT TLS na porta 443 para provedores conhecidos e recusa endereços internos ou reservados. Só ele participa da rede de saída; APIs e bancos continuam na rede interna. Configure pares VAPID separados de produção em `H_VAPID_PUBLICA`/`H_VAPID_PRIVADA` e `H_ADMIN_VAPID_PUBLICA`/`H_ADMIN_VAPID_PRIVADA`; sem eles o recurso permanece desligado. A implantação desse proxy e a migração do Admin exigem revisão e backup antes de alterar a infraestrutura existente.
+
 - O encadeamento dos dois Caddy precisa preservar com segurança o IP real do cliente: as APIs usam X-Forwarded-For para controles de acesso e auditoria. Validar o comportamento e a confiança no proxy de entrada antes de publicar; não confiar cegamente em cabeçalhos enviados pelo navegador.
 
 - H_PROXY_CIDR deve conter somente a sub-rede da rede Docker em que está o Caddy de entrada, confirmada por inspeção no momento do deploy. O gateway confia nos cabeçalhos encaminhados por essa sub-rede; todos os serviços com acesso a ela fazem parte desse limite de confiança. Validar IP real e tentativas de forjar cabeçalhos antes de abrir a homologação.

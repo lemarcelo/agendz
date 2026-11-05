@@ -1,6 +1,8 @@
 package br.com.agendz.push;
 
 import java.net.URI;
+import java.net.InetSocketAddress;
+import java.net.ProxySelector;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -8,13 +10,24 @@ import java.time.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Value;
 
 /** POST ao serviço de push (RFC 8030). Sem redirecionamento; tempo curto; 404/410 = inscrição morta. */
 @Component
 public class EnviadorHttp implements Enviador {
 
     private static final Logger LOG = LoggerFactory.getLogger(EnviadorHttp.class);
-    private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).followRedirects(HttpClient.Redirect.NEVER).build();
+    private final HttpClient http;
+
+    public EnviadorHttp(@Value("${agendz.push.proxy:}") String proxy) {
+        var b = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).followRedirects(HttpClient.Redirect.NEVER);
+        if (proxy != null && !proxy.isBlank()) {
+            URI u = URI.create(proxy);
+            if (!"http".equals(u.getScheme()) || u.getHost() == null || u.getPort() < 1 || u.getUserInfo() != null || u.getPath() == null || !u.getPath().isEmpty() || u.getQuery() != null || u.getFragment() != null) throw new IllegalArgumentException("Proxy de notificações inválido.");
+            b.proxy(ProxySelector.of(InetSocketAddress.createUnresolved(u.getHost(), u.getPort())));
+        }
+        this.http = b.build();
+    }
 
     @Override
     public Resultado enviar(String endpoint, byte[] corpo, String autorizacao, int ttlSegundos) {

@@ -38,6 +38,7 @@ services:
       AGENDZ_PERMITIR_QUERY: "false"
       VAPID_PUBLICA: ${H_VAPID_PUBLICA:-}
       VAPID_PRIVADA: ${H_VAPID_PRIVADA:-}
+      AGENDZ_PUSH_PROXY: http://push-egress:3128
       RECAPTCHA_CHAVE_SITE: ""
       RECAPTCHA_SEGREDO: ""
   admin-db:
@@ -72,6 +73,7 @@ services:
       ADMIN_CIFRA_CHAVE: ${H_ADMIN_CIFRA_CHAVE:?Defina H_ADMIN_CIFRA_CHAVE}
       ADMIN_VAPID_PUBLICA: ${H_ADMIN_VAPID_PUBLICA:-}
       ADMIN_VAPID_PRIVADA: ${H_ADMIN_VAPID_PRIVADA:-}
+      ADMIN_PUSH_PROXY: http://push-egress:3128
       AGENDZ_INTERNO_URL: http://api:8080
       AGENDZ_INTERNO_CHAVE: ${H_INTERNO_CHAVE:?Defina H_INTERNO_CHAVE}
       JAVA_TOOL_OPTIONS: -Xmx256m
@@ -88,12 +90,26 @@ services:
       proxy:
         aliases:
           - agendz-homologacao-web
+  push-egress:
+    image: node:22-alpine
+    restart: unless-stopped
+    user: node
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    command: ["node", "/opt/proxy-push.mjs"]
+    volumes:
+      - ./proxy-push.mjs:/opt/proxy-push.mjs:ro
+    networks:
+      default: {}
+      saida_push: {}
 networks:
   default:
     internal: true # APIs e bancos sem acesso direto a serviços externos.
   proxy:
     external: true
     name: agendz_default
+  saida_push: {}
 volumes:
   db_homologacao:
   admin_db_homologacao:

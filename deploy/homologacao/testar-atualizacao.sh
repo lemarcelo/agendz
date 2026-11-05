@@ -11,8 +11,10 @@ mkdir -p "$base/bin" "$raiz/ambiente/site" "$raiz/candidatos/agendz/$new/deploy/
 printf 'H_AGENDZ_IMAGE=agendz-homologacao-api:%s\nH_ADMIN_IMAGE=agendz-homologacao-admin:%s\nSEGREDO=valor-ficticio\n' "$old" "$old" > "$raiz/ambiente/.env"
 printf 'compose' > "$raiz/ambiente/compose.yml"
 printf 'caddy' > "$raiz/ambiente/Caddyfile"
+printf 'proxy' > "$raiz/ambiente/proxy-push.mjs"
 cp "$raiz/ambiente/compose.yml" "$raiz/candidatos/agendz/$new/deploy/homologacao/compose.yml"
 cp "$raiz/ambiente/Caddyfile" "$raiz/candidatos/agendz/$new/deploy/homologacao/Caddyfile"
+cp "$raiz/ambiente/proxy-push.mjs" "$raiz/candidatos/agendz/$new/deploy/homologacao/proxy-push.mjs"
 printf '#!/usr/bin/env bash\nexit 0\n' > "$raiz/ambiente/verificar-isolamento.sh"
 for f in index.html sw.js manifest.webmanifest icone.svg; do printf 'anterior' > "$raiz/ambiente/site/$f"; done
 printf 'faixa-homologacao nova' > "$raiz/candidatos/agendz/$new/index-real.html"
