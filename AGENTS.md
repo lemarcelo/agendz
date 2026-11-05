@@ -1,0 +1,10 @@
+# Orientações para agentes
+
+Leia também `CLAUDE.md` deste repositório e as orientações do workspace, quando disponíveis.
+
+- Valide entradas JavaScript com Zod, preservando as regras e mensagens existentes; as APIs Spring continuam responsáveis pela validação no servidor.
+- Use Jest para testes de lógica, Playwright para interações no navegador e JUnit/Spring Test com Testcontainers para o backend. Preserve os casos existentes ao migrar testes. Execute também `node tools/rodar-testes-tipo.mjs barbearia unidade` quando a mudança afetar a barbearia.
+- Helmet é middleware Node/Express e não se aplica às APIs Spring Boot; mantenha as proteções HTTP no Spring Security e no Caddy. Para senhas, mantenha BCryptPasswordEncoder; dados recuperáveis exigem criptografia.
+- Homologação usa bancos, volumes, rede, segredos e domínios próprios. O gateway deve usar os aliases exclusivos `agendz-homologacao-api` e `agendz-homologacao-admin-api`; nunca os nomes genéricos da produção. Valide `tests-jest/homologacao-isolamento.test.mjs` e a resolução real no Docker.
+- O WhatsApp aberto manualmente no navegador deve funcionar em homologação; use contatos fictícios ou autorizados. As APIs de homologação permanecem isoladas de integrações externas até que haja configuração de teste apropriada.
+- Envie candidatos para branches `homologacao/*` e aguarde os testes. Não publique produção nem integre em `main` sem aprovação específica. Enquanto as proteções novas não estiverem na `main`, um push nela ainda pode publicar produção e sobrescrever o roteamento de homologação.
