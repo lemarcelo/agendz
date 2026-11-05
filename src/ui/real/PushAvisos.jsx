@@ -82,7 +82,10 @@ export default function PushAvisos({ janela }) {
       if (sub) {
         const r = await push.situacao(sub.endpoint);
         if (!r.ok) throw new Error('Não foi possível conferir este aparelho.');
-        if (r.inscrito && r.id) { const apagou = await push.remover(r.id); if (!apagou.ok) throw new Error(apagou.erro); }
+        if (r.inscrito) {
+          if (!r.id) throw new Error('Não foi possível identificar este aparelho.');
+          const apagou = await push.remover(r.id); if (!apagou.ok) throw new Error(apagou.erro);
+        }
         await sub.unsubscribe();
       }
       setMsg('Avisos desligados neste aparelho.');

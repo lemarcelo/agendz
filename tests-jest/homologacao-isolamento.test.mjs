@@ -14,6 +14,11 @@ test('o gateway de homologação usa nomes exclusivos para as duas APIs', () => 
   assert.match(caddy, /reverse_proxy agendz-homologacao-admin-api:8080/);
   assert.doesNotMatch(caddy, /reverse_proxy (?:api|admin-api):8080/);
   assert.match(compose, /networks:\s*\n\s*default:\s*\n\s*internal:\s*true/);
+  const proxy = compose.split(/\n  push-egress:\s*\n/)[1]?.split(/\nnetworks:\s*\n/)[0] || '';
+  assert.match(proxy, /saida_push:/);
+  assert.doesNotMatch(api + admin, /saida_push:/);
+  assert.match(api, /AGENDZ_PUSH_PROXY: http:\/\/push-egress:3128/);
+  assert.match(admin, /ADMIN_PUSH_PROXY: http:\/\/push-egress:3128/);
 });
 
 test('o proxy de produção encaminha os três domínios de homologação ao gateway exclusivo', () => {

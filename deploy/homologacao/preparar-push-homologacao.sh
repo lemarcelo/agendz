@@ -9,6 +9,7 @@ command -v openssl >/dev/null || { echo 'OpenSSL indisponível.' >&2; exit 1; }
 tmp=$(mktemp .push-env.XXXXXXXX); par=$(mktemp .push-chave.XXXXXXXX)
 trap 'rm -f -- "$tmp" "$par"' EXIT
 cp -p .env "$tmp"; chmod 600 "$tmp"
+printf '\n' >> "$tmp"
 b64u() { base64 -w0 | tr '+/' '-_' | tr -d '='; }
 for prefixo in H_VAPID H_ADMIN_VAPID; do
   publica=$(grep -c "^${prefixo}_PUBLICA=" "$tmp" || true)

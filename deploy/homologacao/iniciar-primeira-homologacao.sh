@@ -29,7 +29,7 @@ imagem_admin="agendz-homologacao-admin:$2"
 docker image inspect "$imagem_agendz" "$imagem_admin" >/dev/null
 [ "$(docker image inspect "$imagem_agendz" --format '{{.Id}}')" = "$(cat "$agendz/image-id")" ] || { echo 'Imagem do Agendz divergente.' >&2; exit 1; }
 [ "$(docker image inspect "$imagem_admin" --format '{{.Id}}')" = "$(cat "$admin/image-id")" ] || { echo 'Imagem do painel divergente.' >&2; exit 1; }
-for arquivo in compose.yml Caddyfile preparar-homologacao.sh proxy-push.mjs; do
+for arquivo in compose.yml Caddyfile preparar-homologacao.sh proxy-push.mjs verificar-isolamento.sh; do
   [ -f "$agendz/deploy/homologacao/$arquivo" ] || { echo "Arquivo ausente: $arquivo" >&2; exit 1; }
 done
 for arquivo in index-real.html sw.js manifest.webmanifest icone.svg; do
@@ -40,6 +40,7 @@ cd "$ambiente"
 install -m 600 "$agendz/deploy/homologacao/compose.yml" compose.yml
 install -m 600 "$agendz/deploy/homologacao/Caddyfile" Caddyfile
 install -m 644 "$agendz/deploy/homologacao/proxy-push.mjs" proxy-push.mjs
+install -m 700 "$agendz/deploy/homologacao/verificar-isolamento.sh" verificar-isolamento.sh
 install -m 700 "$agendz/deploy/homologacao/preparar-homologacao.sh" preparar-homologacao.sh
 install -m 600 "$agendz/migracoes.sha256" migracoes-agendz.sha256
 install -m 600 "$admin/migracoes.sha256" migracoes-admin.sha256
