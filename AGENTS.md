@@ -10,3 +10,4 @@ Leia também `CLAUDE.md` deste repositório e as orientações do workspace, qua
 - Envie candidatos para branches `homologacao/*` e aguarde os testes. Não publique produção nem integre em `main` sem aprovação específica. Enquanto as proteções novas não estiverem na `main`, um push nela ainda pode publicar produção e sobrescrever o roteamento de homologação.
 
 - Uma mudança nas migrações bloqueia a atualização automática de homologação: revise a alteração e prepare backup antes de atualizar. Voltar a imagem não desfaz migrações do banco.
+- Ao migrar limites de texto para Zod, confira a contagem de caracteres especiais e emojis: algumas verificações do Zod podem divergir de String.length. Preserve o contrato e teste os limites.

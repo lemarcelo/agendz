@@ -38,6 +38,12 @@ test('texto: até 500 caracteres; 501 é recusado (não corta calado); sem texto
   assert.equal(AV.validarAvaliacao({ nota: 5, texto: 123 }).ok, false);
   assert.equal(AV.validarAvaliacao({ nota: 5, texto: '  ótimo\u0007  ' }).dados.texto, 'ótimo', 'tira controle e espaços');
 });
+test('validação preserva números textuais, campos nulos e limite UTF-16', () => {
+  assert.deepEqual(AV.validarAvaliacao({ nota: ' 05 ', texto: null, anonimo: null }), { ok: true, dados: { nota: 5, texto: '', anonimo: false } });
+  assert.equal(AV.validarAvaliacao({ nota: '1.0' }).ok, false);
+  assert.equal(AV.validarAvaliacao({ nota: 5, texto: '😀'.repeat(250) }).ok, true);
+  assert.equal(AV.validarAvaliacao({ nota: 5, texto: '😀'.repeat(251) }).ok, false);
+});
 test('anônimo: só booleano; padrão falso', () => {
   assert.equal(AV.validarAvaliacao({ nota: 4 }).dados.anonimo, false);
   assert.equal(AV.validarAvaliacao({ nota: 4, anonimo: true }).dados.anonimo, true);

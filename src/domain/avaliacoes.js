@@ -7,6 +7,7 @@
 // - O cliente chega por um token pessoal por agendamento (48 hex, só o HASH fica guardado, 90 dias, uso único). Telefone sozinho nunca basta.
 // - Anônimo: sem a regra da plataforma (`avaliacaoMostraAnonimo`, só o Admin muda) o painel recebe "Anônimo" e NUNCA a identidade (o DTO não a carrega).
 // - Fila em lote: sem API da Meta não há envio automático; é uma lista em que cada contato abre o wa.me (um clique por pessoa).
+import * as z from 'zod/mini';
 import { STATUS, servicosPorIds } from './rules.js';
 import { DIA, addDays, fromYmd, startOfDay, ymd } from './time.js';
 import { limparTexto } from './texto.js';
@@ -69,22 +70,29 @@ export function sha256hex(texto) {
 }
 
 // ---------- validação ----------
+const notaSchema = z.number().check(z.int(), z.minimum(NOTA_MIN), z.maximum(NOTA_MAX));
+const textoSchema = z.string();
+const textoLimitadoSchema = z.string().check(z.refine((texto) => texto.length <= TEXTO_MAX));
+const anonimatoSchema = z.boolean();
+const motivoBrutoSchema = z.string().check(z.refine((texto) => texto.length <= MOTIVO_MAX));
+const motivoLimpoSchema = z.string().check(z.refine((texto) => texto.length >= MOTIVO_MIN && texto.length <= MOTIVO_MAX));
+
 export function validarAvaliacao(entrada) {
   const d = entrada && typeof entrada === 'object' && !Array.isArray(entrada) ? entrada : {};
   const bruta = typeof d.nota === 'string' && /^\s*\d{1,2}\s*$/.test(d.nota) ? Number(d.nota) : d.nota;
-  if (typeof bruta !== 'number' || !Number.isInteger(bruta) || bruta < NOTA_MIN || bruta > NOTA_MAX) return { ok: false, erro: `Escolha uma nota de ${NOTA_MIN} a ${NOTA_MAX} estrelas.` };
+  if (!notaSchema.safeParse(bruta).success) return { ok: false, erro: `Escolha uma nota de ${NOTA_MIN} a ${NOTA_MAX} estrelas.` };
   let texto = '';
   if (d.texto !== undefined && d.texto !== null) {
-    if (typeof d.texto !== 'string') return { ok: false, erro: 'Comentário inválido.' };
-    if (d.texto.length > TEXTO_MAX) return { ok: false, erro: `O comentário pode ter até ${TEXTO_MAX} caracteres.` };
+    if (!textoSchema.safeParse(d.texto).success) return { ok: false, erro: 'Comentário inválido.' };
+    if (!textoLimitadoSchema.safeParse(d.texto).success) return { ok: false, erro: `O comentário pode ter até ${TEXTO_MAX} caracteres.` };
     texto = limparTexto(d.texto, TEXTO_MAX).trim();
   }
-  if (d.anonimo !== undefined && d.anonimo !== null && typeof d.anonimo !== 'boolean') return { ok: false, erro: 'Opção de anonimato inválida.' };
+  if (d.anonimo !== undefined && d.anonimo !== null && !anonimatoSchema.safeParse(d.anonimo).success) return { ok: false, erro: 'Opção de anonimato inválida.' };
   return { ok: true, dados: { nota: bruta, texto, anonimo: d.anonimo === true } };
 }
 export function validarMotivo(m) {
-  const t = typeof m === 'string' ? limparTexto(m, MOTIVO_MAX + 1).trim() : '';
-  return t.length >= MOTIVO_MIN && t.length <= MOTIVO_MAX && m.length <= MOTIVO_MAX ? { ok: true, motivo: t } : { ok: false, erro: `Explique o motivo (${MOTIVO_MIN} a ${MOTIVO_MAX} letras).` };
+  const t = textoSchema.safeParse(m).success ? limparTexto(m, MOTIVO_MAX + 1).trim() : '';
+  return motivoLimpoSchema.safeParse(t).success && motivoBrutoSchema.safeParse(m).success ? { ok: true, motivo: t } : { ok: false, erro: `Explique o motivo (${MOTIVO_MIN} a ${MOTIVO_MAX} letras).` };
 }
 
 // ---------- token pessoal por agendamento ----------
