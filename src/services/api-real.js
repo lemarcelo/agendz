@@ -1511,6 +1511,12 @@ function lerResumoPublico(d) {
   };
 }
 const consultaServicos = (ids) => (Array.isArray(ids) ? ids.filter((x) => ID.test(String(x))).slice(0, 5).join(',') : '');
+// B1: { servicoId: profissionalId } → "a:b,c:d" (só pares válidos; até 10)
+const consultaAtribuicoes = (a) => {
+  if (!a || typeof a !== 'object' || Array.isArray(a)) return '';
+  const pares = Object.entries(a).filter(([k, v]) => ID.test(String(k)) && ID.test(String(v))).slice(0, 10);
+  return pares.length ? pares.map(([k, v]) => `${k}:${v}`).join(',') : '';
+};
 export const publico = {
   // GET /api/publico/agendar
   async pagina() {
@@ -1518,24 +1524,25 @@ export const publico = {
     return r.ok ? { ok: true, pagina: lerPaginaPublica(r.dados) } : r;
   },
   // GET /api/publico/dias?de=AAAA-MM-DD&dias=14&servicos=id,id&profissionalId=&porte=   → ['AAAA-MM-DD', ...]  (porte só na estética)
-  async dias({ de, dias, servicoIds, profissionalId, porte }) {
+  async dias({ de, dias, servicoIds, profissionalId, porte, atribuicoes }) {
     if (!DIA_ISO.test(String(de)) || !consultaServicos(servicoIds)) return { ok: true, dias: [] };
-    const q = `de=${de}&dias=${Math.min(31, Math.max(1, Number(dias) || 1))}&servicos=${consultaServicos(servicoIds)}${ID.test(String(profissionalId)) ? `&profissionalId=${profissionalId}` : ''}${porteDoPublico(porte) ? `&porte=${porte}` : ''}`;
+    const q = `de=${de}&dias=${Math.min(31, Math.max(1, Number(dias) || 1))}&servicos=${consultaServicos(servicoIds)}${ID.test(String(profissionalId)) ? `&profissionalId=${profissionalId}` : ''}${porteDoPublico(porte) ? `&porte=${porte}` : ''}${consultaAtribuicoes(atribuicoes) ? `&atribuicoes=${consultaAtribuicoes(atribuicoes)}` : ''}`;
     const r = await chamar('GET', `/api/publico/dias?${q}`, undefined, undefined, PUB);
     return r.ok ? { ok: true, dias: listaDe(r.dados, 62).filter((x) => DIA_ISO.test(String(x))) } : r;
   },
   // GET /api/publico/horarios?data=AAAA-MM-DD&servicos=id,id&profissionalId=&porte=   → [{ inicio, profissionalId }]  (porte só na estética)
-  async horarios({ data, servicoIds, profissionalId, porte }) {
+  async horarios({ data, servicoIds, profissionalId, porte, atribuicoes }) {
     if (!DIA_ISO.test(String(data)) || !consultaServicos(servicoIds)) return { ok: true, horarios: [] };
-    const q = `data=${data}&servicos=${consultaServicos(servicoIds)}${ID.test(String(profissionalId)) ? `&profissionalId=${profissionalId}` : ''}${porteDoPublico(porte) ? `&porte=${porte}` : ''}`;
+    const q = `data=${data}&servicos=${consultaServicos(servicoIds)}${ID.test(String(profissionalId)) ? `&profissionalId=${profissionalId}` : ''}${porteDoPublico(porte) ? `&porte=${porte}` : ''}${consultaAtribuicoes(atribuicoes) ? `&atribuicoes=${consultaAtribuicoes(atribuicoes)}` : ''}`;
     const r = await chamar('GET', `/api/publico/horarios?${q}`, undefined, undefined, PUB);
     return r.ok ? { ok: true, horarios: listaDe(r.dados, 100).filter((x) => x && instante(x.inicio) !== null && IDV(x.profissionalId)).map((x) => ({ inicio: instante(x.inicio), profissionalId: x.profissionalId })) } : r;
   },
   // POST /api/publico/agendamentos  { nome, telefone, servicoIds, inicio, profissionalId?, cupomChave?, veiculo?, site }  → { agendamento, token, usouPlano }
-  async agendar({ nome, telefone, servicoIds, inicio, profissionalId, cupomChave, veiculo, site, selo, captcha }) {
+  async agendar({ nome, telefone, servicoIds, inicio, profissionalId, cupomChave, veiculo, site, selo, captcha, atribuicoes }) {
     if (!Number.isFinite(inicio)) return { ok: false, status: 0, erro: 'Escolha um dia e um horário.' };
     const corpo = { nome: texto(nome, 100), telefone: texto(telefone, 30), servicoIds: Array.isArray(servicoIds) ? servicoIds.filter((x) => ID.test(String(x))).slice(0, 10) : [], inicio: new Date(inicio).toISOString() };
     if (ID.test(String(profissionalId))) corpo.profissionalId = profissionalId;
+    if (consultaAtribuicoes(atribuicoes)) corpo.atribuicoes = Object.entries(atribuicoes).filter(([k, v]) => ID.test(String(k)) && ID.test(String(v))).slice(0, 10).map(([servicoId, profissionalId]) => ({ servicoId, profissionalId })); // B1
     if (typeof cupomChave === 'string' && cupomChave.trim()) corpo.cupomChave = texto(cupomChave.trim(), 40);
     if (typeof site === 'string' && site) corpo.site = texto(site, 100);
     if (typeof selo === 'string' && /^\d{1,12}\.[0-9a-f]{32}$/.test(selo)) corpo.selo = selo;
@@ -1547,7 +1554,9 @@ export const publico = {
     const r = await chamar('POST', '/api/publico/agendamentos', corpo, undefined, comProva(PUB, captcha));
     if (!r.ok) return r;
     const token = r.dados && typeof r.dados.token === 'string' && /^[0-9a-f]{48}$/.test(r.dados.token) ? r.dados.token : '';
-    return { ok: true, agendamento: lerResumoPublico(r.dados && r.dados.agendamento), token, usouPlano: !!(r.dados && r.dados.usouPlano === true) };
+    // B1: com profissionais diferentes vêm também os demais agendamentos da sequência, cada um com o seu token
+    const outros = listaDe(r.dados && r.dados.outros, 9).map((o) => ({ agendamento: lerResumoPublico(o && o.agendamento), token: o && typeof o.token === 'string' && /^[0-9a-f]{48}$/.test(o.token) ? o.token : '' })).filter((o) => o.agendamento.id && o.agendamento.inicio !== null);
+    return { ok: true, agendamento: lerResumoPublico(r.dados && r.dados.agendamento), token, usouPlano: !!(r.dados && r.dados.usouPlano === true), outros };
   },
   // POST /api/publico/meus  { tokens }  → [resumo]   (o token vai no corpo, nunca na URL)
   async meus(tokens, captcha) {

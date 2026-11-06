@@ -1606,6 +1606,8 @@ const P = (rota, metodo = 'POST') => ({ metodo, rota, origem: 'link' });
 const MUITAS = 'Muitas tentativas. Aguarde um pouco e tente de novo.';
 const tokenOk = (t) => typeof t === 'string' && t.length === 48;
 const servicosPorIdsPublico = (a) => R.servicosPorIds(state, a.servicoIds || [], a.porte).map((x) => x.nome);
+// B1: { servicoId: profissionalId } com até 10 pares (ou ausente)
+const atribuicoesOk = (a) => a === undefined || a === null || (typeof a === 'object' && !Array.isArray(a) && Object.keys(a).length <= 10 && Object.entries(a).every(([k, v]) => texto(k, 60) && texto(v, 60)));
 export const publico = {
 
   // GET /publico/planos  (catálogo à venda: nome, descrição, valor, cortes e serviços; nada de cliente)
@@ -1655,18 +1657,19 @@ export const publico = {
   // GET /publico/config  (só nome, serviços ativos e profissionais que atendem)
   config() { return PU.configPublica(state); },
   // GET /publico/dias-livres?profissionalId=&servicoIds=&porte=&de=&dias=
-  diasLivres({ profissionalId, servicoIds, porte, de, dias } = {}) {
-    if (!finito(de) || !porteOk(porte) || !Array.isArray(servicoIds) || servicoIds.length > 10 || (profissionalId && !texto(profissionalId, 60))) return [];
-    try { return PU.diasLivres(state, { profissionalId: profissionalId || '', servicoIds, porte, deTs: Number(de), dias, agora: now() }); } catch (e) { return []; }
+  diasLivres({ profissionalId, servicoIds, porte, de, dias, atribuicoes } = {}) {
+    if (!finito(de) || !porteOk(porte) || !Array.isArray(servicoIds) || servicoIds.length > 10 || (profissionalId && !texto(profissionalId, 60)) || !atribuicoesOk(atribuicoes)) return [];
+    try { return PU.diasLivres(state, { profissionalId: profissionalId || '', servicoIds, porte, deTs: Number(de), dias, agora: now(), atribuicoes }); } catch (e) { return []; }
   },
   // GET /publico/horarios?profissionalId=&servicoIds=&porte=&dia=  (devolve só { inicio, profissionalId }: nunca quem ocupa os outros horários)
-  horarios({ profissionalId, servicoIds, porte, dayTs } = {}) {
-    if (!finito(dayTs) || !porteOk(porte) || !Array.isArray(servicoIds) || servicoIds.length > 10 || (profissionalId && !texto(profissionalId, 60))) return [];
-    try { return PU.horariosPublicos(state, { profissionalId: profissionalId || '', servicoIds, porte, dayTs: Number(dayTs), agora: now() }); } catch (e) { return []; }
+  horarios({ profissionalId, servicoIds, porte, dayTs, atribuicoes } = {}) {
+    if (!finito(dayTs) || !porteOk(porte) || !Array.isArray(servicoIds) || servicoIds.length > 10 || (profissionalId && !texto(profissionalId, 60)) || !atribuicoesOk(atribuicoes)) return [];
+    try { return PU.horariosPublicos(state, { profissionalId: profissionalId || '', servicoIds, porte, dayTs: Number(dayTs), agora: now(), atribuicoes }); } catch (e) { return []; }
   },
   // POST /publico/agendamentos  (nome + telefone + placa, modelo e porte do veículo; nasce "Cliente agendou"; devolve o token pessoal)
   agendar(entrada) {
-    const d = pegar(entrada, permitidos(['nome', 'telefone', 'placa', 'marca', 'modelo', 'cor', 'porte', 'servicoIds', 'profissionalId', 'inicio', 'lembretes', 'site']));
+    const d = pegar(entrada, permitidos(['nome', 'telefone', 'placa', 'marca', 'modelo', 'cor', 'porte', 'servicoIds', 'profissionalId', 'inicio', 'lembretes', 'site', 'atribuicoes']));
+    if (!atribuicoesOk(d.atribuicoes)) return erro('Escolha o profissional de cada serviço.');
     // nome e telefone podem faltar se o dono tirou a obrigatoriedade (agendarPorLink confere); aqui só o tipo e o tamanho
     for (const [k, n] of [['nome', 60], ['telefone', 30]]) if (d[k] !== undefined && d[k] !== null && (typeof d[k] !== 'string' || d[k].length > n)) return erro('Dados inválidos.');
     for (const k of ['placa', 'marca', 'modelo', 'cor', 'porte']) if (d[k] !== undefined && d[k] !== null && !texto(d[k], 40)) return erro('Dados do veículo inválidos.');

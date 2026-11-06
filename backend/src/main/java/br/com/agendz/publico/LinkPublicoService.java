@@ -6,6 +6,7 @@ import br.com.agendz.comissao.ComissaoService;
 import br.com.agendz.configuracao.LinkAgendamento;
 import br.com.agendz.configuracao.PorteController;
 import br.com.agendz.configuracao.RegrasAtendimento;
+import br.com.agendz.agenda.AtribuicaoDeServicos;
 import br.com.agendz.agenda.Folga;
 import br.com.agendz.servicos.OrdemDosServicos;
 import br.com.agendz.configuracao.LocalDaLoja;
@@ -121,14 +122,23 @@ public class LinkPublicoService {
             @Size(max = 40) String cupomChave,
             @Size(max = 100) String site,
             @Valid VeiculoEntrada veiculo,
-            @Size(max = 120) String selo) {
+            @Size(max = 120) String selo,
+            @Size(max = 10) List<@Valid AtribuicaoPublica> atribuicoes) {
+    }
+
+    /** B1: quem faz cada serviço do pedido (só quando pessoas diferentes fazem os serviços). */
+    public record AtribuicaoPublica(UUID servicoId, UUID profissionalId) {
     }
 
     public record Resumo(UUID id, Instant inicio, Instant fim, String status, String rotulo, List<String> servicos, int duracao, BigDecimal total, BigDecimal desconto,
                          String cupom, String profissional, boolean ativo, boolean podeCancelar, VeiculoResumo veiculo) {
     }
 
-    public record Criado(Resumo agendamento, String token, boolean usouPlano) {
+    /** `outros`: nos pedidos com profissionais diferentes (B1), os demais agendamentos da sequência (cada um com o seu token). */
+    public record Criado(Resumo agendamento, String token, boolean usouPlano, List<Criado> outros) {
+        public Criado(Resumo agendamento, String token, boolean usouPlano) {
+            this(agendamento, token, usouPlano, List.of());
+        }
     }
 
     private record Svc(UUID id, String nome, BigDecimal preco, int duracaoMin, int intervaloMin, int antecedenciaH) {
@@ -212,20 +222,33 @@ public class LinkPublicoService {
 
     /** Horários livres de um dia (de 30 em 30 min, só dentro do expediente). `profissionalId` vazio = qualquer um (mostra o primeiro livre). */
     public List<Horario> horarios(String ip, LocalDate dia, List<UUID> servicoIds, UUID profissionalId, String porte) {
+        return horarios(ip, dia, servicoIds, profissionalId, porte, null);
+    }
+
+    /** `atribuicoes` (B1): serviço → profissional. Com pessoas diferentes, só os horários em que a sequência inteira cabe (cada um no horário do seu profissional). */
+    public List<Horario> horarios(String ip, LocalDate dia, List<UUID> servicoIds, UUID profissionalId, String porte, Map<UUID, UUID> atribuicoes) {
         Loja loja = LojaContext.exigir();
         consultaLiberada(loja, ip);
         if (dia == null) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha um dia.");
         return banco.naLoja(jdbc -> {
             LinkAgendamento.Config cfg = config(jdbc, loja);
             if (!cfg.ativo()) return List.<Horario>of();
-            List<Svc> servicos = servicosDoLink(jdbc, ids(servicoIds), porteDoPedido(jdbc, loja, porte, cfg.veiculoObrigatorio().contains("porte")));
-            Base base = base(jdbc, loja, profissionalId);
+            String porteEfetivo = porteDoPedido(jdbc, loja, porte, cfg.veiculoObrigatorio().contains("porte"));
+            List<Svc> servicos = servicosDoLink(jdbc, ids(servicoIds), porteEfetivo);
+            List<AtribuicaoDeServicos.Grupo> grupos = atribuicoes == null || atribuicoes.isEmpty() ? null : AtribuicaoDeServicos.agrupar(ids(servicoIds), atribuicoes);
+            if (grupos != null && grupos.size() > 1) return Capacidades.usaRecursoFisico(loja) ? List.<Horario>of() : horariosEmCadeia(jdbc, cfg, loja, dia, grupos, porteEfetivo, relogio.instant());
+            UUID doProfissional = grupos != null ? grupos.get(0).profissionalId() : profissionalId;
+            Base base = base(jdbc, loja, doProfissional);
 return horariosDoDia(jdbc, cfg, base, dia, servicos, relogio.instant(), false, null);
         });
     }
 
     /** Dias (a partir de `de`) que têm ao menos um horário livre, para pintar o calendário. Até 31 dias por consulta. */
     public List<LocalDate> dias(String ip, LocalDate de, int quantos, List<UUID> servicoIds, UUID profissionalId, String porte) {
+        return dias(ip, de, quantos, servicoIds, profissionalId, porte, null);
+    }
+
+    public List<LocalDate> dias(String ip, LocalDate de, int quantos, List<UUID> servicoIds, UUID profissionalId, String porte, Map<UUID, UUID> atribuicoes) {
         Loja loja = LojaContext.exigir();
         consultaLiberada(loja, ip);
         if (de == null) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha o primeiro dia.");
@@ -233,16 +256,68 @@ return horariosDoDia(jdbc, cfg, base, dia, servicos, relogio.instant(), false, n
         return banco.naLoja(jdbc -> {
             LinkAgendamento.Config cfg = config(jdbc, loja);
             if (!cfg.ativo() || n == 0) return List.<LocalDate>of();
-            List<Svc> servicos = servicosDoLink(jdbc, ids(servicoIds), porteDoPedido(jdbc, loja, porte, cfg.veiculoObrigatorio().contains("porte")));
-            Base base = base(jdbc, loja, profissionalId);
+            String porteEfetivo = porteDoPedido(jdbc, loja, porte, cfg.veiculoObrigatorio().contains("porte"));
+            List<Svc> servicos = servicosDoLink(jdbc, ids(servicoIds), porteEfetivo);
+            List<AtribuicaoDeServicos.Grupo> grupos = atribuicoes == null || atribuicoes.isEmpty() ? null : AtribuicaoDeServicos.agrupar(ids(servicoIds), atribuicoes);
             Instant agora = relogio.instant();
             List<LocalDate> livres = new ArrayList<>();
+            if (grupos != null && grupos.size() > 1) { // B1: cadeia de profissionais
+                if (Capacidades.usaRecursoFisico(loja)) return livres;
+                for (int i = 0; i < n; i++) {
+                    LocalDate d = de.plusDays(i);
+                    if (!horariosEmCadeia(jdbc, cfg, loja, d, grupos, porteEfetivo, agora).isEmpty()) livres.add(d);
+                }
+                return livres;
+            }
+            Base base = base(jdbc, loja, grupos != null ? grupos.get(0).profissionalId() : profissionalId);
             for (int i = 0; i < n; i++) {
                 LocalDate d = de.plusDays(i);
                 if (!horariosDoDia(jdbc, cfg, base, d, servicos, agora, true, null).isEmpty()) livres.add(d);
             }
             return livres;
         });
+    }
+
+    /**
+     * B1: horários de um dia em que a sequência inteira cabe. O primeiro serviço segue as regras de sempre (grade, expediente, ausência, ocupação); cada serviço seguinte começa
+     * quando o anterior termina e precisa caber no horário do SEU profissional ({@link #livreNoHorario}). Devolve o início, com o profissional do primeiro serviço.
+     */
+    private List<Horario> horariosEmCadeia(JdbcTemplate jdbc, LinkAgendamento.Config cfg, Loja loja, LocalDate dia, List<AtribuicaoDeServicos.Grupo> grupos, String porte, Instant agora) {
+        List<List<Svc>> porGrupo = new ArrayList<>();
+        for (AtribuicaoDeServicos.Grupo g : grupos) porGrupo.add(servicosDoLink(jdbc, g.servicoIds(), porte));
+        List<Horario> candidatos = horariosDoDia(jdbc, cfg, base(jdbc, loja, grupos.get(0).profissionalId()), dia, porGrupo.get(0), agora, false, null);
+        if (candidatos.isEmpty()) return candidatos;
+        Base todos = base(jdbc, loja, null);
+        Map<UUID, List<UUID>> vinculos = VinculoServicos.porServico(jdbc);
+        List<Horario> saida = new ArrayList<>();
+        for (Horario h : candidatos) {
+            Instant inicio = h.inicio();
+            boolean cabe = true;
+            for (int i = 0; i < grupos.size() && cabe; i++) {
+                List<Svc> sv = porGrupo.get(i);
+                if (i > 0) cabe = livreNoHorario(jdbc, todos, vinculos, grupos.get(i).profissionalId(), sv, inicio, agora);
+                inicio = inicio.plus(sv.stream().mapToInt(Svc::duracaoMin).sum(), ChronoUnit.MINUTES);
+            }
+            if (cabe) saida.add(new Horario(h.inicio(), grupos.get(0).profissionalId()));
+        }
+        return saida;
+    }
+
+    /** O profissional faz estes serviços começando em `inicio`? (mesmas conferências de {@link #gravar}: expediente, ausência, ocupação, antecedência, vínculo). */
+    private boolean livreNoHorario(JdbcTemplate jdbc, Base base, Map<UUID, List<UUID>> vinculos, UUID profissional, List<Svc> sv, Instant inicio, Instant agora) {
+        int duracao = sv.stream().mapToInt(Svc::duracaoMin).sum();
+        int antecedencia = sv.stream().mapToInt(Svc::antecedenciaH).max().orElse(0);
+        if (!inicio.isAfter(agora) || inicio.isBefore(agora.plus(antecedencia, ChronoUnit.HOURS))) return false;
+        if (base.profissionais().stream().noneMatch(x -> x.id().equals(profissional))) return false;
+        if (!VinculoServicos.realizaTodos(vinculos, profissional, sv.stream().map(Svc::id).toList())) return false;
+        var local = inicio.atZone(Fuso.BRASIL);
+        int dow = local.getDayOfWeek().getValue() % 7;
+        int ini = local.getHour() * 60 + local.getMinute();
+        if (!EscalaService.cabeNoDia(base.loja(), base.escalas().get(profissional), dow, ini, ini + duracao)) return false;
+        Instant fimOcupado = inicio.plus(duracao, ChronoUnit.MINUTES).plus(sv.get(sv.size() - 1).intervaloMin(), ChronoUnit.MINUTES);
+        if (Ausencias.ocupado(jdbc, profissional, inicio, fimOcupado)) return false;
+        Integer n = jdbc.queryForObject("select count(*) from agendamento where profissional_id = ? and status <> 'cancelado' and inicio < ? and fim_ocupado > ?", Integer.class, profissional, utc(fimOcupado), utc(inicio));
+        return n != null && n == 0;
     }
 
     private void consultaLiberada(Loja loja, String ip) {
@@ -459,7 +534,13 @@ return horariosDoDia(jdbc, cfg, base, dia, servicos, relogio.instant(), false, n
             barrados.registrar(loja.id(), BarradosDoLink.Motivo.FREQUENCIA, ipHash, telHash);
             throw new ErroDeNegocio(HttpStatus.TOO_MANY_REQUESTS, ERRO_MUITOS);
         }
-        return banco.naLoja(jdbc -> {
+        return banco.naLoja(jdbc -> p.atribuicoes() == null || p.atribuicoes().isEmpty()
+                ? gravar(jdbc, loja, ip, ipHash, telHash, p, nome, tel, servicoIds, comCupom)
+                : gravarEmSequencia(jdbc, loja, ip, ipHash, telHash, p, nome, tel, servicoIds, comCupom));
+    }
+
+    /** O pedido de UM profissional (o de sempre): confere tudo e grava o agendamento, o token e os avisos, na transação da loja. */
+    private Criado gravar(JdbcTemplate jdbc, Loja loja, String ip, String ipHash, String telHash, Pedido p, String nome, String tel, List<UUID> servicoIds, boolean comCupom) {
             Instant agora = relogio.instant();
             LinkAgendamento.Config cfg = config(jdbc, loja);
             if (!cfg.ativo()) throw new ErroDeNegocio(HttpStatus.FORBIDDEN, ERRO_DESLIGADO);
@@ -547,7 +628,46 @@ return horariosDoDia(jdbc, cfg, base, dia, servicos, relogio.instant(), false, n
             jdbc.update("insert into acesso_publico (loja_id, agendamento_id, token_hash, expira_em) values (?::uuid, ?, ?, ?)",
                     loja.id().toString(), id, hash(token), utc(agora.plus(TOKEN_DIAS, ChronoUnit.DAYS)));
             return new Criado(resumo(jdbc, id, agora), token, usouPlano);
-        });
+    }
+
+    /**
+     * B1: serviços de pessoas diferentes. Um agendamento por profissional, em sequência (o próximo começa quando o anterior termina), tudo na MESMA transação: se qualquer parte
+     * não couber, nenhuma é gravada. Ligados por `grupo_id` (V56). Cupom e plano ficam no primeiro. Estética (box único) fica de fora.
+     */
+    private Criado gravarEmSequencia(JdbcTemplate jdbc, Loja loja, String ip, String ipHash, String telHash, Pedido p, String nome, String tel, List<UUID> servicoIds, boolean comCupom) {
+        if (Capacidades.usaRecursoFisico(loja)) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Nesta loja, todos os serviços precisam ser do mesmo profissional.");
+        List<AtribuicaoDeServicos.Grupo> grupos = AtribuicaoDeServicos.agrupar(servicoIds, atribuicoesDe(p.atribuicoes()));
+        // trava quem atende (sempre na mesma ordem de id): duas pessoas pedindo ao mesmo tempo passam uma de cada vez
+        List<UUID> quem = grupos.stream().map(AtribuicaoDeServicos.Grupo::profissionalId).distinct().toList();
+        String marcas = String.join(",", quem.stream().map(x -> "?").toList());
+        if (jdbc.queryForList("select id from usuario where ativo and atende and id in (" + marcas + ") order by id for update", UUID.class, quem.toArray()).size() != quem.size()) {
+            throw new ErroDeNegocio(HttpStatus.CONFLICT, ERRO_HORARIO);
+        }
+        List<Criado> feitos = new ArrayList<>();
+        Instant inicio = p.inicio();
+        for (int i = 0; i < grupos.size(); i++) {
+            AtribuicaoDeServicos.Grupo g = grupos.get(i);
+            Pedido pg = new Pedido(p.nome(), p.telefone(), g.servicoIds(), inicio, g.profissionalId(), i == 0 ? p.cupomChave() : null, p.site(), p.veiculo(), p.selo(), null);
+            Criado c = gravar(jdbc, loja, ip, ipHash, telHash, pg, nome, tel, g.servicoIds(), comCupom && i == 0);
+            feitos.add(c);
+            inicio = c.agendamento().fim();
+        }
+        UUID grupoId = UUID.randomUUID();
+        for (Criado c : feitos) jdbc.update("update agendamento set grupo_id = ? where id = ?", grupoId, c.agendamento().id());
+        Criado primeiro = feitos.get(0);
+        return new Criado(primeiro.agendamento(), primeiro.token(), primeiro.usouPlano(), new ArrayList<>(feitos.subList(1, feitos.size())));
+    }
+
+    /** serviço → profissional, sem repetir nem faltar dado. */
+    static Map<UUID, UUID> atribuicoesDe(List<AtribuicaoPublica> lista) {
+        Map<UUID, UUID> m = new LinkedHashMap<>();
+        if (lista == null) return m;
+        for (AtribuicaoPublica a : lista) {
+            if (a == null || a.servicoId() == null || a.profissionalId() == null || m.put(a.servicoId(), a.profissionalId()) != null) {
+                throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha o profissional de cada serviço.");
+            }
+        }
+        return m;
     }
 
     // ---------------------------------------------------------------- os próprios horários

@@ -17,6 +17,8 @@ import { PORTE_PADRAO, formatarPlaca, limparVeiculoComRegras, placaValida, tipoP
 import { logoValida } from '../../domain/tema.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
 import { useCaptcha } from './Captcha.jsx';
+import ProfissionalPorServico from '../leve/ProfissionalPorServico.jsx';
+import { precisaAtribuirPorServico } from '../../domain/vinculo.js';
 
 // Datas sempre no fuso da loja (Brasília), não no do aparelho: o servidor entrega dias "AAAA-MM-DD" e horários em instantes.
 const FUSO = 'America/Sao_Paulo';
@@ -63,7 +65,7 @@ function salvarReservas(slug, dados) {
 const diaSemana = (ts) => new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'short', day: '2-digit', month: '2-digit' }).format(new Date(ts)).replace('.', '').replace(',', '');
 
 // Dia + horário livres: os dois vêm do servidor, que só devolve o que está livre. `fonte` ({ dias(de, n), horarios(dia) }) troca a consulta (remarcar um horário já marcado).
-function DiaHora({ chave, diasMax, servicoIds, profissionalId, porte, valor, aoEscolher, fonte, duracaoTotal = 30, dia, aoMudarDia }) {
+function DiaHora({ chave, diasMax, servicoIds, profissionalId, porte, valor, aoEscolher, fonte, duracaoTotal = 30, dia, aoMudarDia, atribuicoes }) {
   const hoje = useMemo(hojeBrasilia, []);
   const [janela, setJanela] = useState(14);
   const [dias, setDias] = useState(null);
@@ -81,7 +83,7 @@ function DiaHora({ chave, diasMax, servicoIds, profissionalId, porte, valor, aoE
     (async () => {
       const achados = [];
       for (let ini = 0; ini < limite; ini += 31) {
-        const r = fonte ? await fonte.dias(somaDias(hoje, ini), Math.min(31, limite - ini)) : await publico.dias({ de: somaDias(hoje, ini), dias: Math.min(31, limite - ini), servicoIds, profissionalId, porte });
+        const r = fonte ? await fonte.dias(somaDias(hoje, ini), Math.min(31, limite - ini)) : await publico.dias({ de: somaDias(hoje, ini), dias: Math.min(31, limite - ini), servicoIds, profissionalId, porte, atribuicoes });
         if (!vivo) return;
         if (!r.ok) { setErro(r.erro); setDias([]); return; }
         achados.push(...r.dias);
@@ -97,7 +99,7 @@ function DiaHora({ chave, diasMax, servicoIds, profissionalId, porte, valor, aoE
     if (!diaAtual) { setHoras(null); return undefined; }
     let vivo = true;
     setHoras(null);
-    (fonte ? fonte.horarios(diaAtual) : publico.horarios({ data: diaAtual, servicoIds, profissionalId, porte })).then((r) => { if (!vivo) return; if (r.ok) setHoras(r.horarios); else { setErro(r.erro); setHoras([]); } });
+    (fonte ? fonte.horarios(diaAtual) : publico.horarios({ data: diaAtual, servicoIds, profissionalId, porte, atribuicoes })).then((r) => { if (!vivo) return; if (r.ok) setHoras(r.horarios); else { setErro(r.erro); setHoras([]); } });
     return () => { vivo = false; };
   }, [chave, diaAtual]);
 
@@ -335,6 +337,13 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
   const profSel = pagina.profissionais.find((b) => b.id === barb);
   const servicosVisiveis = pagina.servicos.filter((x) => (profSel ? realiza(profSel, x.id) : pagina.profissionais.length === 0 || pagina.profissionais.some((b) => realiza(b, x.id))));
   const profissionaisVisiveis = pagina.profissionais.filter((b) => srv.every((sid) => realiza(b, sid)));
+  // B1: serviços feitos por pessoas diferentes → um campo de profissional por serviço (vazio e obrigatório); "Com quem?" some. Estética (box único) e escolha automática ficam como eram.
+  const [atrib, setAtrib] = useState({});
+  const porServicoPub = Object.fromEntries(srv.map((sid) => [sid, pagina.profissionais.filter((b) => realiza(b, sid)).map((b) => b.id)]));
+  const precisaAtribuir = !capAtiva('usaRecursoFisico') && !pagina.profissionalAutomatico && pagina.profissionais.every((b) => Array.isArray(b.servicoIds)) && precisaAtribuirPorServico(srv, porServicoPub);
+  useEffect(() => { setAtrib((a) => Object.fromEntries(Object.entries(a).filter(([sid, pid]) => srv.includes(sid) && (porServicoPub[sid] || []).includes(pid)))); }, [srv.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+  const faltaAtribuir = precisaAtribuir && srv.some((sid) => !atrib[sid]);
+  const atribuicoes = precisaAtribuir && !faltaAtribuir ? atrib : undefined;
   const preco = (x) => (usaVeiculo ? x.precos[porte || PORTE_PADRAO] ?? x.preco : x.preco); // sem porte (dono tirou a obrigatoriedade) vale o médio
   const minutos = (x) => (usaVeiculo ? x.duracoes[porte || PORTE_PADRAO] ?? x.duracao : x.duracao);
   const total = servicos.reduce((t, x) => t + preco(x), 0);
@@ -345,7 +354,7 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
   const estrela = (k) => (exV.includes(k) ? ' *' : ' (opcional)');
   const rotuloPorte = (pagina.portes || []).find((x) => x.id === porte)?.nome || '';
   const textoV = [modelo.trim(), placa && formatarPlaca(placa), rotuloPorte && `porte ${rotuloPorte.toLowerCase()}`].filter(Boolean).join(' · ');
-  const chave = `${srv.join(',')}|${barb}|${porte}`;
+  const chave = `${srv.join(',')}|${barb}|${porte}|${precisaAtribuir ? Object.entries(atrib).map(([k, v]) => `${k}:${v}`).sort().join(',') : ''}`;
   const nomeBarb = (id) => pagina.profissionais.find((b) => b.id === id)?.nome || `Qualquer ${rot('profissional')}`;
   const alternar = (id) => { setSrv((l) => (l.includes(id) ? l.filter((x) => x !== id) : l.length >= 5 ? l : [...l, id])); setEscolha(null); };
 
@@ -376,7 +385,7 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
       return;
     }
     setEnviando(true);
-    const r = await publico.agendar({ nome, telefone: tel, servicoIds: srv, profissionalId: escolha?.profissionalId || barb, inicio: escolha?.inicio, cupomChave: cupom, site: isca, selo: pagina.selo, captcha: cap.prova, ...(usaVeiculo ? { veiculo: { placa, marca, modelo, cor, porte } } : {}) });
+    const r = await publico.agendar({ nome, telefone: tel, servicoIds: srv, profissionalId: escolha?.profissionalId || barb, ...(atribuicoes ? { atribuicoes } : {}), inicio: escolha?.inicio, cupomChave: cupom, site: isca, selo: pagina.selo, captcha: cap.prova, ...(usaVeiculo ? { veiculo: { placa, marca, modelo, cor, porte } } : {}) });
     cap.gasta();
     setEnviando(false);
     if (!r.ok) {
@@ -391,7 +400,8 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
       return;
     }
     if (r.token) aoCriar({ id: r.agendamento.id, token: r.token }, { id: r.agendamento.id, inicio: r.agendamento.inicio, fim: r.agendamento.fim, servicos: r.agendamento.servicos, profissional: r.agendamento.profissional }, { nome, telefone: tel });
-    setFeito({ ...r.agendamento, usouPlano: r.usouPlano === true });
+    for (const o of r.outros || []) if (o.token) aoCriar({ id: o.agendamento.id, token: o.token }, { id: o.agendamento.id, inicio: o.agendamento.inicio, fim: o.agendamento.fim, servicos: o.agendamento.servicos, profissional: o.agendamento.profissional }, { nome, telefone: tel });
+    setFeito({ ...r.agendamento, partes: (r.outros || []).map((o) => o.agendamento), usouPlano: r.usouPlano === true });
     setEtapa(4);
   };
   const recomecar = () => { setEtapa(desl); setSrv([]); setEscolha(null); setFeito(null); setCupom(''); setErro(''); };
@@ -401,7 +411,9 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
       <section className="pub-cartao" data-testid="pub-feito" aria-live="polite">
         <div className="pub-ok"><Icone n="check" size={26} /></div>
         <h2>Pedido enviado</h2>
-        <p>{feito.servicos.join(', ')}{feito.veiculo ? ` · ${feito.veiculo.modelo} ${formatarPlaca(feito.veiculo.placa)}` : ''} com <b>{feito.profissional}</b><br /><b>{diaLongo(feito.inicio)}, {horaDe(feito.inicio)}</b></p>
+        {feito.partes && feito.partes.length > 0
+          ? <ul className="pub-partes" data-testid="pub-feito-partes">{[feito, ...feito.partes].map((x) => <li key={x.id}>{x.servicos.join(', ')} com <b>{x.profissional}</b> · <b>{diaLongo(x.inicio)}, {horaDe(x.inicio)}</b></li>)}</ul>
+          : <p>{feito.servicos.join(', ')}{feito.veiculo ? ` · ${feito.veiculo.modelo} ${formatarPlaca(feito.veiculo.placa)}` : ''} com <b>{feito.profissional}</b><br /><b>{diaLongo(feito.inicio)}, {horaDe(feito.inicio)}</b></p>}
         {feito.usouPlano && <p data-testid="pub-feito-plano"><Icone n="ticket" size={14} /> Este horário usa um atendimento do seu plano.</p>}
         {feito.desconto > 0 && <p data-testid="pub-feito-cupom"><Icone n="key" size={14} /> Cupom {feito.cupom}: −{fmtMoney(feito.desconto)} · a pagar {fmtMoney(feito.total - feito.desconto)}</p>}
         <p className="muted">{loja.nome} vai confirmar o seu horário. Você acompanha em “Meus agendamentos” neste aparelho.</p>
@@ -465,7 +477,8 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
               </label>
             ))}
           </div>
-          {!(pagina.profissionalAutomatico && !barb) && <>
+          {precisaAtribuir && <ProfissionalPorServico testid="pub-pps" servicos={servicos.map((x) => ({ id: x.id, nome: x.nome }))} rotuloProfissional={Rot('profissional')} opcoes={(sid) => pagina.profissionais.filter((b) => realiza(b, sid)).map((b) => ({ id: b.id, nome: b.nome }))} valor={atrib} aoMudar={(v) => { setAtrib(v); setEscolha(null); }} />}
+          {!precisaAtribuir && !(pagina.profissionalAutomatico && !barb) && <>
           <h3>Com quem?</h3>
           <div className="pub-barbs" role="group" aria-label={Rot('profissional')}>
             <button type="button" className={`pub-barb ${barb === '' ? 'on' : ''}`} aria-pressed={barb === ''} onClick={() => { setBarb(''); setEscolha(null); }} data-testid="pub-barb-qualquer">Qualquer um</button>
@@ -475,7 +488,7 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
           <div className="pub-rodape">
             {servicos.length > 0 && <span className="muted">{fmtDur(duracao)} · {fmtMoney(total)}</span>}
             {usaVeiculo && <Btn variante="fantasma" onClick={() => { setErro(''); setEtapa(0); }} data-testid="pub-voltar-0">Voltar</Btn>}
-            <Btn variante="primario" disabled={!srv.length} onClick={() => setEtapa(2)} data-testid="pub-continuar-1">Escolher horário</Btn>
+            <Btn variante="primario" disabled={!srv.length || faltaAtribuir} onClick={() => setEtapa(2)} data-testid="pub-continuar-1">Escolher horário</Btn>
           </div>
         </div>
       )}
@@ -484,7 +497,7 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
         <div className="pub-bloco">
           <h2>Quando?</h2>
           <p className="muted">Só aparecem horários livres. Toque no dia e no horário.</p>
-          <DiaHora chave={chave} diasMax={pagina.diasMax} servicoIds={srv} profissionalId={barb} porte={usaVeiculo ? porte : undefined} valor={escolha?.inicio} aoEscolher={setEscolha} duracaoTotal={duracao} dia={dia} aoMudarDia={setDia} />
+          <DiaHora chave={chave} diasMax={pagina.diasMax} servicoIds={srv} profissionalId={precisaAtribuir ? '' : barb} atribuicoes={atribuicoes} porte={usaVeiculo ? porte : undefined} valor={escolha?.inicio} aoEscolher={setEscolha} duracaoTotal={duracao} dia={dia} aoMudarDia={setDia} />
           {erro && <Aviso tipo="erro"><span data-testid="pub-erro">{erro}</span></Aviso>}
           <div className="pub-rodape">
             <Btn variante="fantasma" onClick={() => { setErro(''); setEtapa(1); }} data-testid={`pub-voltar-${1 - desl}`}>Voltar</Btn>

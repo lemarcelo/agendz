@@ -8,7 +8,9 @@ import { PORTE_PADRAO, formatarPlaca, limparVeiculoComRegras, placaValida, resum
 import { Aviso, Btn, Campo, Icon } from './common.jsx';
 import { LogoMarca, RodapePlataforma } from './Marca.jsx';
 import { useLocal, useStore } from './hooks.js';
-import { Rot, cap, rot } from '../domain/tipos.js';
+import { Rot, cap, capAtiva, rot } from '../domain/tipos.js';
+import ProfissionalPorServico from './leve/ProfissionalPorServico.jsx';
+import { precisaAtribuirPorServico } from '../domain/vinculo.js';
 
 // Página do cliente (sem login): pede um horário com nome e telefone e depois gerencia só os próprios agendamentos.
 // Fala só com `publico.*`: nunca vê quem ocupa os outros horários.
@@ -280,7 +282,7 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
   const total = servicos.reduce((t, x) => t + preco(x), 0);
   const duracao = servicos.reduce((t, x) => t + minutos(x), 0);
   const multiDia = servicos.some((x) => x.multiDia);
-  const chave = `${srv.join(',')}|${barb}|${porte}`;
+  const chave = `${srv.join(',')}|${barb}|${porte}|${precisaAtribuir ? Object.entries(atrib).map(([k, v]) => `${k}:${v}`).sort().join(',') : ''}`;
   const nomeBarb = (id) => cfg.profissionais.find((b) => b.id === id)?.nome || `Qualquer ${rot('profissional')}`;
   const alternar = (id) => { setSrv((l) => (l.includes(id) ? l.filter((x) => x !== id) : [...l, id])); setEscolha(null); };
   // A1: escolhendo o profissional, só aparecem os serviços dele; escolhendo serviços, só aparecem quem realiza todos
@@ -288,6 +290,13 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
   const profSel = cfg.profissionais.find((b) => b.id === barb);
   const servicosVisiveis = cfg.servicos.filter((x) => (profSel ? realizaPub(profSel, x.id) : cfg.profissionais.length === 0 || cfg.profissionais.some((b) => realizaPub(b, x.id))));
   const profissionaisVisiveis = cfg.profissionais.filter((b) => srv.every((sid) => realizaPub(b, sid)));
+  // B1: serviços feitos por pessoas diferentes → um campo de profissional por serviço (vazio e obrigatório); "Com quem?" some (estética e escolha automática ficam como eram)
+  const [atrib, setAtrib] = useState({});
+  const porServicoPub = Object.fromEntries(srv.map((sid) => [sid, cfg.profissionais.filter((b) => realizaPub(b, sid)).map((b) => b.id)]));
+  const precisaAtribuir = !capAtiva('usaRecursoFisico') && !cfg.profissionalAutomatico && precisaAtribuirPorServico(srv, porServicoPub);
+  useEffect(() => { setAtrib((a) => Object.fromEntries(Object.entries(a).filter(([sid, pid]) => srv.includes(sid) && (porServicoPub[sid] || []).includes(pid)))); }, [srv.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+  const faltaAtribuir = precisaAtribuir && srv.some((sid) => !atrib[sid]);
+  const atribuicoes = precisaAtribuir && !faltaAtribuir ? atrib : undefined;
   const categorias = useMemo(() => {
     const m = new Map();
     for (const x of servicosVisiveis) { const k = x.categoria || 'Serviços'; if (!m.has(k)) m.set(k, []); m.get(k).push(x); }
@@ -323,10 +332,10 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
       return;
     }
     setEnviando(true);
-    const r = publico.agendar({ nome, telefone: tel, ...(usaVeiculo ? { placa, marca, modelo, cor, ...(porte ? { porte } : {}) } : {}), servicoIds: srv, profissionalId: escolha?.profissionalId || barb, inicio: escolha?.inicio, site: isca });
+    const r = publico.agendar({ nome, telefone: tel, ...(usaVeiculo ? { placa, marca, modelo, cor, ...(porte ? { porte } : {}) } : {}), servicoIds: srv, profissionalId: escolha?.profissionalId || barb, ...(atribuicoes ? { atribuicoes } : {}), inicio: escolha?.inicio, site: isca });
     setEnviando(false);
     if (!r.ok) { setErro(r.erros[0]); if (/ocupado/.test(r.erros[0])) { setEscolha(null); setEtapa(2); } return; }
-    if (r.token) setToken(r.token); setFeito({ usouPlano: !!r.usouPlano, semTelefone: !r.token, inicio: escolha.inicio, profissionalId: escolha.profissionalId, servicos: servicos.map((x) => x.nome), veiculo: usaVeiculo ? [modelo.trim(), placa && formatarPlaca(placa)].filter(Boolean).join(' · ') : '' });
+    if (r.token) setToken(r.token); setFeito({ partes: r.partes && r.partes.length > 1 ? r.partes : null, usouPlano: !!r.usouPlano, semTelefone: !r.token, inicio: escolha.inicio, profissionalId: escolha.profissionalId, servicos: servicos.map((x) => x.nome), veiculo: usaVeiculo ? [modelo.trim(), placa && formatarPlaca(placa)].filter(Boolean).join(' · ') : '' });
     setEtapa(4);
   };
   const lembrar = (quer) => { const r = publico.lembretes(token, quer); if (r.ok) setLemb(quer); else setErro(r.erros[0]); };
@@ -337,7 +346,8 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
       <section className="pub-cartao" data-testid="pub-feito" aria-live="polite">
         <div className="pub-ok"><Icon n="check" size={26} stroke={3} /></div>
         <h2>Pedido enviado</h2>
-        <p>{feito.servicos.join(', ')}{feito.veiculo ? <> para <b>{feito.veiculo}</b></> : null} com <b>{nomeBarb(feito.profissionalId)}</b><br /><b>{fmtDayLong(feito.inicio)}, {fmtHM(feito.inicio)}</b></p>
+        {feito.partes ? <ul className="pub-partes" data-testid="pub-feito-partes">{feito.partes.map((x) => <li key={x.agendamentoId}>{x.servicoIds.map((id) => cfg.servicos.find((z) => z.id === id)?.nome).filter(Boolean).join(', ')} com <b>{nomeBarb(x.profissionalId)}</b> · <b>{fmtDayLong(x.inicio)}, {fmtHM(x.inicio)}</b></li>)}</ul> : null}
+        {!feito.partes && <p>{feito.servicos.join(', ')}{feito.veiculo ? <> para <b>{feito.veiculo}</b></> : null} com <b>{nomeBarb(feito.profissionalId)}</b><br /><b>{fmtDayLong(feito.inicio)}, {fmtHM(feito.inicio)}</b></p>}
         {feito.usouPlano && <p data-testid="pub-feito-plano"><Icon n="ticket" size={14} /> Este horário usa um atendimento do seu plano.</p>}
         <p className="muted">{!feito.semTelefone ? `${cfg.nome} vai confirmar o seu horário. Você acompanha em “Meus agendamentos”.` : `${cfg.nome} vai ver o seu pedido e confirmar o horário. Como não deixou telefone, a loja não consegue avisar você: guarde o dia e a hora.`}</p>
         {!feito.semTelefone && <div className="pub-pergunta" data-testid="pub-lembretes-pergunta">
@@ -413,7 +423,8 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
               </div>
             </div>
           ))}
-          {!(cfg.profissionalAutomatico && !barb) && <>
+          {precisaAtribuir && <ProfissionalPorServico testid="pub-pps" servicos={servicos.map((x) => ({ id: x.id, nome: x.nome }))} rotuloProfissional={Rot('profissional')} opcoes={(sid) => cfg.profissionais.filter((b) => realizaPub(b, sid)).map((b) => ({ id: b.id, nome: b.nome }))} valor={atrib} aoMudar={(v) => { setAtrib(v); setEscolha(null); }} />}
+          {!precisaAtribuir && !(cfg.profissionalAutomatico && !barb) && <>
           <h3>Com quem?</h3>
           <div className="pub-barbs" role="group" aria-label={Rot('profissional')}>
             <button type="button" className={`pub-barb ${barb === '' ? 'on' : ''}`} aria-pressed={barb === ''} onClick={() => { setBarb(''); setEscolha(null); }} data-testid="pub-barb-qualquer">Qualquer um</button>
@@ -423,7 +434,7 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
           <div className="pub-rodape">
             {servicos.length > 0 && <span className="muted">{multiDia ? 'Vários dias' : dur(duracao)} · {fmtMoney(total)}</span>}
             {usaVeiculo && <Btn variante="fantasma" onClick={() => { setErro(''); setEtapa(0); }} data-testid="pub-voltar-0">Voltar</Btn>}
-            <Btn variante="primario" disabled={!srv.length} onClick={() => setEtapa(2)} data-testid="pub-continuar-1">Escolher horário</Btn>
+            <Btn variante="primario" disabled={!srv.length || faltaAtribuir} onClick={() => setEtapa(2)} data-testid="pub-continuar-1">Escolher horário</Btn>
           </div>
         </div>
       )}
@@ -433,8 +444,8 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
           <h2>{multiDia ? 'Quando você deixa o carro?' : 'Quando?'}</h2>
           <p className="muted">Só aparecem horários livres. Toque no dia e no horário.{multiDia ? ` A retirada é combinada com ${cfg.nome}.` : ''}</p>
           <DiaHora chave={chave} diasMax={cfg.diasMax} valor={escolha?.inicio}
-            obterDias={(de, n) => publico.diasLivres({ profissionalId: barb, servicoIds: srv, porte, de, dias: n })}
-            obterHorarios={(d) => publico.horarios({ profissionalId: barb, servicoIds: srv, porte, dayTs: d })}
+            obterDias={(de, n) => publico.diasLivres({ profissionalId: precisaAtribuir ? '' : barb, servicoIds: srv, porte, de, dias: n, atribuicoes })}
+            obterHorarios={(d) => publico.horarios({ profissionalId: precisaAtribuir ? '' : barb, servicoIds: srv, porte, dayTs: d, atribuicoes })}
             aoEscolher={setEscolha} duracaoTotal={duracao} />
           {erro && <Aviso tipo="erro">{erro}</Aviso>}
           <div className="pub-rodape">

@@ -1,14 +1,14 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:f2513d1752 */
 // Autoagendamento pelo link: o cliente (sem login) vê só horários livres, pede um horário e depois gerencia só os próprios agendamentos.
 // Tudo aqui é regra pura. A API pública (`publico.*` em api.js) acrescenta os limites de uso; nada daqui devolve dado de outro cliente.
-import { STATUS, acharConflitos, errosServicoIds, limparTexto, retiradaDe, semBoxAtivo, servicosDoAg, statusVisual, telefoneBrasileiro, telefoneNacional, validarHorario } from './rules.js';
+import { STATUS, acharConflitos, duracaoMin, errosServicoIds, limparTexto, retiradaDe, semBoxAtivo, servicosPorIds, servicosDoAg, statusVisual, telefoneBrasileiro, telefoneNacional, validarHorario } from './rules.js';
 import { PORTE_PADRAO, porteAtivo, portesAtivos, precoNoPorte, resumoVeiculo } from './veiculos.js';
 import { faixasDoProfissional } from './schedule.js';
 import { DIA, MIN, fmtDate, fmtHM, startOfDay } from './time.js';
 import * as E from './engine.js';
 import { CAMPOS_VEICULO_EXIGIVEIS, limparVeiculoComRegras } from './veiculos.js';
 import { cap, rot, tipoDe } from './tipos.js';
-import { realizaServico } from './vinculo.js';
+import { agruparAtribuicao, realizaServico } from './vinculo.js';
 import { servicosNaOrdemDaLoja } from './ordem-servicos.js';
 import { limitesDoDia, ordemPorFolga, profissionalAutomatico } from './profissional-auto.js';
 
@@ -53,7 +53,32 @@ function candidatosDoLink(s, profissionalId, dayTs) {
 
 // Só [{ inicio, profissionalId }] — nunca quem ocupa os outros horários nem qual box. `profissionalId` vazio = qualquer profissional (o primeiro livre).
 // O porte do veículo define a duração; sem ele não há horário para mostrar. Um horário só aparece se houver profissional E box livres.
-export function horariosPublicos(s, { profissionalId, servicoIds, porte, dayTs, agora, ignoreId, boxPreferido, limite = Infinity }) {
+// B1: profissional por serviço. `atribuicoes` = { servicoId: profissionalId }. Com pessoas diferentes, só os horários em que a sequência inteira cabe: o primeiro serviço segue as
+// regras de sempre; cada seguinte começa quando o anterior termina e precisa caber no horário do SEU profissional. Estética (box único) fica de fora. Espelho de LinkPublicoService.horariosEmCadeia.
+function gruposDoLink(servicoIds, atribuicoes) {
+  if (!atribuicoes || typeof atribuicoes !== 'object' || !Object.keys(atribuicoes).length) return null;
+  const g = agruparAtribuicao(servicoIds, atribuicoes);
+  return g.erro ? { erro: g.erro } : g.grupos;
+}
+function horariosEmCadeia(s, { grupos, porte, dayTs, agora }) {
+  if (cap(s.estabelecimento, 'usaRecursoFisico')) return [];
+  const dur = grupos.map((g) => duracaoMin(servicosPorIds(s, g.servicoIds, porte)));
+  const primeiros = horariosPublicos(s, { profissionalId: grupos[0].profissionalId, servicoIds: grupos[0].servicoIds, porte, dayTs, agora });
+  return primeiros.filter((h) => {
+    let t = h.inicio + dur[0] * MIN;
+    for (let i = 1; i < grupos.length; i++) {
+      if (!horarioLivre(s, { profissionalId: grupos[i].profissionalId, inicio: t, servicoIds: grupos[i].servicoIds, porte, agora })) return false;
+      t += dur[i] * MIN;
+    }
+    return true;
+  }).map((h) => ({ inicio: h.inicio, profissionalId: grupos[0].profissionalId }));
+}
+
+export function horariosPublicos(s, { profissionalId, servicoIds, porte, dayTs, agora, ignoreId, boxPreferido, limite = Infinity, atribuicoes }) {
+  const grupos = gruposDoLink(servicoIds, atribuicoes);
+  if (grupos && grupos.erro) return [];
+  if (grupos && grupos.length > 1) return horariosEmCadeia(s, { grupos, porte, dayTs, agora });
+  if (grupos) { servicoIds = grupos[0].servicoIds; profissionalId = grupos[0].profissionalId; }
   const cfg = configLink(s);
   if (!cfg.ativo || semBoxAtivo(s) || (cap(s.estabelecimento, 'precoPorPorte') && !porteAtivo(porte || PORTE_PADRAO)) || errosServicoIds(s, servicoIds, { ativos: true }) || !Number.isFinite(dayTs)) return [];
   const dia = startOfDay(dayTs);
@@ -73,12 +98,12 @@ export function horariosPublicos(s, { profissionalId, servicoIds, porte, dayTs, 
 }
 
 // Dias (início de cada dia) que têm ao menos um horário livre, a partir de `deTs`.
-export function diasLivres(s, { profissionalId, servicoIds, porte, deTs, dias, agora, ignoreId, boxPreferido }) {
+export function diasLivres(s, { profissionalId, servicoIds, porte, deTs, dias, agora, ignoreId, boxPreferido, atribuicoes }) {
   const n = Math.min(Math.max(Number(dias) || 0, 0), 60);
   const out = [];
   for (let i = 0; i < n; i++) {
     const d = startOfDay(deTs + i * DIA + 12 * 3600000);
-    if (horariosPublicos(s, { profissionalId, servicoIds, porte, dayTs: d, agora, ignoreId, boxPreferido, limite: 1 }).length) out.push(d);
+    if (horariosPublicos(s, { profissionalId, servicoIds, porte, dayTs: d, agora, ignoreId, boxPreferido, limite: 1, atribuicoes }).length) out.push(d);
   }
   return out;
 }
@@ -154,7 +179,33 @@ export function validarCodigo(s, telefone, codigo, agora) {
 }
 
 // ---------- pedido de horário ----------
+// B1: um pedido com pessoas diferentes vira um agendamento por profissional, em sequência, ligados por `grupoId` (tudo ou nada: a API simulada só grava se todos derem certo).
+function agendarEmSequencia(s, d, grupos, agora) {
+  if (cap(s.estabelecimento, 'usaRecursoFisico')) return { ok: false, erros: ['Nesta loja, todos os serviços precisam ser do mesmo profissional.'] };
+  const grupoId = `g${++s.seq}`;
+  const feitos = [];
+  const partes = [];
+  let inicio = d.inicio;
+  for (let i = 0; i < grupos.length; i++) {
+    const { atribuicoes, ...resto } = d;
+    const r = agendarUm(s, { ...resto, servicoIds: grupos[i].servicoIds, profissionalId: grupos[i].profissionalId, inicio, ...(i === 0 ? {} : { cupomChave: undefined }) }, agora);
+    if (!r.ok) return r;
+    const a = s.agendamentos.find((x) => x.id === r.agendamentoId);
+    if (a) { a.grupoId = grupoId; inicio = retiradaDe(s, a); partes.push({ agendamentoId: a.id, inicio: a.inicio, profissionalId: a.profissionalId, servicoIds: [...a.servicoIds] }); }
+    feitos.push(r);
+  }
+  return { ...feitos[0], outros: feitos.slice(1), partes };
+}
+
 export function agendarPorLink(s, d, agora) {
+  const grupos = gruposDoLink(d.servicoIds, d.atribuicoes);
+  if (grupos && grupos.erro) return { ok: false, erros: [grupos.erro] };
+  if (grupos && grupos.length > 1) return agendarEmSequencia(s, d, grupos, agora);
+  if (grupos) { const { atribuicoes, ...resto } = d; d = { ...resto, profissionalId: grupos[0].profissionalId }; }
+  return agendarUm(s, d, agora);
+}
+
+function agendarUm(s, d, agora) {
   const cfg = configLink(s);
   if (!cfg.ativo || semBoxAtivo(s)) return { ok: false, erros: [ERRO_DESLIGADO] };
   if (d.site) return { ok: false, erros: ['Não foi possível agendar. Tente de novo.'] }; // campo isca preenchido: robô

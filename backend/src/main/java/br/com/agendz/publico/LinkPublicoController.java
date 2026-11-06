@@ -43,18 +43,36 @@ public class LinkPublicoController {
         return servico.pagina();
     }
 
+    /** B1: `atribuicoes=servicoId:profissionalId,...` → serviço → profissional (formato inválido = 400). */
+    private static java.util.Map<UUID, UUID> atribuicoesDe(List<String> brutas) {
+        if (brutas == null || brutas.isEmpty()) return null;
+        if (brutas.size() > 10) throw new br.com.agendz.erro.ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha o profissional de cada serviço.");
+        java.util.Map<UUID, UUID> m = new java.util.LinkedHashMap<>();
+        for (String b : brutas) {
+            String[] par = b == null ? new String[0] : b.split(":");
+            try {
+                if (par.length != 2 || m.put(UUID.fromString(par[0]), UUID.fromString(par[1])) != null) throw new IllegalArgumentException();
+            } catch (IllegalArgumentException e) {
+                throw new br.com.agendz.erro.ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha o profissional de cada serviço.");
+            }
+        }
+        return m;
+    }
+
     /** GET /api/publico/horarios?data=2026-10-29&servicos=id,id&profissionalId=&porte= (porte só na estética): horários livres do dia (só início e profissional). */
     @GetMapping("/api/publico/horarios")
     public List<LinkPublicoService.Horario> horarios(@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate data, @RequestParam List<UUID> servicos,
-                                                     @RequestParam(required = false) UUID profissionalId, @RequestParam(required = false) String porte, HttpServletRequest req) {
-        return servico.horarios(ip(req), data, servicos, profissionalId, porte);
+                                                     @RequestParam(required = false) UUID profissionalId, @RequestParam(required = false) String porte,
+                                                     @RequestParam(required = false) List<String> atribuicoes, HttpServletRequest req) {
+        return servico.horarios(ip(req), data, servicos, profissionalId, porte, atribuicoesDe(atribuicoes));
     }
 
     /** GET /api/publico/dias?de=2026-10-29&dias=14&servicos=id,id&profissionalId=: dias com ao menos um horário livre. */
     @GetMapping("/api/publico/dias")
     public List<LocalDate> dias(@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate de, @RequestParam int dias, @RequestParam List<UUID> servicos,
-                                @RequestParam(required = false) UUID profissionalId, @RequestParam(required = false) String porte, HttpServletRequest req) {
-        return servico.dias(ip(req), de, dias, servicos, profissionalId, porte);
+                                @RequestParam(required = false) UUID profissionalId, @RequestParam(required = false) String porte,
+                                @RequestParam(required = false) List<String> atribuicoes, HttpServletRequest req) {
+        return servico.dias(ip(req), de, dias, servicos, profissionalId, porte, atribuicoesDe(atribuicoes));
     }
 
     /** POST /api/publico/agendamentos: pede um horário (entra a confirmar). Devolve o resumo e o token de acesso, uma vez. */
