@@ -2,6 +2,7 @@
 
 Leia também `CLAUDE.md` deste repositório e as orientações do workspace, quando disponíveis.
 
+- **Limite de contexto (qualquer LLM):** mantenha o contexto abaixo de **350k tokens**. Antes de chegar lá: atualize o `SESSAO.md`, escreva um prompt de continuação (estado Git, regras do Marcelo em vigor, decisões assumidas, o que foi feito, o que falta em ordem, armadilhas do ambiente), grave-o em `PROMPT-CONTINUACAO.md` na raiz do workspace (sobrescrito) e peça o `/compact` (a LLM não o executa). **Depois do compact ninguém precisa colar nada: a própria LLM lê `PROMPT-CONTINUACAO.md` e `SESSAO.md` assim que a conversa recomeça e segue do ponto registrado.** Regra completa no `CLAUDE.md` da raiz.
 - Valide entradas JavaScript com Zod, preservando as regras e mensagens existentes; as APIs Spring continuam responsáveis pela validação no servidor.
 - Use Jest para testes de lógica, Playwright para interações no navegador e JUnit/Spring Test com Testcontainers para o backend. Preserve os casos existentes ao migrar testes. Execute também `node tools/rodar-testes-tipo.mjs barbearia unidade` quando a mudança afetar a barbearia.
 - Helmet é middleware Node/Express e não se aplica às APIs Spring Boot; mantenha as proteções HTTP no Spring Security e no Caddy. Para senhas, mantenha BCryptPasswordEncoder; dados recuperáveis exigem criptografia.

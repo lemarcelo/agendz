@@ -1,7 +1,6 @@
 # Agendz: regras fixas do projeto
 
-> ⛔ **BLOQUEIO TEMPORÁRIO DO CLAUDE (Até sexta-feira, 06/11/2026):** Uso proibido de Claude. Utilize Gemini ou GPT.
-
+- **Limite de contexto (qualquer LLM):** mantenha o contexto abaixo de **350k tokens**. Antes de chegar lá: atualize o `SESSAO.md`, escreva um prompt de continuação (estado Git, regras do Marcelo em vigor, decisões assumidas, o que foi feito, o que falta em ordem, armadilhas do ambiente), grave-o em `PROMPT-CONTINUACAO.md` na raiz do workspace (sobrescrito) e peça o `/compact` (a LLM não o executa). **Depois do compact ninguém precisa colar nada: a própria LLM lê `PROMPT-CONTINUACAO.md` e `SESSAO.md` assim que a conversa recomeça e segue do ponto registrado.** Regra completa no `CLAUDE.md` da raiz.
 
 > **Retomando o trabalho? Leia primeiro `../SESSAO.md` na raiz do workspace (e `docs/BACKLOG-FUTURO.md`)** para seguir a ordem estrita oficial do backlog (itens 1 a 10).
 

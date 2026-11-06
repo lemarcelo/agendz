@@ -5,6 +5,8 @@ description: Use ao alterar qualquer coisa no Agendz (agenda multi-tenant React;
 
 # Manutenção, testes, visual e entrega do Agendz
 
+- **Limite de contexto (qualquer LLM):** mantenha o contexto abaixo de **350k tokens**. Antes de chegar lá: atualize o `SESSAO.md`, escreva um prompt de continuação (estado Git, regras do Marcelo em vigor, decisões assumidas, o que foi feito, o que falta em ordem, armadilhas do ambiente), grave-o em `PROMPT-CONTINUACAO.md` na raiz do workspace (sobrescrito) e peça o `/compact` (a LLM não o executa). **Depois do compact ninguém precisa colar nada: a própria LLM lê `PROMPT-CONTINUACAO.md` e `SESSAO.md` assim que a conversa recomeça e segue do ponto registrado.** Regra completa no `CLAUDE.md` da raiz.
+
 Projeto: `/home/claude/agendz` (React 19 + esbuild, API simulada `src/services/api.js`, domínio puro `src/domain`, **tudo de um tipo em `src/tipos/<tipo>/`**). Regras fixas: `CLAUDE.md`. Documento vivo: `/home/claude/prompt-agendz-regras.md` (seção do assunto + "Histórico de implementação"). Artifact: `https://claude.ai/artifact/JVXrYoWFyrxi3nAEfo28QQ` (sempre `dist/agenda.html`, mesma `url`, sem `icon` na republicação, título "Agendz").
 
 ## Passos de toda mudança
