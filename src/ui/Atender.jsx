@@ -253,9 +253,6 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
               </div>
             )}
             {porteDefinido && <p className="muted" data-testid="atender-porte-info">Preços e tempos do porte {ROTULO_PORTE[porteAtual].toLowerCase()}.</p>}
-            <div className="acoes" style={{ marginTop: 8 }}>
-              <Btn variante="primario" type="button" onClick={() => focarBloco('servicos', 1)} data-testid="atender-prox-servicos">Escolher serviços →</Btn>
-            </div>
           </fieldset>
         ) : null,
     servicos: (
@@ -268,9 +265,6 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
             </label>
           </div>
         )} />
-        <div className="acoes" style={{ marginTop: 8 }}>
-          <Btn variante="primario" type="button" onClick={() => focarBloco('quando', usaVeiculo ? 2 : 1)} data-testid="atender-prox-quando">Definir data e hora →</Btn>
-        </div>
       </div>
     ),
     quando: (
@@ -304,9 +298,6 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
             {v && v.erros.map((e) => <p key={e} className="msg-conflito" data-testid="erro-horario"><Icon n="alert" size={15} /> {e}</p>)}
             {v && !v.erros.length && !v.pendentes.length && <p className="msg-ok"><Icon n="check" size={15} /> Horário livre · {v.retirada && v.dias > 1 ? `entrada ${fmtDate(inicio)} ${fmtHM(inicio)}, retirada prevista ${fmtDate(v.retirada)} ${fmtHM(v.retirada)} (${v.dias} dias)` : `${fmtHM(inicio)} às ${fmtHM(v.retirada || inicio + (v.duracao || 0) * MIN)}`}{v.boxId ? ` · ${nomeBox(st, v.boxId)}` : ''}</p>}
           </div>
-        </div>
-        <div className="acoes" style={{ marginTop: 8 }}>
-          <Btn variante="primario" type="button" onClick={() => focarBloco('cliente', usaVeiculo ? 3 : 2)} data-testid="atender-prox-cliente">Identificar cliente e pagamento →</Btn>
         </div>
       </div>
     ),

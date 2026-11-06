@@ -30,6 +30,7 @@ for (const vp of [{ width: 1366, height: 860 }, { width: 390, height: 800 }]) {
   await T('atender').click();
   await p.locator('[data-testid^="atender-srv-"]').first().check();
   assert.match(await p.locator('label.campo', { has: T('atender-nome') }).innerText(), /Apelido/, `${onde}: o campo se chama Apelido`);
+  assert.equal(await p.locator('[data-testid^="atender-prox-"]').count(), 0, `${onde}: o Atender da demonstração mostra tudo numa página: sem botões de próxima etapa`);
   await T('atender-telefone').fill('51 98888-0003');
   await salvarAtender(p); await T('salvar-atender').waitFor({ state: 'detached' });
   // o atendimento local de agora aparece na Agenda do dia
