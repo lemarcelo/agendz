@@ -2,6 +2,7 @@
 import { caminhoHttps } from '../domain/localizacao.js';
 import React, { useEffect, useMemo, useState } from 'react';
 import { MODO_DEMO, publico, store } from '../services/api.js';
+import { TOKEN_DEMO } from '../domain/link-profissional.js';
 import { DIAS_CURTOS, fmtDayLong, fmtHM, fmtMoney, maiuscula1, startOfDay, ymd } from '../domain/time.js';
 import { formatarTelefone, telefoneBrasileiro } from '../domain/rules.js';
 import { PORTE_PADRAO, formatarPlaca, limparVeiculoComRegras, placaValida, resumoVeiculo, tipoPlaca } from '../domain/veiculos.js';
@@ -288,7 +289,12 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
   // A1: escolhendo o profissional, só aparecem os serviços dele; escolhendo serviços, só aparecem quem realiza todos
   const realizaPub = (b, sid) => !b || !Array.isArray(b.servicoIds) || b.servicoIds.includes(sid);
   const profSel = cfg.profissionais.find((b) => b.id === barb);
-  const servicosVisiveis = cfg.servicos.filter((x) => (profSel ? realizaPub(profSel, x.id) : cfg.profissionais.length === 0 || cfg.profissionais.some((b) => realizaPub(b, x.id))));
+  // B3: profissional vindo do link: os serviços aparecem todos; se o escolhido não for dele, ele sai e "Com quem?" lista só quem faz (aviso derivado)
+  const profDoLink = cfg.profissionais.find((b) => b.id === profissionalInicial);
+  const naoFazDoLink = !!profDoLink && srv.some((sid) => !realizaPub(profDoLink, sid));
+  const avisoProf = naoFazDoLink && barb !== profDoLink.id ? `${profDoLink.nome} não faz esse serviço. Escolha quem faz.` : '';
+  useEffect(() => { if (profDoLink && barb === profDoLink.id && srv.some((sid) => !realizaPub(profDoLink, sid))) { setBarb(''); setEscolha(null); } }, [srv.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+  const servicosVisiveis = cfg.servicos.filter((x) => ((profSel && !(profDoLink && profSel.id === profDoLink.id)) ? realizaPub(profSel, x.id) : cfg.profissionais.length === 0 || cfg.profissionais.some((b) => realizaPub(b, x.id))));
   const profissionaisVisiveis = cfg.profissionais.filter((b) => srv.every((sid) => realizaPub(b, sid)));
   // B1: serviços feitos por pessoas diferentes → um campo de profissional por serviço (vazio e obrigatório); "Com quem?" some (estética e escolha automática ficam como eram)
   const [atrib, setAtrib] = useState({});
@@ -425,6 +431,7 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
           ))}
           {precisaAtribuir && <ProfissionalPorServico testid="pub-pps" servicos={servicos.map((x) => ({ id: x.id, nome: x.nome }))} rotuloProfissional={Rot('profissional')} opcoes={(sid) => cfg.profissionais.filter((b) => realizaPub(b, sid)).map((b) => ({ id: b.id, nome: b.nome }))} valor={atrib} aoMudar={(v) => { setAtrib(v); setEscolha(null); }} />}
           {!precisaAtribuir && !(cfg.profissionalAutomatico && !barb) && <>
+          {!precisaAtribuir && avisoProf && <p className="muted" role="status" data-testid="pub-aviso-prof">{avisoProf}</p>}
           <h3>Com quem?</h3>
           <div className="pub-barbs" role="group" aria-label={Rot('profissional')}>
             <button type="button" className={`pub-barb ${barb === '' ? 'on' : ''}`} aria-pressed={barb === ''} onClick={() => { setBarb(''); setEscolha(null); }} data-testid="pub-barb-qualquer">Qualquer um</button>
@@ -583,7 +590,9 @@ export default function AgendarPublico({ profissionalInicial, logado, aoVoltar }
   const cfg = useMemo(() => publico.config(), [snap.state]);
   const [aba, setAba] = useState('agendar');
   const [token, setToken] = useLocal('agendar-token', '');
-  const barb = cfg.profissionais.some((b) => b.id === profissionalInicial) ? profissionalInicial : '';
+  // B3: o trecho do link pode ser um token (simulado; inválido/vencido/de outra loja = ignorado) ou o id cru de links antigos
+  const doLink = TOKEN_DEMO.test(profissionalInicial || '') ? publico.linkProfissional(profissionalInicial).profissionalId : (profissionalInicial || '');
+  const barb = cfg.profissionais.some((b) => b.id === doLink) ? doLink : '';
   return (
     <div className="pub" data-testid="pagina-publica">
       {logado && (

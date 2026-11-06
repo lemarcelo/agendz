@@ -1,7 +1,10 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
 // Link da página de agendamento do cliente: `#agendar`, `#agendar-<id do profissional>` e, só na demonstração (Artifact: não há endereço por loja),
 // `…@<slug da loja>` no fim, para o cliente cair na loja de quem enviou e nunca na loja padrão. Só letras, números e hífen.
-export const HASH_AGENDAR = /^#agendar(-[\w-]{1,40})?(@[a-z0-9-]{1,40})?$/;
+export const HASH_AGENDAR = /^#agendar(-[\w-]{1,80})?(@[a-z0-9-]{1,40})?$/;
+
+// B3: token assinado do link com profissional (32 hex do id + 8 hex do vencimento + 22 da assinatura); só o servidor o confere. Fora desse formato (ou um id cru de link antigo) não é token.
+export const TOKEN_PROFISSIONAL = /^[0-9a-f]{40}[A-Za-z0-9_-]{22}$/;
 
 // Lê o hash: devolve null se não for link de agendamento; senão { profissionalId, loja } (vazios quando ausentes).
 export function lerHashAgendar(hash) {
@@ -12,7 +15,7 @@ export function lerHashAgendar(hash) {
 
 // Monta o link. `lojaNoLink` (slug) só entra quando a loja não vem do endereço (demonstração com seletor).
 export function montarLinkAgendamento({ base, busca = '', profissionalId = '', lojaNoLink = '' }) {
-  const prof = /^[\w-]{1,40}$/.test(String(profissionalId)) ? `-${profissionalId}` : '';
+  const prof = /^[\w-]{1,80}$/.test(String(profissionalId)) ? `-${profissionalId}` : '';
   const loja = /^[a-z0-9-]{1,40}$/.test(String(lojaNoLink)) ? `@${lojaNoLink}` : '';
   return `${base}${buscaComLoja(busca, lojaNoLink, `agendar${prof}`)}#agendar${prof}${loja}`;
 }
@@ -29,7 +32,7 @@ export function buscaComLoja(busca = '', lojaNoLink = '', ir = '') {
   return `${busca}${busca.includes('?') ? '&' : '?'}${vai}`;
 }
 
-export const IR_VALIDO = /^(agendar(-[\w-]{1,40})?|planos|avaliar\/[0-9a-f]{48})$/;
+export const IR_VALIDO = /^(agendar(-[\w-]{1,80})?|planos|avaliar\/[0-9a-f]{48})$/;
 
 // O hash que vale agora: o do endereço; se o fragmento se perdeu (hash vazio) e a busca traz `ir`, refaz o hash a partir dela (com a loja de `?loja=`).
 // Só devolve hash de página pública conhecida. Chamado na carga da página (depois, só o `hashchange` real manda).
@@ -40,7 +43,7 @@ export function hashEfetivo(hash = '', busca = '') {
   try { const q = new URLSearchParams(String(busca ?? '')); ir = q.get('ir') || ''; slug = q.get('loja') || ''; } catch { return h; }
   if (!IR_VALIDO.test(ir)) return h;
   const loja = /^[a-z0-9-]{1,40}$/.test(slug) ? `@${slug}` : '';
-  const m = /^(agendar(?:-[\w-]{1,40})?|planos|avaliar)(\/[0-9a-f]{48})?$/.exec(ir);
+  const m = /^(agendar(?:-[\w-]{1,80})?|planos|avaliar)(\/[0-9a-f]{48})?$/.exec(ir);
   if (!m) return h;
   const novo = `#${m[1]}${loja}${m[2] || ''}`;
   return lerHashAgendar(novo) || lerHashPlanos(novo) || lerHashAvaliar(novo) ? novo : h;

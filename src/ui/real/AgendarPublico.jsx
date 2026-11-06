@@ -19,6 +19,7 @@ import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
 import { useCaptcha } from './Captcha.jsx';
 import ProfissionalPorServico from '../leve/ProfissionalPorServico.jsx';
 import { precisaAtribuirPorServico } from '../../domain/vinculo.js';
+import { TOKEN_PROFISSIONAL } from '../../domain/link-publico.js';
 
 // Datas sempre no fuso da loja (Brasília), não no do aparelho: o servidor entrega dias "AAAA-MM-DD" e horários em instantes.
 const FUSO = 'America/Sao_Paulo';
@@ -335,7 +336,12 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
   // A1: quem realiza o quê. Escolhendo o profissional, só aparecem os serviços dele; escolhendo serviços, só aparecem quem realiza todos. `servicoIds: null` = servidor antigo, sem filtro.
   const realiza = (b, sid) => !b || b.servicoIds === null || b.servicoIds === undefined || b.servicoIds.includes(sid);
   const profSel = pagina.profissionais.find((b) => b.id === barb);
-  const servicosVisiveis = pagina.servicos.filter((x) => (profSel ? realiza(profSel, x.id) : pagina.profissionais.length === 0 || pagina.profissionais.some((b) => realiza(b, x.id))));
+  // B3: profissional vindo do link: os serviços aparecem todos; se o escolhido não for dele, ele sai e "Com quem?" lista só quem faz (aviso derivado, sem estado)
+  const profDoLink = pagina.profissionais.find((b) => b.id === profissionalInicial);
+  const naoFazDoLink = !!profDoLink && srv.some((sid) => !realiza(profDoLink, sid));
+  const avisoProf = naoFazDoLink && barb !== profDoLink.id ? `${profDoLink.nome} não faz esse serviço. Escolha quem faz.` : '';
+  useEffect(() => { if (profDoLink && barb === profDoLink.id && srv.some((sid) => !realiza(profDoLink, sid))) { setBarb(''); setEscolha(null); } }, [srv.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+  const servicosVisiveis = pagina.servicos.filter((x) => ((profSel && !(profDoLink && profSel.id === profDoLink.id)) ? realiza(profSel, x.id) : pagina.profissionais.length === 0 || pagina.profissionais.some((b) => realiza(b, x.id))));
   const profissionaisVisiveis = pagina.profissionais.filter((b) => srv.every((sid) => realiza(b, sid)));
   // B1: serviços feitos por pessoas diferentes → um campo de profissional por serviço (vazio e obrigatório); "Com quem?" some. Estética (box único) e escolha automática ficam como eram.
   const [atrib, setAtrib] = useState({});
@@ -478,6 +484,7 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
             ))}
           </div>
           {precisaAtribuir && <ProfissionalPorServico testid="pub-pps" servicos={servicos.map((x) => ({ id: x.id, nome: x.nome }))} rotuloProfissional={Rot('profissional')} opcoes={(sid) => pagina.profissionais.filter((b) => realiza(b, sid)).map((b) => ({ id: b.id, nome: b.nome }))} valor={atrib} aoMudar={(v) => { setAtrib(v); setEscolha(null); }} />}
+          {!precisaAtribuir && avisoProf && <p className="muted" role="status" data-testid="pub-aviso-prof">{avisoProf}</p>}
           {!precisaAtribuir && !(pagina.profissionalAutomatico && !barb) && <>
           <h3>Com quem?</h3>
           <div className="pub-barbs" role="group" aria-label={Rot('profissional')}>
@@ -724,7 +731,16 @@ export default function AgendarPublico({ loja, profissionalInicial, logado, aoVo
   }, []);
   const sincronizar = (lista) => atualizarReservas((d) => sincronizarReservas(d, lista.map((a) => ({ id: a.id, inicio: a.inicio, fim: a.fim, ativo: a.ativo })), Date.now()));
   const esquecer = () => { atualizarReservas(() => limparReservas(null, Date.now())); };
-  const barb = pagina && pagina.profissionais.some((b) => b.id === profissionalInicial) ? profissionalInicial : '';
+  // B3: o trecho do link pode ser um token assinado (o servidor confere; inválido/vencido/de outra loja = ignorado, sem aviso) ou o id cru de links antigos. null = ainda conferindo.
+  const [profLink, setProfLink] = useState(() => (TOKEN_PROFISSIONAL.test(profissionalInicial || '') ? null : (profissionalInicial || '')));
+  useEffect(() => {
+    if (!TOKEN_PROFISSIONAL.test(profissionalInicial || '')) { setProfLink(profissionalInicial || ''); return undefined; }
+    let vivo = true;
+    setProfLink(null);
+    publico.linkProfissional(profissionalInicial).then((r) => { if (vivo) setProfLink(r.profissionalId || ''); });
+    return () => { vivo = false; };
+  }, [profissionalInicial]);
+  const barb = pagina && profLink && pagina.profissionais.some((b) => b.id === profLink) ? profLink : '';
   return (
     <div className="pub" data-testid="pagina-publica">
       {logado && (
@@ -774,7 +790,9 @@ export default function AgendarPublico({ loja, profissionalInicial, logado, aoVo
             </aside>
           )}
           <div className="pub-principal">
-            {aba === 'agendar'
+            {aba === 'agendar' && profLink === null
+              ? <p className="muted" role="status" data-testid="pub-carregando-link">Carregando…</p>
+              : aba === 'agendar'
               ? <Agendar pagina={pagina} loja={loja} profissionalInicial={barb} cliente={reservas.cliente} aoCriar={guardar} irParaMeus={() => setAba('meus')} />
               : <Meus loja={loja} acessos={acessos} setAcessos={setAcessos} diasMax={pagina.diasMax} aoSincronizar={sincronizar} />}
           </div>

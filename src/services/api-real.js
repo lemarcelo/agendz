@@ -703,6 +703,12 @@ function lerAgendamento(d) {
 const soDia = (ts) => (Number.isFinite(ts) ? new Date(ts).toISOString() : null);
 let ultimaTentativa = { assinatura: '', chave: '' };
 export const agenda = {
+  // B3: GET /api/agenda/meu-link → { token } do link da própria agenda (sempre do usuário logado)
+  async meuLink() {
+    const r = await chamar('GET', '/api/agenda/meu-link');
+    const t = r.ok && r.dados && typeof r.dados.token === 'string' ? r.dados.token : '';
+    return /^[0-9a-f]{40}[A-Za-z0-9_-]{22}$/.test(t) ? { ok: true, token: t } : { ok: false, erro: 'Não foi possível preparar o link.' };
+  },
   async existemFuturos({ aPartirDe, profissionalId }) {
     const data = soDia(aPartirDe);
     if (!data || (profissionalId && !ID.test(String(profissionalId)))) return { ok: false, erro: 'Não foi possível consultar os próximos agendamentos.' };
@@ -1518,6 +1524,12 @@ const consultaAtribuicoes = (a) => {
   return pares.length ? pares.map(([k, v]) => `${k}:${v}`).join(',') : '';
 };
 export const publico = {
+  // B3: POST /api/publico/link-profissional { token } → { profissionalId | null }. Token fora do formato nem sai do aparelho; qualquer falha = sem profissional (nunca erro na tela).
+  async linkProfissional(token) {
+    if (!/^[0-9a-f]{40}[A-Za-z0-9_-]{22}$/.test(String(token ?? ''))) return { ok: true, profissionalId: '' };
+    const r = await chamar('POST', '/api/publico/link-profissional', { token }, undefined, PUB);
+    return { ok: true, profissionalId: r.ok && r.dados ? IDV(r.dados.profissionalId) : '' };
+  },
   // GET /api/publico/agendar
   async pagina() {
     const r = await chamar('GET', '/api/publico/agendar', undefined, undefined, PUB);

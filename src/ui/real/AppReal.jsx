@@ -383,7 +383,7 @@ function Painel({ loja, sessao, aoSair, aoMudarMarca }) {
 }
 
 // Link do cliente: #agendar (qualquer profissional) ou #agendar-<id do profissional>. Só letras, números e hífen. Vale sem login.
-const PUBLICA = /^#agendar(-[\w-]{1,40})?$/;
+const PUBLICA = /^#agendar(-[\w-]{1,80})?$/;
 function useHash() {
   const [hash, setHash] = useState(() => (globalThis.location ? globalThis.location.hash : ''));
   useEffect(() => {

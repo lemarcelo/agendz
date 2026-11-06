@@ -179,7 +179,8 @@ export default function Agenda({ user, onAbrir, onNovo, onIrBoxes }) {
     const lojaDemo = new URLSearchParams(window.location.search).get('loja');
     const busca = lojaDemo && /^[a-z0-9-]{1,40}$/.test(lojaDemo) && base ? `?loja=${lojaDemo}` : '';
     // Artifact: sem ?loja= nem endereço por loja, a loja escolhida no login vai dentro do link (#agendar@<loja>).
-    const link = montarLinkAgendamento({ base, busca, profissionalId: ehProfissional ? user.id : '', lojaNoLink: MODO_DEMO && LOJA_TROCAVEL ? lojaSlug : '' });
+    const meu = ehProfissional ? apiAgenda.meuLink() : null; // B3: token do link (simulado); sem ele cai no id, como antes
+    const link = montarLinkAgendamento({ base, busca, profissionalId: ehProfissional ? ((meu && meu.ok && meu.token) || user.id) : '', lojaNoLink: MODO_DEMO && LOJA_TROCAVEL ? lojaSlug : '' });
     const copiou = copiarTexto(link);
     const abriu = abrirWhatsapp(textoConvite(st.estabelecimento.nome, link, st.estabelecimento.localizacaoNoWhatsapp && Number.isFinite(st.estabelecimento.latitude) ? `https://maps.google.com/?q=${st.estabelecimento.latitude},${st.estabelecimento.longitude}` : ''));
     copiou.then((ok) => {

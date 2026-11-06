@@ -9,7 +9,7 @@ test('lê #agendar, #agendar-<id>, #agendar@loja e #agendar-<id>@loja; o resto n
   assert.deepEqual(lerHashAgendar('#agendar-u-pablo'), { profissionalId: 'u-pablo', loja: '' });
   assert.deepEqual(lerHashAgendar('#agendar@dalforno'), { profissionalId: '', loja: 'dalforno' });
   assert.deepEqual(lerHashAgendar('#agendar-u-pablo@offbox'), { profissionalId: 'u-pablo', loja: 'offbox' });
-  for (const x of ['', '#', '#agendarx', '#agendar@', '#agendar@Apex', '#agendar@a b', '#agendar-@x', '#agendar/../x', '#agendar@a@b', null, undefined, '#agendar-' + 'x'.repeat(41)]) assert.equal(lerHashAgendar(x), null, String(x));
+  for (const x of ['', '#', '#agendarx', '#agendar@', '#agendar@Apex', '#agendar@a b', '#agendar-@x', '#agendar/../x', '#agendar@a@b', null, undefined, '#agendar-' + 'x'.repeat(81)]) assert.equal(lerHashAgendar(x), null, String(x));
 });
 
 test('monta o link com a loja só quando pedida e ignora valores fora do padrão', () => {

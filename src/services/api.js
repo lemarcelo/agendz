@@ -10,6 +10,7 @@ import { trocarFormaDoAgendamento } from '../domain/pagamento.js'; // registra n
 import * as CU from '../domain/resgate.js';
 import * as AS from '../domain/assinaturas.js';
 import * as V from '../domain/vinculo.js'; // serviços por funcionário e ausência (bloco A)
+import { conferirTokenProfissional, montarTokenProfissional } from '../domain/link-profissional.js'; // B3: link com profissional (simulado)
 import { aReceber, extrato, rotuloMes, saldoAtual, planosPublicos } from '../domain/planos.js';
 import { TIPOS_CUPOM } from '../domain/cupons.js';
 import { cancelarComissao, intervaloComissao, pagarComissao, relatorioComissoes, relatorioDoProfissional, restaurarComissao } from '../domain/comissao.js';
@@ -283,6 +284,13 @@ function veiculoDeEntrada(d) {
 }
 
 export const agenda = {
+  // B3: GET /agenda/meu-link → { token } do link da própria agenda (sempre do usuário logado; simulado, sem valor de segurança)
+  meuLink() {
+    const u = usuario();
+    if (!u || !['dono', 'admin', 'profissional'].includes(u.papel)) return semPermissao();
+    const token = montarTokenProfissional({ loja: lojaSlug, profissionalId: u.id, agora: now() });
+    return token ? { ok: true, token } : erro('Não foi possível preparar o link.');
+  },
   // POST /agendamentos
   criar(dados) {
     const u = usuario();
@@ -1609,6 +1617,8 @@ const servicosPorIdsPublico = (a) => R.servicosPorIds(state, a.servicoIds || [],
 // B1: { servicoId: profissionalId } com até 10 pares (ou ausente)
 const atribuicoesOk = (a) => a === undefined || a === null || (typeof a === 'object' && !Array.isArray(a) && Object.keys(a).length <= 10 && Object.entries(a).every(([k, v]) => texto(k, 60) && texto(v, 60)));
 export const publico = {
+  // B3: POST /publico/link-profissional { token } → { profissionalId | '' } (inválido, vencido, adulterado ou de outra loja = vazio, sem motivo)
+  linkProfissional(token) { return { ok: true, profissionalId: conferirTokenProfissional({ loja: lojaSlug, token, agora: now() }) }; },
 
   // GET /publico/planos  (catálogo à venda: nome, descrição, valor, cortes e serviços; nada de cliente)
   planos() { return { ok: true, planos: planosPublicos(state) }; },

@@ -386,10 +386,18 @@ export default function Agenda({ podeAusencia = false, ehProprio = false, ehDono
   const [linkCopiado, setLinkCopiado] = useState(false);
   // Link da página do cliente: o geral (#agendar) ou, para o profissional, o da própria agenda (#agendar-<id>). A loja vem do endereço, então não vai no link.
   // Um clique abre o WhatsApp (aba nova, mensagem pronta; sem await antes, senão o navegador bloqueia) e copia o link como reserva.
+  // B3: o link da própria agenda leva um token assinado (com validade) em vez do id cru; buscado ao montar a tela para o clique não esperar rede. Falhou = link com o id, como antes.
+  const [tokenLink, setTokenLink] = useState('');
+  useEffect(() => {
+    if (!ehProprio) return undefined;
+    let vivo = true;
+    api.meuLink().then((r) => { if (vivo && r.ok) setTokenLink(r.token); });
+    return () => { vivo = false; };
+  }, [ehProprio]);
   const enviarLink = () => {
     if (semBox) { setSemBoxAberto(true); return; }
     const base = `${globalThis.location.origin}${globalThis.location.pathname}`;
-    const link = montarLinkAgendamento({ base, profissionalId: ehProprio ? meuId : '' });
+    const link = montarLinkAgendamento({ base, profissionalId: ehProprio ? (tokenLink || meuId) : '' });
     const abriu = abrirWhatsapp(textoConvite(nomeLoja, link, localizacaoUrl));
     Promise.resolve(globalThis.navigator?.clipboard?.writeText(link)).then(() => { setLinkCopiado(true); setTimeout(() => setLinkCopiado(false), 2000); }, () => { if (!abriu) setErro('Não consegui abrir o WhatsApp nem copiar o link.'); });
   };
