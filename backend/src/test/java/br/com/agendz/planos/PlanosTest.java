@@ -628,6 +628,7 @@ class PlanosTest extends BaseApi {
         pedirTroca("10.70.1.3", novoTelefone(), completo).andExpect(status().isCreated());
         assertEquals(0, contar("select count(*) from pedido_plano"));
         pedirTroca("10.70.1.4", tel, completo).andExpect(status().isCreated());
+        limitePublico.reiniciar(); // o freio real é 3 pedidos por telefone em 15 min; o 4º (repetido) só vale depois de zerar
         pedirTroca("10.70.1.5", tel, completo).andExpect(status().isCreated());
         assertEquals(1, contar("select count(*) from pedido_plano where tipo = 'troca' and status = 'novo'"));
         // o dono vê o pedido com o plano de origem e a diferença gravada na hora
