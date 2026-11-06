@@ -7,6 +7,7 @@
 // Não importa `api.js`, `hooks.js` nem `common.jsx` (tests/estatico.test.mjs).
 import { useAtualizacaoAutomatica } from './atualizar.js';
 import { caminhoHttps } from '../../domain/localizacao.js';
+import { chavePerfil, lerPerfil, mesclarPerfil } from '../../domain/perfil-local.js';
 import { adicionarReserva, lerReservas, limparReservas, removerReserva, sincronizarReservas } from '../../domain/reservas-local.js';
 import React, { useEffect, useMemo, useState } from 'react';
 import { planosPublico, publico } from '../../services/api-real.js';
@@ -67,6 +68,9 @@ function salvarReservas(slug, dados) {
     else localStorage.setItem(chaveReservas(slug), JSON.stringify(dados));
   } catch { /* sem storage: vale só nesta visita */ }
 }
+// Perfil do cliente neste navegador (domain/perfil-local.js): preenche o formulário na próxima visita. Sem storage a página funciona igual.
+const lerPerfilLocal = (slug) => { try { return lerPerfil(localStorage.getItem(chavePerfil(slug))); } catch { return lerPerfil(null); } };
+const gravarPerfilLocal = (slug, dados) => { try { localStorage.setItem(chavePerfil(slug), JSON.stringify(mesclarPerfil(lerPerfilLocal(slug), dados))); } catch { /* sem storage: vale só nesta visita */ } };
 const diaSemana = (ts) => new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'short', day: '2-digit', month: '2-digit' }).format(new Date(ts)).replace('.', '').replace(',', '');
 
 // Dia + horário livres: os dois vêm do servidor, que só devolve o que está livre. `fonte` ({ dias(de, n), horarios(dia) }) troca a consulta (remarcar um horário já marcado).
@@ -318,17 +322,18 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
   const usaVeiculo = capAtiva('usaVeiculo');
   const desl = usaVeiculo ? 0 : 1; // sem veículo (barbearia) a primeira etapa é o serviço
   const [etapa, setEtapa] = useState(desl);
-  const [placa, setPlaca] = useState('');
-  const [modelo, setModelo] = useState('');
-  const [marca, setMarca] = useState('');
-  const [cor, setCor] = useState('');
-  const [porte, setPorte] = useState('');
+  const perfil = useMemo(() => lerPerfilLocal(loja.slug), [loja.slug]);
+  const [placa, setPlaca] = useState(perfil.placa);
+  const [modelo, setModelo] = useState(perfil.modelo);
+  const [marca, setMarca] = useState(perfil.marca);
+  const [cor, setCor] = useState(perfil.cor);
+  const [porte, setPorte] = useState(perfil.porte);
   const [srv, setSrv] = useState([]);
   const [barb, setBarb] = useState(profissionalInicial || '');
   const [dia, setDia] = useState(null);
   const [escolha, setEscolha] = useState(null);
-  const [nome, setNome] = useState(() => (cliente && cliente.nome) || '');
-  const [tel, setTel] = useState(() => (cliente && cliente.telefone) || '');
+  const [nome, setNome] = useState(() => (cliente && cliente.nome) || perfil.nome);
+  const [tel, setTel] = useState(() => (cliente && cliente.telefone) || perfil.tel);
   const [cupom, setCupom] = useState('');
   const [isca, setIsca] = useState('');
   const [erro, setErro] = useState('');
@@ -407,6 +412,7 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
     const r = await publico.agendar({ nome, telefone: tel, servicoIds: srvFix, profissionalId: escolha?.profissionalId || barb, ...(atribuicoes ? { atribuicoes } : {}), inicio: escolha?.inicio, cupomChave: cupom, site: isca, selo: pagina.selo, captcha: cap.prova, ...(usaVeiculo ? { veiculo: { placa, marca, modelo, cor, porte } } : {}) });
     cap.gasta();
     setEnviando(false);
+    if (r.ok) gravarPerfilLocal(loja.slug, { nome, tel, ...(usaVeiculo ? { placa, modelo, marca, cor, porte } : {}) });
     if (!r.ok) {
       cap.verificar(r);
       if (r.status === 409 && /ocupado/.test(r.erro)) {
@@ -750,7 +756,7 @@ export default function AgendarPublico({ loja, profissionalInicial, logado, aoVo
     return () => { clearInterval(id); document.removeEventListener('visibilitychange', varrer); };
   }, []);
   const sincronizar = (lista) => atualizarReservas((d) => sincronizarReservas(d, lista.map((a) => ({ id: a.id, inicio: a.inicio, fim: a.fim, ativo: a.ativo })), Date.now()));
-  const esquecer = () => { atualizarReservas(() => limparReservas(null, Date.now())); };
+  const esquecer = () => { atualizarReservas(() => limparReservas(null, Date.now())); try { localStorage.removeItem(chavePerfil(loja.slug)); } catch { /* sem storage */ } };
   // B3: o trecho do link pode ser um token assinado (o servidor confere; inválido/vencido/de outra loja = ignorado, sem aviso) ou o id cru de links antigos. null = ainda conferindo.
   const [profLink, setProfLink] = useState(() => (TOKEN_PROFISSIONAL.test(profissionalInicial || '') ? null : (profissionalInicial || '')));
   useEffect(() => {

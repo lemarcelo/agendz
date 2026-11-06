@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { MODO_DEMO, publico, store } from '../services/api.js';
 import { TOKEN_DEMO } from '../domain/link-profissional.js';
 import { DIAS_CURTOS, fmtDayLong, fmtHM, fmtMoney, maiuscula1, startOfDay, ymd } from '../domain/time.js';
+import { chavePerfil, lerPerfil, mesclarPerfil } from '../domain/perfil-local.js';
 import { formatarTelefone, telefoneBrasileiro } from '../domain/rules.js';
 import { PORTE_PADRAO, formatarPlaca, limparVeiculoComRegras, placaValida, resumoVeiculo, tipoPlaca } from '../domain/veiculos.js';
 import { rotuloMes } from '../domain/planos.js';
@@ -259,6 +260,10 @@ function Cabecalho({ cfg, aba, setAba }) {
   );
 }
 
+// Perfil do cliente neste navegador (domain/perfil-local.js): preenche o formulário na próxima visita. Sem storage a página funciona igual.
+const lerPerfilLocal = () => { try { return lerPerfil(localStorage.getItem(chavePerfil('demo'))); } catch { return lerPerfil(null); } };
+const gravarPerfilLocal = (dados) => { try { localStorage.setItem(chavePerfil('demo'), JSON.stringify(mesclarPerfil(lerPerfilLocal(), dados))); } catch { /* sem storage */ } };
+
 function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
   // Tipo sem veículo (barbearia): a etapa do veículo some e o preço e a duração são os do serviço. Os números das etapas seguem os da estética (0 = veículo).
   const usaVeiculo = cap({ tipo: cfg.tipo }, 'usaVeiculo');
@@ -267,16 +272,17 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
   const minutos = (x) => (usaVeiculo ? x.duracoes[porte || PORTE_PADRAO] ?? 0 : x.duracao ?? 0);
   const dur = (m) => (usaVeiculo ? fmtDur(m) : `${m} min`);
   const [etapa, setEtapa] = useState(desl);
-  const [placa, setPlaca] = useState('');
-  const [modelo, setModelo] = useState('');
-  const [marca, setMarca] = useState('');
-  const [cor, setCor] = useState('');
-  const [porte, setPorte] = useState('');
+  const perfil = useMemo(lerPerfilLocal, []);
+  const [placa, setPlaca] = useState(perfil.placa);
+  const [modelo, setModelo] = useState(perfil.modelo);
+  const [marca, setMarca] = useState(perfil.marca);
+  const [cor, setCor] = useState(perfil.cor);
+  const [porte, setPorte] = useState(perfil.porte);
   const [srv, setSrv] = useState([]);
   const [barb, setBarb] = useState(profissionalInicial || '');
   const [escolha, setEscolha] = useState(null);
-  const [nome, setNome] = useState('');
-  const [tel, setTel] = useState('');
+  const [nome, setNome] = useState(perfil.nome);
+  const [tel, setTel] = useState(perfil.tel);
   const [isca, setIsca] = useState('');
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
@@ -354,6 +360,7 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
     setEnviando(true);
     const r = publico.agendar({ nome, telefone: tel, ...(usaVeiculo ? { placa, marca, modelo, cor, ...(porte ? { porte } : {}) } : {}), servicoIds: srvFix, profissionalId: escolha?.profissionalId || barb, ...(atribuicoes ? { atribuicoes } : {}), inicio: escolha?.inicio, site: isca });
     setEnviando(false);
+    if (r.ok) gravarPerfilLocal({ nome, tel, ...(usaVeiculo ? { placa, modelo, marca, cor, porte } : {}) });
     if (!r.ok) { setErro(r.erros[0]); if (/ocupado/.test(r.erros[0])) { setEscolha(null); setEtapa(2); } return; }
     if (r.token) setToken(r.token); setFeito({ combinar: paraCombinar, partes: r.partes && r.partes.length > 1 ? r.partes : null, usouPlano: !!r.usouPlano, plano: r.plano || null, semTelefone: !r.token, inicio: escolha.inicio, profissionalId: escolha.profissionalId, servicos: servicos.map((x) => x.nome), veiculo: usaVeiculo ? [modelo.trim(), placa && formatarPlaca(placa)].filter(Boolean).join(' · ') : '' });
     setEtapa(4);

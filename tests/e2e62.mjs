@@ -141,9 +141,11 @@ let estado;
   assert.equal(await p.evaluate(() => localStorage.getItem('agendz-reservas-dalforno')), null, 'e o nome e o telefone saem do navegador junto');
   await p.getByTestId(`pub-srv-${SRV_CORTE}`).check(); await p.getByTestId('pub-continuar-1').click();
   await p.getByTestId('pub-dia-2026-10-30').waitFor(); await p.getByTestId('pub-dia-2026-10-30').click(); await p.getByTestId('pub-hora-0930').click(); await p.getByTestId('pub-continuar-2').click();
-  assert.equal(await p.getByTestId('pub-nome').inputValue(), '', 'formulário vazio');
+  // o painel e os horários somem, mas o perfil (nome, telefone, veículo) fica guardado de propósito para preencher a próxima visita (autocomplete)
+  assert.equal(await p.getByTestId('pub-nome').inputValue(), 'Maria Souza', 'perfil guardado preenche o formulário');
+  assert.equal(await p.getByTestId('pub-tel').inputValue(), '(53) 99900-0001');
   await ctx.close();
-  ok('passou o horário: o painel, o nome e o telefone somem do navegador');
+  ok('passou o horário: o painel e os horários somem; o perfil do cliente continua guardado para preencher');
 }
 {
   // 4. celular: painel acima do formulário, sem rolagem lateral; cancelar tira o horário; esquecer apaga tudo
@@ -172,6 +174,7 @@ let estado;
   await p.getByTestId('pub-reservas-esquecer').click();
   assert.equal(await p.getByTestId('pub-reservas').count(), 0);
   assert.equal(await p.evaluate(() => localStorage.getItem('agendz-reservas-dalforno')), null);
+  assert.equal(await p.evaluate(() => localStorage.getItem('agendz-perfil-dalforno')), null, 'esquecer apaga também o perfil');
   await ctx.close();
   ok('Esquecer meus dados apaga na hora');
 }
