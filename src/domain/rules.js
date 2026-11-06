@@ -8,6 +8,7 @@ import { limparTexto } from './texto.js';
 import { ausenciaNoHorario, erroDeVinculo } from './vinculo.js';
 import { PORTE_PADRAO, porteValido, precoNoPorte } from './veiculos.js';
 import { Rot, rot, capAtiva, cap } from './tipos.js';
+import { limitesDoModo, modoSaneado, ordenarPorModo } from './modo-escolha.js';
 import { duracaoIndefinida, erroDeBlocos, minutosDosBlocos } from './blocos.js';
 
 export const STATUS = {
@@ -196,6 +197,19 @@ export const boxesAtivos = (state) => (state.estabelecimento.boxes || []).filter
 export const semBoxAtivo = (state) => cap(state.estabelecimento, 'usaRecursoFisico') && boxesAtivos(state).length === 0;
 export const ERRO_SEM_BOX = 'Cadastre ao menos um box (Estabelecimento > Boxes) antes de atender.';
 export const nomeBox = (state, id) => (state.estabelecimento.boxes || []).find((b) => b.id === id)?.nome || '';
+// G2 (V62): modos da escolha automática do box (livre/mais livre, aleatório, menos atendeu, fila), os mesmos do profissional com o id do box.
+export function ordemDeBoxes(state, ids, inicio) {
+  if (ids.length < 2) return ids;
+  const modo = modoSaneado(state.estabelecimento.modoEscolhaBox);
+  const sorteio = {};
+  if (modo === 'aleatorio') for (const id of ids) sorteio[id] = Math.random();
+  const ags = (state.agendamentos || []).filter((a) => a.boxId).map((a) => ({ profissionalId: a.boxId, inicio: a.inicio, status: a.status, fim: a.fimOcupado || a.fim }));
+  return ordenarPorModo(modo, ids, { agendamentos: ags, limites: limitesDoModo(startOfDay(inicio)), sorteio, ponteiro: state.estabelecimento.filaBox ?? null });
+}
+// Na CRIAÇÃO do agendamento (nunca antes): no modo fila, o box escolhido vira o ponteiro.
+export function registrarBox(state, boxId) {
+  if (boxId && modoSaneado(state.estabelecimento.modoEscolhaBox) === 'fila') state.estabelecimento.filaBox = boxId;
+}
 // Box para o atendimento: o pedido (se estiver livre), senão o preferido (o que já tinha), senão o primeiro livre. Box nunca é "forçado": dois carros não ocupam o mesmo.
 export function escolherBox(state, ocup, { boxId, preferido, ignoreId } = {}) {
   if (!cap(state.estabelecimento, 'usaRecursoFisico')) return { id: null }; // tipo sem box/cadeira reservada
@@ -209,7 +223,8 @@ export function escolherBox(state, ocup, { boxId, preferido, ignoreId } = {}) {
     if (!b) return { erro: 'Box não encontrado.' };
     return livre(b.id) ? { id: b.id } : { erro: `${b.nome} está ocupado nesse horário.` };
   }
-  const ordem = [...(preferido && ativos.some((b) => b.id === preferido) ? [preferido] : []), ...ativos.map((b) => b.id).filter((i) => i !== preferido)];
+  let ordem = [...(preferido && ativos.some((b) => b.id === preferido) ? [preferido] : []), ...ativos.map((b) => b.id).filter((i) => i !== preferido)];
+  if (!preferido) ordem = ordemDeBoxes(state, ordem, ocup.box[0]); // G2 (V62): sem pedido nem box anterior vale o modo da loja
   const achado = ordem.find(livre);
   if (achado) return { id: achado };
   return { erro: ativos.length === 1 ? 'O box está ocupado nesse horário.' : 'Todos os boxes estão ocupados nesse horário.' };

@@ -862,6 +862,17 @@ export const boxes = {
     const r = await chamar('PUT', '/api/estabelecimento/boxes', corpo);
     return r.ok ? { ok: true, boxes: listaDe(r.dados, 20).map(lerBox).filter((b) => ID.test(b.id)) } : r;
   },
+  // GET /api/estabelecimento/boxes/modo  → { modo } (livre | aleatorio | menos | fila); quem tem a agenda de gestão lê
+  async modo() {
+    const r = await chamar('GET', '/api/estabelecimento/boxes/modo');
+    return r.ok ? { ok: true, modo: ['livre', 'aleatorio', 'menos', 'fila'].includes(r.dados && r.dados.modo) ? r.dados.modo : 'livre' } : r;
+  },
+  // PUT /api/estabelecimento/boxes/modo  { modo }  (só o proprietário; vale quando ninguém pediu um box)
+  async gravarModo(modo) {
+    if (!['livre', 'aleatorio', 'menos', 'fila'].includes(modo)) return { ok: false, status: 0, erro: 'Modo de escolha do box inválido.' };
+    const r = await chamar('PUT', '/api/estabelecimento/boxes/modo', { modo });
+    return r.ok ? { ok: true, modo } : r;
+  },
 };
 
 // ---------- portes de veículo (v122; regras no servidor: PorteService; só o proprietário grava) ----------

@@ -3,7 +3,7 @@
 // altera e devolve um resultado. Espelha os casos de uso do futuro back-end.
 import {
   ATIVOS, STATUS, comissaoJaPaga, ERRO_COMISSAO_PAGA, formaEfetiva, formatarTelefone, acharConflitos, cadastroPorCpf, somenteDigitos, telefoneNacional, telefoneDoCanal, errosServicoIds, limparTexto, duracaoMin, exigeConfirmacaoServico, identificarCliente, janelaOcupada,
-  montarPlano, montarLembretes, notificacoesEfetivas, ocupadoMin, servicosPorIds, servicosDoAg, validarHorario, congelarComissoes, ocupacaoDe, retiradaDe, nomeBox, semBoxAtivo, ERRO_SEM_BOX,
+  montarPlano, montarLembretes, notificacoesEfetivas, ocupadoMin, servicosPorIds, servicosDoAg, validarHorario, congelarComissoes, ocupacaoDe, retiradaDe, nomeBox, semBoxAtivo, ERRO_SEM_BOX, registrarBox,
 } from './rules.js';
 import { assinaturaDoCliente, mensagemLimiteDoPlano, podeUsar, restricaoDoLink, usoParaAgendamento } from './planos.js';
 import { LIMITE_VEICULOS, fotoDoVeiculo, limparVeiculoComRegras, resumoVeiculo, veiculoInformado, veiculoPorPlaca } from './veiculos.js';
@@ -189,6 +189,7 @@ export function criarAgendamento(s, dados, autor, agora) {
   congelarComissoes(s, a, v.servicos);
   registrar(s, a, autor, 'criação', null, `${nomesServicos(s, a)} ${a.veiculo ? `(${resumoVeiculo(a.veiculo)}) ` : ''}em ${fmtDate(inicio)} às ${fmtHM(inicio)}`, agora);
   s.agendamentos.push(a);
+  if (!boxId) registrarBox(s, a.boxId); // G2: na fila de boxes o ponteiro só avança na criação
   if (status === STATUS.CONFIRMADO || status === STATUS.CONCLUIDO) cancelarPendentesConflitantes(s, a, agora);
   if (usoPlano) registrar(s, a, autor, 'plano', null, `Usa 1 atendimento do plano ${usoPlano.uso.planoNome}${usoPlano.aviso ? ` (${usoPlano.aviso})` : ''}`, agora);
   for (const g of aposCriar) g(s, a, autor, agora);

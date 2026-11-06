@@ -1127,7 +1127,7 @@ export const estabelecimento = {
   salvar(entrada) {
     const n = exigir('estabelecimento'); if (n) return n;
     if (entrada && typeof entrada === 'object' && 'tipo' in entrada && entrada.tipo !== tipoDe(state.estabelecimento)) return erro('O tipo do estabelecimento não pode ser alterado depois de criado.');
-    const patch = pegar(entrada, permitidos(['nome', 'telefone', 'endereco', 'enderecoNoLink', 'latitude', 'longitude', 'localizacaoNoWhatsapp', 'whatsappLoja', 'email', 'ddds', 'visaoPadrao', 'confirmacaoServico', 'grupoMovimentacaoId', 'notificacoes', 'escala', 'calendario', 'pixCancelamento', 'logo', 'corTema', 'corTema2', 'temaCor', 'linkAgendamento', 'comissaoPadrao', 'usaIntegracaoPix', 'formaPagamentoPadrao', 'contaPorForma', 'camposObrigatorios', 'boxes', 'portes', 'ordemServicos', 'profissionalAutomatico', 'modoEscolha', 'ordemAtender', 'recaptchaChaveSite', 'recaptchaSegredo']));
+    const patch = pegar(entrada, permitidos(['nome', 'telefone', 'endereco', 'enderecoNoLink', 'latitude', 'longitude', 'localizacaoNoWhatsapp', 'whatsappLoja', 'email', 'ddds', 'visaoPadrao', 'confirmacaoServico', 'grupoMovimentacaoId', 'notificacoes', 'escala', 'calendario', 'pixCancelamento', 'logo', 'corTema', 'corTema2', 'temaCor', 'linkAgendamento', 'comissaoPadrao', 'usaIntegracaoPix', 'formaPagamentoPadrao', 'contaPorForma', 'camposObrigatorios', 'boxes', 'portes', 'ordemServicos', 'profissionalAutomatico', 'modoEscolha', 'modoEscolhaBox', 'ordemAtender', 'recaptchaChaveSite', 'recaptchaSegredo']));
     if ('comissaoPadrao' in patch && !R.ehDono(usuario())) delete patch.comissaoPadrao;
     if ('comissaoPadrao' in patch) { const c = lerPct(patch.comissaoPadrao); if (!c.ok || c.v === null) return erro('A comissão padrão vai de 0 a 100%.'); patch.comissaoPadrao = c.v; }
     for (const k of ['nome', 'telefone', 'endereco', 'email']) if (k in patch && !texto(patch[k], 200)) return erro('Texto grande demais em ' + k + '.');
@@ -1185,6 +1185,7 @@ export const estabelecimento = {
     if ('ordemAtender' in patch) { if (!ordemAtenderValida(patch.ordemAtender)) return erro('A escolha do serviço deve vir antes da escolha do horário.'); patch.ordemAtender = sanearOrdemAtender(patch.ordemAtender, PADRAO_ARTIFACT); } // v133
     if ('profissionalAutomatico' in patch && typeof patch.profissionalAutomatico !== 'boolean') return erro('Escolha automática do profissional: sim ou não.');
     if ('modoEscolha' in patch && !MODOS_DE_ESCOLHA.includes(patch.modoEscolha)) return erro('Modo de escolha do profissional inválido.'); // B2
+    if ('modoEscolhaBox' in patch && !MODOS_DE_ESCOLHA.includes(patch.modoEscolhaBox)) return erro('Modo de escolha do box inválido.'); // G2
     if ('ordemServicos' in patch && !modoOrdemValido(patch.ordemServicos)) return erro('Ordem dos serviços inválida: mais usados primeiro ou a ordem que você definiu.');
     if ('visaoPadrao' in patch && !['dia', 'semana', 'mes'].includes(patch.visaoPadrao)) return erro('Visão padrão inválida.');
     if ('confirmacaoServico' in patch && typeof patch.confirmacaoServico !== 'boolean') return erro(`${Voc('confirmacao')} inválida.`);

@@ -12,6 +12,12 @@ export const ROTULO_MODO = {
   menos: 'Quem atendeu menos no mês',
   fila: 'Fila (um de cada vez)',
 };
+export const DICA_MODO_BOX = {
+  livre: 'O carro vai para o box com menos carros no dia (e, no empate, nos próximos 7 dias).',
+  aleatorio: 'Sorteia entre os boxes livres no horário.',
+  menos: 'Vai para o box que recebeu menos carros no mês (cancelados não contam).',
+  fila: 'Revezamento: depois de um box, vem o seguinte da lista, e assim em círculo.',
+};
 export const DICA_MODO = {
   livre: 'O horário vai para quem tem menos agendamentos no dia (e, no empate, nos próximos 7 dias).',
   aleatorio: 'Sorteia entre quem atende o serviço e está livre no horário.',

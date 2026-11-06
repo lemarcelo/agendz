@@ -319,6 +319,7 @@ function PainelBoxes({ e }) {
         <Btn icone="plus" disabled={lista.length >= 20} onClick={() => setLista([...lista, { nome: `Box ${lista.length + 1}`, ativo: true }])} data-testid="box-add">Adicionar box</Btn>
         <Btn variante="primario" disabled={!sujo} onClick={salvar} data-testid="box-salvar">Salvar boxes</Btn>
       </div>
+      <ModoEscolha valor={e.modoEscolhaBox} testid="boxes-modo" rotulo="Como escolher o box" box aoMudar={(v) => { const r = apiEst.salvar({ modoEscolhaBox: v }); if (r.ok) toast('Modo de escolha do box salvo.'); else toast(r.erros[0], 'erro'); }} />
       <small className="muted">Box com histórico de atendimentos não pode ser removido, só desativado. Para desativar, remarque antes os carros agendados nele.</small>
       {(e.boxes || []).some((b) => b.id) && <AusenciaBoxPainel boxes={(e.boxes || []).filter((b) => b.id)} listar={async () => { const r = apiAusBox.listar({ de: Date.now() - 86400000 }); return r.ok ? r : { ok: false, erro: (r.erros || [])[0] }; }} criar={async (...a) => { const r = apiAusBox.criar(...a); return r.ok ? r : { ok: false, erro: (r.erros || [])[0] }; }} remover={async (id) => { const r = apiAusBox.remover(id); return r.ok ? r : { ok: false, erro: (r.erros || [])[0] }; }} />}
     </div>

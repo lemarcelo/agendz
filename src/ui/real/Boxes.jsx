@@ -6,6 +6,7 @@ import React, { useEffect, useState } from 'react';
 import { boxes as api, ausenciasBox } from '../../services/api-real.js';
 import { erroDosBoxes } from '../../domain/atender-form.js';
 import { Aviso, Btn, Icone } from '../leve/mini.jsx';
+import ModoEscolha from '../leve/ModoEscolha.jsx';
 import AusenciaBoxPainel from '../leve/AusenciaBoxPainel.jsx';
 
 export default function Boxes() {
@@ -14,13 +15,21 @@ export default function Boxes() {
   const [ok, setOk] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [seq, setSeq] = useState(0);
+  const [modo, setModo] = useState('livre');
 
   const carregar = async () => {
     const r = await api.listar();
     if (!r.ok) { setErro(r.erro); setLista([]); return; }
     setErro(''); setLista(r.boxes.map((b) => ({ chave: b.id, id: b.id, nome: b.nome, ativo: b.ativo })));
   };
-  useEffect(() => { carregar(); }, []);
+  useEffect(() => { carregar(); api.modo().then((r) => { if (r.ok) setModo(r.modo); }); }, []);
+  const trocarModo = async (novo) => {
+    const antes = modo;
+    setModo(novo); setErro(''); setOk('');
+    const r = await api.gravarModo(novo);
+    if (!r.ok) { setModo(antes); setErro(r.erro); return; }
+    setOk('Modo de escolha do box salvo.');
+  };
 
   const mudar = (chave, campo, valor) => { setLista((l) => l.map((b) => (b.chave === chave ? { ...b, [campo]: valor } : b))); setErro(''); setOk(''); };
   const novo = () => { setLista((l) => [...l, { chave: `novo-${seq}`, nome: `Box ${l.length + 1}`, ativo: true }]); setSeq(seq + 1); setErro(''); setOk(''); };
@@ -63,6 +72,7 @@ export default function Boxes() {
           <p className="muted">Box que já atendeu não é removido: desative. Box com carro agendado só desativa depois de remarcar.</p>
         </form>
       )}
+      {lista !== null && <ModoEscolha valor={modo} aoMudar={trocarModo} testid="boxes-modo" rotulo="Como escolher o box" box />}
       {lista !== null && lista.some((b) => b.id) && <AusenciaBoxPainel boxes={lista.filter((b) => b.id)} listar={() => ausenciasBox.listar(Date.now() - 86400000, Date.now() + 86400000 * 200)} criar={ausenciasBox.criar} remover={ausenciasBox.remover} />}
     </section>
   );

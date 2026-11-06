@@ -61,6 +61,32 @@ public class BoxController {
         return banco.naLoja(BoxController::ler);
     }
 
+    public record CorpoModo(@Size(max = 20) String modo) {
+    }
+
+    /** G2 (V62): modo da escolha automática do box (livre, aleatorio, menos, fila). Só vale quando ninguém pediu um box. */
+    @GetMapping("/api/estabelecimento/boxes/modo")
+    @PreAuthorize("hasAnyRole('DONO','ADMIN','ATENDENTE')")
+    public java.util.Map<String, String> modo() {
+        if (!Capacidades.usaRecursoFisico(LojaContext.exigir())) return java.util.Map.of("modo", br.com.agendz.agenda.ModoEscolha.LIVRE);
+        return java.util.Map.of("modo", banco.naLoja(br.com.agendz.agenda.EscolhaDeBox::modo));
+    }
+
+    @PutMapping("/api/estabelecimento/boxes/modo")
+    @PreAuthorize("hasRole('DONO')")
+    public java.util.Map<String, String> gravarModo(@RequestBody CorpoModo corpo) {
+        Loja loja = LojaContext.exigir();
+        if (!Capacidades.usaRecursoFisico(loja)) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Este tipo de estabelecimento não usa box.");
+        String modo = corpo == null ? null : corpo.modo();
+        if (modo == null || !br.com.agendz.agenda.ModoEscolha.MODOS.contains(modo)) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Modo de escolha do box inválido.");
+        banco.naLoja(jdbc -> {
+            jdbc.update("insert into configuracao_loja (loja_id, modo_escolha_box) values (?::uuid, ?) on conflict (loja_id) do update set modo_escolha_box = excluded.modo_escolha_box, atualizado_em = now()",
+                    loja.id().toString(), modo);
+            return null;
+        });
+        return java.util.Map.of("modo", modo);
+    }
+
     @PutMapping("/api/estabelecimento/boxes")
     @PreAuthorize("hasRole('DONO')")
     public List<Box> gravar(@RequestBody Corpo corpo) {

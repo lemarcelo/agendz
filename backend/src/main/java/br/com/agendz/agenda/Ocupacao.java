@@ -149,7 +149,14 @@ public class Ocupacao {
         List<Object[]> ordem = new ArrayList<>();
         if (preferido != null) ativos.stream().filter(x -> x[0].equals(preferido)).findFirst().ifPresent(ordem::add);
         for (Object[] b : ativos) if (!b[0].equals(preferido)) ordem.add(b);
-        for (Object[] b : ordem) if (livre(jdbc, (UUID) b[0], plano, ignorar)) return (UUID) b[0];
+        if (preferido == null && ordem.size() > 1) { // G2 (V62): sem pedido nem box anterior, vale o modo da loja (livre, aleatório, menos, fila)
+            List<UUID> pref = EscolhaDeBox.ordem(jdbc, ordem.stream().map(x -> (UUID) x[0]).toList(), plano.entrada());
+            ordem.sort(java.util.Comparator.comparingInt(x -> pref.indexOf((UUID) x[0])));
+        }
+        for (Object[] b : ordem) if (livre(jdbc, (UUID) b[0], plano, ignorar)) {
+            if (preferido == null) EscolhaDeBox.registrar(jdbc, (UUID) b[0]);
+            return (UUID) b[0];
+        }
         throw new ErroDeNegocio(HttpStatus.CONFLICT, ativos.size() == 1 ? "O box está ocupado nesse horário." : "Todos os boxes estão ocupados nesse horário.");
     }
 
