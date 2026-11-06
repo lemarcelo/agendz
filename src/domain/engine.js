@@ -13,7 +13,8 @@ import { renderizar } from './templates.js';
 import { diasDaExcecao } from './schedule.js';
 import { cap, rot, voc } from './tipos.js';
 import { agruparAtribuicao } from './vinculo.js';
-import { limitesDoDia, ordemPorFolga, profissionalAutomatico } from './profissional-auto.js';
+import { profissionalAutomatico } from './profissional-auto.js';
+import { ordemDaLoja, registrarEscolha } from './modo-escolha.js'; // B2: modos da escolha automática
 
 export const AUTOR_SISTEMA = { tipo: 'sistema', nome: 'Sistema' };
 export const autorUsuario = (u) => ({ tipo: 'profissional', nome: u.apelido || u.nome, id: u.id });
@@ -510,11 +511,12 @@ export const camposObrigatorios = (s, tipo) => {
 export function escolherProfissionalAuto(s, { inicio, servicoIds, porte, futuro, agora }) {
   const lista = s.usuarios.filter((u) => u.atende);
   if (!lista.length) return { ok: false, erros: ['Nenhum profissional da equipe atende. Marque quem atende em Equipe.'] };
-  const ordem = ordemPorFolga(s.agendamentos, lista.map((u) => u.id), limitesDoDia(inicio));
-  if (!futuro) return { ok: true, profissionalId: ordem[0] };
+  const chave = servicoIds && servicoIds.length ? servicoIds[0] : null; // B2: a fila é por serviço (o primeiro do pedido)
+  const ordem = ordemDaLoja(s, lista.map((u) => u.id), inicio, chave);
+  if (!futuro) { registrarEscolha(s, chave, ordem[0]); return { ok: true, profissionalId: ordem[0] }; }
   for (const id of ordem) {
     const v = validarHorario(s, { profissionalId: id, inicio, servicoIds, porte, agora });
-    if (!v.erros.length && !v.confirmados.length && !v.pendentes.length) return { ok: true, profissionalId: id };
+    if (!v.erros.length && !v.confirmados.length && !v.pendentes.length) { registrarEscolha(s, chave, id); return { ok: true, profissionalId: id }; }
   }
   return { ok: false, erros: ['Nenhum profissional está livre neste horário. Escolha outro horário.'] };
 }

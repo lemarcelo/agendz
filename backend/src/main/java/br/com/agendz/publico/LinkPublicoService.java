@@ -7,7 +7,7 @@ import br.com.agendz.configuracao.LinkAgendamento;
 import br.com.agendz.configuracao.PorteController;
 import br.com.agendz.configuracao.RegrasAtendimento;
 import br.com.agendz.agenda.AtribuicaoDeServicos;
-import br.com.agendz.agenda.Folga;
+import br.com.agendz.agenda.EscolhaAutomatica;
 import br.com.agendz.servicos.OrdemDosServicos;
 import br.com.agendz.configuracao.LocalDaLoja;
 import br.com.agendz.cupom.CupomService;
@@ -343,9 +343,9 @@ return horariosDoDia(jdbc, cfg, base, dia, servicos, relogio.instant(), false, n
      * B9c: com a escolha automática ligada e o cliente sem escolher quem, o horário vai para quem está com a agenda mais livre no dia (`Folga`); do contrário
      * a ordem é a de sempre (por nome). Com um profissional só (o cliente escolheu) não há o que ordenar.
      */
-    private List<Prof> ordemDoDia(JdbcTemplate jdbc, List<Prof> profs, LocalDate dia) {
+    private List<Prof> ordemDoDia(JdbcTemplate jdbc, List<Prof> profs, LocalDate dia, UUID servicoChave) {
         if (profs.size() < 2 || !RegrasAtendimento.ler(jdbc).profissionalAutomatico()) return profs;
-        List<UUID> ordem = Folga.ordem(jdbc, profs.stream().map(Prof::id).toList(), dia);
+        List<UUID> ordem = EscolhaAutomatica.ordem(jdbc, profs.stream().map(Prof::id).toList(), servicoChave, dia); // B2: o modo da loja (livre, aleatório, menos, fila)
         List<Prof> saida = new ArrayList<>();
         for (UUID id : ordem) profs.stream().filter(x -> x.id().equals(id)).findFirst().ifPresent(saida::add);
         return saida;
@@ -376,7 +376,7 @@ return horariosDoDia(jdbc, cfg, base, dia, servicos, relogio.instant(), false, n
                 : List.of();
         List<UUID> idsDosServicos = servicos.stream().map(Svc::id).toList();
         Map<UUID, List<UUID>> vinculos = VinculoServicos.porServico(jdbc);
-        for (Prof p : ordemDoDia(jdbc, base.profissionais(), dia)) {
+        for (Prof p : ordemDoDia(jdbc, base.profissionais(), dia, idsDosServicos.get(0))) {
             if (!VinculoServicos.realizaTodos(vinculos, p.id(), idsDosServicos)) continue; // A1: só quem realiza todos os serviços escolhidos
             Map<Integer, List<Faixa>> deleEscala = base.escalas().get(p.id());
             List<Ocupado> ocupados = jdbc.query("select inicio, fim_ocupado from agendamento where profissional_id = ? and id <> ? and status <> 'cancelado' and inicio < ? and fim_ocupado > ?",
@@ -579,7 +579,7 @@ return horariosDoDia(jdbc, cfg, base, dia, servicos, relogio.instant(), false, n
             UUID profissional = null;
             Map<UUID, List<UUID>> vinculos = VinculoServicos.porServico(jdbc);
             List<UUID> idsDosServicos = servicos.stream().map(Svc::id).toList();
-            for (Prof c : ordemDoDia(jdbc, base.profissionais(), local.toLocalDate())) {
+            for (Prof c : ordemDoDia(jdbc, base.profissionais(), local.toLocalDate(), idsDosServicos.get(0))) {
                 if (!EscalaService.cabeNoDia(lojaEscala, base.escalas().get(c.id()), dow, ini, ini + duracao)) continue;
                 if (!VinculoServicos.realizaTodos(vinculos, c.id(), idsDosServicos)) continue; // A1
                 if (Ausencias.ocupado(jdbc, c.id(), inicio, fimOcupado)) continue; // A3
@@ -588,6 +588,7 @@ return horariosDoDia(jdbc, cfg, base, dia, servicos, relogio.instant(), false, n
                 if (ocupados != null && ocupados == 0) { profissional = c.id(); break; }
             }
             if (profissional == null) throw new ErroDeNegocio(HttpStatus.CONFLICT, ERRO_HORARIO);
+            EscolhaAutomatica.registrar(jdbc, idsDosServicos.get(0), profissional); // B2: na fila, o ponteiro só avança aqui, na criação (mesma transação)
             UUID boxId = escolherBoxDoLink(jdbc, loja, inicio, fimServico, fimOcupado, null, NINGUEM);
 
             // sem telefone não há cadastro: o pedido guarda só o nome (`nome_avulso`) e o limite de abertos fica por conta do limite por IP e da loja

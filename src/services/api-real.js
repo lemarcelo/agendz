@@ -7,6 +7,7 @@
 // Docs: docs/F2-front-na-api-real.md. Rotas: POST /api/auth/login, PUT /api/usuarios/me/senha, GET /api/publico/loja, /api/onboarding/*, /api/clientes, /api/servicos, /api/usuarios.
 
 import { PADRAO_PAINEL, ordemAtenderValida, sanearOrdemAtender } from '../domain/ordem-atender.js';
+import { MODOS_DE_ESCOLHA, modoSaneado } from '../domain/modo-escolha.js'; // B2
 import { MAX_BYTES, conferirImagens, lerResumoAnexo, tipoPorConteudo } from '../domain/imagem-chamado.js';
 import { corpoDaSemana, erroDaSemana } from '../domain/expediente.js';
 import { corValida, erroDaMarca, logoValida } from '../domain/tema.js';
@@ -1208,7 +1209,7 @@ const CAMPOS_ATENDER = ['nome', 'telefone', 'profissional', 'vendedor', 'formaPa
 const lerRegras = (d) => {
   d = d && typeof d === 'object' ? d : {};
   const campos = (l, futuro) => listaDe(l, 9).map((x) => texto(x, 20)).filter((x) => CAMPOS_ATENDER.includes(x) && !(futuro && x === 'formaPagamento'));
-  return { formaPagamentoPadrao: ['', 'pix', 'dinheiro', 'cartao'].includes(d.formaPagamentoPadrao) ? d.formaPagamentoPadrao : 'pix', futuro: campos(d.futuro, true), local: campos(d.local, false), ordemServicos: d.ordemServicos === 'manual' ? 'manual' : 'uso', profissionalAutomatico: d.profissionalAutomatico === true, ordemAtender: sanearOrdemAtender(d.ordemAtender, PADRAO_PAINEL) };
+  return { formaPagamentoPadrao: ['', 'pix', 'dinheiro', 'cartao'].includes(d.formaPagamentoPadrao) ? d.formaPagamentoPadrao : 'pix', futuro: campos(d.futuro, true), local: campos(d.local, false), ordemServicos: d.ordemServicos === 'manual' ? 'manual' : 'uso', profissionalAutomatico: d.profissionalAutomatico === true, modoEscolha: modoSaneado(d.modoEscolha), ordemAtender: sanearOrdemAtender(d.ordemAtender, PADRAO_PAINEL) };
 };
 export const regras = {
   // GET /api/estabelecimento/regras-atendimento  (quem usa a agenda; o formulário Atender precisa da forma padrão e dos campos obrigatórios)
@@ -1217,8 +1218,12 @@ export const regras = {
     return r.ok ? { ok: true, regras: lerRegras(r.dados) } : r;
   },
   // PUT /api/estabelecimento/regras-atendimento  { formaPagamentoPadrao?, camposObrigatorios?: { futuro, local } }  (só o proprietário)
-  async gravar({ formaPagamentoPadrao, camposObrigatorios, ordemServicos, profissionalAutomatico, ordemAtender } = {}) {
+  async gravar({ formaPagamentoPadrao, camposObrigatorios, ordemServicos, profissionalAutomatico, ordemAtender, modoEscolha } = {}) {
     const corpo = {};
+    if (modoEscolha !== undefined) {
+      if (!MODOS_DE_ESCOLHA.includes(modoEscolha)) return { ok: false, status: 0, erro: 'Modo de escolha do profissional inválido.' };
+      corpo.modoEscolha = modoEscolha; // B2
+    }
     if (ordemAtender !== undefined) {
       if (!ordemAtenderValida(ordemAtender)) return { ok: false, status: 0, erro: 'A escolha do serviço deve vir antes da escolha do horário.' };
       corpo.ordemAtender = sanearOrdemAtender(ordemAtender, PADRAO_PAINEL); // v133

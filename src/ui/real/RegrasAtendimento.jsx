@@ -8,6 +8,7 @@ import { CAMPOS_DO_ATENDER, FORMAS_PAGAMENTO } from '../../domain/atender-form.j
 import { capAtiva } from '../../domain/tipos.js';
 import { Aviso, Btn, Campo } from '../leve/mini.jsx';
 import OrdemAtender from '../leve/OrdemAtender.jsx';
+import ModoEscolha from '../leve/ModoEscolha.jsx';
 import { COMO_A_PAGINA_DO_CLIENTE, PADRAO_PAINEL } from '../../domain/ordem-atender.js';
 
 const VEICULO = ['veiculo', 'placa', 'modelo', 'porte']; // só na estética (v121)
@@ -48,6 +49,7 @@ export default function RegrasAtendimento() {
       camposObrigatorios: { futuro: atual.futuro, local: atual.local },
       ordemServicos: atual.ordemServicos,
       profissionalAutomatico: atual.profissionalAutomatico,
+      modoEscolha: atual.modoEscolha,
       ordemAtender: atual.ordemAtender,
     });
     setSalvando(false);
@@ -82,6 +84,7 @@ export default function RegrasAtendimento() {
         </select>
       </Campo>
       <label className="check-linha"><input type="checkbox" checked={regras.profissionalAutomatico} onChange={(e) => { setOk(''); setErro(''); const atual = { ...regrasRef.current, profissionalAutomatico: e.target.checked }; regrasRef.current = atual; setRegras(atual); }} data-testid="regras-profissional-auto" /><span>Não perguntar quem vai fazer o serviço: o app escolhe quem está com a agenda mais livre (no Atender e no link do cliente)</span></label>
+      {regras.profissionalAutomatico && <ModoEscolha valor={regras.modoEscolha} aoMudar={(v) => { setOk(''); setErro(''); const atual = { ...regrasRef.current, modoEscolha: v }; regrasRef.current = atual; setRegras(atual); }} />}
       <OrdemAtender valor={regras.ordemAtender} padrao={capAtiva('usaVeiculo') ? COMO_A_PAGINA_DO_CLIENTE : PADRAO_PAINEL} usaVeiculo={capAtiva('usaVeiculo')} aoMudar={(v) => { setOk(''); setErro(''); const atual = { ...regrasRef.current, ordemAtender: v }; regrasRef.current = atual; setRegras(atual); }} />
       {grupo('futuro', 'Campos obrigatórios no agendamento (data futura)', CAMPOS_FUTURO())}
       {grupo('local', 'Campos obrigatórios no atendimento feito (agora ou passado)', CAMPOS_LOCAL())}

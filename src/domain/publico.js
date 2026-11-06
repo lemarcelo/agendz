@@ -10,7 +10,8 @@ import { CAMPOS_VEICULO_EXIGIVEIS, limparVeiculoComRegras } from './veiculos.js'
 import { cap, rot, tipoDe } from './tipos.js';
 import { agruparAtribuicao, realizaServico } from './vinculo.js';
 import { servicosNaOrdemDaLoja } from './ordem-servicos.js';
-import { limitesDoDia, ordemPorFolga, profissionalAutomatico } from './profissional-auto.js';
+import { profissionalAutomatico } from './profissional-auto.js';
+import { ordemDaLoja, registrarEscolha } from './modo-escolha.js'; // B2: modos da escolha automática (livre, aleatório, menos, fila)
 
 export const PASSO_PUBLICO_MIN = 30; // os horários do link saem de 30 em 30 minutos
 export const MAX_ABERTOS_LINK = 3; // de fábrica: agendamentos futuros em aberto por cliente; cada loja escolhe o seu de 1 a 20 (`linkAgendamento.limiteAbertos`, B10)
@@ -44,10 +45,10 @@ export function horarioLivre(s, { profissionalId, inicio, servicoIds, porte, ago
 }
 
 // B9c: com a escolha automática ligada (e o cliente sem escolher quem), a ordem de quem tenta o horário primeiro é a do mais livre no dia (domain/profissional-auto.js).
-function candidatosDoLink(s, profissionalId, dayTs) {
+function candidatosDoLink(s, profissionalId, dayTs, servicoChave) {
   const lista = s.usuarios.filter((u) => u.atende && (!profissionalId || u.id === profissionalId));
   if (profissionalId || !profissionalAutomatico(s)) return lista;
-  const ordem = ordemPorFolga(s.agendamentos, lista.map((u) => u.id), limitesDoDia(dayTs));
+  const ordem = ordemDaLoja(s, lista.map((u) => u.id), dayTs, servicoChave); // B2: o modo da loja
   return ordem.map((id) => lista.find((u) => u.id === id));
 }
 
@@ -83,7 +84,7 @@ export function horariosPublicos(s, { profissionalId, servicoIds, porte, dayTs, 
   if (!cfg.ativo || semBoxAtivo(s) || (cap(s.estabelecimento, 'precoPorPorte') && !porteAtivo(porte || PORTE_PADRAO)) || errosServicoIds(s, servicoIds, { ativos: true }) || !Number.isFinite(dayTs)) return [];
   const dia = startOfDay(dayTs);
   if (dia > agora + cfg.diasMax * DIA) return [];
-  const barbs = candidatosDoLink(s, profissionalId, dia);
+  const barbs = candidatosDoLink(s, profissionalId, dia, servicoIds[0]);
   const achados = new Map();
   for (const b of barbs) {
     for (const [ini, fim] of faixasDoProfissional(s.estabelecimento, b, dia)) {
@@ -222,9 +223,10 @@ function agendarUm(s, d, agora) {
   if (!semTelefone && !telefoneBrasileiro(d.telefone)) return { ok: false, erros: ['Informe o telefone com DDD.'] };
   const nac = semTelefone ? null : telefoneNacional(d.telefone);
   if (nac && !s.estabelecimento.ddds.includes(Number(nac.slice(0, 2)))) return { ok: false, erros: ['Esse DDD está fora da área de atendimento.'] };
-  const candidatos = candidatosDoLink(s, d.profissionalId, d.inicio);
+  const candidatos = candidatosDoLink(s, d.profissionalId, d.inicio, d.servicoIds[0]);
   const profissional = candidatos.find((u) => horarioLivre(s, { profissionalId: u.id, inicio: d.inicio, servicoIds: d.servicoIds, porte: lv.veiculo?.porte, agora }));
   if (!profissional) return { ok: false, erros: [ERRO_HORARIO] };
+  registrarEscolha(s, d.servicoIds[0], profissional.id); // B2: na fila o ponteiro só avança aqui, na criação
   if (semTelefone) {
     if (!nome) nome = 'Sem nome'; // dono tirou nome e telefone: o horário fica anônimo, só para a agenda
     const r = E.criarAgendamento(s, { semCliente: true, nomeAvulso: nome, profissionalId: profissional.id, servicoIds: d.servicoIds, inicio: d.inicio, origem: 'link', exigirVeiculo: cfg.veiculoObrigatorio, ...(usaVeiculo ? { veiculo: lv.veiculo } : {}) }, { tipo: 'cliente', nome, id: null }, agora);

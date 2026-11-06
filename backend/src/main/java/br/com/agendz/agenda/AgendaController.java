@@ -588,8 +588,9 @@ public class AgendaController {
         equipe = equipe.stream().filter(p -> VinculoServicos.realizaTodos(porServico, p, servicoIds)).toList(); // A1: só quem realiza todos os serviços
         if (equipe.isEmpty()) throw new ErroDeNegocio(HttpStatus.CONFLICT, "Nenhum profissional realiza todos esses serviços.");
         Instant quando = futuro ? inicio : agora;
-        List<UUID> ordem = Folga.ordem(jdbc, equipe, quando.atZone(br.com.agendz.escala.Fuso.BRASIL).toLocalDate());
-        if (!futuro) return ordem.get(0);
+        UUID servicoChave = servicoIds.isEmpty() ? null : servicoIds.get(0); // B2: a fila é por serviço (o primeiro do pedido); venda só de produto não tem serviço
+        List<UUID> ordem = EscolhaAutomatica.ordem(jdbc, equipe, servicoChave, quando.atZone(br.com.agendz.escala.Fuso.BRASIL).toLocalDate());
+        if (!futuro) { EscolhaAutomatica.registrar(jdbc, servicoChave, ordem.get(0)); return ordem.get(0); }
         List<ServicoLinha> servicos = carregarServicos(jdbc, servicoIds, null);
         int minutos = servicos.stream().mapToInt(ServicoLinha::duracaoMin).sum();
         int intervalo = servicos.get(servicos.size() - 1).intervaloMin();
@@ -598,7 +599,7 @@ public class AgendaController {
         for (UUID id : ordem) {
             try {
                 Ocupacao.Plano plano = ocupacao.planejar(jdbc, id, ini, minutos, intervalo, multiDia);
-                if (ocupacao.conflitos(jdbc, id, new UUID(0, 0), plano).isEmpty()) return id;
+                if (ocupacao.conflitos(jdbc, id, new UUID(0, 0), plano).isEmpty()) { EscolhaAutomatica.registrar(jdbc, servicoChave, id); return id; }
             } catch (ErroDeNegocio e) {
                 // fora do expediente dele: tenta o próximo
             }

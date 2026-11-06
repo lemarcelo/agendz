@@ -232,13 +232,13 @@ test('regras do Atender: rota, corpo certo, leitura defensiva e validação ante
   servidor({ formaPagamentoPadrao: 'dinheiro', futuro: ['nome', 'formaPagamento', 'cpf'], local: ['telefone', 'x'.repeat(50)], lixo: 1 });
   const lida = await regras.obter();
   assert.deepEqual(chamadas[0], { url: 'https://loja.teste/api/estabelecimento/regras-atendimento', metodo: 'GET', corpo: undefined });
-  assert.deepEqual(lida, { ok: true, regras: { formaPagamentoPadrao: 'dinheiro', futuro: ['nome'], local: ['telefone'], ordemServicos: 'uso', profissionalAutomatico: false, ordemAtender: PADRAO_PAINEL } }, 'o futuro nunca exige forma; campo desconhecido some; sem ordem gravada vale "uso"');
+  assert.deepEqual(lida, { ok: true, regras: { formaPagamentoPadrao: 'dinheiro', futuro: ['nome'], local: ['telefone'], ordemServicos: 'uso', profissionalAutomatico: false, modoEscolha: 'livre', ordemAtender: PADRAO_PAINEL } }, 'o futuro nunca exige forma; campo desconhecido some; sem ordem gravada vale "uso"');
   servidor({ formaPagamentoPadrao: 'xx', futuro: [], local: [] });
   assert.equal((await regras.obter()).regras.formaPagamentoPadrao, 'pix', 'forma desconhecida volta ao padrão de fábrica');
   servidor({ formaPagamentoPadrao: '', futuro: ['nome'], local: ['formaPagamento'] });
   const g = await regras.gravar({ formaPagamentoPadrao: '', camposObrigatorios: { futuro: ['nome'], local: ['formaPagamento'], lixo: 1 } });
   assert.deepEqual(chamadas[0], { url: 'https://loja.teste/api/estabelecimento/regras-atendimento', metodo: 'PUT', corpo: { formaPagamentoPadrao: '', camposObrigatorios: { futuro: ['nome'], local: ['formaPagamento'] } } });
-  assert.deepEqual(g.regras, { formaPagamentoPadrao: '', futuro: ['nome'], local: ['formaPagamento'], ordemServicos: 'uso', profissionalAutomatico: false, ordemAtender: PADRAO_PAINEL });
+  assert.deepEqual(g.regras, { formaPagamentoPadrao: '', futuro: ['nome'], local: ['formaPagamento'], ordemServicos: 'uso', profissionalAutomatico: false, modoEscolha: 'livre', ordemAtender: PADRAO_PAINEL });
   // v123: ordem dos serviços — só 'uso' ou 'manual'; inválida nem chega à rede
   servidor({ formaPagamentoPadrao: 'pix', futuro: [], local: [], ordemServicos: 'manual' });
   const o = await regras.gravar({ ordemServicos: 'manual' });
@@ -255,6 +255,16 @@ test('regras do Atender: rota, corpo certo, leitura defensiva e validação ante
   const antesPa = chamadas.length;
   assert.equal((await regras.gravar({ profissionalAutomatico: 'sim' })).ok, false);
   assert.equal(chamadas.length, antesPa, 'valor inválido não vai à rede');
+  // B2: modo da escolha automática — só os quatro modos; inválido nem chega à rede; leitura desconhecida volta a "livre"
+  servidor({ formaPagamentoPadrao: 'pix', futuro: [], local: [], profissionalAutomatico: true, modoEscolha: 'fila' });
+  const me = await regras.gravar({ modoEscolha: 'fila' });
+  assert.deepEqual(chamadas[0].corpo, { modoEscolha: 'fila' });
+  assert.equal(me.regras.modoEscolha, 'fila');
+  const antesMe = chamadas.length;
+  assert.equal((await regras.gravar({ modoEscolha: 'sorteio' })).ok, false);
+  assert.equal(chamadas.length, antesMe, 'modo inválido não vai à rede');
+  servidor({ formaPagamentoPadrao: 'pix', futuro: [], local: [], modoEscolha: 'xx' });
+  assert.equal((await regras.obter()).regras.modoEscolha, 'livre', 'modo desconhecido na leitura volta ao padrão');
   // B9b: ordem da tela Atender — vai saneada (completa) e a leitura defensiva completa o que faltar; forma errada nem chega à rede
   const nova = { ...PADRAO_PAINEL, futuro: { ...PADRAO_PAINEL.futuro, veiculo: ['porte', 'placa', 'modelo', 'marca', 'cor'] } };
   servidor({ formaPagamentoPadrao: 'pix', futuro: [], local: [], ordemAtender: { futuro: { veiculo: ['porte'] } } });

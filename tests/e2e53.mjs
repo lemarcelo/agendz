@@ -52,6 +52,7 @@ const servidor = http.createServer((req, res) => {
       }
       if (f !== undefined) regras = { ...regras, formaPagamentoPadrao: f };
       if (c.profissionalAutomatico !== undefined) regras = { ...regras, profissionalAutomatico: c.profissionalAutomatico === true };
+      if (c.modoEscolha !== undefined) { if (!['livre', 'aleatorio', 'menos', 'fila'].includes(c.modoEscolha)) return json(400, { mensagem: 'Modo de escolha do profissional inválido.' }); regras = { ...regras, modoEscolha: c.modoEscolha }; }
       if (c.ordemAtender !== undefined) regras = { ...regras, ordemAtender: c.ordemAtender };
       if (c.ordemServicos !== undefined) { if (!['uso', 'manual'].includes(c.ordemServicos)) return json(400, { mensagem: 'Ordem dos serviços inválida.' }); regras = { ...regras, ordemServicos: c.ordemServicos }; }
       return json(200, regras);
@@ -111,8 +112,8 @@ const concluirAtender = async (p) => { await p.getByTestId('atender-prox-quando'
   await p.getByTestId('regras-salvar').click();
   await p.getByTestId('regras-ok').waitFor();
   const put = chamadas.filter((c) => c.m === 'PUT' && c.u === '/api/estabelecimento/regras-atendimento').at(-1).corpo;
-  assert.deepEqual(put, { formaPagamentoPadrao: 'dinheiro', camposObrigatorios: { futuro: ['nome'], local: ['telefone', 'formaPagamento'] }, ordemServicos: 'manual', profissionalAutomatico: false, ordemAtender: PADRAO_PAINEL });
-  assert.deepEqual(regras, { formaPagamentoPadrao: 'dinheiro', futuro: ['nome'], local: ['telefone', 'formaPagamento'], ordemServicos: 'manual', profissionalAutomatico: false, ordemAtender: PADRAO_PAINEL });
+  assert.deepEqual(put, { formaPagamentoPadrao: 'dinheiro', camposObrigatorios: { futuro: ['nome'], local: ['telefone', 'formaPagamento'] }, ordemServicos: 'manual', profissionalAutomatico: false, modoEscolha: 'livre', ordemAtender: PADRAO_PAINEL });
+  assert.deepEqual(regras, { formaPagamentoPadrao: 'dinheiro', futuro: ['nome'], local: ['telefone', 'formaPagamento'], ordemServicos: 'manual', profissionalAutomatico: false, modoEscolha: 'livre', ordemAtender: PADRAO_PAINEL });
   ok('Início do dono: muda forma padrão e campos obrigatórios; corpo certo, servidor guardou');
   await ctx.close();
 }
@@ -236,6 +237,37 @@ const concluirAtender = async (p) => { await p.getByTestId('atender-prox-quando'
   larg = await p.evaluate(() => ({ doc: document.documentElement.scrollWidth, janela: window.innerWidth }));
   assert.ok(larg.doc <= larg.janela, `Atender: rolagem lateral ${larg.doc} > ${larg.janela}`);
   ok('390 px com fonte larga: sem rolagem lateral');
+  await ctx.close();
+}
+
+// 6. B2: o modo da escolha automática só aparece com a escolha automática ligada; o corpo leva o modo; a tela volta ao que o servidor devolveu; 390 px sem rolagem lateral
+for (const vp of [{ width: 1280, height: 860 }, { width: 390, height: 800 }]) {
+  regras = { ...regras, profissionalAutomatico: false, modoEscolha: 'livre' }; // o servidor falso recomeça igual em cada tamanho
+  const { ctx, p } = await entrar(vp);
+  if (vp.width < 700) await p.addStyleTag({ content: '*{font-family:"DejaVu Sans",sans-serif !important}' });
+  await p.getByTestId('regras-real').waitFor();
+  assert.equal(await p.getByTestId('regras-modo-escolha').count(), 0, 'sem a escolha automática, sem modo');
+  await p.getByTestId('regras-profissional-auto').check({ force: true });
+  await p.getByTestId('regras-modo-escolha-select').waitFor();
+  assert.equal(await p.getByTestId('regras-modo-escolha-select').inputValue(), 'livre', 'o padrão é o mais livre');
+  assert.deepEqual(await p.getByTestId('regras-modo-escolha-select').locator('option').evaluateAll((o) => o.map((x) => x.value)), ['livre', 'aleatorio', 'menos', 'fila']);
+  await p.getByTestId('regras-modo-escolha-select').selectOption('fila');
+  assert.match(await p.getByTestId('regras-modo-escolha').innerText(), /Revezamento por serviço/, 'a dica acompanha o modo');
+  if (process.env.E2E_CAPTURAS) await p.screenshot({ path: `${process.env.E2E_CAPTURAS}/b2-regras-modo-${vp.width}.png`, fullPage: true });
+  const larg = await p.evaluate(() => ({ doc: document.documentElement.scrollWidth, janela: window.innerWidth }));
+  assert.ok(larg.doc <= larg.janela, `Regras: rolagem lateral ${larg.doc} > ${larg.janela}`);
+  await p.getByTestId('regras-salvar').click();
+  await p.getByTestId('regras-ok').waitFor();
+  const put = chamadas.filter((c) => c.m === 'PUT' && c.u === '/api/estabelecimento/regras-atendimento').at(-1).corpo;
+  assert.equal(put.modoEscolha, 'fila'); assert.equal(put.profissionalAutomatico, true);
+  await p.reload();
+  await p.getByTestId('login-id').fill('alan'); await p.getByTestId('login-senha').fill('Minha-senha'); await p.getByTestId('login-entrar').click();
+  await acessarSecao(p, 'nav-estabelecimento'); await p.getByTestId('regras-modo-escolha-select').waitFor();
+  assert.equal(await p.getByTestId('regras-modo-escolha-select').inputValue(), 'fila', 'o modo salvo volta');
+  await p.getByTestId('regras-profissional-auto').uncheck({ force: true });
+  assert.equal(await p.getByTestId('regras-modo-escolha').count(), 0, 'desligada a escolha automática, o modo some');
+  await p.getByTestId('regras-salvar').click(); await p.getByTestId('regras-ok').waitFor();
+  ok(`${vp.width}px: modo da escolha automática (aparece só com a regra ligada, vai no corpo, volta salvo)`);
   await ctx.close();
 }
 

@@ -1,0 +1,28 @@
+{
+  "descricao": "B2: modos da escolha automática do profissional (livre = B9c, aleatorio, menos, fila). h = horas desde a meia-noite do dia do atendimento. Dia = [0, 24); janela = [0, 168); mês = [mes.ini, mes.fim) (padrão [-240, 480)). ja = serviços já atribuídos a cada um no MESMO agendamento. sorteio = chave sorteada por pessoa (menor vem antes; sem chave = depois de quem tem). ponteiro = último escolhido da fila do serviço.",
+  "casos": [
+    { "nome": "livre: ordem do mais livre (B9c)", "modo": "livre", "ids": ["a", "b"], "agendamentos": [{ "p": "a", "h": 9 }], "esperado": ["b", "a"] },
+    { "nome": "livre ignora ponteiro e sorteio", "modo": "livre", "ids": ["a", "b", "c"], "agendamentos": [{ "p": "b", "h": 9 }], "ponteiro": "a", "sorteio": { "a": 0.9, "b": 0.1, "c": 0.5 }, "esperado": ["a", "c", "b"] },
+    { "nome": "modo desconhecido vale livre", "modo": "qualquer", "ids": ["a", "b"], "agendamentos": [{ "p": "a", "h": 9 }], "esperado": ["b", "a"] },
+    { "nome": "menos: conta o mês inteiro, não só o dia", "modo": "menos", "ids": ["a", "b", "c"], "agendamentos": [{ "p": "a", "h": 9 }, { "p": "a", "h": 100 }, { "p": "b", "h": 9 }], "esperado": ["c", "b", "a"] },
+    { "nome": "menos: empate segue a ordem da equipe", "modo": "menos", "ids": ["b", "a"], "agendamentos": [{ "p": "a", "h": 9 }, { "p": "b", "h": 9 }], "esperado": ["b", "a"] },
+    { "nome": "menos: cancelado não conta", "modo": "menos", "ids": ["a", "b"], "agendamentos": [{ "p": "a", "h": 9, "cancelado": true }, { "p": "a", "h": 10, "cancelado": true }, { "p": "b", "h": 9 }], "esperado": ["a", "b"] },
+    { "nome": "menos: antes e depois do mês não contam (o fim do mês é aberto)", "modo": "menos", "ids": ["a", "b"], "agendamentos": [{ "p": "a", "h": -300 }, { "p": "a", "h": 480 }, { "p": "b", "h": 9 }], "esperado": ["a", "b"] },
+    { "nome": "menos: o mês pode ser outro (mes informado)", "modo": "menos", "ids": ["a", "b"], "mes": { "ini": 0, "fim": 48 }, "agendamentos": [{ "p": "a", "h": 100 }, { "p": "b", "h": 9 }], "esperado": ["a", "b"] },
+    { "nome": "menos: soma os serviços já atribuídos no mesmo agendamento", "modo": "menos", "ids": ["a", "b"], "agendamentos": [{ "p": "a", "h": 9 }], "ja": { "b": 2 }, "esperado": ["a", "b"] },
+    { "nome": "menos: só os já atribuídos, sem agendamentos", "modo": "menos", "ids": ["a", "b", "c"], "agendamentos": [], "ja": { "a": 1 }, "esperado": ["b", "c", "a"] },
+    { "nome": "menos: id de fora da lista é ignorado", "modo": "menos", "ids": ["a", "b"], "agendamentos": [{ "p": "zzz", "h": 9 }, { "p": "a", "h": 9 }], "esperado": ["b", "a"] },
+    { "nome": "aleatorio: menor chave primeiro", "modo": "aleatorio", "ids": ["a", "b", "c"], "sorteio": { "a": 0.9, "b": 0.1, "c": 0.5 }, "esperado": ["b", "c", "a"] },
+    { "nome": "aleatorio: chave repetida segue a ordem da equipe", "modo": "aleatorio", "ids": ["b", "a"], "sorteio": { "a": 0.5, "b": 0.5 }, "esperado": ["b", "a"] },
+    { "nome": "aleatorio: quem não tem chave vem depois, na ordem da equipe", "modo": "aleatorio", "ids": ["a", "b", "c"], "sorteio": { "c": 0.2 }, "esperado": ["c", "a", "b"] },
+    { "nome": "aleatorio ignora agendamentos", "modo": "aleatorio", "ids": ["a", "b"], "agendamentos": [{ "p": "b", "h": 9 }], "sorteio": { "a": 0.7, "b": 0.3 }, "esperado": ["b", "a"] },
+    { "nome": "fila: sem ponteiro começa pelo primeiro da equipe", "modo": "fila", "ids": ["a", "b", "c"], "esperado": ["a", "b", "c"] },
+    { "nome": "fila: começa depois do último escolhido", "modo": "fila", "ids": ["a", "b", "c"], "ponteiro": "a", "esperado": ["b", "c", "a"] },
+    { "nome": "fila: depois do último, volta ao primeiro (circular)", "modo": "fila", "ids": ["a", "b", "c"], "ponteiro": "c", "esperado": ["a", "b", "c"] },
+    { "nome": "fila: ponteiro no meio", "modo": "fila", "ids": ["a", "b", "c"], "ponteiro": "b", "esperado": ["c", "a", "b"] },
+    { "nome": "fila: ponteiro de quem saiu da lista começa do primeiro", "modo": "fila", "ids": ["a", "b", "c"], "ponteiro": "zzz", "esperado": ["a", "b", "c"] },
+    { "nome": "fila: segue a ordem da equipe informada", "modo": "fila", "ids": ["c", "a", "b"], "ponteiro": "a", "esperado": ["b", "c", "a"] },
+    { "nome": "fila ignora agendamentos e sorteio", "modo": "fila", "ids": ["a", "b"], "agendamentos": [{ "p": "b", "h": 9 }], "sorteio": { "a": 0.9, "b": 0.1 }, "ponteiro": "a", "esperado": ["b", "a"] },
+    { "nome": "um só profissional: nada a ordenar", "modo": "fila", "ids": ["a"], "ponteiro": "a", "esperado": ["a"] }
+  ]
+}
