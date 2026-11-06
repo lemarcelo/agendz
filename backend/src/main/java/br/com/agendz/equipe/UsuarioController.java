@@ -26,7 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Equipe (docs/MAPA-API-SPRING.md, equipe.*; regras em {@link UsuarioService}). Só o proprietário cadastra, altera, refaz senha, remove e vê a lista com
- * contatos e CPF mascarado. Cada pessoa troca só a própria foto. A lista simples de quem atende (para a agenda) continua em `/api/profissionais`.
+ * contatos e CPF mascarado. Desde o E1 trocar o perfil (inclusive de proprietário) não pede senha; as travas e o registro ficam no service. Cada pessoa troca só a própria foto. A lista simples de quem atende (para a agenda) continua em `/api/profissionais`.
  */
 @RestController
 public class UsuarioController {
@@ -37,15 +37,10 @@ public class UsuarioController {
     public record Foto(@Size(max = 40000) String foto) {
     }
 
-    public record Confirma(@Size(max = 200) String confirmaSenha) {
-    }
-
     private final UsuarioService usuarios;
-    private final ConfirmarSenha senhas;
 
-    public UsuarioController(UsuarioService usuarios, ConfirmarSenha senhas) {
+    public UsuarioController(UsuarioService usuarios) {
         this.usuarios = usuarios;
-        this.senhas = senhas;
     }
 
     @GetMapping("/api/usuarios")
@@ -64,17 +59,15 @@ public class UsuarioController {
     @PostMapping("/api/usuarios")
     @PreAuthorize("hasRole('DONO')")
     public ResponseEntity<ComSenha> criar(@Valid @RequestBody Dados d, @AuthenticationPrincipal Jwt jwt) {
-        // cadastrar alguém já como proprietário também pede a senha de quem faz (B6)
-        if (d.papel() != null && "dono".equals(d.papel().trim().toLowerCase(java.util.Locale.ROOT))) senhas.confirmar(UUID.fromString(jwt.getSubject()), d.confirmaSenha());
-        return ResponseEntity.status(HttpStatus.CREATED).cacheControl(CacheControl.noStore()).body(usuarios.criar(d));
+        // E1: cadastrar alguém já como proprietário NÃO pede mais a senha de quem faz; fica no registro de ações
+        return ResponseEntity.status(HttpStatus.CREATED).cacheControl(CacheControl.noStore()).body(usuarios.criarPor(UUID.fromString(jwt.getSubject()), d));
     }
 
     @PutMapping("/api/usuarios/{id}")
     @PreAuthorize("hasRole('DONO')")
     public Usuario alterar(@PathVariable UUID id, @Valid @RequestBody Dados d, @AuthenticationPrincipal Jwt jwt) {
-        // promover ou rebaixar um proprietário é ação sensível: pede a senha de quem faz (B6)
-        if (usuarios.mudaProprietario(id, d.papel())) senhas.confirmar(UUID.fromString(jwt.getSubject()), d.confirmaSenha());
-        return usuarios.alterar(id, d);
+        // E1: trocar o perfil (inclusive promover ou rebaixar proprietário) não pede senha; ninguém muda o próprio perfil; fica no registro de ações
+        return usuarios.alterarPor(UUID.fromString(jwt.getSubject()), id, d);
     }
 
     @PutMapping("/api/usuarios/{id}/atendimento")
@@ -85,10 +78,8 @@ public class UsuarioController {
 
     @PostMapping("/api/usuarios/{id}/senha-temporaria")
     @PreAuthorize("hasRole('DONO')")
-    public ResponseEntity<ComSenha> refazerSenha(@PathVariable UUID id, @RequestBody(required = false) @Valid Confirma c, @AuthenticationPrincipal Jwt jwt) {
-        UUID eu = UUID.fromString(jwt.getSubject());
-        // refazer a senha de OUTRO proprietário pede a senha de quem faz (B6); a própria senha tem outro caminho e o service recusa
-        if (!id.equals(eu) && usuarios.ehProprietario(id)) senhas.confirmar(eu, c == null ? null : c.confirmaSenha());
+    public ResponseEntity<ComSenha> refazerSenha(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
+        // E1: sem senha de confirmação (a própria senha tem outro caminho e o service recusa); fica no registro de ações
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(usuarios.refazerSenha(id, UUID.fromString(jwt.getSubject())));
     }
 

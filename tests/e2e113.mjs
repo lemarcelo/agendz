@@ -1,6 +1,6 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
-// B6 no Artifact: cadastrar/promover/rebaixar proprietário pede a senha de quem faz (campo `usr-confirma-senha`); perfil comum não pede; a loja nunca fica sem
-// proprietário; remover proprietário exige rebaixar antes. O texto visível diz "Proprietário". 390 px sem rolagem lateral.
+// B6 + E1 no Artifact: cadastrar/promover/rebaixar proprietário NÃO pede senha (não existe mais o campo `usr-confirma-senha`); ninguém altera o próprio perfil (select desabilitado + aviso);
+// a loja nunca fica sem proprietário; remover proprietário exige rebaixar antes. O texto visível diz "Proprietário". 390 px sem rolagem lateral.
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 
@@ -30,22 +30,31 @@ for (const [nome, vp, touch] of [['computador', { width: 1280, height: 800 }, fa
   await T('novo-usuario').click();
   await T('usr-nome').fill('Sócia Teste'); await T('usr-apelido').fill('Socia'); await T('usr-cpf').fill('52998224725');
   await T('usr-email').fill('socia@x.com'); await T('usr-senha').fill('1234');
-  assert.equal(await T('usr-confirma-senha').count(), 0, `${nome}: perfil comum não pede a senha`);
   await T('usr-papel').selectOption('dono');
-  assert.equal(await T('usr-confirma-senha').count(), 1, `${nome}: proprietário pede a senha`);
+  assert.equal(await T('usr-confirma-senha').count(), 0, `${nome}: proprietário também não pede a senha`);
   assert.match(await T('usr-papel').innerText(), /Proprietário/);
   assert.ok(!/\bDono\b/.test(await p.locator('[role="dialog"], .modal').first().innerText()), `${nome}: texto visível diz proprietário`);
   await semRolagem(p, `${nome}: formulário`);
-  await T('salvar-usuario').click(); // sem senha: recusa e o modal continua
-  await p.waitForTimeout(150);
-  assert.equal(await T('usr-confirma-senha').count(), 1, `${nome}: continua no formulário`);
-  assert.match(await p.locator('[role="alert"], .aviso').first().innerText(), /Senha incorreta/);
-  await T('usr-confirma-senha').fill('errada'); await T('salvar-usuario').click(); await p.waitForTimeout(150);
-  assert.match(await p.locator('[role="alert"], .aviso').first().innerText(), /Senha incorreta/);
-  await T('usr-confirma-senha').fill('1234'); await T('salvar-usuario').click();
+  await T('salvar-usuario').click(); // sem senha: salva e fecha
   await p.waitForTimeout(250);
-  assert.equal(await T('usr-confirma-senha').count(), 0, `${nome}: salvou e fechou`);
+  assert.equal(await T('usr-papel').count(), 0, `${nome}: salvou e fechou`);
   assert.match(await p.locator('.card-serv', { hasText: 'Sócia Teste' }).first().innerText(), /Proprietário/, `${nome}: cartão mostra Proprietário`);
+  // o próprio perfil não se altera: select desabilitado e aviso (o Davi é proprietário)
+  await p.locator('.card-serv', { hasText: 'Davi' }).first().getByRole('button', { name: /^Editar/ }).click();
+  await T('usr-papel').waitFor();
+  assert.equal(await T('usr-papel').isDisabled(), true, `${nome}: o próprio perfil não é editável`);
+  assert.match(await T('usr-perfil-proprio').innerText(), /não pode alterar o seu próprio perfil/);
+  await semRolagem(p, `${nome}: aviso do próprio perfil`);
+  await p.keyboard.press('Escape');
+  await p.waitForTimeout(250);
+  // a sócia (outra pessoa) tem o select liberado e pode ser rebaixada sem senha
+  await p.locator('.card-serv', { hasText: 'Sócia Teste' }).first().getByRole('button', { name: /^Editar/ }).click();
+  await T('usr-papel').waitFor();
+  assert.equal(await T('usr-papel').isDisabled(), false, `${nome}: o perfil de outra pessoa é editável`);
+  assert.equal(await T('usr-perfil-proprio').count(), 0);
+  await T('usr-papel').selectOption('atendente');
+  await T('salvar-usuario').click(); await p.waitForTimeout(250);
+  assert.equal(await T('usr-papel').count(), 0, `${nome}: rebaixou e fechou`);
   await ctx.close();
 }
 await b.close();

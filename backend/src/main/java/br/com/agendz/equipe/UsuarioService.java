@@ -58,7 +58,7 @@ public class UsuarioService {
     }
 
     /** Corpo de POST/PUT. Campo ausente não muda; texto vazio apaga (CPF, e-mail, telefone, nascimento, foto). `senhaTemporaria` (opcional, só ao CRIAR, 8 a 100 caracteres): o proprietário escolhe a senha de
-     *  entrada; vazia = gerada pelo sistema. Em qualquer caso é temporária (a pessoa troca no primeiro acesso). Não existe campo `senha` (400). */
+     *  entrada; vazia = gerada pelo sistema. Em qualquer caso é temporária (a pessoa troca no primeiro acesso). Não existe campo `senha` (400). `confirmaSenha` (E1) é IGNORADO: trocar o perfil não pede mais senha; o campo fica só para versões antigas do site não darem erro. */
     public record Dados(@Size(max = 300) String nome, @Size(max = 300) String apelido, @Size(max = 100) String usuario, @Size(max = 100) String cpf,
                         @Size(max = 100) String nascimento, @Size(max = 300) String email, @Size(max = 100) String telefone, @Size(max = 40) String papel,
                         @Size(max = 20) Map<String, Boolean> permissoes, Boolean atende, Boolean podeVender, BigDecimal comissaoPct,
@@ -223,7 +223,9 @@ public class UsuarioService {
             jdbc.update("delete from aparelho_confiavel where usuario_id = ?", id);
             return null;
         });
-        return new ComSenha(obter(id), senha);
+        ComSenha r = new ComSenha(obter(id), senha);
+        registrarAcao(eu, "equipe.senha", id, "Refez a senha temporária de " + rotulo(r.usuario()) + ".");
+        return r;
     }
 
     /** GET /api/usuarios/me: a pessoa lê os próprios dados. As contas ocultas (`suporte` e as de fumaça) não têm perfil na loja: recebem só o que já sabem do login (200, sem 404 no console). */
@@ -256,17 +258,49 @@ public class UsuarioService {
         });
     }
 
-    /** Muda para ou de proprietário? (ação sensível: pede a senha de quem faz). Perfil igual, ausente ou pessoa inexistente = não (o 404 vem do alterar). */
-    public boolean mudaProprietario(UUID id, String papelNovo) {
-        if (papelNovo == null || papelNovo.isBlank()) return false;
-        String novo = papelNovo.trim().toLowerCase(Locale.ROOT);
-        List<String> atual = banco.naLoja(jdbc -> jdbc.queryForList("select papel from usuario where id = ?", String.class, id));
-        return !atual.isEmpty() && !atual.get(0).equals(novo) && ("dono".equals(atual.get(0)) || "dono".equals(novo));
+    // ---------- E1: perfil sem senha de confirmação, com salvaguardas e registro ----------
+
+    /** Cadastra (painel da loja) e registra no log; cadastrar alguém já como proprietário não pede senha (E1). */
+    public ComSenha criarPor(UUID eu, Dados d) {
+        ComSenha r = criar(d);
+        registrarAcao(eu, "equipe.criar", r.usuario().id(), "Cadastrou " + rotulo(r.usuario()) + " com o perfil " + r.usuario().papel() + ".");
+        return r;
     }
 
-    /** A pessoa é proprietária? (refazer a senha de outro proprietário pede a senha de quem faz) */
-    public boolean ehProprietario(UUID id) {
-        return !banco.naLoja(jdbc -> jdbc.queryForList("select 1 from usuario where id = ? and papel = 'dono'", Integer.class, id)).isEmpty();
+    /**
+     * Altera a ficha. Troca de perfil (inclusive promover ou rebaixar proprietário) NÃO pede senha (E1), mas ninguém muda o PRÓPRIO perfil (409) e a loja
+     * nunca fica sem proprietário (409, em {@link #alterar}); a troca vai para o registro de ações. Só o proprietário chega aqui (@PreAuthorize no controller).
+     */
+    public Usuario alterarPor(UUID eu, UUID id, Dados d) {
+        String antes = papelAtual(id);
+        String novo = d.papel() == null || d.papel().isBlank() ? null : d.papel().trim().toLowerCase(Locale.ROOT);
+        boolean muda = antes != null && novo != null && !antes.equals(novo);
+        if (muda && id.equals(eu)) throw new ErroDeNegocio(HttpStatus.CONFLICT, "Você não pode alterar o seu próprio perfil. Peça a outro proprietário.");
+        Usuario u = alterar(id, d);
+        if (muda) registrarAcao(eu, "equipe.perfil", id, "Mudou o perfil de " + rotulo(u) + " de " + antes + " para " + novo + ".");
+        return u;
+    }
+
+    private String papelAtual(UUID id) {
+        List<String> l = banco.naLoja(jdbc -> jdbc.queryForList("select papel from usuario where id = ?", String.class, id));
+        return l.isEmpty() ? null : l.get(0);
+    }
+
+    private static String rotulo(Usuario u) {
+        return u.apelido() != null && !u.apelido().isBlank() ? u.apelido() : u.nome();
+    }
+
+    /** Registro de ações da loja (V48 `log_acao`): quem fez, o quê e em quem. Sem dado pessoal além do apelido da equipe. */
+    private void registrarAcao(UUID eu, String acao, UUID alvo, String resumo) {
+        Loja loja = LojaContext.exigir();
+        banco.naLoja(jdbc -> {
+            List<String[]> quem = jdbc.query("select coalesce(apelido, nome), papel from usuario where id = ?", (rs, i) -> new String[] {rs.getString(1), rs.getString(2)}, eu);
+            String nome = quem.isEmpty() ? "?" : quem.get(0)[0];
+            String papel = quem.isEmpty() ? "dono" : quem.get(0)[1];
+            jdbc.update("insert into log_acao (loja_id, usuario_id, usuario_nome, papel, acao, tipo_objeto, objeto_id, resumo, origem) values (?::uuid, ?, ?, ?, ?, 'usuario', ?, ?, 'web')",
+                    loja.id().toString(), eu, nome, papel, acao, alvo == null ? null : alvo.toString(), resumo);
+            return null;
+        });
     }
 
     public void remover(UUID id, UUID eu) {

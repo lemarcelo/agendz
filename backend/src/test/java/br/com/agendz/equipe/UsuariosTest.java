@@ -188,8 +188,8 @@ class UsuariosTest extends BaseApi {
         UUID daviId = jdbc.queryForObject("select id from usuario where loja_id = ?::uuid and identificador = 'davi'", UUID.class, LOJA_APEX);
         mvc.perform(delete("/api/usuarios/" + daviId).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)))
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.mensagem").value("Você não pode remover o seu próprio usuário."));
-        mvc.perform(put("/api/usuarios/" + daviId).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON).content("{\"papel\":\"profissional\",\"confirmaSenha\":\"1234\"}"))
-                .andExpect(status().isConflict()).andExpect(jsonPath("$.mensagem").value("É preciso ter pelo menos um proprietário."));
+        mvc.perform(put("/api/usuarios/" + daviId).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON).content("{\"papel\":\"profissional\"}"))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.mensagem").value("Você não pode alterar o seu próprio perfil. Peça a outro proprietário."));
         // com histórico: não apaga
         String comHistorico = criarOk("UtG", "");
         UUID cliente = jdbc.queryForObject("insert into cliente (loja_id, nome, telefone_cif, telefone_hash) values (?::uuid, 'Cli', 'v1:teste', md5('x')) returning id", UUID.class, LOJA_APEX);
@@ -205,40 +205,42 @@ class UsuariosTest extends BaseApi {
     }
 
     @Test
-    void podeHaverMaisDeUmProprietarioEMudarDePerfilOuRefazerSenhaDeProprietarioPedeASenha() throws Exception {
+    void podeHaverMaisDeUmProprietarioETrocarDePerfilOuRefazerSenhaDeProprietarioNaoPedeSenha() throws Exception {
         String id = criarOk("UtP", "");
         String url = "/api/usuarios/" + id;
-        String papelUtP = "select papel from usuario where id = ?::uuid";
-        // promover pede a senha de quem faz: sem senha ou errada = 403 e nada muda (nunca 401)
-        for (String corpo : new String[] {"{\"papel\":\"dono\"}", "{\"papel\":\"dono\",\"confirmaSenha\":\"errada\"}"}) {
-            mvc.perform(put(url).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON).content(corpo))
-                    .andExpect(status().isForbidden()).andExpect(jsonPath("$.mensagem").value("Senha incorreta"));
-        }
-        assertEquals("profissional", jdbc.queryForObject(papelUtP, String.class, id));
-        mvc.perform(put(url).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON).content("{\"papel\":\"dono\",\"confirmaSenha\":\"1234\"}"))
+        // E1: promover a proprietário NÃO pede senha (sem campo algum) e vai para o registro de ações; um confirmaSenha antigo é ignorado, nunca 403
+        mvc.perform(put(url).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON).content("{\"papel\":\"dono\"}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.papel").value("dono"));
-        // cadastrar já como proprietário também pede a senha
+        assertEquals(1, jdbc.queryForObject("select count(*) from log_acao where acao = 'equipe.perfil' and objeto_id = ? and resumo like '%de profissional para dono%'", Integer.class, id));
+        mvc.perform(put(url).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON).content("{\"papel\":\"atendente\",\"confirmaSenha\":\"errada\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.papel").value("atendente"));
+        mvc.perform(put(url).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON).content("{\"papel\":\"dono\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.papel").value("dono"));
+        // cadastrar já como proprietário também não pede senha
         String novoDono = "{\"nome\":\"Sócia Teste\",\"apelido\":\"UtSocia\",\"papel\":\"dono\"";
         mvc.perform(post("/api/usuarios").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON).content(novoDono + "}"))
-                .andExpect(status().isForbidden()).andExpect(jsonPath("$.mensagem").value("Senha incorreta"));
-        mvc.perform(post("/api/usuarios").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON).content(novoDono + ",\"confirmaSenha\":\"1234\"}"))
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.usuario.papel").value("dono"));
+        assertEquals(1, jdbc.queryForObject("select count(*) from log_acao where acao = 'equipe.criar' and resumo like '%UtSocia%'", Integer.class));
         // mudar perfil que NÃO envolve proprietário não pede senha
         String outra = criarOk("UtQ", "");
         mvc.perform(put("/api/usuarios/" + outra).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON).content("{\"papel\":\"atendente\"}"))
                 .andExpect(status().isOk());
-        // refazer a senha de OUTRO proprietário pede a senha de quem faz; a de quem não é proprietário, não
-        mvc.perform(post(url + "/senha-temporaria").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi))).andExpect(status().isForbidden());
+        // refazer a senha de OUTRO proprietário também não pede senha (com ou sem corpo), e fica no registro
+        mvc.perform(post(url + "/senha-temporaria").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi))).andExpect(status().isOk());
         mvc.perform(post(url + "/senha-temporaria").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON).content("{\"confirmaSenha\":\"1234\"}"))
                 .andExpect(status().isOk());
+        assertEquals(2, jdbc.queryForObject("select count(*) from log_acao where acao = 'equipe.senha' and objeto_id = ?", Integer.class, id));
         mvc.perform(post("/api/usuarios/" + outra + "/senha-temporaria").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi))).andExpect(status().isOk());
         // proprietário não é removido de uma vez: primeiro muda de perfil
         mvc.perform(delete(url).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)))
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.mensagem").value("Mude o perfil deste proprietário antes de removê-lo."));
-        // com outro proprietário, o davi pode se rebaixar; o token antigo dele (ainda com papel dono) deixa de valer na hora
+        // ninguém muda o PRÓPRIO perfil (mesmo havendo outro proprietário): 409 e nada muda
         UUID daviId = jdbc.queryForObject("select id from usuario where loja_id = ?::uuid and identificador = 'davi'", UUID.class, LOJA_APEX);
-        mvc.perform(put("/api/usuarios/" + daviId).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON).content("{\"papel\":\"admin\",\"confirmaSenha\":\"1234\"}"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.papel").value("admin"));
+        mvc.perform(put("/api/usuarios/" + daviId).with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON).content("{\"papel\":\"admin\"}"))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.mensagem").value("Você não pode alterar o seu próprio perfil. Peça a outro proprietário."));
+        assertEquals("dono", jdbc.queryForObject("select papel from usuario where id = ?", String.class, daviId));
+        // quem foi rebaixado por outro proprietário perde o acesso na hora: o token antigo dele (ainda com papel dono) deixa de valer
+        jdbc.update("update usuario set papel = 'admin' where id = ?", daviId);
         mvc.perform(get("/api/usuarios").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi))).andExpect(status().isUnauthorized());
     }
 

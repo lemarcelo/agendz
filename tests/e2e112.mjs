@@ -1,6 +1,6 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
-// B6 (site real, servidor falso): mais de um proprietário. Promover, rebaixar ou cadastrar proprietário pede a SENHA de quem faz (campo `eq-confirma-senha`);
-// refazer a senha de outro proprietário também; perfil sem proprietário não pede. Senha errada = 403 do servidor e a sessão continua. As regras de verdade estão em UsuariosTest.
+// B6 + E1 (site real, servidor falso): mais de um proprietário. Promover, rebaixar, cadastrar proprietário e refazer a senha de outro proprietário NÃO pedem senha (E1);
+// ninguém altera o próprio perfil (select desabilitado + aviso). As regras de verdade estão em UsuariosTest.
 // O mesmo fluxo no Artifact está em tests-jest/proprietarios.test.mjs (unidade) e na parte 2 deste arquivo.
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
@@ -33,7 +33,6 @@ const servidor = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://x');
     if (url.pathname === '/api/usuarios' && req.method === 'GET') return json(200, banco);
     if (url.pathname === '/api/usuarios' && req.method === 'POST') {
-      if (c.papel === 'dono' && c.confirmaSenha !== '1234') return json(403, { mensagem: 'Senha incorreta' });
       if (!String(c.nome || '').trim() || !String(c.apelido || '').trim()) return json(400, { mensagem: 'Informe o nome e o apelido.' });
       if (banco.some((x) => x.apelido.toLowerCase() === c.apelido.toLowerCase())) return json(409, { mensagem: 'Já existe alguém com esse apelido.' });
       if ('senha' in c) return json(400, { mensagem: 'Campo não aceito' });
@@ -50,10 +49,10 @@ const servidor = http.createServer((req, res) => {
         x.atende = c.atende; return json(200, x);
       }
       if (m[2] === '/senha-temporaria') {
-        if (x.papel === 'dono' && (!c || c.confirmaSenha !== '1234')) return json(403, { mensagem: 'Senha incorreta' }); x.deveTrocarSenha = true; return json(200, { usuario: x, senhaTemporaria: 'Nv5tHc8Ra3Lw' }); }
+        x.deveTrocarSenha = true; return json(200, { usuario: x, senhaTemporaria: 'Nv5tHc8Ra3Lw' }); }
       if (req.method === 'GET') return json(200, x);
       if (req.method === 'PUT') {
-        if (c.papel && (c.papel === 'dono') !== (x.papel === 'dono') && c.confirmaSenha !== '1234') return json(403, { mensagem: 'Senha incorreta' });
+        if (c.papel && c.papel !== x.papel && x.id === MEU) return json(409, { mensagem: 'Você não pode alterar o seu próprio perfil. Peça a outro proprietário.' });
         if (x.papel === 'dono' && c.papel && c.papel !== 'dono' && banco.filter((y) => y.papel === 'dono').length < 2) return json(409, { mensagem: 'É preciso ter pelo menos um proprietário.' });
         const { confirmaSenha, ...resto } = c; Object.assign(x, resto); return json(200, x);
       }
@@ -80,6 +79,8 @@ async function abrir(viewport = { width: 1280, height: 800 }) {
   await p.locator('.nav button').first().waitFor();
   return { ctx, p };
 }
+const CAP = process.env.E2E_CAPTURAS; // pasta de capturas (opcional): 1366 e 390 px, fonte larga
+const cap = async (p, nome) => { if (!CAP) return; const orig = p.viewportSize(); for (const w of [1366, 390]) { await p.setViewportSize({ width: w, height: w === 390 ? 780 : 800 }); await p.addStyleTag({ content: "*{font-family:'DejaVu Sans',sans-serif !important}" }); await p.waitForTimeout(350); await p.screenshot({ path: `${CAP}/${nome}-${w}.png` }); } await p.setViewportSize(orig); };
 const semRolagem = async (p, nome) => assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `${nome}: rolagem horizontal em 390 px`);
 
 
@@ -90,47 +91,53 @@ const semRolagem = async (p, nome) => assert.ok(await p.evaluate(() => document.
   const ana = banco.find((x) => x.apelido === 'Ana') || (() => { const n = { id: '00000000-0000-4000-8000-0000000000b1', nome: 'Ana Souza', apelido: 'Ana', usuario: 'ana', papel: 'atendente', atende: false, podeVender: true, comissaoPct: null, permissoes: {}, corSlot: 1, deveTrocarSenha: false, cpfMascarado: null }; banco.push(n); return n; })();
   await p.reload(); await p.getByTestId('login-id').fill('davi'); await p.getByTestId('login-senha').fill('x'); await p.getByTestId('login-entrar').click();
   await p.getByTestId('nav-equipe').click(); await p.getByTestId('eq-lista').waitFor();
-  // promover a Ana: o campo da senha só aparece ao escolher Proprietário
+  // E1: promover a Ana a proprietária não pede senha (nenhum campo de senha de confirmação) e nada de senha vai no corpo
   await p.getByTestId(`editar-${ana.id}`).click();
   await p.getByTestId('eq-form').waitFor();
-  assert.equal(await p.getByTestId('eq-confirma-senha').count(), 0, 'perfil sem proprietário não pede senha');
   await p.getByTestId('eq-papel').selectOption('dono');
-  assert.equal(await p.getByTestId('eq-confirma-senha').count(), 1);
+  assert.equal(await p.getByTestId('eq-confirma-senha').count(), 0, 'não existe mais campo de senha de confirmação');
+  assert.equal(await p.locator('input[type="password"]').count(), 0, 'nenhum campo de senha no formulário');
+  await cap(p, 'e1-promover-sem-senha');
   assert.match(await p.getByTestId('eq-papel').innerText(), /Proprietário/);
   assert.ok(!/\bDono\b/.test(await p.getByTestId('eq-form').innerText()), 'texto visível diz proprietário');
-  await p.getByTestId('eq-confirma-senha').fill('errada'); await p.getByTestId('salvar-pessoa').click();
-  assert.match(await p.getByTestId('eq-erro').innerText(), /Senha incorreta/);
-  assert.equal(banco.find((x) => x.id === ana.id).papel, 'atendente', 'senha errada não muda nada');
-  await p.getByTestId('eq-confirma-senha').fill('1234'); await p.getByTestId('salvar-pessoa').click();
+  await p.getByTestId('salvar-pessoa').click();
   await p.getByTestId('eq-salvo').waitFor();
   assert.equal(banco.find((x) => x.id === ana.id).papel, 'dono');
-  assert.equal(chamadas.filter((c) => c.m === 'PUT' && c.u.endsWith(ana.id)).at(-1).corpo.confirmaSenha, '1234');
-  // refazer a senha de outro proprietário pede a senha de quem faz; a senha digitada não fica na tela depois
+  assert.ok(!('confirmaSenha' in chamadas.filter((c) => c.m === 'PUT' && c.u.endsWith(ana.id)).at(-1).corpo), 'o corpo não leva senha de confirmação');
+  // refazer a senha de outro proprietário: um clique, sem pedir senha
   await p.getByTestId(`senha-${ana.id}`).click();
-  await p.getByTestId(`eq-refazer-${ana.id}`).waitFor();
-  assert.equal(chamadas.filter((c) => c.u.endsWith('/senha-temporaria')).length, 0, 'nada enviado antes de digitar a senha');
-  await p.getByTestId(`eq-refazer-senha-${ana.id}`).fill('errada'); await p.getByTestId(`eq-refazer-sim-${ana.id}`).click();
-  assert.match(await p.getByTestId('eq-erro-lista').innerText(), /Senha incorreta/);
-  await p.getByTestId(`eq-refazer-senha-${ana.id}`).fill('1234'); await p.getByTestId(`eq-refazer-sim-${ana.id}`).click();
   await p.getByTestId('equipe-senha').waitFor();
   assert.equal(await p.getByTestId('equipe-senha-valor').innerText(), 'Nv5tHc8Ra3Lw');
+  assert.deepEqual(chamadas.filter((c) => c.u.endsWith('/senha-temporaria')).at(-1).corpo, {}, 'sem senha de confirmação no corpo');
   await p.getByTestId('equipe-senha-anotei').click();
-  assert.equal(await p.evaluate(() => [...document.querySelectorAll('input')].filter((i) => i.value === '1234').length), 0, 'a senha de confirmação não fica em nenhum campo depois de usada');
-  // refazer a senha de quem NÃO é proprietário não pede senha
+  // refazer a senha de quem NÃO é proprietário também não pede senha
   const pablo = banco.find((x) => x.apelido === 'Pablo');
   if (pablo) { await p.getByTestId(`senha-${pablo.id}`).click(); await p.getByTestId('equipe-senha').waitFor(); await p.getByTestId('equipe-senha-anotei').click(); }
-  // rebaixar a Ana de volta (agora há dois): pede a senha de novo
+  // rebaixar a Ana de volta (agora há dois): também sem senha
   await p.getByTestId(`editar-${ana.id}`).click(); await p.getByTestId('eq-form').waitFor();
   await p.getByTestId('eq-papel').selectOption('atendente');
-  await p.getByTestId('eq-confirma-senha').fill('1234'); await p.getByTestId('salvar-pessoa').click();
+  await p.getByTestId('salvar-pessoa').click();
   await p.getByTestId('eq-salvo').waitFor();
   assert.equal(banco.find((x) => x.id === ana.id).papel, 'atendente');
-  // 390 px: o campo da senha não cria rolagem lateral
-  await p.setViewportSize({ width: 390, height: 800 });
+  // ninguém altera o PRÓPRIO perfil: o select fica desabilitado, com o aviso, e salvar mantém o perfil
+  await p.getByTestId(`editar-${MEU}`).click(); await p.getByTestId('eq-form').waitFor();
+  assert.equal(await p.getByTestId('eq-papel').isDisabled(), true, 'o próprio perfil não é editável');
+  assert.match(await p.getByTestId('eq-perfil-proprio').innerText(), /não pode alterar o seu próprio perfil/);
+  await cap(p, 'e1-proprio-perfil');
+  await p.getByTestId('salvar-pessoa').click(); await p.getByTestId('eq-salvo').waitFor();
+  assert.equal(banco.find((x) => x.id === MEU).papel, 'dono');
+  // outra pessoa continua com o select liberado
   await p.getByTestId(`editar-${ana.id}`).click(); await p.getByTestId('eq-form').waitFor();
-  await p.getByTestId('eq-papel').selectOption('dono');
-  await semRolagem(p, 'campo da senha do proprietário');
-  ok('site real: promover/rebaixar/refazer senha de proprietário pedem a senha; perfil comum não');
+  assert.equal(await p.getByTestId('eq-papel').isDisabled(), false);
+  assert.equal(await p.getByTestId('eq-perfil-proprio').count(), 0);
+  // 390 px: o aviso do próprio perfil não cria rolagem lateral
+  await p.setViewportSize({ width: 390, height: 800 });
+  await p.getByTestId('eq-form').waitFor();
+  await semRolagem(p, 'formulário da equipe');
+  await p.getByRole('button', { name: 'Cancelar' }).click();
+  await p.getByTestId(`editar-${MEU}`).click(); await p.getByTestId('eq-form').waitFor();
+  await semRolagem(p, 'aviso do próprio perfil');
+  ok('site real: promover/rebaixar/refazer senha de proprietário sem senha; ninguém altera o próprio perfil');
   await ctx.close();
 }
 

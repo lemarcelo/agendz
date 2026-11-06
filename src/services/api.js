@@ -1018,7 +1018,7 @@ export const equipe = {
   // POST /usuarios  |  PUT /usuarios/{id}
   salvar(entrada) {
     if (!R.ehDono(usuario())) return erro('Somente o proprietário cadastra e altera a equipe.');
-    const u = pegar(entrada, ['id', 'nome', 'apelido', 'cpf', 'nascimento', 'email', 'telefone', 'senha', 'papel', 'permissoes', 'atende', 'foto', 'comissaoPct', 'comissaoProdutoPct', 'podeVender', 'confirmaSenha', 'servicoIds']);
+    const u = pegar(entrada, ['id', 'nome', 'apelido', 'cpf', 'nascimento', 'email', 'telefone', 'senha', 'papel', 'permissoes', 'atende', 'foto', 'comissaoPct', 'comissaoProdutoPct', 'podeVender', 'servicoIds']);
     if ('servicoIds' in u && (!Array.isArray(u.servicoIds) || u.servicoIds.length > 500)) return erro('Lista de serviços inválida.');
     if ('comissaoPct' in u && !R.ehDono(usuario())) delete u.comissaoPct;
     if ('comissaoProdutoPct' in u && !R.ehDono(usuario())) delete u.comissaoProdutoPct;
@@ -1026,18 +1026,16 @@ export const equipe = {
     if ('comissaoPct' in u) { const c = lerPct(u.comissaoPct); if (!c.ok) return erro('A comissão vai de 0 a 100%.'); u.comissaoPct = c.v; }
     if ('comissaoProdutoPct' in u) { const c = lerPct(u.comissaoProdutoPct); if (!c.ok) return erro('A comissão vai de 0 a 100%.'); u.comissaoProdutoPct = c.v; } // sobre produtos: vale quando o produto não tem a sua
     if ('foto' in u && u.foto !== null && !fotoValida(u.foto)) return erro('Foto inválida: use uma imagem PNG, JPEG ou WebP pequena.');
-    for (const k of ['nome', 'apelido', 'cpf', 'nascimento', 'email', 'telefone', 'senha', 'confirmaSenha']) if (k in u && !texto(u[k], 150)) return erro('Texto inválido ou grande demais em ' + k + '.');
+    for (const k of ['nome', 'apelido', 'cpf', 'nascimento', 'email', 'telefone', 'senha']) if (k in u && !texto(u[k], 150)) return erro('Texto inválido ou grande demais em ' + k + '.');
     if (('papel' in u || !u.id) && !['dono', 'admin', 'atendente', 'profissional'].includes(u.papel)) return erro('Escolha o perfil da pessoa.');
     if ('permissoes' in u) u.permissoes = R.limparPermissoes(u.permissoes);
     if (R.nomeReservado(u.nome) || R.nomeReservado(u.apelido)) return erro(R.NOME_RESERVADO); // `suporte` é do Admin da plataforma
-    const confirmaSenha = u.confirmaSenha; delete u.confirmaSenha; // nunca vai para o estado
+    delete u.confirmaSenha; // E1: versões antigas ainda mandam; o campo é ignorado e nunca vai para o estado
     return mutate((s) => {
-      // B6: promover, rebaixar ou cadastrar um proprietário pede a senha de quem faz (senha errada = erro, a sessão continua)
+      // E1: trocar o perfil (inclusive de proprietário) não pede senha; ninguém muda o PRÓPRIO perfil
       const antes = u.id ? s.usuarios.find((x) => x.id === u.id) : null;
       if (u.id && !antes) return erro('Usuário não encontrado.');
-      const mudaProprietario = antes ? 'papel' in u && (antes.papel === 'dono') !== (u.papel === 'dono') : u.papel === 'dono';
-      const quemFaz = s.usuarios.find((x) => x.id === sessao);
-      if (mudaProprietario && (!confirmaSenha || !quemFaz || quemFaz.senha !== confirmaSenha)) return erro('Senha incorreta');
+      if (antes && 'papel' in u && u.papel !== antes.papel && antes.id === sessao) return erro('Você não pode alterar o seu próprio perfil. Peça a outro proprietário.');
       if (!String(u.nome || '').trim() || !String(u.apelido || '').trim()) return erro('Informe o nome e o apelido.');
       if (R.somenteDigitos(u.cpf).length !== 11) return erro('Informe o CPF completo.');
       if (!String(u.email || '').includes('@')) return erro('Informe um e-mail válido.');

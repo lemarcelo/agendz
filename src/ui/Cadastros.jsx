@@ -384,7 +384,7 @@ function FormUsuario({ u, user, onClose }) {
         <Campo rotulo="E-mail"><input type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} data-testid="usr-email" /></Campo>
         <Campo rotulo={u.id ? 'Nova senha (deixe vazio para manter)' : 'Senha'}><input type="password" value={f.senha} onChange={(e) => setF({ ...f, senha: e.target.value })} autoComplete="new-password" data-testid="usr-senha" /></Campo>
         <Campo rotulo="Perfil" className="campo-largo">
-          <select value={f.papel} disabled={ehMaster} onChange={(e) => setF({ ...f, papel: e.target.value, atende: ehGestor({ papel: e.target.value }) ? false : f.atende, permissoes: {} })} data-testid="usr-papel">
+          <select value={f.papel} disabled={ehMaster || (!!u.id && u.id === sessao)} onChange={(e) => setF({ ...f, papel: e.target.value, atende: ehGestor({ papel: e.target.value }) ? false : f.atende, permissoes: {} })} data-testid="usr-papel">
             <option value="profissional">{Rot('profissional')}: vê só a própria agenda</option>
             <option value="atendente">Atendente: agenda e cadastros, sem relatórios</option>
             <option value="admin">Admin: começa sem acesso, você libera abaixo</option>
@@ -392,11 +392,7 @@ function FormUsuario({ u, user, onClose }) {
             {ehMaster && <option value="master">Master: acesso total, só de IP reservado</option>}
           </select>
         </Campo>
-        {(u.id ? (u.papel === 'dono') !== (f.papel === 'dono') : f.papel === 'dono') && (
-          <Campo rotulo="Sua senha (para confirmar a mudança de proprietário)" className="campo-largo" dica="Promover, rebaixar ou cadastrar um proprietário pede a sua senha. Pode haver mais de um; sempre sobra pelo menos um.">
-            <input type="password" value={f.confirmaSenha || ''} onChange={(e) => setF({ ...f, confirmaSenha: e.target.value })} autoComplete="current-password" data-testid="usr-confirma-senha" />
-          </Campo>
-        )}
+        {u.id && u.id === sessao && <p className="muted campo-largo" data-testid="usr-perfil-proprio">Você não pode alterar o seu próprio perfil. Peça a outro proprietário. Pode haver mais de um; sempre sobra pelo menos um.</p>}
         {f.papel !== 'dono' && f.papel !== 'master' && (
           <fieldset className="campo-largo conj" data-testid="usr-acessos"><legend>Menus que esta pessoa acessa</legend>
             <div className="servicos-lista">{SECOES_LIBERAVEIS.map((k) => {
