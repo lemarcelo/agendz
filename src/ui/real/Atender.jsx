@@ -13,6 +13,8 @@ import { EXEMPLO_PORTE, PORTE_PADRAO, ROTULO_PORTE, portesParaEscolher, rotuloVe
 import { REGRAS_DE_FABRICA, FORMAS_PAGAMENTO, boxesAtivos, camposFaltando, ehRetroativo, exige, faltaItem, exigenciasDoVeiculo, faltaVeiculo, porteDoAtendimento, formaEfetiva, filtrarProdutos, filtrarServicos, qtdValida, resumoDosProdutos, resumoDosServicos, servicoNoPorte, tipoDoAtendimento, vendedorPadrao } from '../../domain/atender-form.js';
 import { ordenarServicos } from '../../domain/ordem-servicos.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
+import ProfissionalPorServico from '../leve/ProfissionalPorServico.jsx';
+import { precisaAtribuirPorServico } from '../../domain/vinculo.js';
 
 const aoLocal = (ts) => { const d = new Date(ts); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
 const doLocal = (v) => { const t = new Date(v).getTime(); return Number.isFinite(t) ? t : null; };
@@ -118,6 +120,12 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
   const forma = formaEfetiva(regras, formaEscolhida);
   const faltam = camposFaltando(tipo, { nome, telefone, cliente, profissionalId: profId, vendedorId: itens.length ? vendedor : '', temProdutos: itens.length > 0, forma }, regras);
   const auto = autoAtender; // B9c: o campo some e o servidor escolhe quem está mais livre
+  // B1: serviços feitos por pessoas diferentes → um campo de profissional por serviço (vazio e obrigatório); o campo único some. Só a recepção e o proprietário escolhem.
+  const [atrib, setAtrib] = useState({});
+  const porAtribuir = !auto && !ehProprio && vinculos !== null && precisaAtribuirPorServico(ids, vinculos);
+  useEffect(() => { setAtrib((a) => Object.fromEntries(Object.entries(a).filter(([sid, pid]) => ids.includes(sid) && realiza(pid, sid)))); }, [ids, vinculos]); // eslint-disable-line react-hooks/exhaustive-deps
+  const atribuicoes = porAtribuir ? ids.map((sid) => ({ servicoId: sid, profissionalId: atrib[sid] || '' })) : null;
+  const faltaAtribuir = porAtribuir && atribuicoes.some((x) => !x.profissionalId) ? 'Escolha o profissional de cada serviço.' : '';
   const marca = (campo) => (exige(regras, tipo, campo) ? ' *' : ' (opcional)');
 
   const escolher = (c) => { setCliente(c); setVeiculoId(c.veiculos && c.veiculos.length === 1 ? c.veiculos[0].id : ''); setNome(c.apelido || c.nome); setTelefone(c.telefone ? formatarTelefone(telNacional(c.telefone)) : ''); setBusca(''); setAchados([]); setErro(''); };
@@ -129,10 +137,11 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
     if (enviando) return;
     if (personalizar) { const problema = validarQuando(inicio, modoQuando, Date.now()); if (problema) { setErro(problema); return; } }
     if (falta) { setErro(falta); return; }
+    if (faltaAtribuir) { setErro(faltaAtribuir); return; }
     if (tipo === 'local' && !forma) { setErro('Escolha a forma de pagamento.'); return; }
     setEnviando(true); setErro('');
     const r = await api.atender({
-      servicoIds: ids, ...(itens.length ? { produtos: itens, vendedorId: vendedor } : {}), nome, telefone, ...(cliente ? { clienteId: cliente.id } : {}), ...(auto ? {} : { profissionalId: profId }),
+      servicoIds: ids, ...(itens.length ? { produtos: itens, vendedorId: vendedor } : {}), nome, telefone, ...(cliente ? { clienteId: cliente.id } : {}), ...(auto ? {} : { profissionalId: porAtribuir ? atribuicoes[0].profissionalId : profId }), ...(porAtribuir ? { atribuicoes } : {}),
       ...(usaVeiculo && ids.length ? (veiculoEscolhido ? { veiculoId: veiculoEscolhido.id } : { veiculo: novoVeic }) : {}),
       ...(usaBox && tipo === 'futuro' && boxId ? { boxId } : {}),
       ...(personalizar ? { inicio } : {}), ...(retro ? { motivoRetroativo: motivo } : {}),
@@ -319,7 +328,11 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
 
       <div className="atender-conclusao-real" hidden={PASSOS_ATENDER[etapaAtiva].id !== 'cliente'}>
       <div className="form-grade">
-        {!auto && (
+        {porAtribuir && (
+          <ProfissionalPorServico testid="atender-pps" servicos={ids.map((sid) => ({ id: sid, nome: (servicos || []).find((s) => s.id === sid)?.nome || '' }))} rotuloProfissional={Rot('profissional')}
+            opcoes={(sid) => profissionais.filter((p) => realiza(p.id, sid)).map((p) => ({ id: p.id, nome: p.nome }))} valor={atrib} aoMudar={setAtrib} />
+        )}
+        {!auto && !porAtribuir && (
           <Campo rotulo={`${Rot('profissional')}${exige(regras, tipo, 'profissional') ? ' *' : ''}`}>
             <select value={profId} onChange={(e) => { setProfId(e.target.value); setProfManual(true); }} disabled={ehProprio} data-testid="atender-profissional">
               {profOpcoes.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}

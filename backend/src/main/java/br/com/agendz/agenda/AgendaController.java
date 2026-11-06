@@ -13,6 +13,7 @@ import br.com.agendz.tenant.Loja;
 import br.com.agendz.tenant.LojaContext;
 import br.com.agendz.tenant.Idempotencia;
 import br.com.agendz.tenant.LojaJdbc;
+import br.com.agendz.agenda.AtribuicaoDeServicos.Grupo;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -153,7 +154,12 @@ public class AgendaController {
             UUID veiculoId,
             ClienteService.EntradaVeiculo veiculo,
             UUID boxId,
-            UUID assinaturaId) {
+            UUID assinaturaId,
+            @Size(max = 10) List<@Valid Atribuicao> atribuicoes) {
+    }
+
+    /** B1: quem faz cada serviço do pedido (só o proprietário e a recepção escolhem). Sem isto, vale `profissionalId` para todos os serviços, como sempre. */
+    public record Atribuicao(UUID servicoId, UUID profissionalId) {
     }
 
     public record ChaveCupom(@jakarta.validation.constraints.NotBlank @Size(max = 40) String chave) {
@@ -453,6 +459,11 @@ public class AgendaController {
             RegrasAtendimento.Regras regras = RegrasAtendimento.ler(jdbc);
             // B9c: a loja tirou o campo "quem faz o serviço" e ninguém escolheu → o servidor escolhe quem está com a agenda mais livre (quem tem o campo preenchido manda)
             UUID profissionalId = profissionalPedido;
+            // B1: profissional por serviço. Um profissional só = comportamento de sempre; dois ou mais = um agendamento por profissional, em sequência (V56)
+            List<Grupo> grupos = gruposDeAtribuicao(jdbc, d, servicoIds, veTudo);
+            if (grupos != null) profissionalId = grupos.get(0).profissionalId();
+            boolean dividido = grupos != null && grupos.size() > 1;
+            if (dividido && usaBox(loja)) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Nesta loja, todos os serviços de um atendimento precisam ser do mesmo profissional (o veículo fica num box só).");
             if (profissionalId == null && regras.profissionalAutomatico() && veTudo) profissionalId = escolherAutomatico(jdbc, servicoIds, futuro, d.inicio(), agora);
             Map<String, Boolean> tem = new LinkedHashMap<>();
             tem.put("nome", !nomeInf.isEmpty() || (semNome != null && !semNome));
@@ -468,10 +479,12 @@ public class AgendaController {
             }
             boolean comCupom = d.cupomChave() != null && !d.cupomChave().isBlank();
             if (comCupom && !futuro) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Cupom só vale em agendamento (data futura).");
+            if (dividido && !futuro) return criarCadeiaLocal(jdbc, loja, jwt, d, grupos, produtos, vendedorPedido, agoraMinuto, regras);
             if (futuro) {
                 String status = d.status() == null || d.status().isBlank() ? A_CONFIRMAR : d.status();
                 if (!A_CONFIRMAR.equals(status) && !CONFIRMADO.equals(status)) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Agendamento futuro nasce a confirmar ou confirmado.");
                 if (profissionalId == null) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha o profissional.");
+                if (dividido) return criarCadeiaFutura(jdbc, loja, jwt, d, grupos, status, produtos, vendedorPedido, comCupom, exigirVeiculo(regras.futuro()));
                 UUID vendedor = produtos.isEmpty() ? null : vendedorPedido != null ? vendedorPedido : profissionalId;
                 if (vendedor != null) exigirVendedor(jdbc, vendedor);
                 ClienteService.DoAtendimento quem = clientes.resolverDoAtendimento(jdbc, d.nome(), d.telefone(), d.clienteId());
@@ -488,6 +501,79 @@ public class AgendaController {
             return inserirLocal(jdbc, loja, jwt, d, profissionalId, servicoIds, produtos, vendedorPedido, agoraMinuto, regras);
         }));
         return ResponseEntity.status(HttpStatus.CREATED).body(feito);
+    }
+
+    /**
+     * B1: valida `atribuicoes` (cada serviço do pedido com um profissional, sem repetir) e junta serviços consecutivos do mesmo profissional.
+     * Devolve null quando não há atribuições. Só o proprietário e a recepção escolhem quem faz cada serviço. A conferência de "o profissional realiza o serviço" e de horário
+     * é a de sempre, em {@link #inserirAgendamento}/{@link #inserirLocal}.
+     */
+    private List<Grupo> gruposDeAtribuicao(JdbcTemplate jdbc, NovoAtendimento d, List<UUID> servicoIds, boolean veTudo) {
+        List<Atribuicao> a = d.atribuicoes();
+        if (a == null || a.isEmpty()) return null;
+        if (!veTudo) throw new ErroDeNegocio(HttpStatus.FORBIDDEN, "Só o proprietário ou a recepção escolhe o profissional de cada serviço.");
+        Map<UUID, UUID> porServico = new LinkedHashMap<>();
+        for (Atribuicao x : a) {
+            if (x == null || x.servicoId() == null || x.profissionalId() == null || porServico.put(x.servicoId(), x.profissionalId()) != null) {
+                throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Profissional de serviço inválido ou repetido.");
+            }
+        }
+        List<Grupo> grupos = AtribuicaoDeServicos.agrupar(servicoIds, porServico);
+        for (UUID p : new java.util.LinkedHashSet<>(porServico.values())) {
+            if (!atende(jdbc, p)) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha o profissional que atendeu.");
+        }
+        return grupos;
+    }
+
+    /** B1, data futura: um agendamento por profissional, cada um começando quando o anterior termina; o cliente é resolvido uma vez. Produtos e cupom ficam no primeiro. */
+    private Agendamento criarCadeiaFutura(JdbcTemplate jdbc, Loja loja, Jwt jwt, NovoAtendimento d, List<Grupo> grupos, String status, List<ProdutoPedido> produtos, UUID vendedorPedido,
+                                          boolean comCupom, Set<String> exigirVeiculo) {
+        ClienteService.DoAtendimento quem = clientes.resolverDoAtendimento(jdbc, d.nome(), d.telefone(), d.clienteId());
+        String avulso = quem.clienteId() == null ? (quem.nomeAvulso() == null ? "" : quem.nomeAvulso()) : null;
+        UUID vendedor = produtos.isEmpty() ? null : vendedorPedido != null ? vendedorPedido : grupos.get(0).profissionalId();
+        if (vendedor != null) exigirVendedor(jdbc, vendedor);
+        UUID grupoId = UUID.randomUUID();
+        List<UUID> ids = new ArrayList<>();
+        Instant inicio = d.inicio();
+        for (int i = 0; i < grupos.size(); i++) {
+            Grupo g = grupos.get(i);
+            Agendamento criado = inserirAgendamento(jdbc, loja, jwt, quem.clienteId(), avulso, g.profissionalId(), g.servicoIds(), inicio, status, Boolean.TRUE.equals(d.encaixe()),
+                    d.veiculoId(), d.veiculo(), null, i == 0 ? d.assinaturaId() : null, exigirVeiculo);
+            ids.add(criado.id());
+            inicio = criado.fim();
+        }
+        for (int i = 0; i < ids.size(); i++) {
+            jdbc.update("update agendamento set grupo_id = ? where id = ?", grupoId, ids.get(i));
+            registrar(jdbc, loja.id(), ids.get(i), jwt, "atendimento dividido", null, "Parte " + (i + 1) + " de " + ids.size() + " do mesmo atendimento, com profissionais diferentes");
+        }
+        UUID primeiro = ids.get(0);
+        if (!produtos.isEmpty()) lancarProdutos(jdbc, loja, primeiro, produtos, vendedor, jwt);
+        if (comCupom) {
+            CupomService.Aplicado ap = cupons.aplicar(jdbc, loja.id(), primeiro, null, jwt.getSubject(), d.cupomChave(), relogio.instant());
+            registrar(jdbc, loja.id(), primeiro, jwt, "cupom", null, ap.nome() + ": desconto de " + CupomService.reais(ap.desconto()));
+        }
+        return buscar(jdbc, primeiro, null);
+    }
+
+    /** B1, atendimento de agora ou passado: um atendimento local por profissional, um depois do outro, ligados pelo mesmo grupo. Produtos ficam no primeiro. */
+    private Agendamento criarCadeiaLocal(JdbcTemplate jdbc, Loja loja, Jwt jwt, NovoAtendimento d, List<Grupo> grupos, List<ProdutoPedido> produtos, UUID vendedorPedido,
+                                         Instant agoraMinuto, RegrasAtendimento.Regras regras) {
+        UUID grupoId = UUID.randomUUID();
+        List<UUID> ids = new ArrayList<>();
+        Instant inicio = d.inicio();
+        for (int i = 0; i < grupos.size(); i++) {
+            Grupo g = grupos.get(i);
+            NovoAtendimento dg = new NovoAtendimento(d.clienteId(), g.profissionalId(), g.servicoIds(), d.nome(), d.telefone(), inicio, d.status(), d.encaixe(), d.motivoRetroativo(),
+                    i == 0 ? d.produtos() : null, i == 0 ? d.vendedorId() : null, d.formaPagamento(), null, d.veiculoId(), d.veiculo(), null, i == 0 ? d.assinaturaId() : null, null);
+            Agendamento criado = inserirLocal(jdbc, loja, jwt, dg, g.profissionalId(), g.servicoIds(), i == 0 ? produtos : List.<ProdutoPedido>of(), i == 0 ? vendedorPedido : null, agoraMinuto, regras);
+            ids.add(criado.id());
+            inicio = criado.fim();
+        }
+        for (int i = 0; i < ids.size(); i++) {
+            jdbc.update("update agendamento set grupo_id = ? where id = ?", grupoId, ids.get(i));
+            registrar(jdbc, loja.id(), ids.get(i), jwt, "atendimento dividido", null, "Parte " + (i + 1) + " de " + ids.size() + " do mesmo atendimento, com profissionais diferentes");
+        }
+        return buscar(jdbc, ids.get(0), null);
     }
 
     /**

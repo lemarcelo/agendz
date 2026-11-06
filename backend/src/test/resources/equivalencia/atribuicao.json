@@ -1,0 +1,14 @@
+{
+  "descricao": "Bloco B1: profissional por serviço. `servicos` na ordem do pedido; `porServico` = serviço → profissional. `grupos` = um agendamento por profissional (serviços consecutivos do mesmo profissional se juntam). `erro: true` = recusa (falta ou sobra profissional). Mesmos casos em AtribuicaoEquivalenciaTest (servidor) e tests-jest/atribuicao.test.mjs (demonstração).",
+  "casos": [
+    { "nome": "um serviço, um profissional", "servicos": ["s1"], "porServico": { "s1": "p1" }, "grupos": [{ "p": "p1", "s": ["s1"] }] },
+    { "nome": "dois serviços do mesmo profissional viram um agendamento", "servicos": ["s1", "s2"], "porServico": { "s1": "p1", "s2": "p1" }, "grupos": [{ "p": "p1", "s": ["s1", "s2"] }] },
+    { "nome": "dois serviços de profissionais diferentes: dois agendamentos em sequência", "servicos": ["s1", "s2"], "porServico": { "s1": "p1", "s2": "p2" }, "grupos": [{ "p": "p1", "s": ["s1"] }, { "p": "p2", "s": ["s2"] }] },
+    { "nome": "a ordem do pedido manda", "servicos": ["s2", "s1"], "porServico": { "s1": "p1", "s2": "p2" }, "grupos": [{ "p": "p2", "s": ["s2"] }, { "p": "p1", "s": ["s1"] }] },
+    { "nome": "só consecutivos se juntam: p1, p2, p1 são três agendamentos", "servicos": ["s1", "s2", "s3"], "porServico": { "s1": "p1", "s2": "p2", "s3": "p1" }, "grupos": [{ "p": "p1", "s": ["s1"] }, { "p": "p2", "s": ["s2"] }, { "p": "p1", "s": ["s3"] }] },
+    { "nome": "consecutivos do mesmo profissional no meio da fila se juntam", "servicos": ["s1", "s2", "s3"], "porServico": { "s1": "p1", "s2": "p2", "s3": "p2" }, "grupos": [{ "p": "p1", "s": ["s1"] }, { "p": "p2", "s": ["s2", "s3"] }] },
+    { "nome": "serviço sem profissional é recusado", "servicos": ["s1", "s2"], "porServico": { "s1": "p1" }, "erro": true },
+    { "nome": "profissional para serviço que não está no pedido é recusado", "servicos": ["s1"], "porServico": { "s1": "p1", "s2": "p2" }, "erro": true },
+    { "nome": "serviço diferente do pedido é recusado", "servicos": ["s1"], "porServico": { "s9": "p1" }, "erro": true }
+  ]
+}

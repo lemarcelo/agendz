@@ -4,7 +4,8 @@ import PickerCliente from './PickerCliente.jsx';
 import { porUltimoUso } from '../domain/codigo.js';
 import { servicosNaOrdemDaLoja } from '../domain/ordem-servicos.js';
 import React, { useEffect, useMemo, useState } from 'react';
-import { realizaServico } from '../domain/vinculo.js';
+import { realizaServico, porServicoDoEstado, precisaAtribuirPorServico } from '../domain/vinculo.js';
+import ProfissionalPorServico from './leve/ProfissionalPorServico.jsx';
 import { agenda, agendamentosVisiveis, planos as apiPlanos } from '../services/api.js';
 import { rotuloMes as rotuloMesPlano } from '../domain/planos.js';
 import { acharClientePorTelefone, CAMPOS_DE_VEICULO, camposObrigatorios, nomeMaisCompleto } from '../domain/engine.js';
@@ -71,6 +72,10 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
   const servicos = servicosNaOrdemDaLoja(st, st.servicos.filter((s) => s.ativo !== false && (ehProfissional || (profManual && !auto) ? realizaServico(doProfissional, s.id) : profissionais.some((p) => realizaServico(p, s.id))))); // mais usados primeiro ou a ordem do dono (Estabelecimento > Regras)
   // ...e o campo do profissional oferece só quem realiza TODOS os serviços já marcados
   const profOpcoes = profissionais.filter((p) => servicoIds.every((id) => realizaServico(p, id)));
+  // B1: serviços feitos por pessoas diferentes → um campo de profissional por serviço (vazio e obrigatório); o campo único some
+  const [atrib, setAtrib] = useState({});
+  const porAtribuir = !auto && !ehProfissional && precisaAtribuirPorServico(servicoIds, porServicoDoEstado(st));
+  useEffect(() => { setAtrib((a) => Object.fromEntries(Object.entries(a).filter(([sid, pid]) => servicoIds.includes(sid) && realizaServico(st.usuarios.find((u) => u.id === pid), sid)))); }, [servicoIds]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (profOpcoes.length && !profOpcoes.some((p) => p.id === profissionalId)) setProfissionalId(profOpcoes[0].id); }, [servicoIds]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (ehProfissional || (profManual && !auto)) setServicoIds((ids) => ids.filter((id) => realizaServico(doProfissional, id))); }, [profissionalId, profManual]); // eslint-disable-line react-hooks/exhaustive-deps
   const itensProduto = produtos.filter((m) => Number(qtds[m.id]) > 0).map((m) => ({ materialId: m.id, qtd: Number(qtds[m.id]) }));
@@ -142,13 +147,13 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
   const formaEscolhida = forma || formaPadrao;
 
   // Horário livre (só agendamento futuro)
-  const v = useMemo(() => (futuro && profissionalId && temServico && !auto ? agenda.validar({ profissionalId, inicio, servicoIds, porte: porteAtual, boxId: boxId || undefined, encaixe }) : null), [futuro, profissionalId, inicio, servicoIds, porteAtual, boxId, encaixe, temServico, st]);
+  const v = useMemo(() => (futuro && profissionalId && temServico && !auto && !porAtribuir ? agenda.validar({ profissionalId, inicio, servicoIds, porte: porteAtual, boxId: boxId || undefined, encaixe }) : null), [futuro, profissionalId, inicio, servicoIds, porteAtual, boxId, encaixe, temServico, st]);
   const nomeDe = (a) => `${nomeCliente(st, a)} às ${fmtHM(a.inicio)}`;
 
   const salvar = () => {
     const r = agenda.atender({
       servicoIds, produtos: itensProduto, nome: nome.trim() || undefined, telefone: telefone.trim() || undefined, clienteId: clienteId || undefined,
-      profissionalId: auto ? undefined : profissionalId || undefined, vendedorId: vendeProduto && !ehProfissional && vendedorEscolhido ? vendedorEscolhido : undefined,
+      profissionalId: auto ? undefined : porAtribuir ? atrib[servicoIds[0]] || undefined : profissionalId || undefined, ...(porAtribuir ? { atribuicoes: servicoIds.map((sid) => ({ servicoId: sid, profissionalId: atrib[sid] || '' })) } : {}), vendedorId: vendeProduto && !ehProfissional && vendedorEscolhido ? vendedorEscolhido : undefined,
       formaPagamento: futuro ? undefined : formaEscolhida || undefined, inicio: inicio != null ? inicio : undefined, motivoRetroativo: retro ? motivoRetro.trim() || undefined : undefined,
       ...(usaPlano ? { assinaturaId: planoCli.assinaturaId } : {}),
       ...(temServico && usaVeiculo ? (veicSel === 'novo' ? { veiculo: vNovo } : veicSel ? { veiculoId: veicSel } : {}) : {}),
@@ -334,7 +339,11 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
       </ol>
       <div className="form-grade">
         {ordem.etapas.map((k) => <React.Fragment key={k}>{blocos[k]}</React.Fragment>)}
-        {!auto && (
+        {porAtribuir && (
+          <ProfissionalPorServico testid="atender-pps" servicos={servicoIds.map((sid) => ({ id: sid, nome: st.servicos.find((s) => s.id === sid)?.nome || '' }))} rotuloProfissional={Rot('profissional')}
+            opcoes={(sid) => profissionais.filter((p) => realizaServico(p, sid)).map((p) => ({ id: p.id, nome: p.apelido || p.nome }))} valor={atrib} aoMudar={setAtrib} />
+        )}
+        {!auto && !porAtribuir && (
         <Campo rotulo={`${Rot('profissional')}${pede('profissional') ? ' *' : ''}`}>
           <select value={profissionalId} onChange={(e) => { setProfissionalId(e.target.value); setProfManual(true); }} disabled={ehProfissional} data-testid="atender-profissional">
             {profOpcoes.map((b) => <option key={b.id} value={b.id}>{b.apelido || b.nome}</option>)}

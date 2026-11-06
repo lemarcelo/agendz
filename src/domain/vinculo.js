@@ -64,6 +64,30 @@ export function servicoNovoParaTodos(state, servicoId) {
   for (const u of state.usuarios) if (Array.isArray(u.servicoIds) && !u.servicoIds.includes(servicoId)) u.servicoIds.push(servicoId);
 }
 
+// ---------- profissional por serviço (B1) ----------
+/** Os serviços escolhidos são feitos por pessoas diferentes? (então cada um ganha o seu campo de profissional, vazio e obrigatório). `porServico` = { servicoId: [usuarioId] }. */
+export function precisaAtribuirPorServico(servicoIds, porServico) {
+  if (!Array.isArray(servicoIds) || servicoIds.length < 2) return false;
+  const chaves = servicoIds.map((id) => [...((porServico || {})[id] || [])].sort().join('|'));
+  return new Set(chaves).size > 1;
+}
+
+/** Espelho de AtribuicaoDeServicos.agrupar: `porServico` = { servicoId: profissionalId }. Devolve { grupos: [{ profissionalId, servicoIds }] } ou { erro }. */
+export function agruparAtribuicao(servicoIds, porServico) {
+  const ids = Array.isArray(servicoIds) ? servicoIds : [];
+  const mapa = porServico && typeof porServico === 'object' ? porServico : {};
+  const chaves = Object.keys(mapa);
+  if (chaves.length !== ids.length || !ids.every((id) => chaves.includes(id))) return { erro: 'Escolha o profissional de cada serviço.' };
+  const grupos = [];
+  for (const sid of ids) {
+    const p = mapa[sid];
+    const ultimo = grupos[grupos.length - 1];
+    if (ultimo && ultimo.profissionalId === p) ultimo.servicoIds.push(sid);
+    else grupos.push({ profissionalId: p, servicoIds: [sid] });
+  }
+  return { grupos };
+}
+
 // ---------- ausência ----------
 /** Ausência do profissional que toca algum dos blocos [ini, fim) de trabalho (sem o intervalo). */
 export function ausenciaNoHorario(state, profissionalId, blocos) {

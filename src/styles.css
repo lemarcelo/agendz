@@ -1698,3 +1698,9 @@ body.trava-scroll-modal {
 .vinculo-vazio { padding: 10px; }
 .vinculo-acoes { margin: 0; }
 @media (max-width: 640px) { .vinculo-duplo { grid-template-columns: minmax(0, 1fr); } .vinculo-lista { height: 160px; } }
+
+/* B1 — quem faz cada serviço (Atender e #agendar) */
+.pps-conj { grid-column: 1 / -1; }
+.pps-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.pps-linha { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 8px; align-items: center; }
+@media (max-width: 560px) { .pps-linha { grid-template-columns: minmax(0, 1fr); gap: 4px; } }

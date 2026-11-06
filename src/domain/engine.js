@@ -12,6 +12,7 @@ import { consumoDoAgendamento, r2, r3, totalAgendamento } from './reports.js';
 import { renderizar } from './templates.js';
 import { diasDaExcecao } from './schedule.js';
 import { cap, rot, voc } from './tipos.js';
+import { agruparAtribuicao } from './vinculo.js';
 import { limitesDoDia, ordemPorFolga, profissionalAutomatico } from './profissional-auto.js';
 
 export const AUTOR_SISTEMA = { tipo: 'sistema', nome: 'Sistema' };
@@ -518,9 +519,45 @@ export function escolherProfissionalAuto(s, { inicio, servicoIds, porte, futuro,
   return { ok: false, erros: ['Nenhum profissional está livre neste horário. Escolha outro horário.'] };
 }
 
+// B1: atendimento dividido. Um agendamento por profissional, em sequência (o próximo começa quando o anterior termina), ligados por `grupoId`; comissão de cada serviço
+// para quem o fez (cada agendamento tem o seu profissional). Produto, cupom e plano ficam no primeiro. Qualquer falha desfaz tudo (a API simulada só grava se tudo der certo).
+function atenderEmCadeia(s, d, grupos, autor, agora) {
+  if (cap(s.estabelecimento, 'usaRecursoFisico')) return { ok: false, erros: ['Nesta loja, todos os serviços de um atendimento precisam ser do mesmo profissional (o veículo fica num box só).'] };
+  const grupoId = `g${++s.seq}`;
+  const agoraMin = Math.floor(agora / 60000) * 60000;
+  let inicio = d.inicio;
+  let primeiro = null;
+  for (let i = 0; i < grupos.length; i++) {
+    const g = grupos[i];
+    const { atribuicoes, ...resto } = d;
+    const dg = { ...resto, profissionalId: g.profissionalId, servicoIds: g.servicoIds, ...(inicio === undefined || inicio === null ? {} : { inicio }), ...(i === 0 ? {} : { produtos: [], vendedorId: undefined, cupomChave: undefined, assinaturaId: undefined }) };
+    const r = atender(s, dg, autor, agora);
+    if (!r.ok) return r;
+    r.agendamento.grupoId = grupoId;
+    if (i === 0) primeiro = r;
+    inicio = Math.min(retiradaDe(s, r.agendamento), r.tipo === 'futuro' ? Infinity : agoraMin); // atendimento já feito nunca vai para o futuro
+  }
+  return primeiro;
+}
+
 export function atender(s, d, autor, agora) {
   if (semBoxAtivo(s)) return { ok: false, erros: [ERRO_SEM_BOX] }; // estética sem box ativo: nem atendimento local nem agendamento (v120)
   const ids = Array.isArray(d.servicoIds) ? d.servicoIds : [];
+  if (Array.isArray(d.atribuicoes) && d.atribuicoes.length) { // B1: profissional por serviço
+    const porServico = {};
+    for (const x of d.atribuicoes) {
+      if (!x || !x.servicoId || !x.profissionalId || x.servicoId in porServico) return { ok: false, erros: ['Profissional de serviço inválido ou repetido.'] };
+      porServico[x.servicoId] = x.profissionalId;
+    }
+    const g = agruparAtribuicao(ids, porServico);
+    if (g.erro) return { ok: false, erros: [g.erro] };
+    const quemFaz = new Set(g.grupos.map((x) => x.profissionalId));
+    for (const p of quemFaz) if (!s.usuarios.some((u) => u.id === p && u.atende)) return { ok: false, erros: [`Escolha o ${rot('profissional')} que atendeu.`] };
+    d = { ...d, profissionalId: g.grupos[0].profissionalId };
+    if (g.grupos.length > 1) return atenderEmCadeia(s, d, g.grupos, autor, agora);
+    const { atribuicoes, ...semAtribuicoes } = d;
+    d = semAtribuicoes;
+  }
   const produtos = Array.isArray(d.produtos) ? d.produtos : [];
   if (!ids.length && !produtos.length) return { ok: false, erros: ['Escolha ao menos um serviço ou um produto.'] };
   const futuro = d.inicio !== undefined && d.inicio !== null && Number(d.inicio) > agora + 60000;

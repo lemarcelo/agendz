@@ -303,9 +303,13 @@ export const agenda = {
   atender(entrada) {
     const u = usuario();
     if (!u || !R.pode(u, 'agenda')) return semPermissao();
-    const d = pegar(entrada, permitidos(['servicoIds', 'produtos', 'nome', 'telefone', 'clienteId', 'profissionalId', 'vendedorId', 'formaPagamento', 'inicio', 'status', 'encaixe', 'cupomChave', 'veiculoId', 'veiculo', 'boxId', 'motivoRetroativo', 'assinaturaId']));
+    const d = pegar(entrada, permitidos(['servicoIds', 'produtos', 'nome', 'telefone', 'clienteId', 'profissionalId', 'vendedorId', 'formaPagamento', 'inicio', 'status', 'encaixe', 'cupomChave', 'atribuicoes', 'veiculoId', 'veiculo', 'boxId', 'motivoRetroativo', 'assinaturaId']));
     if (d.servicoIds === undefined || d.servicoIds === null) d.servicoIds = [];
     if (!(Array.isArray(d.servicoIds) && d.servicoIds.length <= 10 && d.servicoIds.every((x) => texto(x, 60)))) return erro('Escolha até 10 serviços.');
+    if (d.atribuicoes === undefined || d.atribuicoes === null) delete d.atribuicoes;
+    else if (!(Array.isArray(d.atribuicoes) && d.atribuicoes.length <= 10 && d.atribuicoes.every((x) => x && typeof x === 'object' && texto(x.servicoId, 60) && texto(x.profissionalId, 60)))) return erro('Profissional de serviço inválido.');
+    else if (d.atribuicoes.length && u.papel === 'profissional') return erro('Só o proprietário ou a recepção escolhe o profissional de cada serviço.');
+    if (d.atribuicoes) d.atribuicoes = d.atribuicoes.map((x) => pegar(x, ['servicoId', 'profissionalId']));
     if (d.produtos === undefined || d.produtos === null) d.produtos = [];
     if (!(Array.isArray(d.produtos) && d.produtos.length <= 10 && d.produtos.every((p) => p && typeof p === 'object'))) return erro('Produtos inválidos.');
     d.produtos = d.produtos.map((p) => pegar(p, ['materialId', 'qtd']));

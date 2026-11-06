@@ -745,6 +745,10 @@ export const agenda = {
     }
     const corpo = { servicoIds: ids };
     if (produtos.length) corpo.produtos = produtos;
+    if (Array.isArray(d.atribuicoes) && d.atribuicoes.length) { // B1: quem faz cada serviço (só o proprietário e a recepção; o servidor confere)
+      if (d.atribuicoes.length > 10 || !d.atribuicoes.every((x) => x && ID.test(String(x.servicoId)) && ID.test(String(x.profissionalId)))) return { ok: false, status: 0, erro: 'Escolha o profissional de cada serviço.' };
+      corpo.atribuicoes = d.atribuicoes.map((x) => ({ servicoId: String(x.servicoId), profissionalId: String(x.profissionalId) }));
+    }
     for (const [k, max] of [['nome', 100], ['telefone', 30], ['motivoRetroativo', 300]]) if (typeof d[k] === 'string' && d[k].trim()) corpo[k] = d[k].slice(0, max);
     for (const k of ['clienteId', 'profissionalId', 'vendedorId']) {
       if (d[k] === undefined || d[k] === null || d[k] === '') continue;
