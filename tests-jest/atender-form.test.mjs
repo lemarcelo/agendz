@@ -28,11 +28,11 @@ test('de fábrica nada é obrigatório; com nome e telefone marcados: cadastro e
   const marcado = { formaPagamentoPadrao: 'pix', futuro: ['nome', 'telefone'], local: [] };
   assert.deepEqual(camposFaltando('local', { nome: '', telefone: '', cliente: null }), []);
   assert.deepEqual(camposFaltando('futuro', { nome: '', telefone: '', cliente: null }), [], 'agendar sem dados do cliente vale por padrão');
-  assert.deepEqual(camposFaltando('futuro', { nome: '', telefone: '', cliente: null }, marcado), ['nome', 'telefone']);
-  assert.deepEqual(camposFaltando('futuro', { nome: ' ', telefone: '1199', cliente: null }, marcado), ['nome', 'telefone'], 'telefone curto não vale');
+  assert.deepEqual(camposFaltando('futuro', { nome: '', telefone: '', cliente: null }, marcado), ['apelido', 'telefone']);
+  assert.deepEqual(camposFaltando('futuro', { nome: ' ', telefone: '1199', cliente: null }, marcado), ['apelido', 'telefone'], 'telefone curto não vale');
   assert.deepEqual(camposFaltando('futuro', { nome: 'Ana', telefone: '(11) 97777-6666', cliente: null }, marcado), []);
   assert.deepEqual(camposFaltando('futuro', { nome: '', telefone: '', cliente: { semNome: false } }, marcado), []);
-  assert.deepEqual(camposFaltando('futuro', { nome: '', telefone: '', cliente: { semNome: true } }, marcado), ['nome'], 'cadastro só com telefone ainda precisa de nome');
+  assert.deepEqual(camposFaltando('futuro', { nome: '', telefone: '', cliente: { semNome: true } }, marcado), ['apelido'], 'cadastro só com telefone ainda precisa de nome');
 });
 
 test('resumo soma só os serviços marcados', () => {
@@ -91,7 +91,7 @@ test('campos obrigatórios seguem as regras, na ordem delas, com o rótulo da te
   assert.deepEqual(camposFaltando('local', vazio, regras), ['forma de pagamento', 'telefone', 'vendedor', 'profissional']);
   assert.deepEqual(camposFaltando('local', { ...vazio, forma: 'pix', telefone: '(11) 97777-6666', vendedorId: 'v', profissionalId: 'p' }, regras), []);
   assert.deepEqual(camposFaltando('local', { ...vazio, temProdutos: false }, { ...regras, local: ['vendedor'] }), [], 'sem produto o vendedor não é exigido');
-  assert.deepEqual(camposFaltando('futuro', { ...vazio, telefone: '' }, regras), ['nome'], 'o futuro só exige o que a regra do futuro manda');
+  assert.deepEqual(camposFaltando('futuro', { ...vazio, telefone: '' }, regras), ['apelido'], 'o futuro só exige o que a regra do futuro manda');
   assert.deepEqual(camposFaltando('futuro', { ...vazio, forma: '' }, { ...regras, futuro: ['formaPagamento'] }), [], 'forma de pagamento não existe no agendamento');
   assert.deepEqual(camposFaltando('futuro', vazio), [], 'sem regras: padrão de fábrica não exige nada');
   assert.deepEqual(camposFaltando('local', vazio), [], 'sem regras o atendimento feito não exige nada');

@@ -1,6 +1,6 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:28da092318 */
 import ListaItens from './ListaItens.jsx';
-import PickerCliente from './PickerCliente.jsx';
+import PickerCliente, { filtrarClientes } from './PickerCliente.jsx';
 import { porUltimoUso } from '../domain/codigo.js';
 import { servicosNaOrdemDaLoja } from '../domain/ordem-servicos.js';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -15,6 +15,7 @@ import { MIN, fmtDate, fmtDuration, fmtHM, fmtMoney, fromYmd, startOfDay, tsAt, 
 import { Aviso, rolarAoErro, Btn, Campo, Icon, Modal } from './common.jsx';
 import { SeletorHora } from './Agendamento.jsx';
 import { nomeCliente } from './format.js';
+import { nomeReal, rotuloDoCliente } from '../domain/cliente-rotulo.js';
 import { toast, useStore } from './hooks.js';
 import { capAtiva, Rot, rot } from '../domain/tipos.js';
 import { COMO_A_PAGINA_DO_CLIENTE, PADRAO_ARTIFACT, sanearOrdemAtender } from '../domain/ordem-atender.js';
@@ -128,7 +129,7 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
   const escolheCliente = (id) => {
     setClienteId(id);
     const c = st.clientes.find((x) => x.id === id);
-    if (c) { setNome(c.semNome ? '' : c.nome); setTelefone(formatarTelefone(c.telefone)); }
+    if (c) { setNome(c.apelido || nomeReal(c)); setTelefone(formatarTelefone(c.telefone)); }
   };
   // Nome digitado mais completo que o do cadastro: avisa que o cadastro será atualizado.
   const atualizaraNome = cadastrado && !cadastrado.semNome && nome.trim() && nomeMaisCompleto(cadastrado.nome, nome.trim());
@@ -217,12 +218,19 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
   };
   const camposCli = {
     nome: (
-        <Campo rotulo={`Nome${marca('nome')}`}><input value={nome} onChange={(e) => { setNome(e.target.value); if (clienteId && !(tel.length >= 10)) setClienteId(''); }} maxLength={60} placeholder="Nome ou apelido" data-testid="atender-nome" /></Campo>
+        <Campo rotulo={`Apelido${marca('nome')}`}>
+          <input value={nome} onChange={(e) => { setNome(e.target.value); if (clienteId && !(tel.length >= 10)) setClienteId(''); }} maxLength={60} placeholder="Apelido do cliente" autoComplete="off" data-testid="atender-nome" />
+          {!clienteId && nome.trim().length >= 2 && filtrarClientes(st.clientes, nome).length > 0 && (
+            <ul className="picker-itens" data-testid="atender-achados" aria-label="Clientes parecidos">
+              {filtrarClientes(st.clientes, nome).slice(0, 5).map((c) => <li key={c.id}><button type="button" className="picker-item" onClick={() => escolheCliente(c.id)} data-testid={`atender-cli-${c.id}`}><b>{rotuloDoCliente(c)}</b><small className="muted">{c.telefone}</small></button></li>)}
+            </ul>
+          )}
+        </Campo>
     ),
     telefone: (
         <Campo rotulo={`Telefone${pede('telefone') || futuro ? ' *' : ' (opcional)'}`} dica={cadastrado ? undefined : tel.length >= 10 ? 'Número novo: o cadastro do cliente é criado ao registrar.' : futuro ? 'O aviso do horário vai por WhatsApp.' : 'Com o telefone, o cliente fica cadastrado para a próxima vez.'}>
           <input value={telefone} inputMode="tel" autoComplete="off" onChange={(e) => trocaTelefone(e.target.value, nome)} placeholder="(55) 99999-9999" data-testid="atender-telefone" />
-          {cadastrado && <span className="msg-ok" data-testid="atender-vinculo">Cliente cadastrado: {cadastrado.semNome ? formatarTelefone(cadastrado.telefone) : cadastrado.apelido || cadastrado.nome}.{atualizaraNome ? ` O nome no cadastro será atualizado para “${nome.trim()}”.` : ''}</span>}
+          {cadastrado && <span className="msg-ok" data-testid="atender-vinculo">Cliente cadastrado: {rotuloDoCliente(cadastrado)}.{atualizaraNome ? ` O nome no cadastro será atualizado para “${nome.trim()}”.` : ''}</span>}
         </Campo>
     ),
   };

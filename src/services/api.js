@@ -498,7 +498,9 @@ export const clientes = {
         const trocou = R.telefoneNacional(s.clientes[i].telefone) !== tel;
         if (trocou && !R.podeAlterarTelefone(usuario(), s, c.id)) return erro(`Só o proprietário, um admin ou o ${rot('profissional')} que atende esse cliente altera o telefone de um cliente já cadastrado.`);
         const anteriores = trocou ? [...(s.clientes[i].telefonesAnteriores || []), { telefone: s.clientes[i].telefone, ate: agora, autorizadoPor: usuario().nome }].slice(-5) : s.clientes[i].telefonesAnteriores;
+        const nomeAntes = s.clientes[i].nome;
         s.clientes[i] = { ...s.clientes[i], ...c, ...(veiculos ? { veiculos } : {}), ...(anteriores ? { telefonesAnteriores: anteriores } : {}) };
+        if (c.nome !== nomeAntes) delete s.clientes[i].semNome; // informar um nome de verdade tira a marca "só telefone"; mexer só no apelido não tira
         return { ok: true, cliente: s.clientes[i] };
       }
       const novo = { apelido: '', cpf: '', nascimento: '', ...c, veiculos: veiculos || [], id: `c${++s.seq}` };

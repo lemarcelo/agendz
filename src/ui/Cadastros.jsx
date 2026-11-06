@@ -52,7 +52,7 @@ export function Clientes({ user, aoIr }) {
       <input className="busca" type="search" placeholder={capAtiva('usaVeiculo') ? 'Buscar por nome, telefone, CPF ou placa' : 'Buscar por nome, telefone ou CPF'} value={busca} onChange={(e) => setBusca(e.target.value)} aria-label="Buscar cliente" />
       {lista.length === 0 ? <Vazio icone="users" titulo="Nenhum cliente encontrado" /> : (
         <Tabela id="clientes" chave={(c) => c.id} linhas={lista} colunas={[
-          { id: 'cliente', titulo: 'Cliente', cel: (c) => <><b>{c.nome}</b>{c.apelido && c.apelido !== c.nome ? <small className="muted"> “{c.apelido}”</small> : null}{creditoDoCliente(st, c.id, null, agora) > 0 ? <small className="muted" style={{ display: 'block' }} data-testid={`credito-${c.id}`}>Crédito: {fmtMoney(creditoDoCliente(st, c.id, null, agora))}</small> : null}</> },
+          { id: 'cliente', titulo: 'Cliente', cel: (c) => <><b>{c.semNome ? (c.apelido || 'Sem nome') : c.nome}</b>{!c.semNome && c.apelido && c.apelido !== c.nome ? <small className="muted"> “{c.apelido}”</small> : null}{creditoDoCliente(st, c.id, null, agora) > 0 ? <small className="muted" style={{ display: 'block' }} data-testid={`credito-${c.id}`}>Crédito: {fmtMoney(creditoDoCliente(st, c.id, null, agora))}</small> : null}</> },
           { id: 'telefone', titulo: 'Telefone', cel: (c) => <><span style={{ whiteSpace: 'nowrap' }}>{c.telefone}</span>{c.telefonesAnteriores?.length ? <small className="muted" style={{ display: 'block' }}>antes: {c.telefonesAnteriores[c.telefonesAnteriores.length - 1].telefone}</small> : null}</> },
           ...(capAtiva('usaVeiculo') ? [{ id: 'veiculos', titulo: 'Veículos', cel: (c) => (c.veiculos || []).length ? <ul className="lista-veiculos" data-testid={`cli-veiculos-${c.id}`}>{c.veiculos.map((v) => <li key={v.id}>{rotuloVeiculo(v)} <small className="muted">{ROTULO_PORTE[v.porte]}</small></li>)}</ul> : <span className="muted">—</span> }] : []),
           { id: 'cpf', titulo: 'CPF', cel: (c) => c.cpf || <span className="muted">—</span> },
@@ -131,7 +131,7 @@ function FormCliente({ c, onClose, plano }) {
     <Modal titulo={c.id ? 'Editar cliente' : 'Novo cliente'} onClose={onClose} rodape={<><Btn onClick={onClose}>Cancelar</Btn><Btn variante="primario" onClick={salvar} data-testid="salvar-cliente">Salvar</Btn></>}>
       <div className="form-grade">
         <Campo rotulo="Nome ou apelido (obrigatório)"><input value={f.nome} onChange={(e) => setF({ ...f, nome: e.target.value })} data-testid="cli-nome" /></Campo>
-        <Campo rotulo="Apelido"><input value={f.apelido || ''} onChange={(e) => setF({ ...f, apelido: e.target.value })} /></Campo>
+        <Campo rotulo="Apelido"><input value={f.apelido || ''} onChange={(e) => setF({ ...f, apelido: e.target.value })} data-testid="cli-apelido" /></Campo>
         <Campo rotulo="Telefone (WhatsApp)"><input value={f.telefone} inputMode="tel" onChange={(e) => setF({ ...f, telefone: formatarTelefone(e.target.value) })} placeholder="(55) 99999-9999" data-testid="cli-tel" /></Campo>
         <Campo rotulo="CPF (opcional)"><input value={f.cpf || ''} inputMode="numeric" onChange={(e) => setF({ ...f, cpf: formatarCpf(e.target.value) })} /></Campo>
         <Campo rotulo="Nascimento (opcional)"><input type="date" value={f.nascimento || ''} onChange={(e) => setF({ ...f, nascimento: e.target.value })} /></Campo>

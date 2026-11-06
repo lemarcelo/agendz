@@ -394,7 +394,7 @@ export function acharClientePorTelefone(clientes, telefone, nome) {
 }
 function atualizaNomeDoCadastro(cli, nomeInf) {
   if (!nomeInf) return;
-  if (cli.semNome) { cli.nome = nomeInf; delete cli.semNome; } else if (nomeMaisCompleto(cli.nome, nomeInf)) cli.nome = nomeInf.slice(0, 60);
+  if (cli.semNome) { cli.nome = nomeInf.slice(0, 60); if (!cli.apelido) cli.apelido = nomeInf.slice(0, 60); delete cli.semNome; } else if (nomeMaisCompleto(cli.nome, nomeInf)) cli.nome = nomeInf.slice(0, 60);
 }
 export function resolverClienteDoAtendimento(s, { nome, telefone, clienteId }, agora) {
   const tel = telefoneNacional(telefone);
@@ -409,7 +409,7 @@ export function resolverClienteDoAtendimento(s, { nome, telefone, clienteId }, a
   if (!tel) return { ok: true, cliente: null, nomeAvulso: nomeInf };
   const cli = acharClientePorTelefone(s.clientes, tel, nomeInf);
   if (cli) { atualizaNomeDoCadastro(cli, nomeInf); return { ok: true, cliente: cli }; }
-  const novo = { id: nextId(s, 'c'), nome: nomeInf || formatarTelefone(tel), apelido: '', telefone: formatarTelefone(tel), cpf: '', nascimento: '', criadoEm: agora, origemCadastro: 'atendimento', ...(nomeInf ? {} : { semNome: true }) };
+  const novo = { id: nextId(s, 'c'), nome: nomeInf || formatarTelefone(tel), apelido: nomeInf.slice(0, 60), telefone: formatarTelefone(tel), cpf: '', nascimento: '', criadoEm: agora, origemCadastro: 'atendimento', ...(nomeInf ? {} : { semNome: true }) };
   s.clientes.push(novo);
   return { ok: true, cliente: novo, criado: true };
 }
@@ -496,7 +496,7 @@ export function registrarAtendimentoLocal(s, { profissionalId, servicoIds, nome,
 // ---------- Atender: uma ação só para atendimento no balcão, registro do que já aconteceu e agendamento futuro ----------
 // Sem data (ou data de agora/passado): atendimento já feito (local, concluído nessa data). Data futura: agendamento (a confirmar ou confirmado).
 // O único requisito fixo é ≥1 serviço ou produto; o resto depende dos campos obrigatórios de cada tipo (Estabelecimento > Regras).
-export const CAMPOS_ATENDER = { nome: 'nome', telefone: 'telefone', profissional: 'profissional', vendedor: 'vendedor', formaPagamento: 'forma de pagamento', veiculo: 'veículo', placa: 'placa', modelo: 'modelo do veículo', porte: 'porte do veículo' };
+export const CAMPOS_ATENDER = { nome: 'apelido', telefone: 'telefone', profissional: 'profissional', vendedor: 'vendedor', formaPagamento: 'forma de pagamento', veiculo: 'veículo', placa: 'placa', modelo: 'modelo do veículo', porte: 'porte do veículo' };
 export const CAMPOS_DE_VEICULO = ['veiculo', 'placa', 'modelo', 'porte']; // só valem no tipo com veículo (estética) e quando há serviço
 export const CAMPOS_OBRIGATORIOS_PADRAO = { futuro: [], local: [] }; // de fábrica nada é obrigatório; o dono marca em Estabelecimento > Regras do atendimento
 export const camposObrigatorios = (s, tipo) => {

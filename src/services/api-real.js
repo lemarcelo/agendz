@@ -445,7 +445,7 @@ function lerCliente(d) {
   return {
     id: texto(d.id, 40), nome: texto(d.nome, 100), apelido: texto(d.apelido, 100), telefone: texto(d.telefone, 20), telefoneAnterior: d.telefoneAnterior ? texto(d.telefoneAnterior, 20) : '',
     cpf: d.cpf ? texto(d.cpf, 14) : '', cpfMascarado: d.cpfMascarado ? texto(d.cpfMascarado, 14) : '', nascimento: d.nascimento ? texto(d.nascimento, 10) : '',
-    dadosCompletos: d.dadosCompletos === true, semMensagens: d.semMensagens === true, veiculos: listaDe(d.veiculos, 10).map(lerVeiculo),
+    dadosCompletos: d.dadosCompletos === true, semMensagens: d.semMensagens === true, semNome: d.semNome === true, veiculos: listaDe(d.veiculos, 10).map(lerVeiculo),
     parceiro: d.parceiro === true,
     parceiroDescontoPct: typeof d.parceiroDescontoPct === 'number' ? d.parceiroDescontoPct : (d.parceiroDescontoPct ? Number(d.parceiroDescontoPct) : null),
   };

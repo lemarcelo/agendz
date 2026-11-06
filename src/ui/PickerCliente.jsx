@@ -2,6 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import { somenteDigitos } from '../domain/rules.js';
 import { Btn, Campo, Icon } from './common.jsx';
+import { rotuloDoCliente } from '../domain/cliente-rotulo.js';
 
 export const POR_PAGINA = 10;
 const sem = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -22,12 +23,12 @@ export default function PickerCliente({ clientes, valor, onEscolher, onLimpar })
   const p = Math.min(pag, paginas - 1);
   const visiveis = achados.slice(p * POR_PAGINA, p * POR_PAGINA + POR_PAGINA);
   const atual = valor ? clientes.find((c) => c.id === valor) : null;
-  const rotulo = (c) => (c.apelido && c.apelido !== c.nome ? `${c.nome} (${c.apelido})` : c.nome);
+  const rotulo = (c) => rotuloDoCliente(c);
   return (
     <Campo rotulo="Cliente cadastrado (opcional)" className="campo-largo">
       <div className="picker-cliente" data-testid="atender-cliente">
         <div className="linha-campos">
-          {atual ? <span className="picker-atual" data-testid="atender-cliente-atual"><Icon n="check" size={15} /> {rotulo(atual)}</span> : <span className="muted">Nenhum escolhido: digite nome e telefone abaixo.</span>}
+          {atual ? <span className="picker-atual" data-testid="atender-cliente-atual"><Icon n="check" size={15} /> {rotulo(atual)}</span> : <span className="muted">Nenhum escolhido: digite o apelido e o telefone abaixo.</span>}
           <Btn tamanho="sm" icone="search" onClick={() => setAberto(!aberto)} aria-expanded={aberto} data-testid="atender-cliente-abrir">{aberto ? 'Fechar' : atual ? 'Trocar' : 'Buscar cliente'}</Btn>
           {atual && <Btn tamanho="sm" onClick={onLimpar} data-testid="atender-cliente-limpar">Limpar</Btn>}
         </div>

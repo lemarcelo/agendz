@@ -2,10 +2,11 @@
 import { nomeBox, servicosPorIds, ultimoAtendimento } from '../domain/rules.js';
 import { fmtDate, fmtHM, fmtDateShort } from '../domain/time.js';
 import { Rot } from '../domain/tipos.js';
+import { rotuloDoCliente } from '../domain/cliente-rotulo.js';
 
 export const nomeServicos = (st, a) => servicosPorIds(st, a.servicoIds, a.porte).map((s) => s.nome).join(' + ') || ((a.produtos || []).length ? 'Venda de produtos' : '');
 export const clienteDe = (st, a) => st.clientes.find((c) => c.id === a.clienteId);
-export const nomeCliente = (st, a) => { if (!a.clienteId) return a.nomeAvulso || (a.local ? 'Atendimento local' : 'Sem cadastro'); const c = clienteDe(st, a); return c ? (c.apelido || c.nome) : '—'; };
+export const nomeCliente = (st, a) => { if (!a.clienteId) return a.nomeAvulso || (a.local ? 'Atendimento local' : 'Sem cadastro'); const c = clienteDe(st, a); return c ? rotuloDoCliente(c) : '—'; };
 // "Civic · ABC-1234" (vazio em venda de produto)
 export const textoVeiculo = (a) => (a.veiculo ? [a.veiculo.modelo, a.veiculo.placa].filter(Boolean).join(' · ') : '');
 export const textoBox = (st, a) => (a.boxId ? nomeBox(st, a.boxId) : '');

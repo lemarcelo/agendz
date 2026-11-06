@@ -116,7 +116,7 @@ public class AgendaController {
         }
     }
 
-    private static final Map<String, String> ROTULO_CAMPO = Map.of("nome", "nome", "telefone", "telefone", "profissional", "profissional", "vendedor", "vendedor", "formaPagamento", "forma de pagamento",
+    private static final Map<String, String> ROTULO_CAMPO = Map.of("nome", "apelido", "telefone", "telefone", "profissional", "profissional", "vendedor", "vendedor", "formaPagamento", "forma de pagamento",
             "veiculo", "veículo", "placa", "placa", "modelo", "modelo do veículo", "porte", "porte do veículo");
 
     /** Produto pedido no Atender: material do tipo produto e quantidade inteira de 1 a 999 (a regra é conferida em {@link #lancarProdutos}, com a mensagem do simulador). */

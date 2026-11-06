@@ -5,6 +5,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { clientes as api } from '../../services/api-real.js';
 import { capAtiva, rot } from '../../domain/tipos.js';
+import { nomeReal, SEM_NOME } from '../../domain/cliente-rotulo.js';
 import { formatarCpf, formatarTelefone, somenteDigitos } from '../../domain/rules.js';
 import { LIMITE_VEICULOS, ROTULO_PORTE, placaValida, portesParaEscolher, rotuloVeiculo } from '../../domain/veiculos.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
@@ -175,7 +176,7 @@ export default function Clientes({ podePlanos = false, aoIr = null }) {
               <li key={c.id} className="cliente-cartao" data-testid={`cli-${c.id}`}>
                 <div className="cliente-dados">
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                    <b data-testid="cli-item-nome">{c.nome}</b>{c.apelido && c.apelido !== c.nome ? <small className="muted"> “{c.apelido}”</small> : null}
+                    <b data-testid="cli-item-nome">{nomeReal(c) || c.apelido || SEM_NOME}</b>{c.apelido && c.apelido !== nomeReal(c) && nomeReal(c) ? <small className="muted"> “{c.apelido}”</small> : null}
                     {c.parceiro && <span className="chip chip-p st-amarelo" data-testid={`cli-parceiro-tag-${c.id}`}>Parceiro{c.parceiroDescontoPct ? ` (${c.parceiroDescontoPct}%)` : ''}</span>}
                   </div>
                   <span className="cliente-linha"><Icone n="phone" size={14} /> {fmtTel(c.telefone)}</span>

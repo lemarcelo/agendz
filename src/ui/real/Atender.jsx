@@ -12,6 +12,7 @@ import { COMO_A_PAGINA_DO_CLIENTE, PADRAO_PAINEL, sanearOrdemAtender } from '../
 import { EXEMPLO_PORTE, PORTE_PADRAO, ROTULO_PORTE, portesParaEscolher, rotuloVeiculo } from '../../domain/veiculos.js';
 import { REGRAS_DE_FABRICA, FORMAS_PAGAMENTO, boxesAtivos, camposFaltando, ehRetroativo, exige, faltaItem, exigenciasDoVeiculo, faltaVeiculo, porteDoAtendimento, formaEfetiva, filtrarProdutos, filtrarServicos, qtdValida, resumoDosProdutos, resumoDosServicos, servicoNoPorte, tipoDoAtendimento, vendedorPadrao } from '../../domain/atender-form.js';
 import { ordenarServicos } from '../../domain/ordem-servicos.js';
+import { nomeReal, rotuloDoCliente } from '../../domain/cliente-rotulo.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
 import ProfissionalPorServico from '../leve/ProfissionalPorServico.jsx';
 import { precisaAtribuirPorServico } from '../../domain/vinculo.js';
@@ -128,7 +129,7 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
   const faltaAtribuir = porAtribuir && atribuicoes.some((x) => !x.profissionalId) ? 'Escolha o profissional de cada serviço.' : '';
   const marca = (campo) => (exige(regras, tipo, campo) ? ' *' : ' (opcional)');
 
-  const escolher = (c) => { setCliente(c); setVeiculoId(c.veiculos && c.veiculos.length === 1 ? c.veiculos[0].id : ''); setNome(c.apelido || c.nome); setTelefone(c.telefone ? formatarTelefone(telNacional(c.telefone)) : ''); setBusca(''); setAchados([]); setErro(''); };
+  const escolher = (c) => { setCliente(c); setVeiculoId(c.veiculos && c.veiculos.length === 1 ? c.veiculos[0].id : ''); setNome(c.apelido || nomeReal(c)); setTelefone(c.telefone ? formatarTelefone(telNacional(c.telefone)) : ''); setBusca(''); setAchados([]); setErro(''); };
   const marcar = (id) => setIds((x) => (x.includes(id) ? x.filter((i) => i !== id) : [...x, id]));
   const marcarProd = (id) => setItens((x) => (x.some((i) => i.materialId === id) ? x.filter((i) => i.materialId !== id) : [...x, { materialId: id, qtd: 1 }]));
   const trocarQtd = (id, v) => setItens((x) => x.map((i) => (i.materialId === id ? { ...i, qtd: qtdValida(v) } : i)));
@@ -195,7 +196,14 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
     ),
   };
   const camposCli = {
-    nome: <Campo rotulo={`Nome${marca('nome')}`}><input value={nome} onChange={(e) => setNome(e.target.value)} maxLength={60} placeholder="Nome ou apelido" data-testid="atender-nome" /></Campo>,
+    nome: <Campo rotulo={`Apelido${marca('nome')}`}>
+      <input value={nome} onChange={(e) => { setNome(e.target.value); if (!cliente) setBusca(e.target.value); }} maxLength={60} placeholder="Apelido do cliente" autoComplete="off" data-testid="atender-nome" />
+      {!cliente && achados.length > 0 && (
+        <ul className="atender-real-achados" data-testid="atender-achados">
+          {achados.map((c) => <li key={c.id}><button type="button" className="atender-real-achado" onClick={() => escolher(c)} data-testid={`atender-cli-${c.id}`}>{rotuloDoCliente(c)}<span className="muted"> · {c.telefone ? formatarTelefone(telNacional(c.telefone)) : ''}</span></button></li>)}
+        </ul>
+      )}
+    </Campo>,
     telefone: <Campo rotulo={`Telefone${marca('telefone')}`}><input value={telefone} inputMode="tel" autoComplete="off" onChange={(e) => setTelefone(e.target.value)} placeholder="(55) 99999-9999" data-testid="atender-telefone" /></Campo>,
   };
   const blocos = {
@@ -256,19 +264,12 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
       <fieldset className="atender-real-bloco" id="atender-bloco-cliente">
         <legend>Cliente</legend>
         {cliente ? (
-          <p className="msg-ok" data-testid="atender-vinculo">Cadastro escolhido: {cliente.apelido || cliente.nome}. <button type="button" className="link" onClick={() => { setCliente(null); setVeiculoId(''); }} data-testid="atender-trocar-cliente">Trocar</button></p>
-        ) : (
-          <Campo rotulo="Buscar cliente cadastrado (opcional)"><input value={busca} onChange={(e) => setBusca(e.target.value)} maxLength={60} placeholder="Nome ou telefone" autoComplete="off" data-testid="atender-busca" /></Campo>
-        )}
-        {achados.length > 0 && (
-          <ul className="atender-real-achados" data-testid="atender-achados">
-            {achados.map((c) => <li key={c.id}><button type="button" className="atender-real-achado" onClick={() => escolher(c)} data-testid={`atender-cli-${c.id}`}>{c.apelido || c.nome}<span className="muted"> · {c.telefone ? formatarTelefone(telNacional(c.telefone)) : ''}</span></button></li>)}
-          </ul>
-        )}
+          <p className="msg-ok" data-testid="atender-vinculo">Cadastro escolhido: {rotuloDoCliente(cliente)}. <button type="button" className="link" onClick={() => { setCliente(null); setVeiculoId(''); }} data-testid="atender-trocar-cliente">Trocar</button></p>
+        ) : null}
         <div className="form-grade">
           {ordem.cliente.map((k) => <React.Fragment key={k}>{camposCli[k]}</React.Fragment>)}
         </div>
-        <p className="muted">Com telefone, o cadastro é achado ou criado. Só com o nome, nada é cadastrado.</p>
+        <p className="muted">Com telefone, o cadastro é achado ou criado. Só com o apelido, nada é cadastrado.</p>
       </fieldset>
     ),
     produtos: produtos !== null && produtos.length > 0 ? (

@@ -17,7 +17,7 @@ export const ehRetroativo = (inicio, agora) => Number.isFinite(inicio) && tipoDo
 // Regras do Atender (Estabelecimento > Regras, no servidor: GET /api/estabelecimento/regras-atendimento). De fábrica: agendamento pede nome e telefone
 // (o aviso do horário vai por telefone), atendimento local não pede nada e a forma padrão é Pix.
 export const FORMAS_PAGAMENTO = [['pix', 'Pix'], ['dinheiro', 'Dinheiro'], ['cartao', 'Cartão']];
-export const CAMPOS_DO_ATENDER = { nome: 'nome', telefone: 'telefone', profissional: 'profissional', vendedor: 'vendedor', formaPagamento: 'forma de pagamento', veiculo: 'veículo', placa: 'placa', modelo: 'modelo do veículo', porte: 'porte do veículo' };
+export const CAMPOS_DO_ATENDER = { nome: 'apelido', telefone: 'telefone', profissional: 'profissional', vendedor: 'vendedor', formaPagamento: 'forma de pagamento', veiculo: 'veículo', placa: 'placa', modelo: 'modelo do veículo', porte: 'porte do veículo' };
 export const CAMPOS_DE_VEICULO = ['veiculo', 'placa', 'modelo', 'porte'];
 export const REGRAS_DE_FABRICA = { formaPagamentoPadrao: 'pix', futuro: [], local: [] };
 export const formaValida = (f) => FORMAS_PAGAMENTO.some(([k]) => k === f);

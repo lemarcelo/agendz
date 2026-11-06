@@ -9,7 +9,7 @@ export const ETAPAS = ['cliente', 'veiculo', 'servicos', 'quando', 'produtos'];
 export const CAMPOS_DO_VEICULO = ['placa', 'modelo', 'marca', 'cor', 'porte'];
 export const CAMPOS_DO_CLIENTE = ['nome', 'telefone'];
 export const ROTULO_ETAPA = { cliente: 'Cliente', veiculo: 'Veículo', servicos: 'Serviços', quando: 'Quando', produtos: 'Produtos' };
-export const ROTULO_CAMPO = { placa: 'Placa', modelo: 'Modelo', marca: 'Marca', cor: 'Cor', porte: 'Porte', nome: 'Nome', telefone: 'Telefone' };
+export const ROTULO_CAMPO = { placa: 'Placa', modelo: 'Modelo', marca: 'Marca', cor: 'Cor', porte: 'Porte', nome: 'Apelido', telefone: 'Telefone' }; // o campo "nome" do Atender é o apelido (bloco C)
 
 const UMA = (etapas) => ({ etapas: [...etapas], veiculo: [...CAMPOS_DO_VEICULO], cliente: [...CAMPOS_DO_CLIENTE] });
 const PARA_OS_DOIS = (etapas) => ({ futuro: UMA(etapas), local: UMA(etapas) });

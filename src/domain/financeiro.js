@@ -11,7 +11,7 @@ import { rot } from './tipos.js';
 const erro = (m) => ({ ok: false, erros: [m] });
 const f = (s) => s.financeiro;
 const ag = (s, id) => s.agendamentos.find((a) => a.id === id);
-const nomeCliente = (s, a) => { if (a.local && !a.clienteId) return a.nomeAvulso || 'Local'; const c = s.clientes.find((x) => x.id === a.clienteId); return c ? c.apelido || c.nome.split(' ')[0] : ''; };
+const nomeCliente = (s, a) => { if (a.local && !a.clienteId) return a.nomeAvulso || 'Local'; const c = s.clientes.find((x) => x.id === a.clienteId); return c ? c.apelido || (c.semNome ? 'Sem nome' : c.nome.split(' ')[0]) : ''; };
 const diasEntre = (a, b) => Math.abs(startOfDay(a) - startOfDay(b)) / DIA;
 const nomesIds = (s, ids) => servicosPorIds(s, ids).map((x) => x.nome).join(' + ');
 

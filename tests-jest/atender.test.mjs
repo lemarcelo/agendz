@@ -52,7 +52,7 @@ test('data futura vira agendamento: com nome e telefone marcados como obrigatór
   assert.ok(estabelecimento.salvar({ camposObrigatorios: { futuro: ['nome', 'telefone'], local: [] } }).ok);
   const inicio = tsAt(dia(9), '10:00');
   const sem = agenda.atender({ servicoIds: ['s-lav-simples'], profissionalId: 'u-pablo', inicio });
-  assert.equal(sem.ok, false); assert.match(sem.erros[0], /nome, telefone/);
+  assert.equal(sem.ok, false); assert.match(sem.erros[0], /apelido, telefone/);
   assert.equal(agenda.atender({ servicoIds: ['s-lav-simples'], profissionalId: 'u-pablo', inicio, nome: 'Léo' }).ok, false, 'falta o telefone');
   const n = st().clientes.length;
   const r = agenda.atender({ servicoIds: ['s-lav-simples'], profissionalId: 'u-pablo', inicio, nome: 'Léo', telefone: '(51) 96666-2222', produtos: [{ materialId: 'pr-aromatizante', qtd: 1 }], vendedorId: 'u-pablo' });
@@ -72,7 +72,7 @@ test('data futura vira agendamento: com nome e telefone marcados como obrigatór
 test('campos obrigatórios por tipo são configuráveis (nome, telefone, esteticista, vendedor, forma de pagamento)', () => {
   assert.ok(estabelecimento.salvar({ camposObrigatorios: { futuro: ['nome', 'telefone', 'profissional'], local: ['nome', 'formaPagamento'] } }).ok);
   const l = agenda.atender({ servicoIds: ['s-lav-simples'], profissionalId: 'u-pablo' });
-  assert.equal(l.ok, false); assert.match(l.erros[0], /nome/);
+  assert.equal(l.ok, false); assert.match(l.erros[0], /apelido/);
   assert.ok(agenda.atender({ servicoIds: ['s-lav-simples'], profissionalId: 'u-pablo', nome: 'Bia' }).ok, 'forma padrão conta como preenchida');
   assert.ok(estabelecimento.salvar({ formaPagamentoPadrao: '' }).ok);
   assert.equal(agenda.atender({ servicoIds: ['s-lav-simples'], profissionalId: 'u-pablo', nome: 'Bia' }).ok, false, 'sem padrão, a forma é obrigatória');

@@ -197,7 +197,7 @@ async function rodar(tela, tema) {
   assert.equal(await p.getByText('Nome Que Nao Vale').count(), 0, `${rot}: Escape descarta a edição`);
   await busca.fill('Cliente Novo Atender');
   await p.getByRole('button', { name: 'Editar Cliente Novo Atender' }).click();
-  await T('cli-nome').fill('Cliente Renomeado');
+  await T('cli-nome').fill('Cliente Renomeado'); await T('cli-apelido').fill('Cliente Renomeado'); // o card mostra o apelido (bloco C)
   await T('salvar-cliente').click(); await T('salvar-cliente').waitFor({ state: 'detached' });
   await semRolagem('Clientes');
   await T('nav-agenda').click();

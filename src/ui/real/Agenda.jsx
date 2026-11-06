@@ -12,6 +12,7 @@ import { DIAS_CURTOS, addDays, addMonths, fmtDateTime, fmtDayLong, maiuscula1, f
 import { ATIVOS, ROTULO_STATUS } from '../../domain/rules.js';
 import { agruparPorDia, rotuloCancelados, rotuloDoGrupo, separarCancelados } from '../../domain/agenda-grupos.js';
 import { abreviarNome } from '../../domain/abreviar.js';
+import { nomeReal, rotuloDoCliente } from '../../domain/cliente-rotulo.js';
 import { Rot, capAtiva } from '../../domain/tipos.js';
 import { ROTULO_PORTE, rotuloVeiculo } from '../../domain/veiculos.js';
 import { boxesAtivos } from '../../domain/atender-form.js';
@@ -24,6 +25,7 @@ import { abrirWhatsapp } from '../whatsapp.js';
 import Atender from './Atender.jsx';
 import { useTravaScroll } from '../travaScroll.js';
 import AvisoSemBox from '../leve/AvisoSemBox.jsx';
+import EditarCliente from '../leve/EditarCliente.jsx';
 import { useAtualizacaoAutomatica } from './atualizar.js';
 
 const CHAVE_COR = { a_confirmar: 'amarelo', confirmado: 'azul', concluido: 'verde', cancelado: 'cinza' };
@@ -134,8 +136,9 @@ function formatarEventoAmigavel(e) {
   return `${e.campo}${de ? ` de ${de}` : ''}${para ? ` para ${para}` : ''}`;
 }
 
-function Detalhe({ a, nomeCliente, nomeProf, nomeDe, profissionais, boxes, ehDono, ehProprietario, podeSuporte, aoFechar, aoAlterar, aoAvisar, cliente = null, loja = null }) {
+function Detalhe({ a, nomeCliente, nomeProf, nomeDe, profissionais, boxes, ehDono, ehProprietario, podeSuporte, aoFechar, aoAlterar, aoAvisar, cliente = null, loja = null, aoClienteAlterado = null }) {
   const v = visual(a);
+  const [editandoCliente, setEditandoCliente] = useState(false);
   const [hist, setHist] = useState(null);
   const [histAberto, setHistAberto] = useState(false);
   const [topoHistorico, setTopoHistorico] = useState(null);
@@ -197,6 +200,9 @@ function Detalhe({ a, nomeCliente, nomeProf, nomeDe, profissionais, boxes, ehDon
           <div className="detalhe-linha-real">
             <Icone n="team" size={16} />
             <strong className="detalhe-cliente-real">{nomeCliente}</strong>
+            {a.clienteId && cliente && cliente.id && (
+              <button type="button" className="btn btn-sm detalhe-editar-cliente" style={{ marginLeft: 'auto' }} onClick={() => setEditandoCliente(true)} aria-label="Editar cliente" title="Editar cliente" data-testid="cliente-editar"><Icone n="edit" size={16} /></button>
+            )}
             {cliente && cliente.parceiro && (
               <span className="chip chip-p st-amarelo" data-testid="detalhe-parceiro-chip">
                 Parceiro{cliente.parceiroDescontoPct ? ` (${cliente.parceiroDescontoPct}%)` : ' (abono)'}
@@ -311,6 +317,14 @@ function Detalhe({ a, nomeCliente, nomeProf, nomeDe, profissionais, boxes, ehDon
           </form>
         )}
       </div>
+      {editandoCliente && cliente && (
+        <EditarCliente apelido={cliente.apelido || ''} nome={cliente.nomeReal || ''} aoFechar={() => { setEditandoCliente(false); detalheRef.current?.focus(); }}
+          aoSalvar={async (campos) => {
+            const r = await apiClientes.salvar({ id: cliente.id, ...campos });
+            if (r.ok && aoClienteAlterado) aoClienteAlterado();
+            return r;
+          }} />
+      )}
     </div>
   );
 }
@@ -429,9 +443,15 @@ export default function Agenda({ podeAusencia = false, ehProprio = false, ehDono
   const [lojaInfo, setLojaInfo] = useState({ endereco: '', mapaUrl: '' });
   const [localizacaoUrl, setLocalizacaoUrl] = useState(''); // link do mapa: o servidor só o devolve quando a loja ligou o envio da localização no WhatsApp
   const ultima = useRef(0);
+  // Lista de clientes da agenda: o rótulo do cartão é o apelido (senão o nome, senão "Sem nome"; nunca o telefone) e a ficha serve ao aviso por WhatsApp e à edição.
+  const lerClientes = () => apiClientes.listar().then((r) => {
+    if (!r.ok) return;
+    setClientes(new Map(r.clientes.map((c) => [c.id, rotuloDoCliente(c)])));
+    setFichas(new Map(r.clientes.map((c) => [c.id, { id: c.id, nome: nomeReal(c) || c.apelido || '', nomeReal: nomeReal(c), apelido: c.apelido || '', telefone: c.telefone, parceiro: c.parceiro === true, parceiroDescontoPct: c.parceiroDescontoPct }])));
+  });
 
   useEffect(() => {
-    apiClientes.listar().then((r) => { if (r.ok) { setClientes(new Map(r.clientes.map((c) => [c.id, c.apelido || c.nome]))); setFichas(new Map(r.clientes.map((c) => [c.id, { nome: c.apelido || c.nome, telefone: c.telefone, parceiro: c.parceiro === true, parceiroDescontoPct: c.parceiroDescontoPct }]))); } });
+    lerClientes();
     apiProf.listar().then((r) => { if (r.ok) setProfs(r.profissionais); });
     if (ehDono) apiLink.obter().then((r) => { if (r.ok) setPendLink(r.link.pendencias); });
     apiLocal.obter().then((r) => { if (r.ok) { setLocalizacaoUrl(r.local.localizacaoWhatsappUrl); setLojaInfo(r.local.localizacaoNoWhatsapp ? { endereco: r.local.enderecoTexto, mapaUrl: r.local.localizacaoWhatsappUrl } : { endereco: '', mapaUrl: '' }); } });
@@ -539,7 +559,7 @@ export default function Agenda({ podeAusencia = false, ehProprio = false, ehDono
   };
   const atendeu = (texto, ag) => {
     setAtendendo(false);
-    apiClientes.listar().then((r) => { if (r.ok) { setClientes(new Map(r.clientes.map((c) => [c.id, c.apelido || c.nome]))); setFichas(new Map(r.clientes.map((c) => [c.id, { nome: c.apelido || c.nome, telefone: c.telefone }]))); } });
+    lerClientes();
     setModo('horarios'); setSelecionado('todos'); setCursor(startOfDay(ag.inicio || Date.now())); setDiasAdiante(7); setAberto(null);
     setDestaqueAtendido(ag.id); setRolarPara(ag.id);
     setAviso(ag.conflitosPendentes?.length ? `Há ${ag.conflitosPendentes.length} agendamento(s) a confirmar no mesmo horário.` : '');
@@ -560,7 +580,7 @@ export default function Agenda({ podeAusencia = false, ehProprio = false, ehDono
     return (
       <Cartao key={a.id} a={a} testid={testid} nomeCliente={nomeCliente(a)} nomeProf={nomeProf(a.profissionalId)} mostraProf={!ehProprio && selecionado === 'todos' && atendem.length > 1}
         aberto={aberto === a.id} aoAbrir={() => setAberto(aberto === a.id ? null : a.id)} aoSegurar={setTrocaForma} destaque={destaqueIds.includes(a.id) || destaqueAtendido === a.id} parceiro={!!(fichaCli && fichaCli.parceiro)}>
-        <Detalhe a={a} nomeCliente={nomeCliente(a)} nomeProf={nomeProf(a.profissionalId)} nomeDe={nomeProf} profissionais={atendem} boxes={boxes} ehDono={ehDono} ehProprietario={ehProprietario} podeSuporte={podeSuporte} aoFechar={() => setAberto(null)} aoAlterar={alterou} aoAvisar={setAvisoRemarcar} cliente={fichaCli} loja={{ nome: nomeLoja, ...lojaInfo }} />
+        <Detalhe a={a} nomeCliente={nomeCliente(a)} nomeProf={nomeProf(a.profissionalId)} nomeDe={nomeProf} profissionais={atendem} boxes={boxes} ehDono={ehDono} ehProprietario={ehProprietario} podeSuporte={podeSuporte} aoFechar={() => setAberto(null)} aoAlterar={alterou} aoClienteAlterado={lerClientes} aoAvisar={setAvisoRemarcar} cliente={fichaCli} loja={{ nome: nomeLoja, ...lojaInfo }} />
       </Cartao>
     );
   };

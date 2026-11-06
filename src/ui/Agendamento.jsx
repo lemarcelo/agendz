@@ -15,6 +15,8 @@ import { MIN, fmtDate, fmtDateTime, fmtDuration, fmtHM, fmtMoney, fmtRelative, f
 import { Aviso, rolarAoErro, Btn, Campo, Etiquetas, Icon, Modal, StatusChip } from './common.jsx';
 import { profissionalDe, campoLog, clienteDe, nomeProfissional, nomeCliente, nomeServicos, textoSemConfirmacao, textoUltimo } from './format.js';
 import { Pagamento } from './Pagamento.jsx';
+import EditarCliente from './leve/EditarCliente.jsx';
+import { nomeReal } from '../domain/cliente-rotulo.js';
 import { comissaoJaPaga, ehDono, formatarTelefone, usaIntegracaoPix } from '../domain/rules.js';
 import { agendamentosVisiveis } from '../services/api.js';
 import { partesDoAgendamento } from '../domain/comissao.js';
@@ -320,6 +322,7 @@ export function GavetaAgendamento({ id, user, onClose, onRemarcar }) {
   const [cancelandoCom, setCancelandoCom] = useState(null); // quem (id) está com o motivo do cancelamento da comissão aberto
   const [motivoCom, setMotivoCom] = useState('');
   const [erroCom, setErroCom] = useState('');
+  const [editandoCliente, setEditandoCliente] = useState(false);
   useEffect(() => { const f = (e) => { if (e.key === 'Escape') onClose(); }; document.addEventListener('keydown', f); return () => document.removeEventListener('keydown', f); }, [onClose]);
   if (!a) return null;
   const c = clienteDe(st, a);
@@ -349,6 +352,7 @@ export function GavetaAgendamento({ id, user, onClose, onRemarcar }) {
             <p className="eyebrow">{fmtDate(a.inicio)} às {fmtHM(a.inicio)}</p>
             <h2>{nomeCliente(st, a)}</h2>
           </div>
+          {c && <button type="button" className="icone-btn" onClick={() => setEditandoCliente(true)} aria-label="Editar cliente" title="Editar cliente" data-testid="cliente-editar"><Icon n="edit" /></button>}
           <button type="button" className="icone-btn" onClick={onClose} aria-label="Fechar"><Icon n="x" /></button>
         </header>
         <div className="gaveta-corpo">
@@ -567,6 +571,10 @@ export function GavetaAgendamento({ id, user, onClose, onRemarcar }) {
           </div>
         </div>
       </aside>
+      {editandoCliente && c && (
+        <EditarCliente apelido={c.apelido || ''} nome={nomeReal(c)} aoFechar={() => setEditandoCliente(false)}
+          aoSalvar={(campos) => apiClientes.salvar({ id: c.id, nome: c.nome, apelido: c.apelido || '', telefone: c.telefone, ...campos })} />
+      )}
     </>
   );
 }

@@ -44,9 +44,12 @@ public class ClienteService {
     }
 
     /** Linha da lista: CPF só mascarado, sem nascimento. */
-    public record Resumo(UUID id, String nome, String apelido, String telefone, String cpfMascarado, List<Veiculo> veiculos, boolean semMensagens, boolean parceiro, BigDecimal parceiroDescontoPct) {
+    public record Resumo(UUID id, String nome, String apelido, String telefone, String cpfMascarado, List<Veiculo> veiculos, boolean semMensagens, boolean parceiro, BigDecimal parceiroDescontoPct, boolean semNome) {
+        public Resumo(UUID id, String nome, String apelido, String telefone, String cpfMascarado, List<Veiculo> veiculos, boolean semMensagens, boolean parceiro, BigDecimal parceiroDescontoPct) {
+            this(id, nome, apelido, telefone, cpfMascarado, veiculos, semMensagens, parceiro, parceiroDescontoPct, false);
+        }
         public Resumo(UUID id, String nome, String apelido, String telefone, String cpfMascarado, List<Veiculo> veiculos, boolean semMensagens) {
-            this(id, nome, apelido, telefone, cpfMascarado, veiculos, semMensagens, false, null);
+            this(id, nome, apelido, telefone, cpfMascarado, veiculos, semMensagens, false, null, false);
         }
     }
 
@@ -105,13 +108,14 @@ public class ClienteService {
                     (rs, i) -> lerLinha(rs));
             Map<UUID, List<Veiculo>> veiculos = veiculosDaLoja(jdbc);
             Set<UUID> optOut = new HashSet<>(jdbc.query("select id from cliente where sem_mensagens", (rs, i) -> rs.getObject(1, UUID.class)));
+            Set<UUID> semNome = new HashSet<>(jdbc.query("select id from cliente where sem_nome", (rs, i) -> rs.getObject(1, UUID.class)));
             List<Resumo> saida = new ArrayList<>();
             for (Linha l : linhas) {
                 String tel = cifra.decifrar(l.telefoneCif());
                 String cpf = l.cpfCif() == null ? null : cifra.decifrar(l.cpfCif());
                 List<Veiculo> vs = veiculos.getOrDefault(l.id(), List.of());
                 if (!consulta.isEmpty() && !confere(consulta, soDigitos, l, tel, cpf, vs)) continue;
-                saida.add(new Resumo(l.id(), l.nome(), l.apelido(), tel, cpf == null ? null : Documentos.cpfMascarado(cpf), vs, optOut.contains(l.id()), l.parceiro(), l.parceiroDescontoPct()));
+                saida.add(new Resumo(l.id(), l.nome(), l.apelido(), tel, cpf == null ? null : Documentos.cpfMascarado(cpf), vs, optOut.contains(l.id()), l.parceiro(), l.parceiroDescontoPct(), semNome.contains(l.id())));
                 if (saida.size() >= 500) break;
             }
             return saida;
@@ -213,8 +217,8 @@ public class ClienteService {
                 boolean parcFinal = novoParceiro != null ? novoParceiro : atual.parceiro();
                 BigDecimal descFinal = novoParceiro != null || novoDescPct != null ? (parcFinal ? novoDescPct : null) : atual.parceiroDescontoPct();
 
-                jdbc.update("update cliente set sem_nome = false, nome = ?, apelido = ?, telefone_cif = ?, telefone_hash = ?, cpf_cif = ?, cpf_hash = ?, nascimento_cif = ?, parceiro = ?, parceiro_desconto_pct = ?, atualizado_em = now() where id = ?",
-                        nome != null ? nome : atual.nome(), apelido != null ? apelido : atual.apelido(), novoTelCif, novoTelHash,
+                jdbc.update("update cliente set sem_nome = case when ? then sem_nome else false end, nome = ?, apelido = ?, telefone_cif = ?, telefone_hash = ?, cpf_cif = ?, cpf_hash = ?, nascimento_cif = ?, parceiro = ?, parceiro_desconto_pct = ?, atualizado_em = now() where id = ?",
+                        nome == null || nome.equals(atual.nome()), nome != null ? nome : atual.nome(), apelido != null ? apelido : atual.apelido(), novoTelCif, novoTelHash,
                         cpfFinal == null ? null : (cpfFinal.equals(cpfAtual) ? atual.cpfCif() : cifra.cifrar(cpfFinal)),
                         cpfFinal == null ? null : cifra.hash(loja.id(), "cpf", cpfFinal),
                         nascFinal == null ? null : (nascFinal.equals(nascAtual) ? atual.nascimentoCif() : cifra.cifrar(nascFinal)),
@@ -507,8 +511,8 @@ public class ClienteService {
         }
         try {
             UUID novo = jdbc.queryForObject(
-                    "insert into cliente (loja_id, nome, telefone_cif, telefone_hash, sem_nome, origem_cadastro) values (?::uuid, ?, ?, ?, ?, 'atendimento') returning id",
-                    UUID.class, loja.id().toString(), nomeInf.isEmpty() ? telefoneFormatado(tel) : nomeInf, cifra.cifrar(tel), hash, nomeInf.isEmpty());
+                    "insert into cliente (loja_id, nome, apelido, telefone_cif, telefone_hash, sem_nome, origem_cadastro) values (?::uuid, ?, ?, ?, ?, ?, 'atendimento') returning id",
+                    UUID.class, loja.id().toString(), nomeInf.isEmpty() ? telefoneFormatado(tel) : nomeInf, nomeInf, cifra.cifrar(tel), hash, nomeInf.isEmpty());
             return new DoAtendimento(novo, null);
         } catch (DuplicateKeyException ex) {
             throw duplicado(ex);
@@ -548,8 +552,8 @@ public class ClienteService {
         }
         try {
             UUID novo = jdbc.queryForObject(
-                    "insert into cliente (loja_id, nome, telefone_cif, telefone_hash, sem_nome, origem_cadastro) values (?::uuid, ?, ?, ?, ?, 'link') returning id",
-                    UUID.class, loja.id().toString(), nome.isEmpty() ? telefoneFormatado(tel) : nome, cifra.cifrar(tel), hash, nome.isEmpty());
+                    "insert into cliente (loja_id, nome, apelido, telefone_cif, telefone_hash, sem_nome, origem_cadastro) values (?::uuid, ?, ?, ?, ?, ?, 'link') returning id",
+                    UUID.class, loja.id().toString(), nome.isEmpty() ? telefoneFormatado(tel) : nome, nome, cifra.cifrar(tel), hash, nome.isEmpty());
             return new DoLink(novo, true);
         } catch (DuplicateKeyException ex) {
             throw duplicado(ex);
@@ -563,7 +567,7 @@ public class ClienteService {
     private static void atualizarNome(JdbcTemplate jdbc, Candidato c, String nomeInf) {
         if (nomeInf.isEmpty()) return;
         if (c.semNome()) {
-            jdbc.update("update cliente set nome = ?, sem_nome = false, atualizado_em = now() where id = ?", nomeInf, c.id());
+            jdbc.update("update cliente set nome = ?, apelido = case when apelido = '' then ? else apelido end, sem_nome = false, atualizado_em = now() where id = ?", nomeInf, nomeInf, c.id());
         } else if (nomeMaisCompleto(c.nome(), nomeInf)) {
             jdbc.update("update cliente set nome = ?, atualizado_em = now() where id = ?", nomeInf, c.id());
         }
