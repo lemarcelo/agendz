@@ -644,7 +644,7 @@ class PlanosTest extends BaseApi {
         assertEquals(0, new java.math.BigDecimal("30.00").compareTo(jdbc.queryForObject("select valor from assinatura_pagamento where assinatura_id = ?::uuid and mes = ?", java.math.BigDecimal.class, novo, mes1)),
                 "o mês da troca vale só a diferença");
         // o atendimento já usado no mês passou para o plano novo e a cota nova (4) tem sobra: o link volta a usar o plano
-        assertEquals(1, contar("select count(*) from agendamento where plano_assinatura_id = ?::uuid", novo));
+        assertEquals(2, contar("select count(*) from agendamento where plano_assinatura_id = ?::uuid", novo)); // os dois pedidos do mês (o 2º é o adiantamento que esgotou a cota)
         assertEquals(0, contar("select count(*) from agendamento where plano_assinatura_id = ?::uuid", assinatura));
         assertEquals(1, contar("select count(*) from pedido_plano where status = 'aceito' and assinatura_id = ?::uuid", novo));
         previa("10.70.2.1", tel, c, 14, 9).andExpect(content().json("{\"usaPlano\":true,\"esgotado\":false,\"restrito\":false}", true));
