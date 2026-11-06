@@ -201,7 +201,9 @@ export function escolherBox(state, ocup, { boxId, preferido, ignoreId } = {}) {
   if (!cap(state.estabelecimento, 'usaRecursoFisico')) return { id: null }; // tipo sem box/cadeira reservada
   const ativos = boxesAtivos(state);
   if (!ativos.length) return { erro: 'Cadastre ao menos um box em Estabelecimento > Boxes.' };
-  const livre = (id) => !acharConflitos(state, { boxId: id, ocup: { profissional: [], box: ocup.box }, ignoreId }).length;
+  // G2: a ausência do box (folga, manutenção) também o deixa ocupado, como no servidor (`AusenciasBox`)
+  const livre = (id) => !acharConflitos(state, { boxId: id, ocup: { profissional: [], box: ocup.box }, ignoreId }).length
+    && !(state.ausenciasBox || []).some((x) => x.boxId === id && sobrepoe(ocup.box[0], ocup.box[1], x.ini, x.fim));
   if (boxId) {
     const b = ativos.find((x) => x.id === boxId);
     if (!b) return { erro: 'Box não encontrado.' };

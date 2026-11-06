@@ -1,7 +1,8 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:003f7f8e99 */
 import { consumirAbaEstabelecimento } from './destino.js';
 import React, { useState } from 'react';
-import { estabelecimento as apiEst, excecoes as apiEx, afetadosPorExcecoes } from '../services/api.js';
+import { estabelecimento as apiEst, excecoes as apiEx, afetadosPorExcecoes, ausenciasBox as apiAusBox } from '../services/api.js';
+import AusenciaBoxPainel from './leve/AusenciaBoxPainel.jsx';
 import { FORMAS_PAGAMENTO, ehDono } from '../domain/rules.js';
 import { configLink } from '../domain/publico.js';
 import { CAMPOS_ATENDER, CAMPOS_DE_VEICULO, CAMPOS_OBRIGATORIOS_PADRAO } from '../domain/engine.js';
@@ -319,6 +320,7 @@ function PainelBoxes({ e }) {
         <Btn variante="primario" disabled={!sujo} onClick={salvar} data-testid="box-salvar">Salvar boxes</Btn>
       </div>
       <small className="muted">Box com histórico de atendimentos não pode ser removido, só desativado. Para desativar, remarque antes os carros agendados nele.</small>
+      {(e.boxes || []).some((b) => b.id) && <AusenciaBoxPainel boxes={(e.boxes || []).filter((b) => b.id)} listar={async () => { const r = apiAusBox.listar({ de: Date.now() - 86400000 }); return r.ok ? r : { ok: false, erro: (r.erros || [])[0] }; }} criar={async (...a) => { const r = apiAusBox.criar(...a); return r.ok ? r : { ok: false, erro: (r.erros || [])[0] }; }} remover={async (id) => { const r = apiAusBox.remover(id); return r.ok ? r : { ok: false, erro: (r.erros || [])[0] }; }} />}
     </div>
   );
 }

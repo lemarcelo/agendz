@@ -156,7 +156,7 @@ public class Ocupacao {
     private boolean livre(JdbcTemplate jdbc, UUID boxId, Plano plano, UUID ignorar) {
         Integer n = jdbc.queryForObject("select count(*) from agendamento where box_id = ? and id <> ? and status <> 'cancelado' and inicio < ? and fim_ocupado > ?",
                 Integer.class, boxId, ignorar, utc(plano.fimOcupado()), utc(plano.entrada()));
-        return n != null && n == 0;
+        return n != null && n == 0 && !br.com.agendz.escala.AusenciasBox.ocupado(jdbc, boxId, plano.entrada(), plano.fimOcupado()); // G2: ausência do box também bloqueia
     }
 
     private String nome(JdbcTemplate jdbc, UUID usuarioId) {

@@ -1770,6 +1770,48 @@ export const publico = {
   },
 };
 
+// ---------- ausência do box (G2): espelho de AusenciaBoxController ----------
+export const ausenciasBox = {
+  // GET /boxes/ausencias?de=&ate=
+  listar({ de, ate } = {}) {
+    const u = usuario();
+    if (!u || !R.pode(u, 'agenda')) return semPermissao();
+    const lista = (state.ausenciasBox || []).filter((x) => (!Number.isFinite(ate) || x.ini < ate) && (!Number.isFinite(de) || x.fim > de));
+    return { ok: true, ausencias: lista.map((x) => ({ ...x, box: R.nomeBox(state, x.boxId) })).sort((a, b) => a.ini - b.ini) };
+  },
+  // POST /boxes/ausencias  { boxId, motivo?, ini, fim }  (proprietário, administrador e recepção; carro já agendado NÃO impede: devolve `afetados`)
+  criar(boxId, ini, fim, motivo) {
+    const u = usuario();
+    if (!u || !R.pode(u, 'agenda')) return semPermissao();
+    if (!(R.ehDono(u) || u.papel === 'admin' || u.papel === 'atendente')) return erro('Só o proprietário, o administrador ou a recepção lançam ausência de box.');
+    return mutate((s, agora) => {
+      if (!capAtiva('usaRecursoFisico')) return erro('Este tipo de loja não usa box.');
+      if (!R.boxesAtivos(s).some((b) => b.id === boxId)) return erro('Box não encontrado.');
+      if (!Number.isFinite(ini) || !Number.isFinite(fim) || ini >= fim) return erro('Informe o início antes do fim da ausência.');
+      if (fim <= agora) return erro('A ausência precisa ser de agora em diante.');
+      if (fim - ini > 31 * 86400000) return erro('Ausência distante demais ou longa demais (máximo de 31 dias por intervalo).');
+      const afetados = s.agendamentos.filter((a) => a.boxId === boxId && R.ATIVOS.includes(a.status) && R.sobrepoe(ini, fim, ...R.ocupacaoDe(s, a).box))
+        .map((a) => new Date(a.inicio).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }));
+      s.ausenciasBox = s.ausenciasBox || [];
+      const nova = { id: `ab${++s.seq}`, boxId, ini, fim, diaInteiro: false, motivo: String(motivo || '').trim().slice(0, 120), criadoPor: u.id };
+      s.ausenciasBox.push(nova);
+      return { ok: true, ausencias: [nova], afetados };
+    }, { metodo: 'POST', rota: '/boxes/ausencias' });
+  },
+  // DELETE /boxes/ausencias/{id}
+  remover(id) {
+    const u = usuario();
+    if (!u || !R.pode(u, 'agenda')) return semPermissao();
+    if (!(R.ehDono(u) || u.papel === 'admin' || u.papel === 'atendente')) return erro('Só o proprietário, o administrador ou a recepção removem ausência de box.');
+    return mutate((s) => {
+      const i = (s.ausenciasBox || []).findIndex((x) => x.id === id);
+      if (i < 0) return erro('Ausência não encontrada.');
+      s.ausenciasBox.splice(i, 1);
+      return { ok: true };
+    }, { metodo: 'DELETE', rota: `/boxes/ausencias/${id}` });
+  },
+};
+
 // ---------- ausência do profissional (A3): espelho de AusenciaController ----------
 export const ausencias = {
   // GET /ausencias?de=&ate=  (o profissional só vê as próprias)

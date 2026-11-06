@@ -1489,6 +1489,34 @@ export const vinculos = {
   },
 };
 
+// Ausência do box (bloco G2): período em que o box não recebe carro. Só proprietário, administrador e recepção; carro já agendado não impede (a resposta traz `afetados`).
+const lerAusenciaBox = (d) => ({
+  id: texto(d && d.id, 40), boxId: texto(d && d.boxId, 40), box: texto(d && d.box, 40),
+  ini: Date.parse(d && d.ini) || 0, fim: Date.parse(d && d.fim) || 0, diaInteiro: !!(d && d.diaInteiro), motivo: d && d.motivo ? texto(d.motivo, 120) : '',
+});
+export const ausenciasBox = {
+  // GET /api/boxes/ausencias?de=&ate=
+  async listar(de, ate) {
+    const q = [];
+    if (Number.isFinite(de)) q.push(`de=${encodeURIComponent(new Date(de).toISOString())}`);
+    if (Number.isFinite(ate)) q.push(`ate=${encodeURIComponent(new Date(ate).toISOString())}`);
+    const r = await chamar('GET', `/api/boxes/ausencias${q.length ? '?' + q.join('&') : ''}`);
+    return r.ok ? { ok: true, ausencias: listaDe(r.dados, 1000).map(lerAusenciaBox) } : r;
+  },
+  // POST /api/boxes/ausencias  { boxId, motivo?, intervalos: [{ ini, fim }] }
+  async criar(boxId, ini, fim, motivo) {
+    if (!ID.test(String(boxId ?? ''))) return { ok: false, status: 0, erro: 'Escolha o box.' };
+    if (!Number.isFinite(ini) || !Number.isFinite(fim) || fim <= ini) return { ok: false, status: 0, erro: 'Informe o início antes do fim da ausência.' };
+    const r = await chamar('POST', '/api/boxes/ausencias', { boxId, ...(motivo ? { motivo: texto(motivo, 120) } : {}), intervalos: [{ ini: new Date(ini).toISOString(), fim: new Date(fim).toISOString() }] });
+    return r.ok ? { ok: true, ausencias: listaDe(r.dados && r.dados.ausencias, 300).map(lerAusenciaBox), afetados: listaDe(r.dados && r.dados.afetados, 100).map((x) => texto(x, 60)) } : r;
+  },
+  // DELETE /api/boxes/ausencias/{id}
+  async remover(id) {
+    if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Ausência não encontrada.' };
+    return chamar('DELETE', `/api/boxes/ausencias/${id}`);
+  },
+};
+
 // Ausência (bloco A3): intervalos em que o profissional não recebe agendamento. Servidor recusa se já há agendamento no período (409 com a lista).
 const lerAusencia = (d) => ({
   id: texto(d && d.id, 40), profissionalId: texto(d && d.profissionalId, 40), profissional: d && d.profissional ? texto(d.profissional, 80) : '',

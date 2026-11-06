@@ -3,9 +3,10 @@
 // só se desativa, box com carro agendado não se desativa) é do servidor (PUT /api/estabelecimento/boxes); a tela mostra a mensagem dele.
 // Não importa `api.js`, `hooks.js` nem `common.jsx` (tests/estatico.test.mjs). Classes de CSS próprias terminam em `-real`.
 import React, { useEffect, useState } from 'react';
-import { boxes as api } from '../../services/api-real.js';
+import { boxes as api, ausenciasBox } from '../../services/api-real.js';
 import { erroDosBoxes } from '../../domain/atender-form.js';
 import { Aviso, Btn, Icone } from '../leve/mini.jsx';
+import AusenciaBoxPainel from '../leve/AusenciaBoxPainel.jsx';
 
 export default function Boxes() {
   const [lista, setLista] = useState(null); // [{ chave, id?, nome, ativo }]
@@ -62,6 +63,7 @@ export default function Boxes() {
           <p className="muted">Box que já atendeu não é removido: desative. Box com carro agendado só desativa depois de remarcar.</p>
         </form>
       )}
+      {lista !== null && lista.some((b) => b.id) && <AusenciaBoxPainel boxes={lista.filter((b) => b.id)} listar={() => ausenciasBox.listar(Date.now() - 86400000, Date.now() + 86400000 * 200)} criar={ausenciasBox.criar} remover={ausenciasBox.remover} />}
     </section>
   );
 }

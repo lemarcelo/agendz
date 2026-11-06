@@ -393,9 +393,10 @@ return horariosDoDia(jdbc, cfg, base, dia, servicos, relogio.instant(), false, n
         // estética: o horário só existe se houver profissional E box livres (o carro nunca divide o box); sem nenhum box cadastrado não há horário
         boolean usaBox = base.boxes() != null;
         List<BoxOcupado> boxesOcupados = usaBox
-                ? jdbc.query("select box_id, inicio, fim_ocupado from agendamento where box_id is not null and id <> ? and status <> 'cancelado' and inicio < ? and fim_ocupado > ?",
+                ? jdbc.query("select box_id, inicio, fim_ocupado from agendamento where box_id is not null and id <> ? and status <> 'cancelado' and inicio < ? and fim_ocupado > ? "
+                        + "union all select box_id, ini, fim from ausencia_box where ini < ? and fim > ?", // G2: ausência do box ocupa como um carro
                         (rs, i) -> new BoxOcupado(rs.getObject(1, UUID.class), rs.getObject(2, OffsetDateTime.class).toInstant(), rs.getObject(3, OffsetDateTime.class).toInstant()),
-                        ignorar == null ? NINGUEM : ignorar, utc(diaFim.plus(1, ChronoUnit.DAYS)), utc(diaIni))
+                        ignorar == null ? NINGUEM : ignorar, utc(diaFim.plus(1, ChronoUnit.DAYS)), utc(diaIni), utc(diaFim.plus(1, ChronoUnit.DAYS)), utc(diaIni))
                 : List.of();
         List<UUID> idsDosServicos = servicos.stream().map(Svc::id).toList();
         Map<UUID, List<UUID>> vinculos = VinculoServicos.porServico(jdbc);
