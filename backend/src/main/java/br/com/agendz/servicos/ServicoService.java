@@ -242,7 +242,7 @@ public class ServicoService {
         BigDecimal precoBase = d.preco();
         if (indef) precoBase = validarIndefinida(d, v);
         boolean porPorte = precoPorPorte(loja) && !indef;
-        if (precoBase != null && (precoBase.signum() < 0 || d.preco().compareTo(TETO_PRECO) > 0)) throw ruim("Informe o preço.");
+        if (precoBase != null && (precoBase.signum() < 0 || precoBase.compareTo(TETO_PRECO) > 0)) throw ruim("Informe o preço.");
         if (!indef && d.duracaoMin() != null && (d.duracaoMin() <= 0 || d.duracaoMin() > DURACAO_MULTIDIA)) throw ruim(MSG_DURACAO);
         boolean multi = Boolean.TRUE.equals(d.multiDia());
         // Edição sem o campo "vários dias": o teto certo depende do que já está gravado e é conferido em alterar().

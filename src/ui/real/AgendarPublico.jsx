@@ -501,7 +501,7 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
           {paraCombinar.length > 0 && <CombinarAgendamento servicos={paraCombinar} nomeCliente={nome} aviso={srvFix.length ? 'Estes serviços não têm horário na grade: combine com a loja. Os demais você agenda pelos horários abaixo.' : 'Este serviço não tem horário na grade: combine com a loja.'} />}
           {precisaAtribuir && <ProfissionalPorServico testid="pub-pps" servicos={servicos.map((x) => ({ id: x.id, nome: x.nome }))} rotuloProfissional={Rot('profissional')} opcoes={(sid) => pagina.profissionais.filter((b) => realiza(b, sid)).map((b) => ({ id: b.id, nome: b.nome }))} valor={atrib} aoMudar={(v) => { setAtrib(v); setEscolha(null); }} />}
           {!precisaAtribuir && avisoProf && <p className="muted" role="status" data-testid="pub-aviso-prof">{avisoProf}</p>}
-          {srvFix.length > 0 && !precisaAtribuir && !(pagina.profissionalAutomatico && !barb) && <>
+          {(srvFix.length > 0 || !srv.length) && !precisaAtribuir && !(pagina.profissionalAutomatico && !barb) && <>
           <h3>Com quem?</h3>
           <div className="pub-barbs" role="group" aria-label={Rot('profissional')}>
             <button type="button" className={`pub-barb ${barb === '' ? 'on' : ''}`} aria-pressed={barb === ''} onClick={() => { setBarb(''); setEscolha(null); }} data-testid="pub-barb-qualquer">Qualquer um</button>

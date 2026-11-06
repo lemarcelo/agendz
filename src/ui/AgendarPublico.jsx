@@ -447,7 +447,7 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
           ))}
           {paraCombinar.length > 0 && <CombinarAgendamento servicos={paraCombinar} nomeCliente={nome} aviso={srvFix.length ? 'Estes serviços não têm horário na grade: combine com a loja. Os demais você agenda pelos horários abaixo.' : 'Este serviço não tem horário na grade: combine com a loja.'} />}
           {precisaAtribuir && <ProfissionalPorServico testid="pub-pps" servicos={servicos.map((x) => ({ id: x.id, nome: x.nome }))} rotuloProfissional={Rot('profissional')} opcoes={(sid) => cfg.profissionais.filter((b) => realizaPub(b, sid)).map((b) => ({ id: b.id, nome: b.nome }))} valor={atrib} aoMudar={(v) => { setAtrib(v); setEscolha(null); }} />}
-          {srvFix.length > 0 && !precisaAtribuir && !(cfg.profissionalAutomatico && !barb) && <>
+          {(srvFix.length > 0 || !srv.length) && !precisaAtribuir && !(cfg.profissionalAutomatico && !barb) && <>
           {!precisaAtribuir && avisoProf && <p className="muted" role="status" data-testid="pub-aviso-prof">{avisoProf}</p>}
           <h3>Com quem?</h3>
           <div className="pub-barbs" role="group" aria-label={Rot('profissional')}>

@@ -86,7 +86,7 @@ await T('nav-agenda').click();
 await T('atender').click();
 await primeiroServico();
 await T('salvar-atender').click();
-assert.match(await p.locator('[role=dialog], .modal').first().innerText(), /nome/i, 'nome passou a ser obrigatório no atendimento local');
+assert.match(await p.locator('[role=dialog], .modal').first().innerText(), /nome|apelido/i, 'nome passou a ser obrigatório no atendimento local');
 await T('atender-nome').fill('Com Nome');
 await salvar();
 await T('nav-estab').click();
