@@ -20,6 +20,8 @@ import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
 import { OpcoesDeTroca } from '../leve/TrocaDePlano.jsx';
 import { useCaptcha } from './Captcha.jsx';
 import ProfissionalPorServico from '../leve/ProfissionalPorServico.jsx';
+import CombinarAgendamento, { ehParaCombinar } from '../leve/CombinarAgendamento.jsx';
+import { textoDoPreco } from '../../domain/blocos.js';
 import { precisaAtribuirPorServico } from '../../domain/vinculo.js';
 import { TOKEN_PROFISSIONAL } from '../../domain/link-publico.js';
 
@@ -337,23 +339,26 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
   const [trocas, setTrocas] = useState(null); // E3: planos com mais serviços (só vêm com o aviso de cota acabada ou de restrição): { opcoes, descontoPct, whatsapp }
   const [planoEsgotado, setPlanoEsgotado] = useState(false); // E2: tem plano que cobre o serviço, mas os atendimentos do mês acabaram (o link não agenda; a equipe agenda fora do plano)
   const cap = useCaptcha(loja.captchaChave);
-  const servicos = pagina.servicos.filter((x) => srv.includes(x.id));
+  const escolhidos = pagina.servicos.filter((x) => srv.includes(x.id));
+  const paraCombinar = escolhidos.filter(ehParaCombinar); // F: duração indefinida; não entra no pedido nem nos horários, se combina pelo botão
+  const servicos = escolhidos.filter((x) => !ehParaCombinar(x));
+  const srvFix = servicos.map((x) => x.id);
   // A1: quem realiza o quê. Escolhendo o profissional, só aparecem os serviços dele; escolhendo serviços, só aparecem quem realiza todos. `servicoIds: null` = servidor antigo, sem filtro.
   const realiza = (b, sid) => !b || b.servicoIds === null || b.servicoIds === undefined || b.servicoIds.includes(sid);
   const profSel = pagina.profissionais.find((b) => b.id === barb);
   // B3: profissional vindo do link: os serviços aparecem todos; se o escolhido não for dele, ele sai e "Com quem?" lista só quem faz (aviso derivado, sem estado)
   const profDoLink = pagina.profissionais.find((b) => b.id === profissionalInicial);
-  const naoFazDoLink = !!profDoLink && srv.some((sid) => !realiza(profDoLink, sid));
+  const naoFazDoLink = !!profDoLink && srvFix.some((sid) => !realiza(profDoLink, sid));
   const avisoProf = naoFazDoLink && barb !== profDoLink.id ? `${profDoLink.nome} não faz esse serviço. Escolha quem faz.` : '';
-  useEffect(() => { if (profDoLink && barb === profDoLink.id && srv.some((sid) => !realiza(profDoLink, sid))) { setBarb(''); setEscolha(null); } }, [srv.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
-  const servicosVisiveis = pagina.servicos.filter((x) => ((profSel && !(profDoLink && profSel.id === profDoLink.id)) ? realiza(profSel, x.id) : pagina.profissionais.length === 0 || pagina.profissionais.some((b) => realiza(b, x.id))));
-  const profissionaisVisiveis = pagina.profissionais.filter((b) => srv.every((sid) => realiza(b, sid)));
+  useEffect(() => { if (profDoLink && barb === profDoLink.id && srvFix.some((sid) => !realiza(profDoLink, sid))) { setBarb(''); setEscolha(null); } }, [srvFix.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+  const servicosVisiveis = pagina.servicos.filter((x) => ehParaCombinar(x) || ((profSel && !(profDoLink && profSel.id === profDoLink.id)) ? realiza(profSel, x.id) : pagina.profissionais.length === 0 || pagina.profissionais.some((b) => realiza(b, x.id))));
+  const profissionaisVisiveis = pagina.profissionais.filter((b) => srvFix.every((sid) => realiza(b, sid)));
   // B1: serviços feitos por pessoas diferentes → um campo de profissional por serviço (vazio e obrigatório); "Com quem?" some. Estética (box único) e escolha automática ficam como eram.
   const [atrib, setAtrib] = useState({});
-  const porServicoPub = Object.fromEntries(srv.map((sid) => [sid, pagina.profissionais.filter((b) => realiza(b, sid)).map((b) => b.id)]));
-  const precisaAtribuir = !capAtiva('usaRecursoFisico') && !pagina.profissionalAutomatico && pagina.profissionais.every((b) => Array.isArray(b.servicoIds)) && precisaAtribuirPorServico(srv, porServicoPub);
-  useEffect(() => { setAtrib((a) => Object.fromEntries(Object.entries(a).filter(([sid, pid]) => srv.includes(sid) && (porServicoPub[sid] || []).includes(pid)))); }, [srv.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
-  const faltaAtribuir = precisaAtribuir && srv.some((sid) => !atrib[sid]);
+  const porServicoPub = Object.fromEntries(srvFix.map((sid) => [sid, pagina.profissionais.filter((b) => realiza(b, sid)).map((b) => b.id)]));
+  const precisaAtribuir = !capAtiva('usaRecursoFisico') && !pagina.profissionalAutomatico && pagina.profissionais.every((b) => Array.isArray(b.servicoIds)) && precisaAtribuirPorServico(srvFix, porServicoPub);
+  useEffect(() => { setAtrib((a) => Object.fromEntries(Object.entries(a).filter(([sid, pid]) => srvFix.includes(sid) && (porServicoPub[sid] || []).includes(pid)))); }, [srvFix.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+  const faltaAtribuir = precisaAtribuir && srvFix.some((sid) => !atrib[sid]);
   const atribuicoes = precisaAtribuir && !faltaAtribuir ? atrib : undefined;
   const preco = (x) => (usaVeiculo ? x.precos[porte || PORTE_PADRAO] ?? x.preco : x.preco); // sem porte (dono tirou a obrigatoriedade) vale o médio
   const minutos = (x) => (usaVeiculo ? x.duracoes[porte || PORTE_PADRAO] ?? x.duracao : x.duracao);
@@ -365,7 +370,7 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
   const estrela = (k) => (exV.includes(k) ? ' *' : ' (opcional)');
   const rotuloPorte = (pagina.portes || []).find((x) => x.id === porte)?.nome || '';
   const textoV = [modelo.trim(), placa && formatarPlaca(placa), rotuloPorte && `porte ${rotuloPorte.toLowerCase()}`].filter(Boolean).join(' · ');
-  const chave = `${srv.join(',')}|${barb}|${porte}|${precisaAtribuir ? Object.entries(atrib).map(([k, v]) => `${k}:${v}`).sort().join(',') : ''}`;
+  const chave = `${srvFix.join(',')}|${barb}|${porte}|${precisaAtribuir ? Object.entries(atrib).map(([k, v]) => `${k}:${v}`).sort().join(',') : ''}`;
   const nomeBarb = (id) => pagina.profissionais.find((b) => b.id === id)?.nome || `Qualquer ${rot('profissional')}`;
   const alternar = (id) => { setSrv((l) => (l.includes(id) ? l.filter((x) => x !== id) : l.length >= 5 ? l : [...l, id])); setEscolha(null); };
 
@@ -377,14 +382,14 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
     if (etapa !== 3 || !escolha || !telefoneBrasileiro(tel)) return undefined;
     let vivo = true;
     const t = setTimeout(async () => {
-      const r = await planosPublico.uso({ telefone: tel, servicoIds: srv, inicio: escolha.inicio });
+      const r = await planosPublico.uso({ telefone: tel, servicoIds: srvFix, inicio: escolha.inicio });
       if (vivo && r.ok && r.usaPlano) setUsaPlano(true);
       if (vivo && r.ok && r.esgotado) setPlanoEsgotado(true);
       if (vivo && r.ok && r.restrito) setPlanoRestrito(true);
       if (vivo && r.ok && (r.esgotado || r.restrito) && Array.isArray(r.trocas) && r.trocas.length) setTrocas({ opcoes: r.trocas, descontoPct: r.descontoTrocaPct || 0, whatsapp: r.whatsapp || '' });
     }, 400);
     return () => { vivo = false; clearTimeout(t); };
-  }, [etapa, tel, srv, escolha]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [etapa, tel, srvFix.join(','), escolha]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const enviar = async () => {
     if (enviando) return;
@@ -399,7 +404,7 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
       return;
     }
     setEnviando(true);
-    const r = await publico.agendar({ nome, telefone: tel, servicoIds: srv, profissionalId: escolha?.profissionalId || barb, ...(atribuicoes ? { atribuicoes } : {}), inicio: escolha?.inicio, cupomChave: cupom, site: isca, selo: pagina.selo, captcha: cap.prova, ...(usaVeiculo ? { veiculo: { placa, marca, modelo, cor, porte } } : {}) });
+    const r = await publico.agendar({ nome, telefone: tel, servicoIds: srvFix, profissionalId: escolha?.profissionalId || barb, ...(atribuicoes ? { atribuicoes } : {}), inicio: escolha?.inicio, cupomChave: cupom, site: isca, selo: pagina.selo, captcha: cap.prova, ...(usaVeiculo ? { veiculo: { placa, marca, modelo, cor, porte } } : {}) });
     cap.gasta();
     setEnviando(false);
     if (!r.ok) {
@@ -415,7 +420,7 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
     }
     if (r.token) aoCriar({ id: r.agendamento.id, token: r.token }, { id: r.agendamento.id, inicio: r.agendamento.inicio, fim: r.agendamento.fim, servicos: r.agendamento.servicos, profissional: r.agendamento.profissional }, { nome, telefone: tel });
     for (const o of r.outros || []) if (o.token) aoCriar({ id: o.agendamento.id, token: o.token }, { id: o.agendamento.id, inicio: o.agendamento.inicio, fim: o.agendamento.fim, servicos: o.agendamento.servicos, profissional: o.agendamento.profissional }, { nome, telefone: tel });
-    setFeito({ ...r.agendamento, partes: (r.outros || []).map((o) => o.agendamento), usouPlano: r.usouPlano === true, plano: r.plano || null });
+    setFeito({ ...r.agendamento, combinar: paraCombinar, partes: (r.outros || []).map((o) => o.agendamento), usouPlano: r.usouPlano === true, plano: r.plano || null });
     setEtapa(4);
   };
   const recomecar = () => { setEtapa(desl); setSrv([]); setEscolha(null); setFeito(null); setCupom(''); setErro(''); };
@@ -428,6 +433,7 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
         {feito.partes && feito.partes.length > 0
           ? <ul className="pub-partes" data-testid="pub-feito-partes">{[feito, ...feito.partes].map((x) => <li key={x.id}>{x.servicos.join(', ')} com <b>{x.profissional}</b> · <b>{diaLongo(x.inicio)}, {horaDe(x.inicio)}</b></li>)}</ul>
           : <p>{feito.servicos.join(', ')}{feito.veiculo ? ` · ${feito.veiculo.modelo} ${formatarPlaca(feito.veiculo.placa)}` : ''} com <b>{feito.profissional}</b><br /><b>{diaLongo(feito.inicio)}, {horaDe(feito.inicio)}</b></p>}
+        {feito.combinar && feito.combinar.length > 0 && <CombinarAgendamento servicos={feito.combinar} nomeCliente={nome} aviso={`Falta combinar o horário de ${feito.combinar.map((x) => x.nome).join(', ')} com a loja.`} />}
         {feito.usouPlano && <p data-testid="pub-feito-plano"><Icone n="ticket" size={14} /> Este horário usa um atendimento do seu plano.</p>}
         {feito.plano && <p data-testid="pub-feito-plano-restam">{feito.plano.restantes > 0 ? `Restam ${feito.plano.restantes} atendimento${feito.plano.restantes === 1 ? '' : 's'} do seu plano em ${rotuloMes(feito.plano.mes)}.` : `Este foi o último atendimento do seu plano em ${rotuloMes(feito.plano.mes)}.`}</p>}
         {feito.desconto > 0 && <p data-testid="pub-feito-cupom"><Icone n="key" size={14} /> Cupom {feito.cupom}: −{fmtMoney(feito.desconto)} · a pagar {fmtMoney(feito.total - feito.desconto)}</p>}
@@ -487,14 +493,15 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
             {servicosVisiveis.map((x) => (
               <label key={x.id} className={`pub-item ${srv.includes(x.id) ? 'on' : ''}`}>
                 <input type="checkbox" checked={srv.includes(x.id)} onChange={() => alternar(x.id)} data-testid={`pub-srv-${x.id}`} />
-                <span className="pub-item-txt"><b>{x.nome}</b><small className="muted">{fmtDur(minutos(x))}{x.antecedenciaH > 0 ? ` · agende com ${x.antecedenciaH} h de antecedência` : ''}</small></span>
-                <span className="pub-preco">{fmtMoney(preco(x))}</span>
+                <span className="pub-item-txt"><b>{x.nome}</b><small className="muted">{x.combinar ? (x.combinar.duracaoTexto || 'Duração a combinar') : fmtDur(minutos(x))}{x.antecedenciaH > 0 ? ` · agende com ${x.antecedenciaH} h de antecedência` : ''}</small></span>
+                <span className="pub-preco">{x.combinar ? textoDoPreco({ preco: x.preco, precoModo: x.combinar.precoModo, precoMax: x.combinar.precoMax, precoOpcoes: x.combinar.opcoes }, fmtMoney) : fmtMoney(preco(x))}</span>
               </label>
             ))}
           </div>
+          {paraCombinar.length > 0 && <CombinarAgendamento servicos={paraCombinar} nomeCliente={nome} aviso={srvFix.length ? 'Estes serviços não têm horário na grade: combine com a loja. Os demais você agenda pelos horários abaixo.' : 'Este serviço não tem horário na grade: combine com a loja.'} />}
           {precisaAtribuir && <ProfissionalPorServico testid="pub-pps" servicos={servicos.map((x) => ({ id: x.id, nome: x.nome }))} rotuloProfissional={Rot('profissional')} opcoes={(sid) => pagina.profissionais.filter((b) => realiza(b, sid)).map((b) => ({ id: b.id, nome: b.nome }))} valor={atrib} aoMudar={(v) => { setAtrib(v); setEscolha(null); }} />}
           {!precisaAtribuir && avisoProf && <p className="muted" role="status" data-testid="pub-aviso-prof">{avisoProf}</p>}
-          {!precisaAtribuir && !(pagina.profissionalAutomatico && !barb) && <>
+          {srvFix.length > 0 && !precisaAtribuir && !(pagina.profissionalAutomatico && !barb) && <>
           <h3>Com quem?</h3>
           <div className="pub-barbs" role="group" aria-label={Rot('profissional')}>
             <button type="button" className={`pub-barb ${barb === '' ? 'on' : ''}`} aria-pressed={barb === ''} onClick={() => { setBarb(''); setEscolha(null); }} data-testid="pub-barb-qualquer">Qualquer um</button>
@@ -502,9 +509,9 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
           </div>
           </>}
           <div className="pub-rodape">
-            {servicos.length > 0 && <span className="muted">{fmtDur(duracao)} · {fmtMoney(total)}</span>}
+            {servicos.length > 0 && <span className="muted" data-testid="pub-total">{fmtDur(duracao)} · {fmtMoney(total)}</span>}
             {usaVeiculo && <Btn variante="fantasma" onClick={() => { setErro(''); setEtapa(0); }} data-testid="pub-voltar-0">Voltar</Btn>}
-            <Btn variante="primario" disabled={!srv.length || faltaAtribuir} onClick={() => setEtapa(2)} data-testid="pub-continuar-1">Escolher horário</Btn>
+            {(srvFix.length > 0 || !srv.length) && <Btn variante="primario" disabled={!srvFix.length || faltaAtribuir} onClick={() => setEtapa(2)} data-testid="pub-continuar-1">Escolher horário</Btn>}
           </div>
         </div>
       )}
@@ -513,7 +520,7 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
         <div className="pub-bloco">
           <h2>Quando?</h2>
           <p className="muted">Só aparecem horários livres. Toque no dia e no horário.</p>
-          <DiaHora chave={chave} diasMax={pagina.diasMax} servicoIds={srv} profissionalId={precisaAtribuir ? '' : barb} atribuicoes={atribuicoes} porte={usaVeiculo ? porte : undefined} valor={escolha?.inicio} aoEscolher={setEscolha} duracaoTotal={duracao} dia={dia} aoMudarDia={setDia} />
+          <DiaHora chave={chave} diasMax={pagina.diasMax} servicoIds={srvFix} profissionalId={precisaAtribuir ? '' : barb} atribuicoes={atribuicoes} porte={usaVeiculo ? porte : undefined} valor={escolha?.inicio} aoEscolher={setEscolha} duracaoTotal={duracao} dia={dia} aoMudarDia={setDia} />
           {erro && <Aviso tipo="erro"><span data-testid="pub-erro">{erro}</span></Aviso>}
           <div className="pub-rodape">
             <Btn variante="fantasma" onClick={() => { setErro(''); setEtapa(1); }} data-testid={`pub-voltar-${1 - desl}`}>Voltar</Btn>
@@ -530,6 +537,7 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
             {usaVeiculo && textoV && <span>{textoV}</span>}
             <span>{diaLongo(escolha.inicio)}, {horaDe(escolha.inicio)} · {nomeBarb(escolha.profissionalId)}</span>
             <span className="muted">{fmtDur(duracao)} · {fmtMoney(total)}</span>
+            {paraCombinar.length > 0 && <span className="muted" data-testid="pub-resumo-combinar">Falta combinar com a loja: {paraCombinar.map((x) => x.nome).join(', ')}.</span>}
           </div>
           <form className="pub-form" onSubmit={(e) => { e.preventDefault(); enviar(); }} noValidate>
             <Campo rotulo={pagina.exigeNome === false ? 'Nome (opcional)' : 'Nome'}><input value={nome} onChange={(e) => setNome(e.target.value)} maxLength={60} autoComplete="name" data-testid="pub-nome" /></Campo>

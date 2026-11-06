@@ -16,6 +16,7 @@ import Portes from './Portes.jsx';
 import LinkAgendamento from './LinkAgendamento.jsx';
 import Expediente from './Expediente.jsx';
 import MarcaLoja from './MarcaLoja.jsx';
+import WhatsappLoja from './WhatsappLoja.jsx';
 
 const txt = (n) => (n === null || n === undefined ? '' : String(n).replace('.', ','));
 const numero = (s) => { const t = String(s ?? '').trim().replace(',', '.'); if (t === '') return null; const n = Number(t); return Number.isFinite(n) ? n : NaN; };
@@ -184,6 +185,8 @@ export default function Estabelecimento({ ehDono, aoReconfigurar, aoMudarMarca }
       )}
       <h2 className="est-subtitulo-real">Endereço e localização</h2>
       <LocalDaLoja />
+      <h2 className="est-subtitulo-real">WhatsApp do estabelecimento</h2>
+      <WhatsappLoja />
       {ehDono && (
         <>
           <h2 className="est-subtitulo-real">Comissão</h2>

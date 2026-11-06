@@ -9,6 +9,7 @@ import br.com.agendz.validacao.Texto;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -35,23 +36,37 @@ public class ServicoService {
 
     private static final BigDecimal TETO_PRECO = new BigDecimal("100000");
     private static final int DURACAO_DIA = 1440, DURACAO_MULTIDIA = 14400;
+    private static final String MSG_INDEFINIDA_COMBO = "Serviço de duração indefinida não pode ser combo nem de vários dias.";
     private static final String MSG_DURACAO = "A duração precisa ser maior que zero e de no máximo 24 horas.";
     private static final TypeReference<Map<String, BigDecimal>> MAPA_PRECOS = new TypeReference<>() {
     };
     private static final TypeReference<Map<String, Integer>> MAPA_DURACOES = new TypeReference<>() {
     };
-    private static final String COLUNAS = "id, codigo, nome, categoria, preco, duracao_min, intervalo_min, antecedencia_h, multi_dia, combo, comissao_pct, ativo, precos::text as precos, duracoes::text as duracoes";
+    private static final TypeReference<List<Opcao>> LISTA_OPCOES = new TypeReference<>() {
+    };
+    private static final String COLUNAS = "id, codigo, nome, categoria, preco, duracao_min, intervalo_min, antecedencia_h, multi_dia, combo, comissao_pct, ativo, precos::text as precos, duracoes::text as duracoes, duracao_texto, combinar_msg, preco_modo, preco_opcoes::text as preco_opcoes, preco_max, array_to_string(combina_ids, ',') as combina_ids";
 
-    public record Servico(UUID id, String codigo, String nome, String categoria, BigDecimal preco, int duracaoMin, int intervaloMin, int antecedenciaH,
+    /** Um valor de um serviço de duração indefinida que tem vários preços (ex.: "Pintura simples" — R$ 80). */
+    public record Opcao(@Size(max = 200) String descricao, BigDecimal valor) {
+    }
+
+    /**
+     * `duracaoMin` nulo = duração indefinida (V60): `duracaoTexto` descreve, `combinarMsg` é a mensagem do botão "Combinar agendamento" e `combinaIds` são quem combina o horário.
+     * `precoModo`: fixo (`preco`), lista (`precoOpcoes`; `preco` = o menor) ou faixa (de `preco` a `precoMax`). Serviço de duração fixa é sempre "fixo".
+     */
+    public record Servico(UUID id, String codigo, String nome, String categoria, BigDecimal preco, Integer duracaoMin, int intervaloMin, int antecedenciaH,
                           boolean multiDia, boolean combo, List<UUID> componentes, BigDecimal comissaoPct, boolean ativo,
-                          Map<String, BigDecimal> precos, Map<String, Integer> duracoes) {
+                          Map<String, BigDecimal> precos, Map<String, Integer> duracoes,
+                          String duracaoTexto, String combinarMsg, String precoModo, List<Opcao> precoOpcoes, BigDecimal precoMax, List<UUID> combinaIds) {
     }
 
     /** Corpo de POST/PUT. Os limites daqui só barram corpo gigante; as mensagens de cada regra saem de {@link #validar}. */
     public record Dados(@Size(max = 500) String nome, @Size(max = 60) String codigo, @Size(max = 200) String categoria, BigDecimal preco, Integer duracaoMin,
                         @Size(max = 20) Map<String, BigDecimal> precos, @Size(max = 20) Map<String, Integer> duracoes,
                         Boolean multiDia, Boolean combo, @Size(max = 50) List<@Size(max = 100) String> componentes, Integer intervaloMin, Integer antecedenciaH,
-                        BigDecimal comissaoPct, Boolean ativo) {
+                        BigDecimal comissaoPct, Boolean ativo,
+                        Boolean duracaoIndefinida, @Size(max = 200) String duracaoTexto, @Size(max = 500) String combinarMsg, @Size(max = 20) String precoModo,
+                        @Size(max = 10) List<@Valid Opcao> precoOpcoes, BigDecimal precoMax, @Size(max = 20) List<UUID> combinaIds) {
     }
 
     /** Resultado de remover: apagado de vez (nunca foi usado) ou só desativado (tem histórico ou faz parte de um combo). */
@@ -114,10 +129,14 @@ public class ServicoService {
             return banco.naLoja(jdbc -> {
                 String codigo = codigoFinal(jdbc, v.codigo, null);
                 UUID id = jdbc.queryForObject(
-                        "insert into servico (loja_id, codigo, nome, categoria, preco, duracao_min, intervalo_min, antecedencia_h, multi_dia, combo, comissao_pct, ativo, precos, duracoes, ordem) "
-                                + "values (?::uuid, ?, ?, nullif(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, cast(? as jsonb), cast(? as jsonb), (select coalesce(max(ordem), 0) + 1 from servico)) returning id",
+                        "insert into servico (loja_id, codigo, nome, categoria, preco, duracao_min, intervalo_min, antecedencia_h, multi_dia, combo, comissao_pct, ativo, precos, duracoes, "
+                                + "duracao_texto, combinar_msg, preco_modo, preco_opcoes, preco_max, combina_ids, ordem) "
+                                + "values (?::uuid, ?, ?, nullif(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, cast(? as jsonb), cast(? as jsonb), ?, ?, ?, cast(? as jsonb), ?, string_to_array(?, ',')::uuid[], "
+                                + "(select coalesce(max(ordem), 0) + 1 from servico)) returning id",
                         UUID.class, loja.id().toString(), codigo, v.nome, v.categoria, v.preco, v.duracao, v.intervalo == null ? 0 : v.intervalo, v.antecedencia == null ? 0 : v.antecedencia,
-                        v.multiDia != null && v.multiDia, v.combo != null && v.combo, v.comissao, v.ativo == null || v.ativo, v.precosJson, v.duracoesJson);
+                        v.multiDia != null && v.multiDia, v.combo != null && v.combo, v.comissao, v.ativo == null || v.ativo, v.precosJson, v.duracoesJson,
+                        v.duracaoTexto, v.combinarMsg, v.precoModo, v.opcoesJson, v.precoMax, v.combinaTexto);
+                conferirCombina(jdbc, v);
                 conferirComponentes(jdbc, id, v);
                 gravarComponentes(jdbc, loja, id, v);
                 return buscar(jdbc, id);
@@ -136,14 +155,18 @@ public class ServicoService {
                 if (atual == null) throw new ErroDeNegocio(HttpStatus.NOT_FOUND, "Serviço não encontrado.");
                 // A regra "vários dias" e a tabela por porte dependem do que já está gravado quando o campo não vem.
                 boolean multi = v.multiDia != null ? v.multiDia : atual.multiDia();
+                if (v.indefinida && (multi || (v.combo != null ? v.combo : atual.combo()))) throw ruim(MSG_INDEFINIDA_COMBO);
                 validarLimiteDuracao(multi, v);
                 String codigo = codigoFinal(jdbc, v.codigo, id);
                 boolean combo = v.combo != null ? v.combo : atual.combo();
                 jdbc.update("update servico set codigo = ?, nome = ?, categoria = case when ? then nullif(?, '') else categoria end, preco = ?, duracao_min = ?, intervalo_min = coalesce(?, intervalo_min), "
                                 + "antecedencia_h = coalesce(?, antecedencia_h), multi_dia = ?, combo = ?, comissao_pct = case when ? then ? else comissao_pct end, ativo = coalesce(?, ativo), "
-                                + "precos = case when ? then cast(? as jsonb) else precos end, duracoes = case when ? then cast(? as jsonb) else duracoes end where id = ?",
+                                + "precos = case when ? then cast(? as jsonb) else precos end, duracoes = case when ? then cast(? as jsonb) else duracoes end, "
+                                + "duracao_texto = ?, combinar_msg = ?, preco_modo = ?, preco_opcoes = cast(? as jsonb), preco_max = ?, combina_ids = string_to_array(?, ',')::uuid[] where id = ?",
                         codigo, v.nome, v.categoriaVeio, v.categoria, v.preco, v.duracao, v.intervalo, v.antecedencia, multi, combo, v.comissaoVeio, v.comissao, v.ativo,
-                        v.precosVeio, v.precosJson, v.duracoesVeio, v.duracoesJson, id);
+                        v.precosVeio, v.precosJson, v.duracoesVeio, v.duracoesJson,
+                        v.duracaoTexto, v.combinarMsg, v.precoModo, v.opcoesJson, v.precoMax, v.combinaTexto, id);
+                conferirCombina(jdbc, v);
                 if (v.componentesVeio || v.combo != null) {
                     conferirComponentes(jdbc, id, v);
                     jdbc.update("delete from servico_componente where combo_id = ?", id);
@@ -179,6 +202,10 @@ public class ServicoService {
         Integer duracao, intervalo, antecedencia;
         Boolean multiDia, combo, ativo;
         String precosJson, duracoesJson;
+        boolean indefinida;
+        String duracaoTexto, combinarMsg, precoModo = "fixo", opcoesJson, combinaTexto = "";
+        BigDecimal precoMax;
+        List<UUID> combinaIds = List.of();
         List<String> componentes;
         Map<String, BigDecimal> precoMapa;
         Map<String, Integer> duracaoMapa;
@@ -209,28 +236,34 @@ public class ServicoService {
         v.ativo = d.ativo();
 
         // preço: valor único ou tabela dos 5 portes (só no tipo com preço por porte; nos outros a tabela é ignorada)
-        boolean porPorte = precoPorPorte(loja);
-        if (d.preco() != null && (d.preco().signum() < 0 || d.preco().compareTo(TETO_PRECO) > 0)) throw ruim("Informe o preço.");
-        if (d.duracaoMin() != null && (d.duracaoMin() <= 0 || d.duracaoMin() > DURACAO_MULTIDIA)) throw ruim(MSG_DURACAO);
+        boolean indef = Boolean.TRUE.equals(d.duracaoIndefinida());
+        v.indefinida = indef;
+        if (indef && (Boolean.TRUE.equals(d.multiDia()) || Boolean.TRUE.equals(d.combo()))) throw ruim(MSG_INDEFINIDA_COMBO);
+        BigDecimal precoBase = d.preco();
+        if (indef) precoBase = validarIndefinida(d, v);
+        boolean porPorte = precoPorPorte(loja) && !indef;
+        if (precoBase != null && (precoBase.signum() < 0 || d.preco().compareTo(TETO_PRECO) > 0)) throw ruim("Informe o preço.");
+        if (!indef && d.duracaoMin() != null && (d.duracaoMin() <= 0 || d.duracaoMin() > DURACAO_MULTIDIA)) throw ruim(MSG_DURACAO);
         boolean multi = Boolean.TRUE.equals(d.multiDia());
         // Edição sem o campo "vários dias": o teto certo depende do que já está gravado e é conferido em alterar().
         boolean generoso = multi || (edicao && d.multiDia() == null);
         int limite = generoso ? DURACAO_MULTIDIA : DURACAO_DIA;
         List<PorteController.Porte> portes = porPorte ? banco.naLoja(PorteController::ler) : List.of();
-        Map<String, BigDecimal> tp = porPorte ? tabelaPrecos(portes, d.precos(), d.preco()) : null;
+        Map<String, BigDecimal> tp = porPorte ? tabelaPrecos(portes, d.precos(), precoBase) : null;
         Map<String, Integer> td = porPorte ? tabelaDuracoes(portes, d.duracoes(), d.duracaoMin(), limite, multi) : null;
         if (!porPorte) {
-            if (d.preco() == null) throw ruim("Informe o preço.");
-            if (d.duracaoMin() == null) throw ruim("Informe a duração.");
+            if (precoBase == null) throw ruim("Informe o preço.");
+            if (!indef && d.duracaoMin() == null) throw ruim("Informe a duração.");
         }
-        v.preco = (porPorte ? tp.get("medio") : d.preco()).setScale(2, RoundingMode.HALF_UP);
-        v.duracao = porPorte ? td.get("medio") : d.duracaoMin();
+        v.preco = (porPorte ? tp.get("medio") : precoBase).setScale(2, RoundingMode.HALF_UP);
+        v.duracao = indef ? null : porPorte ? td.get("medio") : d.duracaoMin();
         v.precoMapa = tp;
         v.duracaoMapa = td;
         v.precosJson = tp == null ? null : escrever(tp);
         v.duracoesJson = td == null ? null : escrever(td);
         v.precosVeio = porPorte && (!edicao || d.precos() != null || d.preco() != null);
         v.duracoesVeio = porPorte && (!edicao || d.duracoes() != null || d.duracaoMin() != null);
+        if (indef) { v.precosVeio = true; v.duracoesVeio = true; v.precosJson = null; v.duracoesJson = null; } // a tabela por porte não vale sem duração
         if (!edicao || d.multiDia() != null) validarLimiteDuracao(multi, v);
 
         if (Boolean.TRUE.equals(d.combo())) {
@@ -251,6 +284,61 @@ public class ServicoService {
             v.codigo = c;
         }
         return v;
+    }
+
+    /**
+     * Serviço de duração indefinida: textos, preço (valor, lista ou intervalo) e quem combina. Devolve o preço de base (o único, o menor da lista ou o mínimo do intervalo).
+     * Campo ausente vale como vazio (quem salva manda a ficha inteira).
+     */
+    private BigDecimal validarIndefinida(Dados d, Validado v) {
+        String texto = d.duracaoTexto() == null ? "" : Texto.limpar(d.duracaoTexto());
+        if (texto.length() > 120) throw ruim("A descrição da duração pode ter até 120 letras.");
+        v.duracaoTexto = texto.isEmpty() ? null : texto;
+        String msg = d.combinarMsg() == null ? "" : Texto.limpar(d.combinarMsg());
+        if (msg.length() > 300) throw ruim("A mensagem do botão pode ter até 300 letras.");
+        v.combinarMsg = msg.isEmpty() ? null : msg;
+        List<UUID> quem = d.combinaIds() == null ? List.of() : d.combinaIds().stream().filter(java.util.Objects::nonNull).distinct().toList();
+        if (quem.size() > 20) throw ruim("Escolha até 20 pessoas para combinar o horário.");
+        v.combinaIds = quem;
+        v.combinaTexto = quem.stream().map(UUID::toString).collect(java.util.stream.Collectors.joining(","));
+        String modo = d.precoModo() == null || d.precoModo().isBlank() ? "fixo" : d.precoModo();
+        v.precoModo = modo;
+        switch (modo) {
+            case "fixo" -> {
+                return d.preco();
+            }
+            case "lista" -> {
+                List<Opcao> l = d.precoOpcoes() == null ? List.of() : d.precoOpcoes();
+                if (l.size() < 2 || l.size() > 10) throw ruim("A lista de valores precisa de 2 a 10 opções, cada uma com descrição e valor.");
+                List<Opcao> limpas = new ArrayList<>();
+                BigDecimal menor = null;
+                for (Opcao o : l) {
+                    String desc = o == null || o.descricao() == null ? "" : Texto.limpar(o.descricao());
+                    if (desc.isEmpty() || desc.length() > 60) throw ruim("Cada valor da lista precisa de uma descrição de até 60 letras.");
+                    if (o.valor() == null || o.valor().signum() < 0 || o.valor().compareTo(TETO_PRECO) > 0) throw ruim("Informe o valor de cada opção da lista.");
+                    BigDecimal valor = o.valor().setScale(2, RoundingMode.HALF_UP);
+                    limpas.add(new Opcao(desc, valor));
+                    if (menor == null || valor.compareTo(menor) < 0) menor = valor;
+                }
+                v.opcoesJson = escrever(limpas);
+                return menor;
+            }
+            case "faixa" -> {
+                if (d.preco() == null || d.precoMax() == null) throw ruim("Informe o valor mínimo e o máximo.");
+                if (d.precoMax().signum() < 0 || d.precoMax().compareTo(TETO_PRECO) > 0) throw ruim("Informe o valor máximo.");
+                if (d.precoMax().compareTo(d.preco()) <= 0) throw ruim("O valor máximo precisa ser maior que o mínimo.");
+                v.precoMax = d.precoMax().setScale(2, RoundingMode.HALF_UP);
+                return d.preco();
+            }
+            default -> throw ruim("Tipo de preço inválido.");
+        }
+    }
+
+    /** Quem combina precisa ser da loja (o RLS esconde as outras). */
+    private void conferirCombina(JdbcTemplate jdbc, Validado v) {
+        if (v.combinaIds.isEmpty()) return;
+        Integer achados = jdbc.queryForObject("select count(*) from usuario where id = any(?::uuid[])", Integer.class, v.combinaTexto.isEmpty() ? "{}" : "{" + v.combinaTexto + "}");
+        if (achados == null || achados != v.combinaIds.size()) throw ruim("Escolha só pessoas da equipe para combinar o horário.");
     }
 
     /** Edição que muda "vários dias" ou não manda a duração: confere o teto de 24 h quando o serviço não é de vários dias. */
@@ -319,7 +407,7 @@ public class ServicoService {
             } catch (IllegalArgumentException e) {
                 throw ruim("O combo só aceita serviços comuns já cadastrados (combo dentro de combo não vale).");
             }
-            Integer ok = jdbc.queryForObject("select count(*) from servico where id = ? and not combo", Integer.class, c);
+            Integer ok = jdbc.queryForObject("select count(*) from servico where id = ? and not combo and duracao_min is not null", Integer.class, c);
             if (c.equals(idDoCombo) || ok == null || ok == 0) throw ruim("O combo só aceita serviços comuns já cadastrados (combo dentro de combo não vale).");
         }
     }
@@ -371,13 +459,22 @@ public class ServicoService {
 
     private static Servico comComponentes(Servico s, List<UUID> comps) {
         return new Servico(s.id(), s.codigo(), s.nome(), s.categoria(), s.preco(), s.duracaoMin(), s.intervaloMin(), s.antecedenciaH(), s.multiDia(), s.combo(), comps,
-                s.comissaoPct(), s.ativo(), s.precos(), s.duracoes());
+                s.comissaoPct(), s.ativo(), s.precos(), s.duracoes(),
+                s.duracaoTexto(), s.combinarMsg(), s.precoModo(), s.precoOpcoes(), s.precoMax(), s.combinaIds());
     }
 
     private Servico linha(java.sql.ResultSet rs) throws java.sql.SQLException {
         return new Servico(rs.getObject("id", UUID.class), rs.getString("codigo"), rs.getString("nome"), rs.getString("categoria"), rs.getBigDecimal("preco"),
-                rs.getInt("duracao_min"), rs.getInt("intervalo_min"), rs.getInt("antecedencia_h"), rs.getBoolean("multi_dia"), rs.getBoolean("combo"), List.of(),
-                rs.getBigDecimal("comissao_pct"), rs.getBoolean("ativo"), lerMapa(rs.getString("precos"), MAPA_PRECOS), lerMapa(rs.getString("duracoes"), MAPA_DURACOES));
+                rs.getObject("duracao_min", Integer.class), rs.getInt("intervalo_min"), rs.getInt("antecedencia_h"), rs.getBoolean("multi_dia"), rs.getBoolean("combo"), List.of(),
+                rs.getBigDecimal("comissao_pct"), rs.getBoolean("ativo"), lerMapa(rs.getString("precos"), MAPA_PRECOS), lerMapa(rs.getString("duracoes"), MAPA_DURACOES),
+                rs.getString("duracao_texto"), rs.getString("combinar_msg"), rs.getString("preco_modo"), lerMapa(rs.getString("preco_opcoes"), LISTA_OPCOES), rs.getBigDecimal("preco_max"),
+                idsDe(rs.getString("combina_ids")));
+    }
+
+    private static List<UUID> idsDe(String texto) {
+        List<UUID> ids = new ArrayList<>();
+        if (texto != null && !texto.isBlank()) for (String x : texto.split(",")) ids.add(UUID.fromString(x.trim()));
+        return ids;
     }
 
     private <T> T lerMapa(String texto, TypeReference<T> tipo) {

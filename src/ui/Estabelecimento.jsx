@@ -192,7 +192,7 @@ export default function Estabelecimento({ user }) {
   const { state: st } = useStore();
   const e = st.estabelecimento;
   const [aba, setAba] = useState(() => consumirAbaEstabelecimento() || 'dados');
-  const [dados, setDados] = useState({ nome: e.nome, telefone: e.telefone, endereco: e.endereco || '', enderecoNoLink: e.enderecoNoLink !== false, localizacaoNoWhatsapp: !!e.localizacaoNoWhatsapp, localizacao: Number.isFinite(e.latitude) ? `${e.latitude}, ${e.longitude}` : '', email: e.email, visaoPadrao: e.visaoPadrao, grupoMovimentacaoId: e.grupoMovimentacaoId });
+  const [dados, setDados] = useState({ nome: e.nome, telefone: e.telefone, whatsappLoja: String(e.whatsappLoja || '').replace(/^55/, ''), endereco: e.endereco || '', enderecoNoLink: e.enderecoNoLink !== false, localizacaoNoWhatsapp: !!e.localizacaoNoWhatsapp, localizacao: Number.isFinite(e.latitude) ? `${e.latitude}, ${e.longitude}` : '', email: e.email, visaoPadrao: e.visaoPadrao, grupoMovimentacaoId: e.grupoMovimentacaoId });
   const [notifs, setNotifs] = useState(e.notificacoes);
   const [notifSujo, setNotifSujo] = useState(false);
   const [pixCanc, setPixCanc] = useState(e.pixCancelamento || null);
@@ -220,6 +220,7 @@ export default function Estabelecimento({ user }) {
             <Campo rotulo="Tipo de estabelecimento" dica={`Definido na criação da ${rot('loja')}; não pode ser alterado.`}><input value={TIPOS[tipoDe(st.estabelecimento)].nome} readOnly disabled data-testid="est-tipo" /></Campo>
             <Campo rotulo={`Nome da ${rot('loja')}`}><input value={dados.nome} onChange={(x) => setDados({ ...dados, nome: x.target.value })} /></Campo>
             <Campo rotulo="Telefone"><input value={dados.telefone} onChange={(x) => setDados({ ...dados, telefone: x.target.value })} /></Campo>
+            <Campo rotulo="WhatsApp do estabelecimento" dica="Com DDD. Destino do botão Combinar agendamento quando o serviço não tem ninguém com telefone para combinar o horário."><input value={dados.whatsappLoja} inputMode="tel" maxLength={20} onChange={(x) => setDados({ ...dados, whatsappLoja: x.target.value })} data-testid="est-whatsapp" /></Campo>
             <Campo rotulo="Endereço" className="campo-largo" dica="Aparece na página de agendamento do cliente quando o interruptor abaixo está ligado."><input value={dados.endereco} maxLength={200} onChange={(x) => setDados({ ...dados, endereco: x.target.value })} data-testid="est-endereco" /></Campo>
             <label className="pa-check campo-largo"><input type="checkbox" checked={dados.enderecoNoLink} onChange={(x) => setDados({ ...dados, enderecoNoLink: x.target.checked })} data-testid="est-endereco-no-link" /> Mostrar o endereço na página de agendamento do cliente</label>
             <Campo rotulo="Localização (GPS): latitude, longitude ou link do Google Maps" className="campo-largo" dica="Pode ser preenchida depois de começar a usar."><input value={dados.localizacao} maxLength={500} placeholder="Ex.: -25.428356, -49.273251" onChange={(x) => setDados({ ...dados, localizacao: x.target.value })} data-testid="est-localizacao" /></Campo>

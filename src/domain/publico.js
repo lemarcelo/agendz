@@ -11,6 +11,7 @@ import { cap, rot, tipoDe } from './tipos.js';
 import { agruparAtribuicao, realizaServico } from './vinculo.js';
 import { servicosNaOrdemDaLoja } from './ordem-servicos.js';
 import { profissionalAutomatico } from './profissional-auto.js';
+import { duracaoIndefinida } from './blocos.js';
 import { ordemDaLoja, registrarEscolha } from './modo-escolha.js'; // B2: modos da escolha automática (livre, aleatório, menos, fila)
 
 export const PASSO_PUBLICO_MIN = 30; // os horários do link saem de 30 em 30 minutos
@@ -23,6 +24,23 @@ export const CODIGO_TENTATIVAS = 5;
 export const DIAS_MAX_PADRAO = 30;
 export const ERRO_DESLIGADO = `O agendamento pelo link não está disponível agora. Fale com a ${rot('loja')}.`;
 export const ERRO_HORARIO = 'Esse horário acabou de ser ocupado. Escolha outro.';
+export const erroCombinar = (nome) => `O horário de ${nome} se combina com a loja. Use o botão Combinar agendamento.`; // F (V60): serviço de duração indefinida não entra no pedido nem nos horários
+/** Primeiro serviço de duração indefinida do pedido (mensagem pronta) ou null. */
+export function indefinidoNoPedido(s, ids) {
+  const sv = (Array.isArray(ids) ? ids : []).map((id) => s.servicos.find((x) => x.id === id)).find((x) => x && duracaoIndefinida(x));
+  return sv ? erroCombinar(sv.nome) : null;
+}
+/** WhatsApp (55+DDD+número) do botão Combinar: o primeiro de quem combina com telefone válido, senão o do estabelecimento, senão vazio (mesma regra do servidor). */
+export function destinoDoCombinar(s, sv) {
+  for (const id of sv.combinaIds || []) {
+    const u = s.usuarios.find((x) => x.id === id && x.ativo !== false);
+    if (u && u.telefone && telefoneBrasileiro(u.telefone)) return `55${telefoneNacional(u.telefone)}`;
+  }
+  return s.estabelecimento.whatsappLoja || '';
+}
+export function combinarDoServico(s, sv) {
+  return { duracaoTexto: sv.duracaoTexto || '', mensagem: sv.combinarMsg || '', whatsapp: destinoDoCombinar(s, sv), precoModo: sv.precoModo || 'fixo', opcoes: (sv.precoOpcoes || []).map((o) => ({ descricao: o.descricao, valor: o.valor })), precoMax: sv.precoMax ?? null };
+}
 export const ERRO_ACESSO = 'Não foi possível abrir. Peça um novo código.';
 export const ERRO_NAO_ACHEI = 'Agendamento não encontrado.';
 
@@ -81,7 +99,7 @@ export function horariosPublicos(s, { profissionalId, servicoIds, porte, dayTs, 
   if (grupos && grupos.length > 1) return horariosEmCadeia(s, { grupos, porte, dayTs, agora });
   if (grupos) { servicoIds = grupos[0].servicoIds; profissionalId = grupos[0].profissionalId; }
   const cfg = configLink(s);
-  if (!cfg.ativo || semBoxAtivo(s) || (cap(s.estabelecimento, 'precoPorPorte') && !porteAtivo(porte || PORTE_PADRAO)) || errosServicoIds(s, servicoIds, { ativos: true }) || !Number.isFinite(dayTs)) return [];
+  if (!cfg.ativo || semBoxAtivo(s) || (cap(s.estabelecimento, 'precoPorPorte') && !porteAtivo(porte || PORTE_PADRAO)) || errosServicoIds(s, servicoIds, { ativos: true }) || indefinidoNoPedido(s, servicoIds) || !Number.isFinite(dayTs)) return [];
   const dia = startOfDay(dayTs);
   if (dia > agora + cfg.diasMax * DIA) return [];
   const barbs = candidatosDoLink(s, profissionalId, dia, servicoIds[0]);
@@ -122,7 +140,9 @@ export function configPublica(s) {
     ativo: cfg.ativo && !semBoxAtivo(s), diasMax: cfg.diasMax, exigeTelefone: cfg.telefoneObrigatorio, exigeNome: cfg.nomeObrigatorio, ...(cap(s.estabelecimento, 'usaVeiculo') ? { exigeVeiculo: cfg.veiculoObrigatorio } : {}), tipo: tipoDe(s.estabelecimento), nome: s.estabelecimento.nome, telefone: s.estabelecimento.telefone || '', endereco: s.estabelecimento.enderecoNoLink === false ? '' : s.estabelecimento.endereco || '', mapaUrl: s.estabelecimento.enderecoNoLink === false ? '' : mapaDaLoja(s.estabelecimento),
     ...(cap(s.estabelecimento, 'precoPorPorte') ? { portes: portesAtivos().map((x) => ({ id: x.id, nome: x.nome, exemplo: x.exemplo })) } : {}),
     // preço e duração de cada serviço (por porte quando o tipo cobra por porte; a página mostra os do porte escolhido); nada de custo, material ou comissão
-    servicos: servicosNaOrdemDaLoja(s, s.servicos.filter((x) => x.ativo !== false)).map((x) => (cap(s.estabelecimento, 'precoPorPorte')
+    servicos: servicosNaOrdemDaLoja(s, s.servicos.filter((x) => x.ativo !== false)).map((x) => (duracaoIndefinida(x)
+      ? { id: x.id, nome: x.nome, duracao: 0, preco: x.preco, antecedenciaH: x.antecedenciaH || 0, ...(cap(s.estabelecimento, 'precoPorPorte') ? { precos: {}, duracoes: {}, combo: false, multiDia: false, categoria: x.categoria || '' } : {}), combinar: combinarDoServico(s, x) }
+      : cap(s.estabelecimento, 'precoPorPorte')
       ? { id: x.id, nome: x.nome, precos: Object.fromEntries(portesAtivos().map((p) => [p.id, precoNoPorte(x.preco, x.precos?.[p.id], p.id)])), duracoes: Object.fromEntries(portesAtivos().map((p) => [p.id, Number(x.duracoes?.[p.id]) > 0 ? Number(x.duracoes[p.id]) : x.duracao])), combo: !!x.combo, multiDia: !!x.multiDia, categoria: x.categoria || '' }
       : { id: x.id, nome: x.nome, duracao: x.duracao, preco: x.preco })),
     profissionais: s.usuarios.filter((u) => u.atende).map((u) => ({ id: u.id, nome: u.apelido || u.nome, foto: u.foto || null, servicoIds: s.servicos.filter((x) => realizaServico(u, x.id)).map((x) => x.id) })), // A1: quem realiza o quê
@@ -199,6 +219,7 @@ function agendarEmSequencia(s, d, grupos, agora) {
 }
 
 export function agendarPorLink(s, d, agora) {
+  { const e = indefinidoNoPedido(s, d.servicoIds); if (e) return { ok: false, erros: [e] }; }
   const grupos = gruposDoLink(d.servicoIds, d.atribuicoes);
   if (grupos && grupos.erro) return { ok: false, erros: [grupos.erro] };
   if (grupos && grupos.length > 1) return agendarEmSequencia(s, d, grupos, agora);

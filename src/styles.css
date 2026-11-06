@@ -736,6 +736,26 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
 .pub-item.on { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); background: var(--surface-2); }
 .pub-item input { width: 20px; height: 20px; flex: none; }
 .pub-item-txt { display: grid; flex: 1; min-width: 0; } .pub-preco { font-weight: 700; font-variant-numeric: tabular-nums; }
+/* F (V60): serviço de duração indefinida no link do cliente (leve/CombinarAgendamento.jsx) */
+.pub-combinar { display: grid; gap: 10px; margin: 12px 0; min-width: 0; }
+.pub-combinar-item { display: grid; gap: 6px; padding: 12px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface-2); min-width: 0; overflow-wrap: anywhere; }
+.pub-combinar-item .btn { justify-self: start; margin-top: 6px; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; }
+.pub-combinar-valores { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.pub-combinar-valores li { display: flex; justify-content: space-between; gap: 12px; }
+.pub-combinar-preco { font-weight: 700; font-variant-numeric: tabular-nums; }
+@media (max-width: 600px) { .pub-combinar-item .btn { justify-self: stretch; text-align: center; } }
+/* F (V60): grade de horários do Atender para serviço de duração indefinida (leve/BlocosDoAtender.jsx) */
+.blocos-atender { display: grid; gap: 12px; min-width: 0; }
+.blocos-dia { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: end; }
+.blocos-dia .btn { min-height: 44px; }
+.blocos-grade { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 6px; max-height: 300px; overflow-y: auto; }
+.bloco-h { display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%; min-height: 44px; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface); color: var(--ink); font: inherit; font-variant-numeric: tabular-nums; cursor: pointer; }
+.bloco-h.on { border-color: var(--tema-btn-aro, var(--ink)); box-shadow: 0 0 0 2px var(--tema-btn-aro, var(--ink)); background: var(--surface-2); font-weight: 700; }
+.bloco-x { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: var(--ink); color: var(--surface); flex: none; }
+.blocos-resumo { display: grid; gap: 6px; }
+.blocos-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.blocos-valores { display: grid; gap: 10px; }
+.blocos-atalhos { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .pub-barbs { display: flex; flex-wrap: wrap; gap: 8px; }
 .pub-barb { min-height: 44px; padding: 8px 16px; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--surface); font-weight: 600; }
 .pub-barb.on { background: var(--tema-btn, var(--ink)); color: var(--tema-btn-fg, var(--ink-fg)); border-color: var(--tema-btn-borda, var(--ink)); }

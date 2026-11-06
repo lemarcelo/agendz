@@ -20,6 +20,8 @@ import { toast, useStore } from './hooks.js';
 import { capAtiva, Rot, rot } from '../domain/tipos.js';
 import { COMO_A_PAGINA_DO_CLIENTE, PADRAO_ARTIFACT, sanearOrdemAtender } from '../domain/ordem-atender.js';
 import { profissionalAutomatico } from '../domain/profissional-auto.js';
+import BlocosDoAtender from './leve/BlocosDoAtender.jsx';
+import { blocosDeHorarios, duracaoIndefinida, textoDoPreco } from '../domain/blocos.js';
 
 // Botão único "Atender": atendimento de agora, registro do que já aconteceu (data passada) ou agendamento (data futura).
 // O tipo vem da data: sem data = agora; data passada = concluído nessa data; data futura = agendamento (a confirmar ou confirmado).
@@ -33,6 +35,9 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
   const [data, setData] = useState(ymd(inicial.dayTs != null ? inicial.dayTs : startOfDay(agora)));
   const [minutos, setMinutos] = useState(() => (inicial.minutos != null ? Math.max(0, Math.min(1430, inicial.minutos)) : new Date(agora).getHours() * 60 + Math.floor(new Date(agora).getMinutes() / 10) * 10));
   const [servicoIds, setServicoIds] = useState([]);
+  const [diaBloco, setDiaBloco] = useState(() => ymd(startOfDay(agora))); // F: dia mostrado na grade de horários do serviço de duração indefinida
+  const [horarios, setHorarios] = useState([]); // início de cada horário de 30 min marcado (ms)
+  const [valoresTxt, setValoresTxt] = useState({}); // valor final lançado por serviço indefinido (texto)
   const [qtds, setQtds] = useState({});
   const [clienteId, setClienteId] = useState('');
   const [nome, setNome] = useState('');
@@ -55,7 +60,11 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
   // Limpa erros ao navegar entre as etapas do atendimento
   useEffect(() => { setErros([]); }, [etapaAtiva]);
 
-  const inicio = personalizar && data ? tsAt(fromYmd(data), minutos) : null;
+  // F (V60): serviço de duração indefinida marcado → o "Quando" vira a grade de horários (blocos); o início é o do primeiro bloco
+  const indefSel = st.servicos.filter((s) => servicoIds.includes(s.id) && duracaoIndefinida(s));
+  const usaBlocos = indefSel.length > 0;
+  const blocosCalc = blocosDeHorarios(horarios);
+  const inicio = usaBlocos ? (blocosCalc[0] ? blocosCalc[0][0] : null) : personalizar && data ? tsAt(fromYmd(data), minutos) : null;
   const futuro = inicio != null && inicio > agora + 60000;
   const passado = inicio != null && !futuro && inicio < agora - 60000;
   const retro = inicio != null && inicio < startOfDay(agora); // dia anterior ("esqueci de registrar"): pede o motivo
@@ -75,7 +84,7 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
   const profOpcoes = profissionais.filter((p) => servicoIds.every((id) => realizaServico(p, id)));
   // B1: serviços feitos por pessoas diferentes → um campo de profissional por serviço (vazio e obrigatório); o campo único some
   const [atrib, setAtrib] = useState({});
-  const porAtribuir = !auto && !ehProfissional && precisaAtribuirPorServico(servicoIds, porServicoDoEstado(st));
+  const porAtribuir = !usaBlocos && !auto && !ehProfissional && precisaAtribuirPorServico(servicoIds, porServicoDoEstado(st));
   useEffect(() => { setAtrib((a) => Object.fromEntries(Object.entries(a).filter(([sid, pid]) => servicoIds.includes(sid) && realizaServico(st.usuarios.find((u) => u.id === pid), sid)))); }, [servicoIds]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (profOpcoes.length && !profOpcoes.some((p) => p.id === profissionalId)) setProfissionalId(profOpcoes[0].id); }, [servicoIds]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (ehProfissional || (profManual && !auto)) setServicoIds((ids) => ids.filter((id) => realizaServico(doProfissional, id))); }, [profissionalId, profManual]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -117,6 +126,8 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
   const porteAtual = veicExistente ? veicExistente.porte : veicSel === 'novo' && vNovo.porte ? vNovo.porte : PORTE_PADRAO;
   const porteDefinido = !!veicExistente || (veicSel === 'novo' && !!vNovo.porte);
   const sel = servicosPorIds(st, servicoIds, porteAtual);
+  const ajusteValores = indefSel.reduce((t, s) => { const raw = String(valoresTxt[s.id] ?? '').trim().replace(',', '.'); const n = Number(raw); return raw !== '' && Number.isFinite(n) && n >= 0 ? t + (n - (Number(s.preco) || 0)) : t; }, 0); // valor final lançado no lugar do preço de base
+  const fixosMin = sel.filter((x) => !duracaoIndefinida(x)).reduce((t, x) => t + (Number(x.duracao) || 0), 0);
   const boxes = capAtiva('usaRecursoFisico') ? boxesAtivos(st) : [];
   // Telefone que já existe no sistema: o cliente encontrado passa a ser o do atendimento (sobrescreve o escolhido na lista) e, se faltar nome, vem o do cadastro.
   const trocaTelefone = (v, nomeAtual = nome) => {
@@ -148,14 +159,14 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
   const formaEscolhida = forma || formaPadrao;
 
   // Horário livre (só agendamento futuro)
-  const v = useMemo(() => (futuro && profissionalId && temServico && !auto && !porAtribuir ? agenda.validar({ profissionalId, inicio, servicoIds, porte: porteAtual, boxId: boxId || undefined, encaixe }) : null), [futuro, profissionalId, inicio, servicoIds, porteAtual, boxId, encaixe, temServico, st]);
+  const v = useMemo(() => (futuro && !usaBlocos && profissionalId && temServico && !auto && !porAtribuir ? agenda.validar({ profissionalId, inicio, servicoIds, porte: porteAtual, boxId: boxId || undefined, encaixe }) : null), [futuro, profissionalId, inicio, servicoIds, porteAtual, boxId, encaixe, temServico, st]);
   const nomeDe = (a) => `${nomeCliente(st, a)} às ${fmtHM(a.inicio)}`;
 
   const salvar = () => {
     const r = agenda.atender({
       servicoIds, produtos: itensProduto, nome: nome.trim() || undefined, telefone: telefone.trim() || undefined, clienteId: clienteId || undefined,
       profissionalId: auto ? undefined : porAtribuir ? atrib[servicoIds[0]] || undefined : profissionalId || undefined, ...(porAtribuir ? { atribuicoes: servicoIds.map((sid) => ({ servicoId: sid, profissionalId: atrib[sid] || '' })) } : {}), vendedorId: vendeProduto && !ehProfissional && vendedorEscolhido ? vendedorEscolhido : undefined,
-      formaPagamento: futuro ? undefined : formaEscolhida || undefined, inicio: inicio != null ? inicio : undefined, motivoRetroativo: retro ? motivoRetro.trim() || undefined : undefined,
+      formaPagamento: futuro ? undefined : formaEscolhida || undefined, inicio: inicio != null && !usaBlocos ? inicio : undefined, ...(usaBlocos ? { blocos: blocosCalc, valores: indefSel.map((s) => ({ servicoId: s.id, valor: String(valoresTxt[s.id] ?? '').trim().replace(',', '.') })).filter((x) => x.valor !== '').map((x) => ({ servicoId: x.servicoId, valor: Number(x.valor) })) } : {}), motivoRetroativo: retro ? motivoRetro.trim() || undefined : undefined,
       ...(usaPlano ? { assinaturaId: planoCli.assinaturaId } : {}),
       ...(temServico && usaVeiculo ? (veicSel === 'novo' ? { veiculo: vNovo } : veicSel ? { veiculoId: veicSel } : {}) : {}),
       ...(futuro ? { status, encaixe, boxId: boxId || undefined, cupomChave: chaveCupom.trim() || undefined } : {}),
@@ -168,7 +179,7 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
     onClose();
   };
 
-  const quando = !personalizar ? 'Atendimento de agora, concluído.'
+  const quando = usaBlocos && inicio == null ? 'Marque os horários trabalhados.' : !personalizar && !usaBlocos ? 'Atendimento de agora, concluído.'
     : futuro ? `Agendamento para ${fmtDate(inicio)} às ${fmtHM(inicio)}.`
       : passado ? `Atendimento que já aconteceu em ${fmtDate(inicio)} às ${fmtHM(inicio)}, registrado como concluído.` : 'Atendimento de agora, concluído.';
 
@@ -262,7 +273,7 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
           <div key={s.id} className={`servico-linha ${servicoIds.includes(s.id) ? 'on' : ''}`}>
             <label className="servico-op-lado">
               <input type="checkbox" checked={servicoIds.includes(s.id)} onChange={() => setServicoIds((ids) => (ids.includes(s.id) ? ids.filter((x) => x !== s.id) : [...ids, s.id]))} data-testid={`atender-srv-${s.id}`} />
-              <span><b>{s.nome}</b><small className="muted cod">cód. {s.codigo}{!ehProfissional && (() => { const n = servicoNoPorte(s, porteAtual); return <> · {fmtMoney(n.preco)} · {s.multiDia ? 'vários dias' : fmtDuration(n.duracao)}{s.combo ? ' · combo' : ''}</>; })()}</small></span>
+              <span><b>{s.nome}</b><small className="muted cod">cód. {s.codigo}{!ehProfissional && (() => { const n = servicoNoPorte(s, porteAtual); return duracaoIndefinida(s) ? <> · {textoDoPreco(s, fmtMoney)} · {s.duracaoTexto || 'duração indefinida'}</> : <> · {fmtMoney(n.preco)} · {s.multiDia ? 'vários dias' : fmtDuration(n.duracao)}{s.combo ? ' · combo' : ''}</>; })()}</small></span>
             </label>
           </div>
         )} />
@@ -271,7 +282,8 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
     quando: (
       <div id="atender-bloco-quando" className="campo-largo">
         <div className="campo-largo grupo-hora">
-          <div className="campo"><span className="campo-rotulo">Quando</span>
+          {usaBlocos && <div className="campo"><span className="campo-rotulo">Dia e horário</span><BlocosDoAtender dia={diaBloco} aoMudarDia={(d) => { setDiaBloco(d); setErros([]); }} horarios={horarios} aoMudar={(h) => { setHorarios(h); setErros([]); }} fixosMin={fixosMin} indefinidos={indefSel} valores={valoresTxt} aoMudarValores={setValoresTxt} /></div>}
+          {!usaBlocos && <div className="campo"><span className="campo-rotulo">Quando</span>
             <div className="linha-campos">
               <button type="button" className={`btn btn-quando${!personalizar ? ' btn-on' : ''}`} aria-pressed={!personalizar} onClick={() => { setPersonalizar(false); setData(ymd(startOfDay(agora))); }} data-testid="atender-agora"><Icon n="clock" size={15} />Agora</button>
               <button type="button" className={`btn btn-quando${personalizar ? ' btn-on' : ''}`} aria-pressed={personalizar} onClick={() => { setPersonalizar(true); setTimeout(() => { const el = document.querySelector('[data-testid="atender-data"]'); try { if (el && el.showPicker) el.showPicker(); } catch { /* o navegador pode recusar sem toque do usuário */ } }, 0); }} data-testid="atender-quando"><Icon n="calendar" size={15} />Escolher data</button>
@@ -282,7 +294,7 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
                 <SeletorHora valor={minutos} onChange={setMinutos} />
               </div>
             )}
-          </div>
+          </div>}
           {retro && !ehProfissional && (
             <div className="campo-largo">
               <Campo rotulo="Motivo do lançamento atrasado *">
@@ -394,7 +406,7 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
         )}
         {(temServico || vendeProduto) && !ehProfissional && (
           <p className="muted campo-largo" data-testid="atender-total">
-            Total: {fmtMoney(totalPreco(sel) + totalProdutos - gratisPlano)}{gratisPlano > 0 ? ` (o plano cobre ${fmtMoney(gratisPlano)})` : ''}{temServico ? (sel.some((x) => x.multiDia) ? ' · serviço de vários dias' : ` · ${fmtDuration(duracaoMin(sel))} de atendimento (+ ${fmtDuration(ocupadoMin(sel) - duracaoMin(sel))} de intervalo)`) : ''}
+            Total: {fmtMoney(totalPreco(sel) + ajusteValores + totalProdutos - gratisPlano)}{gratisPlano > 0 ? ` (o plano cobre ${fmtMoney(gratisPlano)})` : ''}{temServico ? (sel.some((x) => x.multiDia) ? ' · serviço de vários dias' : ` · ${fmtDuration(duracaoMin(sel))} de atendimento (+ ${fmtDuration(ocupadoMin(sel) - duracaoMin(sel))} de intervalo)`) : ''}
           </p>
         )}
       </div>

@@ -777,6 +777,153 @@
     "ok": false,
     "erro": "A duração precisa ser maior que zero e de no máximo 24 horas."
    }
+  },
+  {
+   "nome": "indefinida: um valor",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Pintura de peça",
+      "duracaoIndefinida": true,
+      "preco": 80,
+      "duracaoTexto": "De 1 a 3 dias"
+     }
+    }
+   ],
+   "esperado": {
+    "ok": true
+   }
+  },
+  {
+   "nome": "indefinida: sem preço",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Pintura de peça",
+      "duracaoIndefinida": true
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Informe o preço."
+   }
+  },
+  {
+   "nome": "indefinida: lista com uma opção só",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Pintura de peça",
+      "duracaoIndefinida": true,
+      "precoModo": "lista",
+      "precoOpcoes": [
+       {
+        "descricao": "Simples",
+        "valor": 80
+       }
+      ]
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "A lista de valores precisa de 2 a 10 opções, cada uma com descrição e valor."
+   }
+  },
+  {
+   "nome": "indefinida: lista de valores com descrição",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Pintura de peça",
+      "duracaoIndefinida": true,
+      "precoModo": "lista",
+      "precoOpcoes": [
+       {
+        "descricao": "Simples",
+        "valor": 80
+       },
+       {
+        "descricao": "Completa",
+        "valor": 140
+       }
+      ]
+     }
+    }
+   ],
+   "esperado": {
+    "ok": true
+   }
+  },
+  {
+   "nome": "indefinida: faixa com máximo igual ao mínimo",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Pintura de peça",
+      "duracaoIndefinida": true,
+      "precoModo": "faixa",
+      "preco": 100,
+      "precoMax": 100
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "O valor máximo precisa ser maior que o mínimo."
+   }
+  },
+  {
+   "nome": "indefinida: intervalo de valor",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Pintura de peça",
+      "duracaoIndefinida": true,
+      "precoModo": "faixa",
+      "preco": 100,
+      "precoMax": 250
+     }
+    }
+   ],
+   "esperado": {
+    "ok": true
+   }
+  },
+  {
+   "nome": "indefinida: tipo de preço inválido",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Pintura de peça",
+      "duracaoIndefinida": true,
+      "precoModo": "outro",
+      "preco": 10
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "Tipo de preço inválido."
+   }
+  },
+  {
+   "nome": "indefinida: descrição da duração grande demais",
+   "passos": [
+    {
+     "corpo": {
+      "nome": "Pintura de peça",
+      "duracaoIndefinida": true,
+      "preco": 10,
+      "duracaoTexto": "ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+     }
+    }
+   ],
+   "esperado": {
+    "ok": false,
+    "erro": "A descrição da duração pode ter até 120 letras."
+   }
   }
  ]
 }

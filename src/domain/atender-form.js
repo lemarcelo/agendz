@@ -49,6 +49,7 @@ export const exige = (regras, tipo, campo) => ((regras && regras[tipo]) || REGRA
 // Preço e duração do serviço no porte do veículo (estética: `precos`/`duracoes` por porte; sem o mapa ou sem porte, os do cadastro, que são os do médio).
 // Só para mostrar: o servidor recalcula e congela.
 export function servicoNoPorte(s, porte) {
+  if (s.duracaoMin === null) return { preco: Number(s.preco) || 0, duracaoMin: 0 }; // F: duração indefinida: o porte não muda preço nem tempo (o valor final é lançado)
   if (!s.precos && !s.duracoes) return { preco: Number(s.preco) || 0, duracaoMin: Number(s.duracaoMin) || 0 };
   const p = porteValido(porte) ? porte : PORTE_PADRAO;
   const dur = s.duracoes ? Number(s.duracoes[p]) : NaN;
@@ -57,8 +58,14 @@ export function servicoNoPorte(s, porte) {
 }
 
 // Soma de preço e minutos dos serviços marcados (só para mostrar; o servidor recalcula). `porte` só conta onde o serviço tem preço por porte.
-export function resumoDosServicos(servicos, ids, porte) {
-  const marcados = servicos.filter((s) => ids.includes(s.id)).map((s) => servicoNoPorte(s, porte));
+// `valores` (F): valor final lançado (texto) por serviço de duração indefinida; vazio ou inválido vale o preço de base.
+export function resumoDosServicos(servicos, ids, porte, valores) {
+  const marcados = servicos.filter((s) => ids.includes(s.id)).map((s) => {
+    const n = servicoNoPorte(s, porte);
+    if (s.duracaoMin !== null || !valores) return n;
+    const v = Number(String(valores[s.id] ?? '').trim().replace(',', '.'));
+    return String(valores[s.id] ?? '').trim() !== '' && Number.isFinite(v) && v >= 0 ? { ...n, preco: v } : n;
+  });
   return { qtd: marcados.length, total: marcados.reduce((t, s) => t + s.preco, 0), minutos: marcados.reduce((t, s) => t + s.duracaoMin, 0) };
 }
 

@@ -436,5 +436,5 @@ export function usoDoPlanoPorTelefone(s, { telefone, servicoIds, inicio }, agora
     if (up && up.ok) return { ok: true, usaPlano: true, esgotado: false, restrito: false };
     if (up && up.limite) { esgotado = true; trocas = opcoesDe(as); }
   }
-  return { ...nao, esgotado, restrito, ...(trocas.length ? { trocas, descontoTrocaPct: cfg.descontoPct, ...(cfg.whatsapp ? { whatsapp: cfg.whatsapp } : {}) } : {}) };
+  return { ...nao, esgotado, restrito, ...(trocas.length ? { trocas, descontoTrocaPct: cfg.descontoPct, ...(cfg.whatsapp || s.estabelecimento.whatsappLoja ? { whatsapp: cfg.whatsapp || s.estabelecimento.whatsappLoja } : {}) } : {}) }; // V60: sem o da troca, vale o WhatsApp do estabelecimento
 }

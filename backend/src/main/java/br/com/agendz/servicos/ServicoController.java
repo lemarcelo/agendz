@@ -42,7 +42,8 @@ public class ServicoController {
     private static Dados semComissaoSeNaoForDono(Dados d, Jwt jwt) {
         if ("dono".equals(jwt.getClaimAsString("papel")) || d.comissaoPct() == null) return d;
         return new Dados(d.nome(), d.codigo(), d.categoria(), d.preco(), d.duracaoMin(), d.precos(), d.duracoes(), d.multiDia(), d.combo(), d.componentes(), d.intervaloMin(),
-                d.antecedenciaH(), null, d.ativo());
+                d.antecedenciaH(), null, d.ativo(),
+                d.duracaoIndefinida(), d.duracaoTexto(), d.combinarMsg(), d.precoModo(), d.precoOpcoes(), d.precoMax(), d.combinaIds());
     }
 
     @GetMapping("/api/servicos")

@@ -4,6 +4,7 @@
 import { PADRAO_ARTIFACT, ordemAtenderValida, sanearOrdemAtender } from '../domain/ordem-atender.js';
 import * as E from '../domain/engine.js';
 import * as R from '../domain/rules.js';
+import { validarIndefinida, whatsappDaLoja } from '../domain/blocos.js';
 import * as CD from '../domain/codigo.js';
 import * as F from '../domain/financeiro.js';
 import { trocarFormaDoAgendamento } from '../domain/pagamento.js'; // registra no tick o lançamento das receitas e estornos do atendimento local
@@ -312,13 +313,19 @@ export const agenda = {
   atender(entrada) {
     const u = usuario();
     if (!u || !R.pode(u, 'agenda')) return semPermissao();
-    const d = pegar(entrada, permitidos(['servicoIds', 'produtos', 'nome', 'telefone', 'clienteId', 'profissionalId', 'vendedorId', 'formaPagamento', 'inicio', 'status', 'encaixe', 'cupomChave', 'atribuicoes', 'veiculoId', 'veiculo', 'boxId', 'motivoRetroativo', 'assinaturaId']));
+    const d = pegar(entrada, permitidos(['servicoIds', 'produtos', 'nome', 'telefone', 'clienteId', 'profissionalId', 'vendedorId', 'formaPagamento', 'inicio', 'status', 'encaixe', 'cupomChave', 'atribuicoes', 'veiculoId', 'veiculo', 'boxId', 'motivoRetroativo', 'assinaturaId', 'blocos', 'valores']));
     if (d.servicoIds === undefined || d.servicoIds === null) d.servicoIds = [];
     if (!(Array.isArray(d.servicoIds) && d.servicoIds.length <= 10 && d.servicoIds.every((x) => texto(x, 60)))) return erro('Escolha até 10 serviços.');
     if (d.atribuicoes === undefined || d.atribuicoes === null) delete d.atribuicoes;
     else if (!(Array.isArray(d.atribuicoes) && d.atribuicoes.length <= 10 && d.atribuicoes.every((x) => x && typeof x === 'object' && texto(x.servicoId, 60) && texto(x.profissionalId, 60)))) return erro('Profissional de serviço inválido.');
     else if (d.atribuicoes.length && u.papel === 'profissional') return erro('Só o proprietário ou a recepção escolhe o profissional de cada serviço.');
     if (d.atribuicoes) d.atribuicoes = d.atribuicoes.map((x) => pegar(x, ['servicoId', 'profissionalId']));
+    // F (V60): serviço de duração indefinida = vários horários (blocos [início, fim] em ms) e o valor final lançado ({servicoId, valor})
+    if (d.blocos === undefined || d.blocos === null) delete d.blocos;
+    else if (!(Array.isArray(d.blocos) && d.blocos.length <= 200 && d.blocos.every((b) => (Array.isArray(b) ? b.length === 2 && finito(b[0]) && finito(b[1]) : b && typeof b === 'object' && finito(b.inicio) && finito(b.fim))))) return erro('Horário inválido.');
+    if (d.valores === undefined || d.valores === null) delete d.valores;
+    else if (!(Array.isArray(d.valores) && d.valores.length <= 10 && d.valores.every((v) => v && typeof v === 'object' && texto(v.servicoId, 60) && finito(v.valor)))) return erro('Informe um valor válido para o serviço.');
+    else d.valores = d.valores.map((v) => pegar(v, ['servicoId', 'valor']));
     if (d.produtos === undefined || d.produtos === null) d.produtos = [];
     if (!(Array.isArray(d.produtos) && d.produtos.length <= 10 && d.produtos.every((p) => p && typeof p === 'object'))) return erro('Produtos inválidos.');
     d.produtos = d.produtos.map((p) => pegar(p, ['materialId', 'qtd']));
@@ -561,7 +568,7 @@ export const servicos = {
   // POST /servicos  |  PUT /servicos/{id}
   salvar(entrada) {
     const n = exigir('servicos'); if (n) return n;
-    const sv = pegar(entrada, ['id', 'nome', 'preco', 'duracao', 'precos', 'duracoes', 'multiDia', 'combo', 'componentes', 'categoria', 'intervalo', 'antecedenciaH', 'notificacoes', 'confirmacaoServico', 'materiais', 'ativo', 'grupoMovimentacaoId', 'pixCancelamento', 'comissaoPct', 'codigo', 'profissionalIds']);
+    const sv = pegar(entrada, ['id', 'nome', 'preco', 'duracao', 'precos', 'duracoes', 'multiDia', 'combo', 'componentes', 'categoria', 'intervalo', 'antecedenciaH', 'notificacoes', 'confirmacaoServico', 'materiais', 'ativo', 'grupoMovimentacaoId', 'pixCancelamento', 'comissaoPct', 'codigo', 'profissionalIds', 'duracaoIndefinida', 'duracaoTexto', 'combinarMsg', 'precoModo', 'precoOpcoes', 'precoMax', 'combinaIds']);
     if ('comissaoPct' in sv && !R.ehDono(usuario())) delete sv.comissaoPct; // só o proprietário define comissão; para os outros o campo é ignorado
     const profissionalIds = R.ehDono(usuario()) ? sv.profissionalIds : undefined; delete sv.profissionalIds; // A1: quem realiza o serviço (mesma tabela da Equipe > Editar); só o proprietário muda
     if (profissionalIds !== undefined && !Array.isArray(profissionalIds)) return erro('Lista de profissionais inválida.');
@@ -589,16 +596,25 @@ export const servicos = {
         }
         return { v };
       };
-      if (sv.preco !== undefined && sv.preco !== null && (!finito(sv.preco) || Number(sv.preco) < 0 || Number(sv.preco) > 100000)) return erro('Informe o preço.');
-      if (sv.duracao !== undefined && sv.duracao !== null && (!finito(sv.duracao) || !(Number(sv.duracao) > 0) || Number(sv.duracao) > 1440 * 10)) return erro('A duração precisa ser maior que zero e de no máximo 24 horas.');
+      // F (V60): duração indefinida (o horário se combina por WhatsApp ou o profissional marca os blocos); preço único, lista ou intervalo. Mesmas regras e mensagens do servidor.
+      const indef = sv.duracaoIndefinida === true;
+      let ind = null;
+      if (indef) {
+        if (sv.multiDia === true || sv.combo === true) return erro('Serviço de duração indefinida não pode ser combo nem de vários dias.');
+        ind = validarIndefinida(sv); if (!ind.ok) return erro(ind.erro);
+        if (ind.combinaIds.some((x) => !s.usuarios.some((u) => u.id === x))) return erro('Escolha só pessoas da equipe para combinar o horário.');
+      }
+      if (!indef && sv.preco !== undefined && sv.preco !== null && (!finito(sv.preco) || Number(sv.preco) < 0 || Number(sv.preco) > 100000)) return erro('Informe o preço.');
+      if (!indef && sv.duracao !== undefined && sv.duracao !== null && (!finito(sv.duracao) || !(Number(sv.duracao) > 0) || Number(sv.duracao) > 1440 * 10)) return erro('A duração precisa ser maior que zero e de no máximo 24 horas.');
       const multi = sv.multiDia !== undefined ? sv.multiDia : !!s.servicos.find((x) => x.id === sv.id)?.multiDia;
       const limiteDur = multi ? 24 * 60 * 10 : 1440;
-      const tp = tabela(sv.precos, sv.preco, 'o preço', (x) => x >= 0 && x <= 100000, 'preços'); if (tp.erro) return erro(tp.erro);
-      const td = tabela(sv.duracoes, sv.duracao, 'a duração', (x) => x > 0 && x <= limiteDur, 'durações'); if (td.erro) return erro(td.ausente ? td.erro : td.final ? 'A duração precisa ser maior que zero e de no máximo 24 horas.' : multi ? td.erro : `${td.erro} A duração precisa ser maior que zero e de no máximo 24 horas.`);
+      if (indef && s.servicos.find((x) => x.id === sv.id && (x.multiDia || x.combo)) && sv.multiDia !== false && sv.combo !== false) return erro('Serviço de duração indefinida não pode ser combo nem de vários dias.');
+      const tp = indef ? { v: null } : tabela(sv.precos, sv.preco, 'o preço', (x) => x >= 0 && x <= 100000, 'preços'); if (tp.erro) return erro(tp.erro);
+      const td = indef ? { v: null } : tabela(sv.duracoes, sv.duracao, 'a duração', (x) => x > 0 && x <= limiteDur, 'durações'); if (td.erro) return erro(td.ausente ? td.erro : td.final ? 'A duração precisa ser maior que zero e de no máximo 24 horas.' : multi ? td.erro : `${td.erro} A duração precisa ser maior que zero e de no máximo 24 horas.`);
       if (sv.combo) {
         const comp = sv.componentes;
         if (!(Array.isArray(comp) && comp.length >= 2 && comp.length <= 10 && new Set(comp).size === comp.length && comp.every((x) => texto(x, 60)))) return erro('Um combo junta de 2 a 10 serviços diferentes.');
-        if (comp.some((x) => x === sv.id || !s.servicos.some((y) => y.id === x && !y.combo))) return erro('O combo só aceita serviços comuns já cadastrados (combo dentro de combo não vale).');
+        if (comp.some((x) => x === sv.id || !s.servicos.some((y) => y.id === x && !y.combo && y.duracao !== null))) return erro('O combo só aceita serviços comuns já cadastrados (combo dentro de combo não vale).');
       }
       if (sv.intervalo !== undefined && sv.intervalo !== '' && (!finito(sv.intervalo) || Number(sv.intervalo) < 0 || Number(sv.intervalo) > 1440)) return erro('Intervalo inválido.');
       if (sv.antecedenciaH !== undefined && sv.antecedenciaH !== '' && (!finito(sv.antecedenciaH) || Number(sv.antecedenciaH) < 0 || Number(sv.antecedenciaH) > 8760)) return erro('Antecedência inválida.');
@@ -612,7 +628,11 @@ export const servicos = {
       const mats = (sv.materiais || []).filter((m) => m.materialId);
       if (mats.some((m) => !(Number(m.qtd) > 0) || !s.materiais.some((x) => x.id === m.materialId && x.tipo !== 'produto'))) return erro('Cada material do serviço precisa de quantidade maior que zero (produtos à venda não entram como material).');
       if (new Set(mats.map((m) => m.materialId)).size !== mats.length) return erro('O mesmo material aparece duas vezes no serviço.');
-      const dados = { ...sv, codigo: cod.codigo, materiais: mats.map((m) => ({ materialId: m.materialId, qtd: Number(m.qtd) })), precos: tp.v, duracoes: td.v, preco: tp.v.medio, duracao: td.v.medio, intervalo: Number(sv.intervalo || 0), antecedenciaH: Number(sv.antecedenciaH || 0) };
+      const dados = { ...sv, codigo: cod.codigo, materiais: mats.map((m) => ({ materialId: m.materialId, qtd: Number(m.qtd) })), precos: tp.v, duracoes: td.v, preco: indef ? ind.preco : tp.v.medio, duracao: indef ? null : td.v.medio, intervalo: Number(sv.intervalo || 0), antecedenciaH: Number(sv.antecedenciaH || 0) };
+      delete dados.duracaoIndefinida;
+      Object.assign(dados, indef
+        ? { duracaoTexto: ind.duracaoTexto, combinarMsg: ind.combinarMsg, precoModo: ind.precoModo, precoOpcoes: ind.precoOpcoes, precoMax: ind.precoMax, combinaIds: ind.combinaIds }
+        : { duracaoTexto: null, combinarMsg: null, precoModo: 'fixo', precoOpcoes: null, precoMax: null, combinaIds: [] }); // serviço de duração fixa nunca guarda texto, lista nem intervalo de preço
       // Campos opcionais só mudam quando vêm na chamada (editar o preço não zera a categoria nem o "vários dias").
       if (sv.multiDia !== undefined) dados.multiDia = sv.multiDia;
       if (sv.categoria !== undefined) dados.categoria = sv.categoria || '';
@@ -1107,10 +1127,11 @@ export const estabelecimento = {
   salvar(entrada) {
     const n = exigir('estabelecimento'); if (n) return n;
     if (entrada && typeof entrada === 'object' && 'tipo' in entrada && entrada.tipo !== tipoDe(state.estabelecimento)) return erro('O tipo do estabelecimento não pode ser alterado depois de criado.');
-    const patch = pegar(entrada, permitidos(['nome', 'telefone', 'endereco', 'enderecoNoLink', 'latitude', 'longitude', 'localizacaoNoWhatsapp', 'email', 'ddds', 'visaoPadrao', 'confirmacaoServico', 'grupoMovimentacaoId', 'notificacoes', 'escala', 'calendario', 'pixCancelamento', 'logo', 'corTema', 'corTema2', 'temaCor', 'linkAgendamento', 'comissaoPadrao', 'usaIntegracaoPix', 'formaPagamentoPadrao', 'contaPorForma', 'camposObrigatorios', 'boxes', 'portes', 'ordemServicos', 'profissionalAutomatico', 'modoEscolha', 'ordemAtender', 'recaptchaChaveSite', 'recaptchaSegredo']));
+    const patch = pegar(entrada, permitidos(['nome', 'telefone', 'endereco', 'enderecoNoLink', 'latitude', 'longitude', 'localizacaoNoWhatsapp', 'whatsappLoja', 'email', 'ddds', 'visaoPadrao', 'confirmacaoServico', 'grupoMovimentacaoId', 'notificacoes', 'escala', 'calendario', 'pixCancelamento', 'logo', 'corTema', 'corTema2', 'temaCor', 'linkAgendamento', 'comissaoPadrao', 'usaIntegracaoPix', 'formaPagamentoPadrao', 'contaPorForma', 'camposObrigatorios', 'boxes', 'portes', 'ordemServicos', 'profissionalAutomatico', 'modoEscolha', 'ordemAtender', 'recaptchaChaveSite', 'recaptchaSegredo']));
     if ('comissaoPadrao' in patch && !R.ehDono(usuario())) delete patch.comissaoPadrao;
     if ('comissaoPadrao' in patch) { const c = lerPct(patch.comissaoPadrao); if (!c.ok || c.v === null) return erro('A comissão padrão vai de 0 a 100%.'); patch.comissaoPadrao = c.v; }
     for (const k of ['nome', 'telefone', 'endereco', 'email']) if (k in patch && !texto(patch[k], 200)) return erro('Texto grande demais em ' + k + '.');
+    if ('whatsappLoja' in patch) { const w = whatsappDaLoja(patch.whatsappLoja); if (!w.ok) return erro(w.erro); patch.whatsappLoja = w.valor; } // F: destino do "Combinar agendamento" sem ninguém do serviço com telefone
     // Localização (GPS) e interruptores do endereço/WhatsApp (espelho de PUT /api/estabelecimento/local). Latitude e longitude andam juntas.
     for (const k of ['enderecoNoLink', 'localizacaoNoWhatsapp']) if (k in patch && typeof patch[k] !== 'boolean') return erro('Interruptor inválido.');
     if ('latitude' in patch || 'longitude' in patch) {

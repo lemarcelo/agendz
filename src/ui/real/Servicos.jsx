@@ -9,11 +9,14 @@ import SeletorVinculo from '../leve/SeletorVinculo.jsx';
 import { capAtiva } from '../../domain/tipos.js';
 import { PORTES, PORTE_PADRAO, ROTULO_PORTE, portesAtivos, precoNoPorte } from '../../domain/veiculos.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
+import ServicoIndefinido, { corpoDoServicoIndefinido, formDoServicoIndefinido } from '../leve/ServicoIndefinido.jsx';
+import { textoDoPreco } from '../../domain/blocos.js';
 
 const dinheiro = (v) => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const num = (s) => { const t = String(s ?? '').trim().replace(',', '.'); if (t === '') return null; const n = Number(t); return Number.isFinite(n) ? n : null; };
 const txt = (n) => (n === null || n === undefined ? '' : String(n).replace('.', ','));
 export function duracaoTexto(min) {
+  if (min === null || min === undefined) return 'Duração indefinida'; // F: o horário se combina
   const m = Math.round(Number(min) || 0);
   if (m >= 1440 && m % 1440 === 0) return `${m / 1440} ${m === 1440 ? 'dia' : 'dias'}`;
   if (m < 60) return `${m} min`;
@@ -21,6 +24,7 @@ export function duracaoTexto(min) {
 }
 
 function precoDoCartao(s, porPorte) {
+  if (s.duracaoMin === null) return textoDoPreco(s, dinheiro); // F: valor, "a partir de" (lista) ou intervalo
   if (!porPorte) return dinheiro(s.preco);
   // v124: preço no porte = específico ou base × fator
   const v = portesAtivos().map(({ id }) => precoNoPorte(s.preco, s.precos ? s.precos[id] : undefined, id));
@@ -40,7 +44,10 @@ function FormServico({ ficha, todos, ehDono, aoSalvar, aoCancelar }) {
     duracoes: Object.fromEntries(PORTES.map((p) => [p, txt(ficha.duracoes ? ficha.duracoes[p] : null)])),
     intervalo: txt(ficha.intervaloMin || 0), antecedencia: txt(ficha.antecedenciaH || 0), comissao: txt(ficha.comissaoPct),
     multiDia: !!ficha.multiDia, combo: !!ficha.combo, componentes: ficha.componentes || [], ativo: ficha.ativo !== false,
+    indefinida: !novo && ficha.duracaoMin === null, // F: duração indefinida (o horário se combina)
   }));
+  const [ind, setInd] = useState(() => formDoServicoIndefinido(ficha, txt));
+  const [pessoas, setPessoas] = useState(null); // quem pode combinar o horário: toda a equipe ativa
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
   // A1: quem realiza este serviço (mesma tabela da Equipe > Editar). Serviço novo vem com todos os que atendem marcados.
@@ -53,6 +60,7 @@ function FormServico({ ficha, todos, ehDono, aoSalvar, aoCancelar }) {
       const [e, v] = await Promise.all([apiEquipe.listar(), vinculos.porServico()]);
       if (!vivo || !e.ok || !v.ok) return;
       const quemAtende = e.usuarios.filter((u) => u.atende);
+      setPessoas(e.usuarios.filter((u) => u.ativo !== false).map((u) => ({ id: u.id, rotulo: u.apelido || u.nome })));
       setEquipeLista(quemAtende);
       setQuem(novo ? quemAtende.map((u) => u.id) : (v.mapa[ficha.id] || []).filter((id) => quemAtende.some((u) => u.id === id)));
     })();
@@ -69,7 +77,9 @@ function FormServico({ ficha, todos, ehDono, aoSalvar, aoCancelar }) {
     setEnviando(true); setErro('');
     const corpo = { nome: f.nome, categoria: f.categoria, ativo: f.ativo, combo: f.combo };
     if (f.codigo.trim()) corpo.codigo = f.codigo.trim();
-    if (porPorte) {
+    if (f.indefinida) {
+      Object.assign(corpo, corpoDoServicoIndefinido(ind, f.preco, num), { combo: false, multiDia: false });
+    } else if (porPorte) {
       corpo.precos = Object.fromEntries(PORTES.map((p) => [p, num(f.precos[p])]).filter(([, v]) => v !== null));
       corpo.duracoes = Object.fromEntries(PORTES.map((p) => [p, num(f.duracoes[p])]).filter(([, v]) => v !== null));
     } else {
@@ -78,8 +88,8 @@ function FormServico({ ficha, todos, ehDono, aoSalvar, aoCancelar }) {
       if (d !== null) corpo.duracaoMin = d;
     }
     for (const [k, v] of [['intervaloMin', num(f.intervalo)], ['antecedenciaH', num(f.antecedencia)], ['comissaoPct', num(f.comissao)]]) if (v !== null) corpo[k] = v;
-    if (variosDias) corpo.multiDia = f.multiDia;
-    if (f.combo) corpo.componentes = f.componentes;
+    if (variosDias && !f.indefinida) corpo.multiDia = f.multiDia;
+    if (f.combo && !f.indefinida) corpo.componentes = f.componentes;
     if (!novo) corpo.id = ficha.id;
     const r = await api.salvar(corpo);
     if (!r.ok) { setEnviando(false); setErro(r.erro); return; }
@@ -99,7 +109,10 @@ function FormServico({ ficha, todos, ehDono, aoSalvar, aoCancelar }) {
           <Campo rotulo="Nome do serviço"><input value={f.nome} maxLength={100} onChange={mudar('nome')} data-testid="srv-nome" /></Campo>
           <Campo rotulo="Código (deixe vazio para o próximo número)"><input value={f.codigo} maxLength={20} autoComplete="off" onChange={mudar('codigo')} data-testid="srv-codigo" /></Campo>
           <Campo rotulo="Categoria (opcional)"><input value={f.categoria} maxLength={30} onChange={mudar('categoria')} data-testid="srv-categoria" /></Campo>
-          {porPorte ? (
+          <label className="pa-check"><input type="checkbox" checked={f.indefinida} disabled={f.combo || f.multiDia} onChange={(e) => setF({ ...f, indefinida: e.target.checked })} data-testid="srv-indefinida" /> Duração indefinida (o horário é combinado com o cliente)</label>
+          {f.indefinida ? (
+            <ServicoIndefinido f={ind} aoMudar={setInd} preco={f.preco} aoMudarPreco={(v) => setF({ ...f, preco: v })} equipe={ehDono ? pessoas : null} desabilitado={!ehDono} />
+          ) : porPorte ? (
             <div className="srv-portes" data-testid="srv-portes">
               <Campo rotulo="Preço base — Médio (R$)"><input value={f.precos[PORTE_PADRAO]} inputMode="decimal" onChange={mudarPorte('precos', PORTE_PADRAO)} data-testid={`srv-preco-${PORTE_PADRAO}`} /></Campo>
               <Campo rotulo="Duração — Médio (minutos)"><input value={f.duracoes[PORTE_PADRAO]} inputMode="numeric" onChange={mudarPorte('duracoes', PORTE_PADRAO)} data-testid={`srv-duracao-${PORTE_PADRAO}`} /></Campo>
@@ -127,11 +140,11 @@ function FormServico({ ficha, todos, ehDono, aoSalvar, aoCancelar }) {
               <Campo rotulo="Duração (minutos)"><input value={f.duracao} inputMode="numeric" onChange={mudar('duracao')} data-testid="srv-duracao" /></Campo>
             </>
           )}
-          <Campo rotulo="Intervalo depois do serviço (minutos)"><input value={f.intervalo} inputMode="numeric" onChange={mudar('intervalo')} data-testid="srv-intervalo" /></Campo>
+          <Campo rotulo="Intervalo depois do serviço (minutos)" ><input value={f.intervalo} inputMode="numeric" onChange={mudar('intervalo')} data-testid="srv-intervalo" /></Campo>
           <Campo rotulo="Antecedência mínima para agendar (horas)"><input value={f.antecedencia} inputMode="numeric" onChange={mudar('antecedencia')} data-testid="srv-antecedencia" /></Campo>
           {ehDono && <Campo rotulo="Comissão do serviço (%, opcional)"><input value={f.comissao} inputMode="decimal" onChange={mudar('comissao')} data-testid="srv-comissao" /></Campo>}
-          {variosDias && <label className="pa-check"><input type="checkbox" checked={f.multiDia} onChange={(e) => setF({ ...f, multiDia: e.target.checked })} data-testid="srv-multidia" /> Serviço de vários dias (o veículo fica na loja)</label>}
-          <label className="pa-check"><input type="checkbox" checked={f.combo} onChange={(e) => setF({ ...f, combo: e.target.checked })} data-testid="srv-combo" /> Combo (junta de 2 a 10 serviços)</label>
+          {variosDias && !f.indefinida && <label className="pa-check"><input type="checkbox" checked={f.multiDia} onChange={(e) => setF({ ...f, multiDia: e.target.checked })} data-testid="srv-multidia" /> Serviço de vários dias (o veículo fica na loja)</label>}
+          {!f.indefinida && <label className="pa-check"><input type="checkbox" checked={f.combo} onChange={(e) => setF({ ...f, combo: e.target.checked })} data-testid="srv-combo" /> Combo (junta de 2 a 10 serviços)</label>}
           {f.combo && (
             <div className="srv-componentes" data-testid="srv-componentes">
               {opcoes.length === 0 ? <p className="muted">Cadastre antes os serviços que formam o combo.</p> : opcoes.map((s) => (
@@ -216,7 +229,7 @@ export default function Servicos({ ehDono }) {
                 <div className="cliente-dados">
                   <b data-testid="srv-item-nome">{s.nome}</b>{' '}
                   <small className="muted">#{s.codigo}{s.categoria ? ` · ${s.categoria}` : ''}</small>
-                  <span className="cliente-linha" data-testid="srv-item-preco">{precoDoCartao(s, porPorte)} · {duracaoTexto(s.duracaoMin)}{porPorte ? ' (porte médio)' : ''}</span>
+                  <span className="cliente-linha" data-testid="srv-item-preco">{precoDoCartao(s, porPorte)} · {s.duracaoMin === null ? (s.duracaoTexto || duracaoTexto(null)) : duracaoTexto(s.duracaoMin)}{porPorte && s.duracaoMin !== null ? ' (porte médio)' : ''}</span>
                   {(s.combo || s.multiDia || !s.ativo) && (
                     <span className="cliente-linha muted">{[s.combo ? `Combo de ${s.componentes.length}` : '', s.multiDia ? 'Vários dias' : '', !s.ativo ? 'Desativado' : ''].filter(Boolean).join(' · ')}</span>
                   )}

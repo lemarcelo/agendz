@@ -13,6 +13,7 @@ import { renderizar } from './templates.js';
 import { diasDaExcecao } from './schedule.js';
 import { cap, rot, voc } from './tipos.js';
 import { agruparAtribuicao } from './vinculo.js';
+import { deslocarBlocos, erroDeBlocos, normalizarBlocos, valoresLancados } from './blocos.js'; // F: serviço de duração indefinida
 import { profissionalAutomatico } from './profissional-auto.js';
 import { ordemDaLoja, registrarEscolha } from './modo-escolha.js'; // B2: modos da escolha automática
 
@@ -141,7 +142,7 @@ export function gravarVeiculo(s, cliente, rv) {
 }
 
 export function criarAgendamento(s, dados, autor, agora) {
-  const { clienteId, profissionalId, servicoIds, inicio, origem = 'painel', encaixe = false, boxId } = dados;
+  const { clienteId, profissionalId, servicoIds, inicio, origem = 'painel', encaixe = false, boxId, blocos, valores } = dados;
   // Horário sem cliente cadastrado (Atender só com nome ou sem nada): fica com o nome avulso, nasce confirmado (ninguém para confirmar) e não manda mensagem.
   const semCliente = !clienteId && dados.semCliente === true;
   if (dados.status !== undefined && !Object.values(STATUS).includes(dados.status)) return { ok: false, erros: ['Status inválido.'] };
@@ -150,8 +151,10 @@ export function criarAgendamento(s, dados, autor, agora) {
   if (!cliente && !semCliente) return { ok: false, erros: ['Escolha o cliente.'] };
   const rv = resolverVeiculo(s, cliente, dados);
   if (!rv.ok) return { ok: false, erros: rv.erros };
-  const v = validarHorario(s, { profissionalId, inicio, servicoIds, porte: rv.veiculo?.porte, boxId, encaixe, origem, agora, clienteId: cliente ? clienteId : undefined });
+  const v = validarHorario(s, { profissionalId, inicio, servicoIds, porte: rv.veiculo?.porte, boxId, encaixe, origem, agora, clienteId: cliente ? clienteId : undefined, blocos });
   if (v.erros.length) return { ok: false, erros: v.erros };
+  const vl = valoresLancados(v.servicos, valores);
+  if (!vl.ok) return { ok: false, erros: [vl.erro] };
   let usoPlano = null;
   if (dados.assinaturaId) {
     const up = usoParaAgendamento(s, { assinaturaId: dados.assinaturaId, clienteId, servicoIds, inicio, agora });
@@ -179,7 +182,8 @@ export function criarAgendamento(s, dados, autor, agora) {
     criadoEm: agora, plano: porLink ? [] : status === STATUS.A_CONFIRMAR ? plano : plano.map((p) => ({ ...p, estado: 'pulada' })),
     ...(porLink ? { clienteAgendou: true, lembretes: montarLembretes({ inicio, agora }) } : {}),
     faltaConfirmacao: null, servicosFeitos: null, motivoCancelamento: null, log: [],
-    precos: Object.fromEntries(v.servicos.map((x) => [x.id, x.preco])), acrescimos: {}, estoqueBaixado: null,
+    precos: { ...Object.fromEntries(v.servicos.map((x) => [x.id, x.preco])), ...vl.precos }, acrescimos: {}, estoqueBaixado: null,
+    ...(blocos && blocos.length ? { blocos } : {}),
     ...(usoPlano ? { planoUso: usoPlano.uso } : {}),
   };
   congelarComissoes(s, a, v.servicos);
@@ -252,7 +256,7 @@ export function clienteEditaServicos(s, id, servicoIds, agora) {
   const iguais = servicoIds.length === a.servicoIds.length && servicoIds.every((x) => a.servicoIds.includes(x));
   if (iguais) return { ok: false, erros: ['Os serviços continuam os mesmos.'] };
   for (const v of validadoresEdicaoCliente) { const e = v(s, a, servicoIds); if (e) return { ok: false, erros: [e] }; }
-  const v = validarHorario(s, { profissionalId: a.profissionalId, inicio: a.inicio, servicoIds, porte: a.porte, boxPreferido: a.boxId, ignoreId: a.id, origem: 'whatsapp', agora });
+  const v = validarHorario(s, { profissionalId: a.profissionalId, inicio: a.inicio, servicoIds, porte: a.porte, boxPreferido: a.boxId, ignoreId: a.id, origem: 'whatsapp', agora, blocos: a.blocos });
   if (v.erros.length) return { ok: false, erros: v.erros };
   const c = clienteDe(s, a);
   const antes = nomesServicos(s, a);
@@ -278,7 +282,7 @@ export function clienteRemarca(s, id, novoInicio, agora) {
   const podeRemarcar = [STATUS.A_CONFIRMAR, STATUS.CONFIRMADO].includes(a.status) || (a.status === STATUS.CANCELADO && ['conflito', 'falta_confirmacao'].includes(a.motivoCancelamento));
   if (!podeRemarcar) return { ok: false, erros: ['Esse agendamento não pode ser remarcado.'] };
   if (a.status === STATUS.CANCELADO && jaCreditado(s, a)) return { ok: false, erros: ERRO_DEVOLVIDO };
-  const v = validarHorario(s, { profissionalId: a.profissionalId, inicio: novoInicio, servicoIds: a.servicoIds, porte: a.porte, boxPreferido: a.boxId, ignoreId: a.id, origem: 'whatsapp', agora });
+  const v = validarHorario(s, { profissionalId: a.profissionalId, inicio: novoInicio, servicoIds: a.servicoIds, porte: a.porte, boxPreferido: a.boxId, ignoreId: a.id, origem: 'whatsapp', agora, blocos: deslocarBlocos(a.blocos, a.inicio, novoInicio) });
   if (v.erros.length) return { ok: false, erros: v.erros };
   { const e = erroDoPlano(s, a, novoInicio, agora); if (e) return { ok: false, erros: [e] }; }
   const c = clienteDe(s, a);
@@ -294,6 +298,7 @@ export function clienteRemarca(s, id, novoInicio, agora) {
 export function aplicarRemarcacao(s, a, novoInicio, novoStatus, autor, agora) {
   const antes = a.inicio;
   const sv = servicosDoAg(s, a);
+  if (a.blocos) a.blocos = deslocarBlocos(a.blocos, antes, novoInicio); // F: os blocos andam junto
   a.inicio = novoInicio;
   a.reagendado = true; // etiqueta fixa: a data ou a hora mudou
   a.emServico = null; a.pronto = null; // o andamento do carro recomeça no novo horário
@@ -322,7 +327,7 @@ export function profissionalRemarca(s, id, { inicio, status, profissionalId, box
   if (a.status === STATUS.CANCELADO && (status === undefined || status === STATUS.CANCELADO)) return { ok: false, erros: ['Agendamento cancelado não pode ser remarcado. Reative-o antes.'] };
   if (a.status === STATUS.CANCELADO && jaCreditado(s, a)) return { ok: false, erros: ERRO_DEVOLVIDO };
   const novoProfissional = profissionalId || a.profissionalId;
-  const v = validarHorario(s, { profissionalId: novoProfissional, inicio, servicoIds: a.servicoIds, porte: a.porte, boxId, boxPreferido: a.boxId, ignoreId: a.id, encaixe: a.encaixe, origem: 'painel', agora });
+  const v = validarHorario(s, { profissionalId: novoProfissional, inicio, servicoIds: a.servicoIds, porte: a.porte, boxId, boxPreferido: a.boxId, ignoreId: a.id, encaixe: a.encaixe, origem: 'painel', agora, blocos: deslocarBlocos(a.blocos, a.inicio, inicio) });
   if (v.erros.length) return { ok: false, erros: v.erros };
   { const e = erroDoPlano(s, a, inicio, agora); if (e) return { ok: false, erros: [e] }; }
   if (v.boxId !== a.boxId) {
@@ -360,7 +365,7 @@ export function profissionalAlteraStatus(s, id, status, autor, agora) {
   // Reativar um agendamento cancelado precisa de horário livre: senão vira dupla reserva.
   if (a.status === STATUS.CANCELADO && status !== STATUS.CANCELADO) {
     if (jaCreditado(s, a)) return { ok: false, erros: ERRO_DEVOLVIDO };
-    const v = validarHorario(s, { profissionalId: a.profissionalId, inicio: a.inicio, servicoIds: a.servicoIds, porte: a.porte, boxPreferido: a.boxId, ignoreId: a.id, encaixe: a.encaixe, origem: 'painel', agora });
+    const v = validarHorario(s, { profissionalId: a.profissionalId, inicio: a.inicio, servicoIds: a.servicoIds, porte: a.porte, boxPreferido: a.boxId, ignoreId: a.id, encaixe: a.encaixe, origem: 'painel', agora, blocos: a.blocos });
     if (v.erros.length) return { ok: false, erros: v.erros };
     { const e = erroDoPlano(s, a, a.inicio, agora); if (e) return { ok: false, erros: [e] }; }
     a.boxId = v.boxId;
@@ -420,7 +425,7 @@ export function resolverClienteDoAtendimento(s, { nome, telefone, clienteId }, a
 // Atendimento local (cliente que chegou no balcão, ou registro de algo que já aconteceu): nasce concluído, para entrar no relatório, no estoque,
 // na comissão e no financeiro. Não manda mensagem, não passa por conflito de horário (já aconteceu). `inicio` opcional (passado); sem ele, é agora.
 // Cliente: ver `resolverClienteDoAtendimento` (telefone cria cadastro; só nome não).
-export function registrarAtendimentoLocal(s, { profissionalId, servicoIds, nome, telefone, clienteId: clienteEscolhido, produtos, vendedorId, formaPagamento, inicio, veiculoId, veiculo, exigirVeiculo, motivoRetroativo, assinaturaId }, autor, agora) {
+export function registrarAtendimentoLocal(s, { profissionalId, servicoIds, nome, telefone, clienteId: clienteEscolhido, produtos, vendedorId, formaPagamento, inicio, veiculoId, veiculo, exigirVeiculo, motivoRetroativo, assinaturaId, blocos, valores }, autor, agora) {
   const ids = Array.isArray(servicoIds) ? servicoIds : [];
   const temProdutos = Array.isArray(produtos) && produtos.length > 0;
   // Venda de produto sem serviço: vale quando há ao menos um produto; senão continua exigindo ao menos um serviço.
@@ -459,6 +464,10 @@ export function registrarAtendimentoLocal(s, { profissionalId, servicoIds, nome,
   const rv = ids.length ? resolverVeiculo(s, cli, { veiculoId, veiculo, exigirVeiculo }) : null;
   if (rv && !rv.ok) return { ok: false, erros: rv.erros };
   const sv = servicosPorIds(s, ids, rv?.veiculo?.porte);
+  { const eb = erroDeBlocos(sv, blocos && blocos.length ? blocos : null); if (eb) return { ok: false, erros: [eb] }; }
+  if (blocos && blocos.some((b) => b[0] > agora + 60000)) return { ok: false, erros: ['Um atendimento já feito não pode ter horários no futuro.'] };
+  const vl = valoresLancados(sv, valores);
+  if (!vl.ok) return { ok: false, erros: [vl.erro] };
   let usoPlano = null;
   if (assinaturaId) {
     if (!cli) return { ok: false, erros: ['O plano é de um cliente cadastrado: informe o telefone dele.'] };
@@ -472,7 +481,8 @@ export function registrarAtendimentoLocal(s, { profissionalId, servicoIds, nome,
     ...(rv ? { veiculoId: gravarVeiculo(s, cli, rv), veiculo: rv.veiculo, porte: rv.veiculo?.porte } : {}), boxId: null,
     inicio: Math.min(quando, Math.floor(agora / 60000) * 60000), status: STATUS.CONCLUIDO, encaixe: false, reagendado: false, origem: 'local', criadoEm: agora,
     plano: [], faltaConfirmacao: null, servicosFeitos: [...ids], motivoCancelamento: null, log: [],
-    precos: Object.fromEntries(sv.map((x) => [x.id, x.preco])), acrescimos: {}, estoqueBaixado: null, pagamento: { forma },
+    precos: { ...Object.fromEntries(sv.map((x) => [x.id, x.preco])), ...vl.precos }, acrescimos: {}, estoqueBaixado: null, pagamento: { forma },
+    ...(blocos && blocos.length ? { blocos } : {}),
   };
   congelarComissoes(s, a, sv);
   a.produtos = [];
@@ -548,6 +558,13 @@ function atenderEmCadeia(s, d, grupos, autor, agora) {
 export function atender(s, d, autor, agora) {
   if (semBoxAtivo(s)) return { ok: false, erros: [ERRO_SEM_BOX] }; // estética sem box ativo: nem atendimento local nem agendamento (v120)
   const ids = Array.isArray(d.servicoIds) ? d.servicoIds : [];
+  // F: serviço de duração indefinida se atende em BLOCOS escolhidos; o horário do atendimento é o do primeiro bloco
+  const nb = normalizarBlocos(d.blocos);
+  if (!nb.ok) return { ok: false, erros: [nb.erro] };
+  if (nb.blocos) {
+    if (Array.isArray(d.atribuicoes) && d.atribuicoes.length) return { ok: false, erros: ['Com horários marcados à mão, todos os serviços são do mesmo profissional.'] };
+    d = { ...d, blocos: nb.blocos, inicio: nb.blocos[0][0] };
+  } else if (d.blocos !== undefined) { const { blocos: _b, ...resto } = d; d = resto; }
   if (Array.isArray(d.atribuicoes) && d.atribuicoes.length) { // B1: profissional por serviço
     const porServico = {};
     for (const x of d.atribuicoes) {
@@ -600,7 +617,7 @@ export function atender(s, d, autor, agora) {
   const rc = resolverClienteDoAtendimento(s, d, agora);
   if (!rc.ok) return rc;
   // Sem telefone (e sem cliente escolhido) não há cadastro: o horário fica com o nome avulso, confirmado e sem aviso por WhatsApp. Só vira obrigatório se a loja marcar.
-  const r = criarAgendamento(s, { clienteId: rc.cliente ? rc.cliente.id : null, ...(rc.cliente ? {} : { semCliente: true, nomeAvulso: rc.nomeAvulso }), profissionalId: d.profissionalId, servicoIds: ids, inicio: Number(d.inicio), status, encaixe: !!d.encaixe, origem: 'painel', boxId: d.boxId, veiculoId: d.veiculoId, veiculo: d.veiculo, exigirVeiculo, assinaturaId: d.assinaturaId }, autor, agora);
+  const r = criarAgendamento(s, { clienteId: rc.cliente ? rc.cliente.id : null, ...(rc.cliente ? {} : { semCliente: true, nomeAvulso: rc.nomeAvulso }), profissionalId: d.profissionalId, servicoIds: ids, inicio: Number(d.inicio), status, encaixe: !!d.encaixe, origem: 'painel', boxId: d.boxId, veiculoId: d.veiculoId, veiculo: d.veiculo, exigirVeiculo, assinaturaId: d.assinaturaId, blocos: d.blocos, valores: d.valores }, autor, agora);
   if (!r.ok) return r;
   for (const p of produtos) {
     const x = adicionarProdutoAoAgendamento(s, r.agendamento.id, { materialId: p && p.materialId, qtd: p && p.qtd, vendedorId: d.vendedorId }, autor, agora);
@@ -687,7 +704,7 @@ export function profissionalEditaServicos(s, id, servicoIds, autor, agora) {
   { const novos = servicoIds.filter((x) => !a.servicoIds.includes(x)); const e = errosServicoIds(s, novos.length ? novos : servicoIds.slice(0, 1), { ativos: true }); if (novos.length && e) return { ok: false, erros: [e] }; }
   // Mais tempo de serviço pode estourar o expediente ou invadir outro horário: confere de novo enquanto o agendamento está valendo.
   if ([STATUS.A_CONFIRMAR, STATUS.CONFIRMADO].includes(a.status)) {
-    const v = validarHorario(s, { profissionalId: a.profissionalId, inicio: a.inicio, servicoIds, porte: a.porte, boxPreferido: a.boxId, ignoreId: a.id, encaixe: a.encaixe, origem: 'painel', agora });
+    const v = validarHorario(s, { profissionalId: a.profissionalId, inicio: a.inicio, servicoIds, porte: a.porte, boxPreferido: a.boxId, ignoreId: a.id, encaixe: a.encaixe, origem: 'painel', agora, blocos: a.blocos });
     if (v.erros.length) return { ok: false, erros: v.erros };
     if (v.boxId !== a.boxId) { registrar(s, a, autor, 'box', nomeBox(s, a.boxId) || null, nomeBox(s, v.boxId), agora); a.boxId = v.boxId; }
   }

@@ -15,6 +15,8 @@ import { ordenarServicos } from '../../domain/ordem-servicos.js';
 import { nomeReal, rotuloDoCliente } from '../../domain/cliente-rotulo.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
 import ProfissionalPorServico from '../leve/ProfissionalPorServico.jsx';
+import BlocosDoAtender from '../leve/BlocosDoAtender.jsx';
+import { blocosDeHorarios, duracaoIndefinida, erroDeBlocos, textoDoPreco } from '../../domain/blocos.js';
 import { precisaAtribuirPorServico } from '../../domain/vinculo.js';
 
 const aoLocal = (ts) => { const d = new Date(ts); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
@@ -31,6 +33,9 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
   const [personalizar, setPersonalizar] = useState(false);
   const [modoQuando, setModoQuando] = useState('agora');
   const [quando, setQuando] = useState(() => aoLocal(Math.ceil(agora / 3600000) * 3600000));
+  const [diaBloco, setDiaBloco] = useState(() => aoLocal(agora).slice(0, 10)); // F: dia mostrado na grade de horários do serviço de duração indefinida
+  const [horarios, setHorarios] = useState([]); // início de cada horário de 30 min marcado (ms)
+  const [valores, setValores] = useState({}); // valor final lançado por serviço indefinido (texto)
   const [busca, setBusca] = useState('');
   const [achados, setAchados] = useState([]);
   const [cliente, setCliente] = useState(null);
@@ -91,10 +96,14 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
     return () => clearTimeout(t);
   }, [busca]);
 
-  const inicio = personalizar ? doLocal(quando) : null;
-  const instante = personalizar ? inicio : agora;
+  // F (V60): serviço de duração indefinida marcado → o "Quando" vira a grade de horários (blocos); o início é o do primeiro bloco
+  const indefSel = (servicos || []).filter((s) => ids.includes(s.id) && duracaoIndefinida(s));
+  const usaBlocos = indefSel.length > 0;
+  const blocosCalc = blocosDeHorarios(horarios);
+  const inicio = usaBlocos ? (blocosCalc[0] ? blocosCalc[0][0] : null) : personalizar ? doLocal(quando) : null;
+  const instante = usaBlocos ? (inicio ?? agora) : personalizar ? inicio : agora;
   const tipo = tipoDoAtendimento(instante, agora);
-  const retro = personalizar && ehRetroativo(inicio, agora);
+  const retro = (personalizar || usaBlocos) && ehRetroativo(inicio, agora);
   const bloqueado = retro && ehProprio;
   const realiza = (pid, sid) => vinculos === null || (vinculos[sid] || []).includes(pid);
   const autoAtender = regras.profissionalAutomatico === true && !ehProprio; // B9c: o servidor escolhe quem está mais livre
@@ -113,7 +122,8 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
   const veiculoEscolhido = usaVeiculo && veiculoId ? doCliente.find((v) => v.id === veiculoId) || null : null;
   const digitando = usaVeiculo && !veiculoEscolhido;
   const porte = porteDoAtendimento(veiculoEscolhido, digitando ? novoVeic : null);
-  const resumo = resumoDosServicos(servicos || [], ids, usaVeiculo ? porte : undefined);
+  const resumo = resumoDosServicos(servicos || [], ids, usaVeiculo ? porte : undefined, valores);
+  const fixosMin = (servicos || []).filter((s) => ids.includes(s.id) && !duracaoIndefinida(s)).reduce((t, s) => t + servicoNoPorte(s, usaVeiculo ? porte : undefined).duracaoMin, 0);
   const listaProd = useMemo(() => filtrarProdutos(produtos || [], buscaProd), [produtos, buscaProd]);
   const resumoProd = resumoDosProdutos(produtos || [], itens);
   const vendedor = vendem.some((p) => p.id === vendedorEscolhido) ? vendedorEscolhido : vendedorPadrao(vendem, meuId, profId);
@@ -123,7 +133,7 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
   const auto = autoAtender; // B9c: o campo some e o servidor escolhe quem está mais livre
   // B1: serviços feitos por pessoas diferentes → um campo de profissional por serviço (vazio e obrigatório); o campo único some. Só a recepção e o proprietário escolhem.
   const [atrib, setAtrib] = useState({});
-  const porAtribuir = !auto && !ehProprio && vinculos !== null && precisaAtribuirPorServico(ids, vinculos);
+  const porAtribuir = !usaBlocos && !auto && !ehProprio && vinculos !== null && precisaAtribuirPorServico(ids, vinculos);
   useEffect(() => { setAtrib((a) => Object.fromEntries(Object.entries(a).filter(([sid, pid]) => ids.includes(sid) && realiza(pid, sid)))); }, [ids, vinculos]); // eslint-disable-line react-hooks/exhaustive-deps
   const atribuicoes = porAtribuir ? ids.map((sid) => ({ servicoId: sid, profissionalId: atrib[sid] || '' })) : null;
   const faltaAtribuir = porAtribuir && atribuicoes.some((x) => !x.profissionalId) ? 'Escolha o profissional de cada serviço.' : '';
@@ -136,7 +146,13 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
   const enviar = async (e) => {
     e.preventDefault();
     if (enviando) return;
-    if (personalizar) { const problema = validarQuando(inicio, modoQuando, Date.now()); if (problema) { setErro(problema); return; } }
+    if (usaBlocos) {
+      const pseudo = (servicos || []).filter((s) => ids.includes(s.id)).map((s) => ({ nome: s.nome, duracaoMin: duracaoIndefinida(s) ? null : servicoNoPorte(s, usaVeiculo ? porte : undefined).duracaoMin }));
+      const problema = erroDeBlocos(pseudo, blocosCalc.length ? blocosCalc : null); if (problema) { setErro(problema); return; }
+      const problemaData = validarQuando(inicio, 'data', Date.now()); if (problemaData) { setErro(problemaData); return; }
+    } else if (personalizar) { const problema = validarQuando(inicio, modoQuando, Date.now()); if (problema) { setErro(problema); return; } }
+    const lancados = [];
+    if (usaBlocos) for (const s of indefSel) { const t = String(valores[s.id] ?? '').trim().replace(',', '.'); if (!t) continue; const n = Number(t); if (!Number.isFinite(n) || n < 0) { setErro('Informe um valor válido para o serviço.'); return; } lancados.push({ servicoId: s.id, valor: n }); }
     if (falta) { setErro(falta); return; }
     if (faltaAtribuir) { setErro(faltaAtribuir); return; }
     if (tipo === 'local' && !forma) { setErro('Escolha a forma de pagamento.'); return; }
@@ -145,7 +161,7 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
       servicoIds: ids, ...(itens.length ? { produtos: itens, vendedorId: vendedor } : {}), nome, telefone, ...(cliente ? { clienteId: cliente.id } : {}), ...(auto ? {} : { profissionalId: porAtribuir ? atribuicoes[0].profissionalId : profId }), ...(porAtribuir ? { atribuicoes } : {}),
       ...(usaVeiculo && ids.length ? (veiculoEscolhido ? { veiculoId: veiculoEscolhido.id } : { veiculo: novoVeic }) : {}),
       ...(usaBox && tipo === 'futuro' && boxId ? { boxId } : {}),
-      ...(personalizar ? { inicio } : {}), ...(retro ? { motivoRetroativo: motivo } : {}),
+      ...(usaBlocos ? { blocos: blocosCalc.map(([i, f]) => ({ inicio: i, fim: f })), ...(lancados.length ? { valores: lancados } : {}) } : personalizar ? { inicio } : {}), ...(retro ? { motivoRetroativo: motivo } : {}),
       ...(tipo === 'futuro' ? { status, encaixe, ...(cupomChave.trim() ? { cupomChave } : {}) } : { formaPagamento: forma }),
     });
     setEnviando(false);
@@ -235,7 +251,7 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
         <ul className="atender-real-servicos" data-testid="atender-lista-servicos">
           {lista.map((s) => (
             <li key={s.id}>
-              <label className="check-linha"><input type="checkbox" checked={ids.includes(s.id)} onChange={() => marcar(s.id)} data-testid={`atender-srv-${s.id}`} /><span className="atender-real-item"><b>{s.nome}</b><small className="muted">{usaVeiculo ? `${servicoNoPorte(s, porte).duracaoMin} min · ${fmtMoney(servicoNoPorte(s, porte).preco)}` : `${s.duracaoMin} min · ${fmtMoney(s.preco)}`}</small></span></label>
+              <label className="check-linha"><input type="checkbox" checked={ids.includes(s.id)} onChange={() => marcar(s.id)} data-testid={`atender-srv-${s.id}`} /><span className="atender-real-item"><b>{s.nome}</b><small className="muted">{duracaoIndefinida(s) ? `${s.duracaoTexto || 'Duração indefinida'} · ${textoDoPreco(s, fmtMoney)}` : usaVeiculo ? `${servicoNoPorte(s, porte).duracaoMin} min · ${fmtMoney(servicoNoPorte(s, porte).preco)}` : `${s.duracaoMin} min · ${fmtMoney(s.preco)}`}</small></span></label>
             </li>
           ))}
         </ul>
@@ -244,13 +260,14 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
     ),
     quando: (
       <fieldset className="atender-real-bloco" id="atender-bloco-quando" data-testid="atender-quando-bloco">
-        <legend>Quando</legend>
-        <div className="acoes">
+        <legend>{usaBlocos ? 'Dia e horário' : 'Quando'}</legend>
+        {usaBlocos && <BlocosDoAtender dia={diaBloco} aoMudarDia={(d) => { setDiaBloco(d); setErro(''); }} horarios={horarios} aoMudar={(h) => { setHorarios(h); setErro(''); }} fixosMin={fixosMin} indefinidos={indefSel} valores={valores} aoMudarValores={setValores} />}
+        {!usaBlocos && <div className="acoes">
           <button type="button" className={`btn btn-quando${modoQuando === 'atendido' ? ' btn-on' : ''}`} aria-pressed={modoQuando === 'atendido'} onClick={() => { setModoQuando('atendido'); setPersonalizar(true); setQuando(aoLocal(Math.floor((Date.now() - 60000) / 300000) * 300000)); setErro(''); }} data-testid="atender-atendido">Atendido</button>
           <button type="button" className={`btn btn-quando${!personalizar ? ' btn-on' : ''}`} aria-pressed={!personalizar} onClick={() => { setModoQuando('agora'); setPersonalizar(false); setErro(''); }} data-testid="atender-agora"><Icone n="clock" size={15} />Agora</button>
           <button type="button" className={`btn btn-quando${modoQuando === 'data' ? ' btn-on' : ''}`} aria-pressed={modoQuando === 'data'} onClick={() => { setModoQuando('data'); setPersonalizar(true); setErro(''); }} data-testid="atender-quando"><Icone n="calendar" size={15} />Escolher data</button>
-        </div>
-        {personalizar && <Campo rotulo="Data e hora"><input type="datetime-local" step={300} max={modoQuando === 'atendido' ? aoLocal(Date.now()) : undefined} value={quando} onChange={(e) => { setQuando(e.target.value); setErro(''); }} data-testid="atender-data" /></Campo>}
+        </div>}
+        {personalizar && !usaBlocos && <Campo rotulo="Data e hora"><input type="datetime-local" step={300} max={modoQuando === 'atendido' ? aoLocal(Date.now()) : undefined} value={quando} onChange={(e) => { setQuando(e.target.value); setErro(''); }} data-testid="atender-data" /></Campo>}
         {retro && !bloqueado && (
           <Campo rotulo="Motivo do lançamento de um dia anterior">
             <input type="text" maxLength={300} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Por que não foi registrado na hora? (fica no histórico)" data-testid="atender-motivo-retro" />

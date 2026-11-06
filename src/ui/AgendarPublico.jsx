@@ -14,6 +14,8 @@ import { Rot, cap, capAtiva, rot } from '../domain/tipos.js';
 import ProfissionalPorServico from './leve/ProfissionalPorServico.jsx';
 import { precisaAtribuirPorServico } from '../domain/vinculo.js';
 import { OpcoesDeTroca } from './leve/TrocaDePlano.jsx';
+import CombinarAgendamento, { ehParaCombinar } from './leve/CombinarAgendamento.jsx';
+import { textoDoPreco } from '../domain/blocos.js';
 
 // Página do cliente (sem login): pede um horário com nome e telefone e depois gerencia só os próprios agendamentos.
 // Fala só com `publico.*`: nunca vê quem ocupa os outros horários.
@@ -284,7 +286,10 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
   const [planoRestrito, setPlanoRestrito] = useState(false); // E2: o plano do telefone restringe o link aos serviços dele e algum serviço escolhido está fora
   const [trocas, setTrocas] = useState(null); // E3: planos com mais serviços (só vêm com o aviso de cota acabada ou de restrição): { opcoes, descontoPct, whatsapp }
   const [planoEsgotado, setPlanoEsgotado] = useState(false); // E2: tem plano que cobre o serviço, mas os atendimentos do mês acabaram (o link não agenda; a equipe agenda fora do plano)
-  const servicos = cfg.servicos.filter((x) => srv.includes(x.id));
+  const escolhidos = cfg.servicos.filter((x) => srv.includes(x.id));
+  const paraCombinar = escolhidos.filter(ehParaCombinar); // F: duração indefinida; não entra no pedido nem nos horários, se combina pelo botão
+  const servicos = escolhidos.filter((x) => !ehParaCombinar(x));
+  const srvFix = servicos.map((x) => x.id);
   const total = servicos.reduce((t, x) => t + preco(x), 0);
   const duracao = servicos.reduce((t, x) => t + minutos(x), 0);
   const multiDia = servicos.some((x) => x.multiDia);
@@ -295,20 +300,20 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
   const profSel = cfg.profissionais.find((b) => b.id === barb);
   // B3: profissional vindo do link: os serviços aparecem todos; se o escolhido não for dele, ele sai e "Com quem?" lista só quem faz (aviso derivado)
   const profDoLink = cfg.profissionais.find((b) => b.id === profissionalInicial);
-  const naoFazDoLink = !!profDoLink && srv.some((sid) => !realizaPub(profDoLink, sid));
+  const naoFazDoLink = !!profDoLink && srvFix.some((sid) => !realizaPub(profDoLink, sid));
   const avisoProf = naoFazDoLink && barb !== profDoLink.id ? `${profDoLink.nome} não faz esse serviço. Escolha quem faz.` : '';
-  useEffect(() => { if (profDoLink && barb === profDoLink.id && srv.some((sid) => !realizaPub(profDoLink, sid))) { setBarb(''); setEscolha(null); } }, [srv.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
-  const servicosVisiveis = cfg.servicos.filter((x) => ((profSel && !(profDoLink && profSel.id === profDoLink.id)) ? realizaPub(profSel, x.id) : cfg.profissionais.length === 0 || cfg.profissionais.some((b) => realizaPub(b, x.id))));
-  const profissionaisVisiveis = cfg.profissionais.filter((b) => srv.every((sid) => realizaPub(b, sid)));
+  useEffect(() => { if (profDoLink && barb === profDoLink.id && srvFix.some((sid) => !realizaPub(profDoLink, sid))) { setBarb(''); setEscolha(null); } }, [srvFix.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+  const servicosVisiveis = cfg.servicos.filter((x) => ehParaCombinar(x) || ((profSel && !(profDoLink && profSel.id === profDoLink.id)) ? realizaPub(profSel, x.id) : cfg.profissionais.length === 0 || cfg.profissionais.some((b) => realizaPub(b, x.id))));
+  const profissionaisVisiveis = cfg.profissionais.filter((b) => srvFix.every((sid) => realizaPub(b, sid)));
   // B1: serviços feitos por pessoas diferentes → um campo de profissional por serviço (vazio e obrigatório); "Com quem?" some (estética e escolha automática ficam como eram)
   const [atrib, setAtrib] = useState({});
-  const porServicoPub = Object.fromEntries(srv.map((sid) => [sid, cfg.profissionais.filter((b) => realizaPub(b, sid)).map((b) => b.id)]));
-  const precisaAtribuir = !capAtiva('usaRecursoFisico') && !cfg.profissionalAutomatico && precisaAtribuirPorServico(srv, porServicoPub);
-  useEffect(() => { setAtrib((a) => Object.fromEntries(Object.entries(a).filter(([sid, pid]) => srv.includes(sid) && (porServicoPub[sid] || []).includes(pid)))); }, [srv.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
-  const faltaAtribuir = precisaAtribuir && srv.some((sid) => !atrib[sid]);
+  const porServicoPub = Object.fromEntries(srvFix.map((sid) => [sid, cfg.profissionais.filter((b) => realizaPub(b, sid)).map((b) => b.id)]));
+  const precisaAtribuir = !capAtiva('usaRecursoFisico') && !cfg.profissionalAutomatico && precisaAtribuirPorServico(srvFix, porServicoPub);
+  useEffect(() => { setAtrib((a) => Object.fromEntries(Object.entries(a).filter(([sid, pid]) => srvFix.includes(sid) && (porServicoPub[sid] || []).includes(pid)))); }, [srvFix.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+  const faltaAtribuir = precisaAtribuir && srvFix.some((sid) => !atrib[sid]);
   const atribuicoes = precisaAtribuir && !faltaAtribuir ? atrib : undefined;
   // (declarada depois de precisaAtribuir e atrib: antes ficava acima e quebrava a página inteira com "Cannot access before initialization")
-  const chave = `${srv.join(',')}|${barb}|${porte}|${precisaAtribuir ? Object.entries(atrib).map(([k, v]) => `${k}:${v}`).sort().join(',') : ''}`;
+  const chave = `${srvFix.join(',')}|${barb}|${porte}|${precisaAtribuir ? Object.entries(atrib).map(([k, v]) => `${k}:${v}`).sort().join(',') : ''}`;
   const categorias = useMemo(() => {
     const m = new Map();
     for (const x of servicosVisiveis) { const k = x.categoria || 'Serviços'; if (!m.has(k)) m.set(k, []); m.get(k).push(x); }
@@ -328,12 +333,12 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
   useEffect(() => {
     setUsaPlano(false); setPlanoEsgotado(false); setPlanoRestrito(false); setTrocas(null);
     if (etapa !== 3 || !escolha || !telefoneBrasileiro(tel)) return;
-    const r = publico.usoDoPlano({ telefone: tel, servicoIds: srv, inicio: escolha.inicio });
+    const r = publico.usoDoPlano({ telefone: tel, servicoIds: srvFix, inicio: escolha.inicio });
     if (r.ok && r.usaPlano) setUsaPlano(true);
     if (r.ok && r.esgotado) setPlanoEsgotado(true);
     if (r.ok && r.restrito) setPlanoRestrito(true);
     if (r.ok && (r.esgotado || r.restrito) && Array.isArray(r.trocas) && r.trocas.length) setTrocas({ opcoes: r.trocas, descontoPct: r.descontoTrocaPct || 0, whatsapp: r.whatsapp || '' });
-  }, [etapa, tel, srv, escolha]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [etapa, tel, srvFix.join(','), escolha]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const enviar = () => {
     setErro('');
@@ -347,10 +352,10 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
       return;
     }
     setEnviando(true);
-    const r = publico.agendar({ nome, telefone: tel, ...(usaVeiculo ? { placa, marca, modelo, cor, ...(porte ? { porte } : {}) } : {}), servicoIds: srv, profissionalId: escolha?.profissionalId || barb, ...(atribuicoes ? { atribuicoes } : {}), inicio: escolha?.inicio, site: isca });
+    const r = publico.agendar({ nome, telefone: tel, ...(usaVeiculo ? { placa, marca, modelo, cor, ...(porte ? { porte } : {}) } : {}), servicoIds: srvFix, profissionalId: escolha?.profissionalId || barb, ...(atribuicoes ? { atribuicoes } : {}), inicio: escolha?.inicio, site: isca });
     setEnviando(false);
     if (!r.ok) { setErro(r.erros[0]); if (/ocupado/.test(r.erros[0])) { setEscolha(null); setEtapa(2); } return; }
-    if (r.token) setToken(r.token); setFeito({ partes: r.partes && r.partes.length > 1 ? r.partes : null, usouPlano: !!r.usouPlano, plano: r.plano || null, semTelefone: !r.token, inicio: escolha.inicio, profissionalId: escolha.profissionalId, servicos: servicos.map((x) => x.nome), veiculo: usaVeiculo ? [modelo.trim(), placa && formatarPlaca(placa)].filter(Boolean).join(' · ') : '' });
+    if (r.token) setToken(r.token); setFeito({ combinar: paraCombinar, partes: r.partes && r.partes.length > 1 ? r.partes : null, usouPlano: !!r.usouPlano, plano: r.plano || null, semTelefone: !r.token, inicio: escolha.inicio, profissionalId: escolha.profissionalId, servicos: servicos.map((x) => x.nome), veiculo: usaVeiculo ? [modelo.trim(), placa && formatarPlaca(placa)].filter(Boolean).join(' · ') : '' });
     setEtapa(4);
   };
   const lembrar = (quer) => { const r = publico.lembretes(token, quer); if (r.ok) setLemb(quer); else setErro(r.erros[0]); };
@@ -363,6 +368,7 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
         <h2>Pedido enviado</h2>
         {feito.partes ? <ul className="pub-partes" data-testid="pub-feito-partes">{feito.partes.map((x) => <li key={x.agendamentoId}>{x.servicoIds.map((id) => cfg.servicos.find((z) => z.id === id)?.nome).filter(Boolean).join(', ')} com <b>{nomeBarb(x.profissionalId)}</b> · <b>{fmtDayLong(x.inicio)}, {fmtHM(x.inicio)}</b></li>)}</ul> : null}
         {!feito.partes && <p>{feito.servicos.join(', ')}{feito.veiculo ? <> para <b>{feito.veiculo}</b></> : null} com <b>{nomeBarb(feito.profissionalId)}</b><br /><b>{fmtDayLong(feito.inicio)}, {fmtHM(feito.inicio)}</b></p>}
+        {feito.combinar && feito.combinar.length > 0 && <CombinarAgendamento servicos={feito.combinar} nomeCliente={nome} aviso={`Falta combinar o horário de ${feito.combinar.map((x) => x.nome).join(', ')} com a loja.`} />}
         {feito.usouPlano && <p data-testid="pub-feito-plano"><Icon n="ticket" size={14} /> Este horário usa um atendimento do seu plano.</p>}
         {feito.plano && <p data-testid="pub-feito-plano-restam">{feito.plano.restantes > 0 ? `Restam ${feito.plano.restantes} atendimento${feito.plano.restantes === 1 ? '' : 's'} do seu plano em ${rotuloMes(feito.plano.mes)}.` : `Este foi o último atendimento do seu plano em ${rotuloMes(feito.plano.mes)}.`}</p>}
         <p className="muted">{!feito.semTelefone ? `${cfg.nome} vai confirmar o seu horário. Você acompanha em “Meus agendamentos”.` : `${cfg.nome} vai ver o seu pedido e confirmar o horário. Como não deixou telefone, a loja não consegue avisar você: guarde o dia e a hora.`}</p>
@@ -432,15 +438,16 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
                 {lista.map((x) => (
                   <label key={x.id} className={`pub-item ${srv.includes(x.id) ? 'on' : ''}`}>
                     <input type="checkbox" checked={srv.includes(x.id)} onChange={() => alternar(x.id)} data-testid={`pub-srv-${x.id}`} />
-                    <span className="pub-item-txt"><b>{x.nome}</b><small className="muted">{x.multiDia ? 'Vários dias: você deixa o carro e retira quando estiver pronto' : dur(minutos(x))}{x.combo ? ' · combo' : ''}</small></span>
-                    <span className="pub-preco">{fmtMoney(preco(x))}</span>
+                    <span className="pub-item-txt"><b>{x.nome}</b><small className="muted">{x.combinar ? (x.combinar.duracaoTexto || 'Duração a combinar') : x.multiDia ? 'Vários dias: você deixa o carro e retira quando estiver pronto' : dur(minutos(x))}{x.combo ? ' · combo' : ''}</small></span>
+                    <span className="pub-preco">{x.combinar ? textoDoPreco({ preco: x.preco, precoModo: x.combinar.precoModo, precoMax: x.combinar.precoMax, precoOpcoes: x.combinar.opcoes }, fmtMoney) : fmtMoney(preco(x))}</span>
                   </label>
                 ))}
               </div>
             </div>
           ))}
+          {paraCombinar.length > 0 && <CombinarAgendamento servicos={paraCombinar} nomeCliente={nome} aviso={srvFix.length ? 'Estes serviços não têm horário na grade: combine com a loja. Os demais você agenda pelos horários abaixo.' : 'Este serviço não tem horário na grade: combine com a loja.'} />}
           {precisaAtribuir && <ProfissionalPorServico testid="pub-pps" servicos={servicos.map((x) => ({ id: x.id, nome: x.nome }))} rotuloProfissional={Rot('profissional')} opcoes={(sid) => cfg.profissionais.filter((b) => realizaPub(b, sid)).map((b) => ({ id: b.id, nome: b.nome }))} valor={atrib} aoMudar={(v) => { setAtrib(v); setEscolha(null); }} />}
-          {!precisaAtribuir && !(cfg.profissionalAutomatico && !barb) && <>
+          {srvFix.length > 0 && !precisaAtribuir && !(cfg.profissionalAutomatico && !barb) && <>
           {!precisaAtribuir && avisoProf && <p className="muted" role="status" data-testid="pub-aviso-prof">{avisoProf}</p>}
           <h3>Com quem?</h3>
           <div className="pub-barbs" role="group" aria-label={Rot('profissional')}>
@@ -451,7 +458,7 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
           <div className="pub-rodape">
             {servicos.length > 0 && <span className="muted">{multiDia ? 'Vários dias' : dur(duracao)} · {fmtMoney(total)}</span>}
             {usaVeiculo && <Btn variante="fantasma" onClick={() => { setErro(''); setEtapa(0); }} data-testid="pub-voltar-0">Voltar</Btn>}
-            <Btn variante="primario" disabled={!srv.length || faltaAtribuir} onClick={() => setEtapa(2)} data-testid="pub-continuar-1">Escolher horário</Btn>
+            {(srvFix.length > 0 || !srv.length) && <Btn variante="primario" disabled={!srvFix.length || faltaAtribuir} onClick={() => setEtapa(2)} data-testid="pub-continuar-1">Escolher horário</Btn>}
           </div>
         </div>
       )}
@@ -461,8 +468,8 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
           <h2>{multiDia ? 'Quando você deixa o carro?' : 'Quando?'}</h2>
           <p className="muted">Só aparecem horários livres. Toque no dia e no horário.{multiDia ? ` A retirada é combinada com ${cfg.nome}.` : ''}</p>
           <DiaHora chave={chave} diasMax={cfg.diasMax} valor={escolha?.inicio}
-            obterDias={(de, n) => publico.diasLivres({ profissionalId: precisaAtribuir ? '' : barb, servicoIds: srv, porte, de, dias: n, atribuicoes })}
-            obterHorarios={(d) => publico.horarios({ profissionalId: precisaAtribuir ? '' : barb, servicoIds: srv, porte, dayTs: d, atribuicoes })}
+            obterDias={(de, n) => publico.diasLivres({ profissionalId: precisaAtribuir ? '' : barb, servicoIds: srvFix, porte, de, dias: n, atribuicoes })}
+            obterHorarios={(d) => publico.horarios({ profissionalId: precisaAtribuir ? '' : barb, servicoIds: srvFix, porte, dayTs: d, atribuicoes })}
             aoEscolher={setEscolha} duracaoTotal={duracao} />
           {erro && <Aviso tipo="erro">{erro}</Aviso>}
           <div className="pub-rodape">
@@ -480,6 +487,7 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
             {usaVeiculo && textoV && <span>{textoV}</span>}
             <span>{fmtDayLong(escolha.inicio)}, {fmtHM(escolha.inicio)} · {nomeBarb(escolha.profissionalId)}</span>
             <span className="muted">{multiDia ? 'Vários dias' : dur(duracao)} · {fmtMoney(total)}</span>
+            {paraCombinar.length > 0 && <span className="muted" data-testid="pub-resumo-combinar">Falta combinar com a loja: {paraCombinar.map((x) => x.nome).join(', ')}.</span>}
           </div>
           {usaPlano && <p className="pub-aviso-plano" role="status" data-testid="pub-usa-plano"><Icon n="ticket" size={14} /> Este horário usa um atendimento do seu plano.</p>}
           {planoRestrito && <p className="pub-aviso-plano esgotado" role="status" data-testid="pub-plano-restrito"><Icon n="ticket" size={14} /> Seu plano permite agendar pelo link só os serviços dele. Para outros serviços, fale com a equipe.</p>}

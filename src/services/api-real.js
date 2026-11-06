@@ -498,7 +498,11 @@ function lerServico(d) {
   d = d || {};
   return {
     id: texto(d.id, 40), codigo: texto(d.codigo, 20), nome: texto(d.nome, 100), categoria: d.categoria ? texto(d.categoria, 30) : '',
-    preco: numeroOuNulo(d.preco) ?? 0, duracaoMin: numeroOuNulo(d.duracaoMin) ?? 0, intervaloMin: numeroOuNulo(d.intervaloMin) ?? 0, antecedenciaH: numeroOuNulo(d.antecedenciaH) ?? 0,
+    preco: numeroOuNulo(d.preco) ?? 0, duracaoMin: numeroOuNulo(d.duracaoMin), intervaloMin: numeroOuNulo(d.intervaloMin) ?? 0, antecedenciaH: numeroOuNulo(d.antecedenciaH) ?? 0,
+    // F (V60): duracaoMin nulo = duração indefinida (o horário se combina); os textos, o preço em lista/intervalo e quem combina só vêm nesse caso
+    duracaoTexto: d.duracaoTexto ? texto(d.duracaoTexto, 120) : '', combinarMsg: d.combinarMsg ? texto(d.combinarMsg, 300) : '', precoModo: ['lista', 'faixa'].includes(d.precoModo) ? d.precoModo : 'fixo',
+    precoOpcoes: listaDe(d.precoOpcoes, 10).map((o) => ({ descricao: texto(o && o.descricao, 60), valor: numeroOuNulo(o && o.valor) ?? 0 })), precoMax: numeroOuNulo(d.precoMax),
+    combinaIds: listaDe(d.combinaIds, 20).map((x) => texto(x, 40)).filter((x) => ID.test(x)),
     multiDia: d.multiDia === true, combo: d.combo === true, componentes: listaDe(d.componentes, 10).map((c) => texto(c, 40)).filter((c) => ID.test(c)),
     comissaoPct: numeroOuNulo(d.comissaoPct), ativo: d.ativo !== false, precos: lerMapaNum(d.precos, 100000), duracoes: lerMapaNum(d.duracoes, 14400),
   };
@@ -526,7 +530,14 @@ export const servicos = {
     const corpo = {};
     for (const [k, max] of [['nome', 100], ['codigo', 20], ['categoria', 30]]) if (typeof d[k] === 'string') corpo[k] = d[k].slice(0, max);
     for (const k of ['preco', 'duracaoMin', 'intervaloMin', 'antecedenciaH', 'comissaoPct']) if (typeof d[k] === 'number' && Number.isFinite(d[k])) corpo[k] = d[k];
-    for (const k of ['multiDia', 'combo', 'ativo']) if (typeof d[k] === 'boolean') corpo[k] = d[k];
+    for (const k of ['multiDia', 'combo', 'ativo', 'duracaoIndefinida']) if (typeof d[k] === 'boolean') corpo[k] = d[k];
+    if (d.duracaoIndefinida === true) { // F: textos, preço em lista/intervalo e quem combina o horário
+      for (const [k, max] of [['duracaoTexto', 120], ['combinarMsg', 300]]) if (typeof d[k] === 'string') corpo[k] = d[k].slice(0, max);
+      if (['fixo', 'lista', 'faixa'].includes(d.precoModo)) corpo.precoModo = d.precoModo;
+      if (typeof d.precoMax === 'number' && Number.isFinite(d.precoMax)) corpo.precoMax = d.precoMax;
+      if (Array.isArray(d.precoOpcoes)) corpo.precoOpcoes = d.precoOpcoes.slice(0, 10).map((o) => ({ descricao: texto(o && o.descricao, 60), valor: numeroOuNulo(o && o.valor) }));
+      if (Array.isArray(d.combinaIds)) corpo.combinaIds = d.combinaIds.slice(0, 20).map((x) => String(x ?? '')).filter((x) => ID.test(x));
+    }
     const m = lerMapaNum(d.precos, 100000); if (m && d.precos) corpo.precos = m;
     const u = lerMapaNum(d.duracoes, 14400); if (u && d.duracoes) corpo.duracoes = u;
     if (Array.isArray(d.componentes)) corpo.componentes = d.componentes.slice(0, 10).map((c) => texto(c, 60));
@@ -762,6 +773,17 @@ export const agenda = {
       corpo[k] = d[k];
     }
     if (d.inicio !== undefined && d.inicio !== null) { const i = soDia(d.inicio); if (!i) return { ok: false, status: 0, erro: 'Data e hora inválidas.' }; corpo.inicio = i; }
+    // F (V60): serviço de duração indefinida = vários horários (blocos [{inicio, fim}] em ISO) e o valor final lançado ({servicoId, valor}); o servidor confere tudo
+    if (Array.isArray(d.blocos) && d.blocos.length) {
+      if (d.blocos.length > 200) return { ok: false, status: 0, erro: 'Horários demais. Marque menos blocos.' };
+      const bl = d.blocos.map((b) => ({ inicio: soDia(b && b.inicio), fim: soDia(b && b.fim) }));
+      if (bl.some((b) => !b.inicio || !b.fim)) return { ok: false, status: 0, erro: 'Data e hora inválidas.' };
+      corpo.blocos = bl;
+    }
+    if (Array.isArray(d.valores) && d.valores.length) {
+      if (d.valores.length > 10 || !d.valores.every((v) => v && ID.test(String(v.servicoId)) && Number.isFinite(Number(v.valor)) && Number(v.valor) >= 0)) return { ok: false, status: 0, erro: 'Informe um valor válido para o serviço.' };
+      corpo.valores = d.valores.map((v) => ({ servicoId: String(v.servicoId), valor: Number(v.valor) }));
+    }
     if (d.status !== undefined && d.status !== null && d.status !== '') { if (!['a_confirmar', 'confirmado'].includes(d.status)) return { ok: false, status: 0, erro: 'Agendamento futuro nasce a confirmar ou confirmado.' }; corpo.status = d.status; }
     if (typeof d.encaixe === 'boolean') corpo.encaixe = d.encaixe;
     if (d.formaPagamento !== undefined && d.formaPagamento !== null && d.formaPagamento !== '') {
@@ -1349,6 +1371,19 @@ function lerLocal(d) {
     enderecoTexto: opcional(d.enderecoTexto, 300), localizacaoUrl: httpsOuVazio(d.localizacaoUrl), localizacaoWhatsappUrl: httpsOuVazio(d.localizacaoWhatsappUrl),
   };
 }
+// F (V60): WhatsApp do estabelecimento (55+DDD+número, opcional): destino do "Combinar agendamento" quando ninguém do serviço tem telefone
+export const whatsappLoja = {
+  // GET /api/estabelecimento/whatsapp
+  async obter() {
+    const r = await chamar('GET', '/api/estabelecimento/whatsapp');
+    return r.ok ? { ok: true, whatsapp: r.dados && typeof r.dados.whatsapp === 'string' && /^[0-9]{12,13}$/.test(r.dados.whatsapp) ? r.dados.whatsapp : '' } : r;
+  },
+  // PUT /api/estabelecimento/whatsapp  { whatsapp }  (vazio apaga; com ou sem 55)
+  async salvar(whatsapp) {
+    const r = await chamar('PUT', '/api/estabelecimento/whatsapp', { whatsapp: String(whatsapp ?? '').slice(0, 30) });
+    return r.ok ? { ok: true, whatsapp: r.dados && typeof r.dados.whatsapp === 'string' ? r.dados.whatsapp : '' } : r;
+  },
+};
 export const local = {
   // GET /api/estabelecimento/local  (quem edita vê tudo; todos da agenda recebem `localizacaoWhatsappUrl`, o link que vai na mensagem do WhatsApp, e só com o envio ligado)
   async obter() {
@@ -1533,8 +1568,18 @@ function lerPaginaPublica(d) {
     servicos: listaDe(d.servicos, 200).filter((x) => x && IDV(x.id)).map((x) => ({
       id: x.id, nome: texto(x.nome, 120), duracao: inteiroOuZero(x.duracao), preco: dinheiroOuZero(x.preco), antecedenciaH: inteiroOuZero(x.antecedenciaH),
       precos: tabelaPorPorte(x.precos, dinheiroOuNulo), duracoes: tabelaPorPorte(x.duracoes, minutosOuNulo),
+      combinar: lerCombinar(x.combinar), // F: serviço de duração indefinida (o horário se combina por WhatsApp); nulo nos demais
     })),
     profissionais: listaDe(d.profissionais, 100).filter((x) => x && IDV(x.id)).map((x) => ({ id: x.id, nome: texto(x.nome, 80), foto: typeof x.foto === 'string' && x.foto.startsWith('data:image/') ? x.foto : null, servicoIds: Array.isArray(x.servicoIds) ? x.servicoIds.filter((s) => IDV(s)).map(String).slice(0, 500) : null })),
+  };
+}
+// F (V60): o que a página pública mostra do serviço de duração indefinida; `whatsapp` já é o destino final (quem combina ou o do estabelecimento; vazio = abre sem contato)
+function lerCombinar(c) {
+  if (!c || typeof c !== 'object') return null;
+  return {
+    duracaoTexto: c.duracaoTexto ? texto(c.duracaoTexto, 120) : '', mensagem: c.mensagem ? texto(c.mensagem, 300) : '', whatsapp: typeof c.whatsapp === 'string' && /^[0-9]{12,13}$/.test(c.whatsapp) ? c.whatsapp : '',
+    precoModo: ['lista', 'faixa'].includes(c.precoModo) ? c.precoModo : 'fixo',
+    opcoes: listaDe(c.opcoes, 10).map((o) => ({ descricao: texto(o && o.descricao, 60), valor: dinheiroOuZero(o && o.valor) })), precoMax: dinheiroOuNulo(c.precoMax),
   };
 }
 function lerResumoPublico(d) {

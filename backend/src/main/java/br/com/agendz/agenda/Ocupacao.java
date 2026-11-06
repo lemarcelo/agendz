@@ -75,6 +75,19 @@ public class Ocupacao {
         return new Plano(blocos, fimServico, fimServico.plus(Duration.ofMinutes(intervalo)));
     }
 
+    /**
+     * F (V60): ocupação por BLOCOS escolhidos (serviço de duração indefinida). Cada bloco confere o expediente (loja e profissional) e a ausência; o último ganha o intervalo.
+     * `blocos` já vem ordenado, sem sobreposição e com os vizinhos fundidos (ver AgendaController.blocosDoPedido).
+     */
+    public Plano planejarBlocos(JdbcTemplate jdbc, UUID profissionalId, List<Instant[]> blocos, int intervalo) {
+        for (Instant[] b : blocos) {
+            if (!escalas.atende(jdbc, profissionalId, b[0], b[1], false)) throw new ErroDeNegocio(HttpStatus.CONFLICT, nome(jdbc, profissionalId) + " não atende nesse horário.");
+            if (Ausencias.ocupado(jdbc, profissionalId, b[0], b[1])) throw new ErroDeNegocio(HttpStatus.CONFLICT, nome(jdbc, profissionalId) + " está ausente nesse horário.");
+        }
+        Instant fimServico = blocos.get(blocos.size() - 1)[1];
+        return new Plano(new ArrayList<>(blocos), fimServico, fimServico.plus(Duration.ofMinutes(intervalo)));
+    }
+
     /** Ocupação já gravada (blocos do banco; o último guarda o intervalo, então o fim do serviço vem da linha do agendamento). */
     public Plano lerPlano(JdbcTemplate jdbc, UUID agendamentoId, Instant fimServico, Instant fimOcupado) {
         List<Instant[]> blocos = new ArrayList<>(jdbc.query("select ini, fim from agendamento_bloco where agendamento_id = ? order by ini",

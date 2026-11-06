@@ -24,6 +24,7 @@ import br.com.agendz.tenant.Capacidades;
 import br.com.agendz.tenant.Loja;
 import br.com.agendz.tenant.LojaContext;
 import br.com.agendz.tenant.LojaJdbc;
+import br.com.agendz.servicos.ServicoService;
 import br.com.agendz.validacao.Documentos;
 import br.com.agendz.validacao.Texto;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -88,7 +89,15 @@ public class LinkPublicoService {
     private static final SecureRandom ALEATORIO = new SecureRandom();
 
     /** `precos` e `duracoes` (por porte) só vêm no tipo que cobra por porte; os campos simples são os do porte médio/padrão do serviço. */
-    public record ServicoPublico(UUID id, String nome, int duracao, BigDecimal preco, int antecedenciaH, Map<String, BigDecimal> precos, Map<String, Integer> duracoes) {
+    public record ServicoPublico(UUID id, String nome, int duracao, BigDecimal preco, int antecedenciaH, Map<String, BigDecimal> precos, Map<String, Integer> duracoes,
+                                 Combinar combinar) {
+    }
+
+    /**
+     * Serviço de duração indefinida (V60): o cliente não escolhe horário, combina pelo WhatsApp. `whatsapp` já é o destino final (o primeiro de quem combina o horário
+     * que tem telefone, senão o do estabelecimento; nulo = sem número e o botão abre o WhatsApp sem contato). `precoModo`: fixo, lista (`opcoes`) ou faixa (`preco` a `precoMax`).
+     */
+    public record Combinar(String duracaoTexto, String mensagem, String whatsapp, String precoModo, List<ServicoService.Opcao> opcoes, BigDecimal precoMax) {
     }
 
     public record PortePublico(String id, String nome, String exemplo) {
@@ -207,9 +216,15 @@ public class LinkPublicoService {
             boolean porPorte = Capacidades.precoPorPorte(loja);
             List<PorteController.Porte> listaPortes = porPorte ? PorteController.ler(jdbc) : List.of();
             List<ServicoPublico> servicos = jdbc.query(
-                    "select id, nome, preco, duracao_min, antecedencia_h, precos::text as precos, duracoes::text as duracoes from servico where ativo and not multi_dia order by " + OrdemDosServicos.sql(jdbc),
-                    (rs, i) -> new ServicoPublico(rs.getObject("id", UUID.class), rs.getString("nome"), rs.getInt("duracao_min"), rs.getBigDecimal("preco"), rs.getInt("antecedencia_h"),
-                            porPorte ? tabelaPrecos(listaPortes, rs.getBigDecimal("preco"), rs.getString("precos")) : null, porPorte ? tabelaDuracoes(listaPortes, rs.getString("duracoes")) : null));
+                    "select id, nome, preco, duracao_min, antecedencia_h, precos::text as precos, duracoes::text as duracoes, duracao_texto, combinar_msg, preco_modo, preco_opcoes::text as preco_opcoes, "
+                            + "preco_max, array_to_string(combina_ids, ',') as combina_ids from servico where ativo and not multi_dia order by " + OrdemDosServicos.sql(jdbc),
+                    (rs, i) -> {
+                        boolean indefinida = rs.getObject("duracao_min") == null;
+                        return new ServicoPublico(rs.getObject("id", UUID.class), rs.getString("nome"), indefinida ? 0 : rs.getInt("duracao_min"), rs.getBigDecimal("preco"), rs.getInt("antecedencia_h"),
+                                porPorte && !indefinida ? tabelaPrecos(listaPortes, rs.getBigDecimal("preco"), rs.getString("precos")) : null,
+                                porPorte && !indefinida ? tabelaDuracoes(listaPortes, rs.getString("duracoes")) : null,
+                                indefinida ? combinarDe(jdbc, rs.getString("duracao_texto"), rs.getString("combinar_msg"), rs.getString("preco_modo"), rs.getString("preco_opcoes"), rs.getBigDecimal("preco_max"), rs.getString("combina_ids")) : null);
+                    });
             Map<UUID, List<UUID>> vinculos = VinculoServicos.porServico(jdbc);
             List<ProfissionalPublico> profissionais = jdbc.query(
                     "select id, coalesce(nullif(apelido, ''), nome) as n, foto from usuario where ativo and atende order by lower(coalesce(nullif(apelido, ''), nome)), id",
@@ -822,6 +837,7 @@ return horariosDoDia(jdbc, cfg, base, dia, servicos, relogio.instant(), false, n
                 throw new ErroDeNegocio(HttpStatus.CONFLICT, "Esse serviço exige " + antecedencia + " h de antecedência.");
             }
             int duracao = m.servicos().stream().mapToInt(Svc::duracaoMin).sum();
+            if (duracao <= 0) throw new ErroDeNegocio(HttpStatus.CONFLICT, "Esse horário foi combinado com a loja. Peça a mudança pelo WhatsApp."); // F: serviço de duração indefinida tem blocos à mão
             int folga = m.servicos().get(m.servicos().size() - 1).intervaloMin();
             Instant fimServico = novoInicio.plus(duracao, ChronoUnit.MINUTES);
             Instant fimOcupado = fimServico.plus(folga, ChronoUnit.MINUTES);
@@ -904,13 +920,39 @@ return horariosDoDia(jdbc, cfg, base, dia, servicos, relogio.instant(), false, n
         return l.isEmpty() ? null : l.get(0);
     }
 
-    /** Serviços do pedido, na ordem escolhida. Só os que o link oferece: ativos e de um dia só. */
+    /** Destino do "Combinar agendamento": o primeiro de quem combina que tem telefone válido; sem ninguém, o WhatsApp do estabelecimento (pode ser nulo). */
+    private Combinar combinarDe(JdbcTemplate jdbc, String duracaoTexto, String mensagem, String modo, String opcoesJson, BigDecimal precoMax, String combinaIds) {
+        String zap = null;
+        if (combinaIds != null && !combinaIds.isBlank()) {
+            for (String x : combinaIds.split(",")) {
+                List<String> cifrado = jdbc.query("select telefone_cif from usuario where id = ?::uuid and ativo", (r, i) -> r.getString(1), x.trim());
+                if (cifrado.isEmpty() || cifrado.get(0) == null) continue;
+                String t = Documentos.telefone(cifra.decifrar(cifrado.get(0)));
+                if (t != null) { zap = t; break; }
+            }
+        }
+        if (zap == null) zap = br.com.agendz.configuracao.WhatsappDaLoja.ler(jdbc);
+        List<ServicoService.Opcao> opcoes = null;
+        if ("lista".equals(modo) && opcoesJson != null) {
+            try {
+                opcoes = JSON.readValue(opcoesJson, new com.fasterxml.jackson.core.type.TypeReference<List<ServicoService.Opcao>>() { });
+            } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+                opcoes = null;
+            }
+        }
+        return new Combinar(duracaoTexto, mensagem, zap, modo, opcoes, "faixa".equals(modo) ? precoMax : null);
+    }
+
+    /** Serviços do pedido, na ordem escolhida. Só os que o link oferece: ativos, de um dia só e de duração definida (o indefinido se combina pelo WhatsApp). */
     private List<Svc> servicosDoLink(JdbcTemplate jdbc, List<UUID> ids, String porte) {
         String marcas = String.join(",", ids.stream().map(x -> "?").toList());
         List<PorteController.Porte> portesDaLoja = porte == null ? List.of() : PorteController.ler(jdbc);
         List<Object[]> achados = jdbc.query("select id, nome, preco, duracao_min, intervalo_min, antecedencia_h, ativo, multi_dia, precos::text as precos, duracoes::text as duracoes from servico where id in (" + marcas + ")",
                 (rs, i) -> {
                     BigDecimal preco = rs.getBigDecimal("preco");
+                    if (rs.getObject("duracao_min") == null) { // indefinida: não entra no horário do link
+                        return new Object[]{rs.getObject("id", UUID.class), rs.getString("nome"), preco, -1, 0, 0, rs.getBoolean("ativo"), rs.getBoolean("multi_dia")};
+                    }
                     int duracao = rs.getInt("duracao_min");
                     if (porte != null) { // preço e duração do porte do veículo
                         BigDecimal dd = valorDoPorte(rs.getString("duracoes"), porte);
@@ -926,6 +968,7 @@ return horariosDoDia(jdbc, cfg, base, dia, servicos, relogio.instant(), false, n
         for (UUID id : ids) {
             Object[] s = porId.get(id);
             if (s == null || !(boolean) s[6] || (boolean) s[7]) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Serviço indisponível. Escolha outro.");
+            if ((int) s[3] < 0) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "O horário de " + s[1] + " se combina com a loja. Use o botão Combinar agendamento.");
             saida.add(new Svc(id, (String) s[1], (BigDecimal) s[2], (int) s[3], (int) s[4], (int) s[5]));
         }
         return saida;

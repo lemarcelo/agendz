@@ -15,6 +15,8 @@ import { EditorNotificacoes, EditorPixCancelamento } from './Notif.jsx';
 import { SeletorGrupo, rotuloGrupo } from './Grupo.jsx';
 import { PainelEscala } from './Estabelecimento.jsx';
 import SeletorVinculo from './leve/SeletorVinculo.jsx';
+import ServicoIndefinido, { corpoDoServicoIndefinido, formDoServicoIndefinido } from './leve/ServicoIndefinido.jsx';
+import { duracaoIndefinida, textoDoPreco } from '../domain/blocos.js';
 import { realizaServico } from '../domain/vinculo.js';
 import FilaMensagens from './FilaMensagens.jsx';
 import { textoUltimo } from './format.js';
@@ -24,8 +26,8 @@ import { BlocoPlano, ModaisPlano } from './PlanoDoCliente.jsx';
 import { capAtiva, rot, Rot, rots, voc, Voc } from '../domain/tipos.js';
 
 const faixa = (obj, fmt) => { const v = PORTES.map((p) => obj?.[p]).filter((x) => Number.isFinite(x)); if (!v.length) return ''; const a = Math.min(...v), b = Math.max(...v); return a === b ? fmt(a) : `${fmt(a)} a ${fmt(b)}`; };
-const faixaPreco = (s) => (capAtiva('precoPorPorte') ? faixa(Object.fromEntries(portesAtivos().map(({ id }) => [id, precoNoPorte(s.preco, s.precos?.[id], id)])), fmtMoney) : '') || fmtMoney(s.preco);
-const faixaDuracao = (s) => (s.multiDia ? 'vários dias' : (capAtiva('precoPorPorte') ? faixa(Object.fromEntries(portesAtivos().map(({ id }) => [id, Number(s.duracoes?.[id]) > 0 ? Number(s.duracoes[id]) : s.duracao])), fmtDuration) : '') || fmtDuration(s.duracao));
+const faixaPreco = (s) => (duracaoIndefinida(s) ? textoDoPreco(s, fmtMoney) : capAtiva('precoPorPorte') ? faixa(Object.fromEntries(portesAtivos().map(({ id }) => [id, precoNoPorte(s.preco, s.precos?.[id], id)])), fmtMoney) : '') || fmtMoney(s.preco);
+const faixaDuracao = (s) => (duracaoIndefinida(s) ? s.duracaoTexto || 'Duração indefinida' : s.multiDia ? 'vários dias' : (capAtiva('precoPorPorte') ? faixa(Object.fromEntries(portesAtivos().map(({ id }) => [id, Number(s.duracoes?.[id]) > 0 ? Number(s.duracoes[id]) : s.duracao])), fmtDuration) : '') || fmtDuration(s.duracao));
 const fmtNasc = (s) => (s ? fmtDate(new Date(`${s}T00:00`).getTime()) : '');
 
 // ---------- Clientes ----------
@@ -232,7 +234,14 @@ function FormServico({ s, user, onClose }) {
   const [f, setF] = useState(() => ({ ...(s.id ? s : { ...s, codigo: proximoCodigo(st.servicos) }), profissionalIds: s.profissionalIds || quemAtende.filter((u) => !s.id || realizaServico(u, s.id)).map((u) => u.id) })); // serviço novo já vem com o próximo código (dá para trocar)
   const [erro, setErro] = useState('');
   const proprias = Array.isArray(f.notificacoes);
-  const salvar = () => { const r = apiSrv.salvar(f); if (!r.ok) { setErro(r.erros[0]); rolarAoErro(); return; } toast('Serviço salvo.'); onClose(); };
+  // F: duração indefinida (duracao nula): textos, preço em lista/intervalo e quem combina vêm do bloco compartilhado
+  const indef = f.duracao === null;
+  const txt = (n) => (n === null || n === undefined ? '' : String(n).replace('.', ','));
+  const lerNum = (v) => { const t = String(v ?? '').trim().replace(',', '.'); if (t === '') return null; const n = Number(t); return Number.isFinite(n) ? n : null; };
+  const [ind, setInd] = useState(() => formDoServicoIndefinido(s, txt));
+  const [precoInd, setPrecoInd] = useState(() => txt(s.preco));
+  const pessoas = st.usuarios.filter((u) => u.ativo !== false && u.papel !== 'master').map((u) => ({ id: u.id, rotulo: u.apelido || u.nome }));
+  const salvar = () => { const r = apiSrv.salvar(indef ? { ...f, ...corpoDoServicoIndefinido(ind, precoInd, lerNum) } : f); if (!r.ok) { setErro(r.erros[0]); rolarAoErro(); return; } toast('Serviço salvo.'); onClose(); };
   const num = (k) => (e) => setF({ ...f, [k]: e.target.value === '' ? '' : Number(e.target.value) });
   return (
     <Modal titulo={s.id ? 'Editar serviço' : 'Novo serviço'} onClose={onClose} largura={680}
@@ -241,7 +250,8 @@ function FormServico({ s, user, onClose }) {
         <Campo rotulo="Nome do serviço" className="campo-largo"><input value={f.nome} onChange={(e) => setF({ ...f, nome: e.target.value })} data-testid="srv-nome" /></Campo>
         <Campo rotulo="Código" dica="Número automático; pode trocar. Não repete entre serviços."><input value={f.codigo ?? ''} maxLength={20} onChange={(e) => setF({ ...f, codigo: e.target.value })} data-testid="srv-codigo" /></Campo>
         <Campo rotulo="Categoria" dica={`Agrupa os serviços na página do cliente (ex.: ${voc('exemploCategorias')}).`}><input value={f.categoria || ''} maxLength={30} onChange={(e) => setF({ ...f, categoria: e.target.value })} list="srv-categorias" data-testid="srv-categoria" /><datalist id="srv-categorias">{[...new Set(st.servicos.map((x) => x.categoria).filter(Boolean))].map((c) => <option key={c} value={c} />)}</datalist></Campo>
-        {!capAtiva('precoPorPorte') ? <>
+        <div className="campo-largo"><Interruptor checked={indef} onChange={(v) => setF(v ? { ...f, duracao: null, multiDia: false, combo: false, componentes: [], precos: null, duracoes: null } : { ...f, duracao: capAtiva('precoPorPorte') ? undefined : 40, precos: capAtiva('precoPorPorte') ? { medio: Number(f.preco) || 70 } : f.precos, duracoes: capAtiva('precoPorPorte') ? { medio: 45 } : f.duracoes })} rotulo="Duração indefinida" descricao="O horário é combinado com o cliente (botão Combinar agendamento no link) ou marcado pelo profissional, em vários blocos, no Atender." testid="srv-indefinida" /></div>
+        {indef ? <ServicoIndefinido f={ind} aoMudar={setInd} preco={precoInd} aoMudarPreco={setPrecoInd} equipe={ehDono(user) ? pessoas : null} /> : !capAtiva('precoPorPorte') ? <>
           <Campo rotulo="Preço (R$)"><input type="number" min="0" step="0.5" value={f.preco ?? ''} onChange={num('preco')} data-testid="srv-preco" /></Campo>
           <Campo rotulo="Duração (min)"><input type="number" min="5" step="5" value={f.duracao ?? ''} onChange={num('duracao')} data-testid="srv-dur" /></Campo>
         </> : <>
@@ -262,8 +272,8 @@ function FormServico({ s, user, onClose }) {
             </fieldset>
           )}
         </>}
-        {capAtiva('multiDia') && <div className="campo-largo"><Interruptor checked={!!f.multiDia} onChange={(v) => setF({ ...f, multiDia: v })} rotulo="Serviço de vários dias" descricao="O carro entra, fica no box e é retirado depois. A duração conta só o tempo de trabalho (ex.: 480 = um dia de 8 h); a retirada cai no último dia útil necessário." testid="srv-multidia" /></div>}
-        <div className="campo-largo"><Interruptor checked={!!f.combo} onChange={(v) => setF({ ...f, combo: v, componentes: v ? f.componentes || [] : [] })} rotulo="Combo" descricao="Junta serviços comuns com preço e tempo próprios. Os materiais saem do estoque pelos serviços que o combo junta." testid="srv-combo" /></div>
+        {capAtiva('multiDia') && !indef && <div className="campo-largo"><Interruptor checked={!!f.multiDia} onChange={(v) => setF({ ...f, multiDia: v })} rotulo="Serviço de vários dias" descricao="O carro entra, fica no box e é retirado depois. A duração conta só o tempo de trabalho (ex.: 480 = um dia de 8 h); a retirada cai no último dia útil necessário." testid="srv-multidia" /></div>}
+        {!indef && <div className="campo-largo"><Interruptor checked={!!f.combo} onChange={(v) => setF({ ...f, combo: v, componentes: v ? f.componentes || [] : [] })} rotulo="Combo" descricao="Junta serviços comuns com preço e tempo próprios. Os materiais saem do estoque pelos serviços que o combo junta." testid="srv-combo" /></div>}
         {f.combo && (
           <fieldset className="campo-largo conj" data-testid="srv-componentes">
             <legend>Serviços do combo (escolha de 2 a 10)</legend>

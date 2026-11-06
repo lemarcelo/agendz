@@ -155,7 +155,21 @@ public class AgendaController {
             ClienteService.EntradaVeiculo veiculo,
             UUID boxId,
             UUID assinaturaId,
-            @Size(max = 10) List<@Valid Atribuicao> atribuicoes) {
+            @Size(max = 10) List<@Valid Atribuicao> atribuicoes,
+            @Size(max = 200) List<@Valid Bloco> blocos,
+            @Size(max = 10) List<@Valid ValorServico> valores) {
+        NovoAtendimento comInicio(Instant novo) {
+            return new NovoAtendimento(clienteId, profissionalId, servicoIds, nome, telefone, novo, status, encaixe, motivoRetroativo, produtos, vendedorId, formaPagamento, cupomChave, veiculoId, veiculo,
+                    boxId, assinaturaId, atribuicoes, blocos, valores);
+        }
+    }
+
+    /** F (V60): um trecho de trabalho escolhido no Atender para serviço de duração indefinida. Os vizinhos são fundidos e os blocos não precisam ser contíguos. */
+    public record Bloco(Instant inicio, Instant fim) {
+    }
+
+    /** F (V60): valor final lançado de um serviço de duração indefinida (sobre ele incidem total e comissão). */
+    public record ValorServico(UUID servicoId, BigDecimal valor) {
     }
 
     /** B1: quem faz cada serviço do pedido (só o proprietário e a recepção escolhem). Sem isto, vale `profissionalId` para todos os serviços, como sempre. */
@@ -176,7 +190,69 @@ public class AgendaController {
 
     private static final Map<String, String> ROTULO_FORMA = Map.of("pix", "Pix", "dinheiro", "Dinheiro", "cartao", "Cartão");
 
-    private record ServicoLinha(UUID id, String nome, BigDecimal preco, int duracaoMin, int intervaloMin, boolean multiDia, boolean ativo) {
+    private record ServicoLinha(UUID id, String nome, BigDecimal preco, int duracaoMin, int intervaloMin, boolean multiDia, boolean ativo, boolean indefinida) {
+        ServicoLinha comPreco(BigDecimal novo) {
+            return new ServicoLinha(id, nome, novo, duracaoMin, intervaloMin, multiDia, ativo, indefinida);
+        }
+    }
+
+    private static final BigDecimal TETO_VALOR = new BigDecimal("100000");
+
+    /** Blocos do pedido: ordenados, de minuto exato, sem sobreposição e com os vizinhos fundidos. Null = o pedido não trouxe blocos. */
+    private static List<Instant[]> blocosDoPedido(List<Bloco> brutos) {
+        if (brutos == null || brutos.isEmpty()) return null;
+        List<Instant[]> l = new ArrayList<>();
+        for (Bloco b : brutos) {
+            if (b == null || b.inicio() == null || b.fim() == null) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Horário inválido.");
+            if (b.inicio().getNano() != 0 || b.inicio().getEpochSecond() % 60 != 0 || b.fim().getNano() != 0 || b.fim().getEpochSecond() % 60 != 0) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Data e hora inválidas.");
+            if (!b.fim().isAfter(b.inicio()) || Duration.between(b.inicio(), b.fim()).toMinutes() > 1440) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Cada horário marcado precisa ter de 1 minuto a 24 horas.");
+            l.add(new Instant[]{b.inicio(), b.fim()});
+        }
+        l.sort((x, y) -> x[0].compareTo(y[0]));
+        List<Instant[]> fundidos = new ArrayList<>();
+        for (Instant[] b : l) {
+            Instant[] ultimo = fundidos.isEmpty() ? null : fundidos.get(fundidos.size() - 1);
+            if (ultimo != null && b[0].isBefore(ultimo[1])) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Os horários marcados se sobrepõem.");
+            if (ultimo != null && b[0].equals(ultimo[1])) ultimo[1] = b[1];
+            else fundidos.add(new Instant[]{b[0], b[1]});
+        }
+        long total = fundidos.stream().mapToLong(b -> Duration.between(b[0], b[1]).toMinutes()).sum();
+        if (total > 14400) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Os horários marcados passam de 10 dias de trabalho.");
+        return fundidos;
+    }
+
+    /**
+     * F (V60): serviço de duração indefinida só se agenda com blocos (o profissional marca o que vai trabalhar), e blocos só valem com ele. Na mistura com serviço de duração fixa,
+     * a soma dos blocos precisa atender no mínimo a duração dos serviços fixos.
+     */
+    private static void exigirBlocos(List<ServicoLinha> servicos, List<Instant[]> blocos) {
+        List<String> indefinidos = servicos.stream().filter(ServicoLinha::indefinida).map(ServicoLinha::nome).toList();
+        if (blocos == null) {
+            if (!indefinidos.isEmpty()) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Marque os horários de " + String.join(", ", indefinidos) + ": o serviço não tem duração fixa.");
+            return;
+        }
+        if (indefinidos.isEmpty()) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Marcar vários horários só vale para serviço de duração indefinida.");
+        int fixos = servicos.stream().filter(s -> !s.indefinida()).mapToInt(ServicoLinha::duracaoMin).sum();
+        long total = blocos.stream().mapToLong(b -> Duration.between(b[0], b[1]).toMinutes()).sum();
+        if (total < fixos) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Os horários marcados somam " + total + " min, e os serviços de duração fixa precisam de ao menos " + fixos + " min.");
+    }
+
+    /** Valor final lançado: só em serviço de duração indefinida; sem valor, vale o preço de base do serviço (o único, o menor da lista ou o mínimo do intervalo). */
+    private static List<ServicoLinha> aplicarValores(List<ServicoLinha> servicos, List<ValorServico> valores) {
+        if (valores == null || valores.isEmpty()) return servicos;
+        Map<UUID, BigDecimal> porId = new LinkedHashMap<>();
+        for (ValorServico v : valores) {
+            if (v == null || v.servicoId() == null || v.valor() == null || v.valor().signum() < 0 || v.valor().compareTo(TETO_VALOR) > 0) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Informe um valor válido para o serviço.");
+            if (porId.put(v.servicoId(), v.valor().setScale(2, java.math.RoundingMode.HALF_UP)) != null) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "O mesmo serviço aparece duas vezes nos valores.");
+        }
+        List<ServicoLinha> saida = new ArrayList<>();
+        for (ServicoLinha s : servicos) {
+            BigDecimal v = porId.remove(s.id());
+            if (v != null && !s.indefinida()) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "O valor de " + s.nome() + " é fixo; só dá para lançar valor em serviço de duração indefinida.");
+            saida.add(v == null ? s : s.comPreco(v));
+        }
+        if (!porId.isEmpty()) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Valor para um serviço que não está no atendimento.");
+        return saida;
     }
 
     private record Atual(UUID profissionalId, Instant inicio, Instant fimServico, Instant fimOcupado, String status, boolean encaixe, UUID boxId) {
@@ -289,7 +365,7 @@ public class AgendaController {
         if (new HashSet<>(servicoIds).size() != servicoIds.size()) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "O mesmo serviço aparece duas vezes.");
         boolean encaixe = Boolean.TRUE.equals(d.encaixe());
         Agendamento criado = idempotencia.executar(chave, UUID.fromString(jwt.getSubject()), "POST /api/agendamentos", d, Agendamento.class, () -> banco.naLoja(jdbc -> {
-            return inserirAgendamento(jdbc, loja, jwt, d.clienteId(), null, d.profissionalId(), servicoIds, d.inicio(), status, encaixe, d.veiculoId(), d.veiculo(), d.boxId(), d.assinaturaId(), ClienteService.EXIGE_TUDO_DO_VEICULO);
+            return inserirAgendamento(jdbc, loja, jwt, d.clienteId(), null, d.profissionalId(), servicoIds, d.inicio(), status, encaixe, d.veiculoId(), d.veiculo(), d.boxId(), d.assinaturaId(), ClienteService.EXIGE_TUDO_DO_VEICULO, null, null);
         }));
         return ResponseEntity.status(HttpStatus.CREATED).body(criado);
     }
@@ -299,7 +375,8 @@ public class AgendaController {
      * serviços, cliente, veículo (estética), profissional/expediente, conflito do profissional, box.
      */
     private Agendamento inserirAgendamento(JdbcTemplate jdbc, Loja loja, Jwt jwt, UUID clienteId, String nomeAvulsoPedido, UUID profissionalId, List<UUID> servicoIds, Instant inicioBruto, String status, boolean encaixe,
-                                           UUID veiculoId, ClienteService.EntradaVeiculo veiculoNovo, UUID boxPedido, UUID assinaturaId, Set<String> exigirVeiculo) {
+                                           UUID veiculoId, ClienteService.EntradaVeiculo veiculoNovo, UUID boxPedido, UUID assinaturaId, Set<String> exigirVeiculo,
+                                           List<Instant[]> blocos, List<ValorServico> valores) {
         carregarServicos(jdbc, servicoIds, null); // só confere que existem e estão ativos; o preço do porte vem depois do veículo
         // Pelo botão Atender o horário futuro pode ficar sem cadastro (só o nome, ou nem isso): nasce confirmado e sem aviso ao cliente. Pela tela de agendar o cliente é obrigatório.
         boolean semCadastro = clienteId == null && nomeAvulsoPedido != null;
@@ -311,17 +388,20 @@ public class AgendaController {
         if (semCadastro) status = CONFIRMADO;
         String avulso = semCadastro && !nomeAvulsoPedido.isEmpty() ? nomeAvulsoPedido : null;
         ClienteService.VeiculoDoAgendamento vei = clientes.resolverVeiculo(jdbc, loja, clienteId, veiculoId, veiculoNovo, exigirVeiculo);
-        List<ServicoLinha> servicos = carregarServicos(jdbc, servicoIds, vei == null ? null : vei.porte());
+        List<ServicoLinha> servicos = aplicarValores(carregarServicos(jdbc, servicoIds, vei == null ? null : vei.porte()), valores);
         travarProfissional(jdbc, profissionalId);
         VinculoServicos.exigirRealiza(jdbc, profissionalId, servicoIds); // A1: o profissional precisa realizar cada serviço
         Instant inicio = conferirInicio(inicioBruto);
+        exigirBlocos(servicos, blocos);
         int minutos = 0;
         BigDecimal total = BigDecimal.ZERO;
         for (ServicoLinha s : servicos) {
             minutos += s.duracaoMin();
             total = total.add(s.preco());
         }
-        Ocupacao.Plano plano = ocupacao.planejar(jdbc, profissionalId, inicio, minutos, servicos.get(servicos.size() - 1).intervaloMin(), servicos.stream().anyMatch(ServicoLinha::multiDia));
+        int intervaloFinal = servicos.get(servicos.size() - 1).intervaloMin();
+        Ocupacao.Plano plano = blocos != null ? ocupacao.planejarBlocos(jdbc, profissionalId, blocos, intervaloFinal)
+                : ocupacao.planejar(jdbc, profissionalId, inicio, minutos, intervaloFinal, servicos.stream().anyMatch(ServicoLinha::multiDia));
         List<UUID> pendentes = conferirConflitos(ocupacao.conflitos(jdbc, profissionalId, new UUID(0, 0), plano), encaixe);
         if (!encaixe) conferirFixoReservado(jdbc, loja, profissionalId, clienteId, plano); // horário fixo de assinante (v128): ninguém mais toma, só encaixe da equipe passa por cima
         UUID boxId = ocupacao.escolherBox(jdbc, loja, plano, boxPedido, null, new UUID(0, 0));
@@ -352,6 +432,7 @@ public class AgendaController {
             List<ServicoLinha> servicos = carregarServicos(jdbc, servicoIds, vei == null ? null : vei.porte());
             int minutos = 0;
             for (ServicoLinha s : servicos) minutos += s.duracaoMin();
+            if (servicos.stream().anyMatch(ServicoLinha::indefinida)) return null; // serviço de duração indefinida não vira horário fixo
             return ocupacao.planejar(jdbc, profissionalId, inicio, minutos, servicos.get(servicos.size() - 1).intervaloMin(), servicos.stream().anyMatch(ServicoLinha::multiDia));
         } catch (ErroDeNegocio e) {
             return null;
@@ -397,7 +478,7 @@ public class AgendaController {
     /** O agendamento de um horário fixo (confirmado, em nome do assinante, gastando 1 atendimento do plano), feito pelo próprio sistema. Recusa = ErroDeNegocio com o motivo. */
     @PreAuthorize("permitAll()") // idem: só a automação e HorariosFixos chamam, nunca uma rota
     public Agendamento criarDoFixo(JdbcTemplate jdbc, Loja loja, UUID clienteId, UUID profissionalId, List<UUID> servicoIds, Instant inicio, UUID veiculoId, UUID assinaturaId, UUID fixoId, java.time.LocalDate dia) {
-        Agendamento a = inserirAgendamento(jdbc, loja, null, clienteId, null, profissionalId, servicoIds, inicio, CONFIRMADO, false, veiculoId, null, null, assinaturaId, Set.of());
+        Agendamento a = inserirAgendamento(jdbc, loja, null, clienteId, null, profissionalId, servicoIds, inicio, CONFIRMADO, false, veiculoId, null, null, assinaturaId, Set.of(), null, null);
         jdbc.update("update agendamento set fixo_id = ?, fixo_data = ? where id = ?", fixoId, java.sql.Date.valueOf(dia), a.id());
         registrar(jdbc, loja.id(), a.id(), null, "horário fixo", null, "Criado pelo horário fixo do plano");
         return a;
@@ -423,8 +504,11 @@ public class AgendaController {
      * Campos obrigatórios e forma de pagamento padrão: de Estabelecimento > Regras (`RegrasAtendimento`; de fábrica nada é obrigatório, nem no futuro nem no local, forma Pix). Produtos (5d-4a): venda com serviço ou só de produto (só no atendimento de agora), estoque sai ao concluir. A forma de pagamento do atendimento local é só registrada (5d-4c).
      */
     @PostMapping("/api/atendimentos")
-    public ResponseEntity<Agendamento> atender(@Valid @RequestBody NovoAtendimento d, @RequestHeader(value = "Idempotency-Key", required = false) String chave, @AuthenticationPrincipal Jwt jwt) {
+    public ResponseEntity<Agendamento> atender(@Valid @RequestBody NovoAtendimento pedido, @RequestHeader(value = "Idempotency-Key", required = false) String chave, @AuthenticationPrincipal Jwt jwt) {
         Loja loja = LojaContext.exigir();
+        // F (V60): com blocos, o horário do atendimento é o do primeiro bloco
+        final List<Instant[]> blocos = blocosDoPedido(pedido.blocos());
+        final NovoAtendimento d = blocos == null ? pedido : pedido.comInicio(blocos.get(0)[0]);
         boolean veTudo = ehDono(jwt);
         Instant agora = relogio.instant();
         Instant agoraMinuto = agora.truncatedTo(ChronoUnit.MINUTES);
@@ -440,6 +524,7 @@ public class AgendaController {
         if (new HashSet<>(servicoIds).size() != servicoIds.size()) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "O mesmo serviço aparece duas vezes.");
         if (produtos.size() > 10) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "No máximo 10 produtos.");
         boolean futuro = d.inicio() != null && d.inicio().isAfter(agora.plusSeconds(60));
+        if (blocos != null && (d.atribuicoes() != null && !d.atribuicoes().isEmpty())) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Com horários marcados à mão, todos os serviços são do mesmo profissional.");
         if (futuro && servicoIds.isEmpty()) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Para agendar um horário futuro, escolha ao menos um serviço. Produto sozinho só no atendimento de agora.");
         // quem vende os produtos: o profissional vende sempre como ele mesmo; o dono e a recepção escolhem (sem escolha, vale quem atende; venda só de produto exige a escolha)
         UUID vendedorPedido = produtos.isEmpty() ? null : veTudo ? d.vendedorId() : UUID.fromString(jwt.getSubject());
@@ -464,7 +549,7 @@ public class AgendaController {
             if (grupos != null) profissionalId = grupos.get(0).profissionalId();
             boolean dividido = grupos != null && grupos.size() > 1;
             if (dividido && usaBox(loja)) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Nesta loja, todos os serviços de um atendimento precisam ser do mesmo profissional (o veículo fica num box só).");
-            if (profissionalId == null && regras.profissionalAutomatico() && veTudo) profissionalId = escolherAutomatico(jdbc, servicoIds, futuro, d.inicio(), agora);
+            if (profissionalId == null && regras.profissionalAutomatico() && veTudo) profissionalId = escolherAutomatico(jdbc, servicoIds, futuro, d.inicio(), agora, blocos);
             Map<String, Boolean> tem = new LinkedHashMap<>();
             tem.put("nome", !nomeInf.isEmpty() || (semNome != null && !semNome));
             tem.put("telefone", br.com.agendz.validacao.Documentos.telefone(d.telefone()) != null || semNome != null);
@@ -488,7 +573,7 @@ public class AgendaController {
                 UUID vendedor = produtos.isEmpty() ? null : vendedorPedido != null ? vendedorPedido : profissionalId;
                 if (vendedor != null) exigirVendedor(jdbc, vendedor);
                 ClienteService.DoAtendimento quem = clientes.resolverDoAtendimento(jdbc, d.nome(), d.telefone(), d.clienteId());
-                Agendamento criado = inserirAgendamento(jdbc, loja, jwt, quem.clienteId(), quem.clienteId() == null ? (quem.nomeAvulso() == null ? "" : quem.nomeAvulso()) : null, profissionalId, servicoIds, d.inicio(), status, Boolean.TRUE.equals(d.encaixe()), d.veiculoId(), d.veiculo(), d.boxId(), d.assinaturaId(), exigirVeiculo(futuro ? regras.futuro() : regras.local()));
+                Agendamento criado = inserirAgendamento(jdbc, loja, jwt, quem.clienteId(), quem.clienteId() == null ? (quem.nomeAvulso() == null ? "" : quem.nomeAvulso()) : null, profissionalId, servicoIds, d.inicio(), status, Boolean.TRUE.equals(d.encaixe()), d.veiculoId(), d.veiculo(), d.boxId(), d.assinaturaId(), exigirVeiculo(futuro ? regras.futuro() : regras.local()), blocos, d.valores());
                 if (!produtos.isEmpty()) lancarProdutos(jdbc, loja, criado.id(), produtos, vendedor, jwt);
                 if (comCupom) {
                     // cupom recusado: o agendamento também não é criado (a transação volta atrás; só a tentativa errada fica gravada)
@@ -498,7 +583,7 @@ public class AgendaController {
                 if (produtos.isEmpty() && !comCupom) return criado;
                 return buscar(jdbc, criado.id(), null).comAvisos(criado.conflitosPendentes());
             }
-            return inserirLocal(jdbc, loja, jwt, d, profissionalId, servicoIds, produtos, vendedorPedido, agoraMinuto, regras);
+            return inserirLocal(jdbc, loja, jwt, d, profissionalId, servicoIds, produtos, vendedorPedido, agoraMinuto, regras, blocos);
         }));
         return ResponseEntity.status(HttpStatus.CREATED).body(feito);
     }
@@ -538,7 +623,7 @@ public class AgendaController {
         for (int i = 0; i < grupos.size(); i++) {
             Grupo g = grupos.get(i);
             Agendamento criado = inserirAgendamento(jdbc, loja, jwt, quem.clienteId(), avulso, g.profissionalId(), g.servicoIds(), inicio, status, Boolean.TRUE.equals(d.encaixe()),
-                    d.veiculoId(), d.veiculo(), null, i == 0 ? d.assinaturaId() : null, exigirVeiculo);
+                    d.veiculoId(), d.veiculo(), null, i == 0 ? d.assinaturaId() : null, exigirVeiculo, null, null);
             ids.add(criado.id());
             inicio = criado.fim();
         }
@@ -564,8 +649,8 @@ public class AgendaController {
         for (int i = 0; i < grupos.size(); i++) {
             Grupo g = grupos.get(i);
             NovoAtendimento dg = new NovoAtendimento(d.clienteId(), g.profissionalId(), g.servicoIds(), d.nome(), d.telefone(), inicio, d.status(), d.encaixe(), d.motivoRetroativo(),
-                    i == 0 ? d.produtos() : null, i == 0 ? d.vendedorId() : null, d.formaPagamento(), null, d.veiculoId(), d.veiculo(), null, i == 0 ? d.assinaturaId() : null, null);
-            Agendamento criado = inserirLocal(jdbc, loja, jwt, dg, g.profissionalId(), g.servicoIds(), i == 0 ? produtos : List.<ProdutoPedido>of(), i == 0 ? vendedorPedido : null, agoraMinuto, regras);
+                    i == 0 ? d.produtos() : null, i == 0 ? d.vendedorId() : null, d.formaPagamento(), null, d.veiculoId(), d.veiculo(), null, i == 0 ? d.assinaturaId() : null, null, null, null);
+            Agendamento criado = inserirLocal(jdbc, loja, jwt, dg, g.profissionalId(), g.servicoIds(), i == 0 ? produtos : List.<ProdutoPedido>of(), i == 0 ? vendedorPedido : null, agoraMinuto, regras, null);
             ids.add(criado.id());
             inicio = criado.fim();
         }
@@ -581,7 +666,7 @@ public class AgendaController {
      * horário). Agendamento futuro: o primeiro da ordem que cabe no horário (expediente dele e sem conflito); ninguém livre = 409. A duração usa o porte médio; a conferência final
      * (porte, box) continua em `inserirAgendamento`.
      */
-    private UUID escolherAutomatico(JdbcTemplate jdbc, List<UUID> servicoIds, boolean futuro, Instant inicio, Instant agora) {
+    private UUID escolherAutomatico(JdbcTemplate jdbc, List<UUID> servicoIds, boolean futuro, Instant inicio, Instant agora, List<Instant[]> blocos) {
         List<UUID> equipe = jdbc.queryForList("select id from usuario where ativo and atende order by criado_em, id", UUID.class);
         if (equipe.isEmpty()) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Nenhum profissional da equipe atende. Marque quem atende em Equipe.");
         Map<UUID, List<UUID>> porServico = VinculoServicos.porServico(jdbc);
@@ -598,7 +683,7 @@ public class AgendaController {
         Instant ini = conferirInicio(inicio);
         for (UUID id : ordem) {
             try {
-                Ocupacao.Plano plano = ocupacao.planejar(jdbc, id, ini, minutos, intervalo, multiDia);
+                Ocupacao.Plano plano = blocos != null ? ocupacao.planejarBlocos(jdbc, id, blocos, intervalo) : ocupacao.planejar(jdbc, id, ini, minutos, intervalo, multiDia);
                 if (ocupacao.conflitos(jdbc, id, new UUID(0, 0), plano).isEmpty()) { EscolhaAutomatica.registrar(jdbc, servicoChave, id); return id; }
             } catch (ErroDeNegocio e) {
                 // fora do expediente dele: tenta o próximo
@@ -614,7 +699,7 @@ public class AgendaController {
         return r;
     }
 
-    private Agendamento inserirLocal(JdbcTemplate jdbc, Loja loja, Jwt jwt, NovoAtendimento d, UUID profissionalId, List<UUID> servicoIds, List<ProdutoPedido> produtos, UUID vendedorPedido, Instant agoraMinuto, RegrasAtendimento.Regras regras) {
+    private Agendamento inserirLocal(JdbcTemplate jdbc, Loja loja, Jwt jwt, NovoAtendimento d, UUID profissionalId, List<UUID> servicoIds, List<ProdutoPedido> produtos, UUID vendedorPedido, Instant agoraMinuto, RegrasAtendimento.Regras regras, List<Instant[]> blocos) {
         // forma de pagamento: a escolhida ou o padrão da loja (só registro; o financeiro do servidor vem depois)
         String forma = RegrasAtendimento.formaEfetiva(regras, d.formaPagamento());
         if (forma == null) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Forma de pagamento inválida.");
@@ -645,7 +730,10 @@ public class AgendaController {
         // estética: o atendimento de serviço precisa do veículo (o porte define preço e duração); venda só de produto não
         ClienteService.VeiculoDoAgendamento vei = servicoIds.isEmpty() ? null : clientes.resolverVeiculo(jdbc, loja, quem.clienteId(), d.veiculoId(), d.veiculo(), exigirVeiculo(regras.local()));
         if (vei != null) servicos = carregarServicos(jdbc, servicoIds, vei.porte());
-        Instant inicio = quando.isAfter(agoraMinuto) ? agoraMinuto : quando;
+        servicos = aplicarValores(servicos, d.valores());
+        exigirBlocos(servicos, blocos);
+        if (blocos != null && blocos.stream().anyMatch(b -> b[0].isAfter(agoraMinuto.plusSeconds(60)))) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Um atendimento já feito não pode ter horários no futuro.");
+        Instant inicio = blocos != null ? blocos.get(0)[0] : quando.isAfter(agoraMinuto) ? agoraMinuto : quando;
         int minutos = 0;
         BigDecimal total = BigDecimal.ZERO;
         for (ServicoLinha s : servicos) {
@@ -653,7 +741,7 @@ public class AgendaController {
             total = total.add(s.preco());
         }
         if (servicos.isEmpty()) minutos = 1; // venda só de produto: ocupa 1 minuto (o banco exige início < fim)
-        Instant fimServico = inicio.plus(minutos, ChronoUnit.MINUTES);
+        Instant fimServico = blocos != null ? blocos.get(blocos.size() - 1)[1] : inicio.plus(minutos, ChronoUnit.MINUTES);
         Instant fimOcupado = fimServico.plus(servicos.isEmpty() ? 0 : servicos.get(servicos.size() - 1).intervaloMin(), ChronoUnit.MINUTES);
         String avulso = quem.clienteId() == null && quem.nomeAvulso() != null && !quem.nomeAvulso().isEmpty() ? quem.nomeAvulso() : null;
         UUID id = jdbc.queryForObject(
@@ -662,7 +750,7 @@ public class AgendaController {
                 UUID.class, loja.id().toString(), quem.clienteId(), profissionalId, utc(inicio), utc(fimServico), utc(fimOcupado), total, avulso, motivo, forma,
                 vei == null ? null : vei.veiculoId(), vei == null ? null : vei.porte(), vei == null ? null : vei.placa(), vei == null ? null : vei.marca(), vei == null ? null : vei.modelo(), vei == null ? null : vei.cor());
         // atendimento já feito: um bloco só (sem box nem conflito; já aconteceu)
-        ocupacao.gravarBlocos(jdbc, loja.id(), id, new Ocupacao.Plano(List.<Instant[]>of(new Instant[]{inicio, fimServico}), fimServico, fimOcupado));
+        ocupacao.gravarBlocos(jdbc, loja.id(), id, new Ocupacao.Plano(blocos != null ? blocos : List.<Instant[]>of(new Instant[]{inicio, fimServico}), fimServico, fimOcupado));
         gravarServicos(jdbc, loja, id, servicos);
         usarPlano(jdbc, loja, id, jwt, d.assinaturaId(), quem.clienteId(), servicoIds, inicio);
         String vendidos = produtos.isEmpty() ? "" : lancarProdutos(jdbc, loja, id, produtos, vendedor, jwt);
@@ -738,7 +826,7 @@ public class AgendaController {
             Ocupacao.Plano plano = ocupacao.lerPlano(jdbc, id, a.fimServico(), a.fimOcupado());
             if (CANCELADO.equals(a.status())) {
                 // reativação: o horário pode ter sido tomado enquanto estava cancelado (ou o expediente mudou); o box também
-                Ocupacao.Plano novoPlano = ocupacao.planejar(jdbc, a.profissionalId(), a.inicio(), minutosDeServico(jdbc, id), a.fimOcupado().isAfter(a.fimServico()) ? (int) Duration.between(a.fimServico(), a.fimOcupado()).toMinutes() : 0, multiDia(jdbc, id));
+                Ocupacao.Plano novoPlano = replanejar(jdbc, id, a, a.profissionalId(), a.inicio(), a.fimOcupado().isAfter(a.fimServico()) ? (int) Duration.between(a.fimServico(), a.fimOcupado()).toMinutes() : 0);
                 pendentes = conferirConflitos(ocupacao.conflitos(jdbc, a.profissionalId(), id, novoPlano), a.encaixe());
                 planos.conferirNovoHorario(jdbc, id, a.inicio(), relogio.instant()); // plano: o corte volta a gastar a cota do mês
                 UUID box = a.boxId() == null && !usaBox(loja) ? null : ocupacao.escolherBox(jdbc, loja, novoPlano, null, a.boxId(), id);
@@ -802,7 +890,7 @@ public class AgendaController {
             String novoStatus = d.status() == null ? a.status() : d.status();
             int folga = (int) Duration.between(a.fimServico(), a.fimOcupado()).toMinutes();
             boolean encaixe = d.encaixe() == null ? a.encaixe() : d.encaixe();
-            Ocupacao.Plano plano = ocupacao.planejar(jdbc, alvo, novoInicio, minutosDeServico(jdbc, id), folga, multiDia(jdbc, id));
+            Ocupacao.Plano plano = replanejar(jdbc, id, a, alvo, novoInicio, folga);
             Instant fimServico = plano.fimServico();
             Instant fimOcupado = plano.fimOcupado();
             List<UUID> pendentes = conferirConflitos(ocupacao.conflitos(jdbc, alvo, id, plano), encaixe);
@@ -836,6 +924,19 @@ public class AgendaController {
         if (inicio.isAfter(agora.plus(400, ChronoUnit.DAYS))) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Data distante demais.");
         if (inicio.isBefore(agora.minus(400, ChronoUnit.DAYS))) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Data inválida.");
         return inicio;
+    }
+
+    /**
+     * Ocupação do agendamento num horário novo (remarcar) ou no mesmo (reativar). Serviço de duração indefinida (item com duração 0) tem blocos escolhidos à mão: todos andam
+     * juntos pela mesma diferença de tempo e cada um confere expediente e ausência de novo. Os demais seguem pela soma das durações.
+     */
+    private Ocupacao.Plano replanejar(JdbcTemplate jdbc, UUID id, Atual a, UUID alvo, Instant novoInicio, int folga) {
+        Integer indefinidos = jdbc.queryForObject("select count(*) from agendamento_servico where agendamento_id = ? and duracao_min = 0", Integer.class, id);
+        if (indefinidos == null || indefinidos == 0) return ocupacao.planejar(jdbc, alvo, novoInicio, minutosDeServico(jdbc, id), folga, multiDia(jdbc, id));
+        Duration passo = Duration.between(a.inicio(), novoInicio);
+        List<Instant[]> deslocados = new ArrayList<>();
+        for (Instant[] b : ocupacao.lerPlano(jdbc, id, a.fimServico(), a.fimOcupado()).blocos()) deslocados.add(new Instant[]{b[0].plus(passo), b[1].plus(passo)});
+        return ocupacao.planejarBlocos(jdbc, alvo, deslocados, folga);
     }
 
     /** Minutos de trabalho do atendimento (soma das durações congeladas dos serviços). Venda só de produto ocupa 1 minuto. */
@@ -888,7 +989,7 @@ public class AgendaController {
                         preco = PorteController.precoNoPorte(preco, valorDoPorte(rs.getString("precos"), porte), portesDaLoja, porte); // v124: específico ou base × fator
                         if (dur != null && dur.signum() > 0) duracao = dur.intValue();
                     }
-                    return new ServicoLinha(rs.getObject("id", UUID.class), rs.getString("nome"), preco, duracao, rs.getInt("intervalo_min"), rs.getBoolean("multi_dia"), rs.getBoolean("ativo"));
+                    return new ServicoLinha(rs.getObject("id", UUID.class), rs.getString("nome"), preco, duracao, rs.getInt("intervalo_min"), rs.getBoolean("multi_dia"), rs.getBoolean("ativo"), rs.getObject("duracao_min") == null);
                 },
                 ids.toArray());
         Map<UUID, ServicoLinha> porId = new LinkedHashMap<>();

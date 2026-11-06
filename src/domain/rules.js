@@ -8,6 +8,7 @@ import { limparTexto } from './texto.js';
 import { ausenciaNoHorario, erroDeVinculo } from './vinculo.js';
 import { PORTE_PADRAO, porteValido, precoNoPorte } from './veiculos.js';
 import { Rot, rot, capAtiva, cap } from './tipos.js';
+import { duracaoIndefinida, erroDeBlocos, minutosDosBlocos } from './blocos.js';
 
 export const STATUS = {
   A_CONFIRMAR: 'a_confirmar',
@@ -38,7 +39,7 @@ export function errosServicoIds(state, ids, { ativos = false } = {}) {
 }
 // Serviço no porte do veículo: preço e duração do porte (sem porte válido, o médio). `preco` e `duracao` do cadastro espelham o médio.
 export function servicoNoPorte(sv, porte) {
-  if (!capAtiva('precoPorPorte')) return sv; // tipo sem preço por porte (barbearia): preço e duração são os do serviço
+  if (!capAtiva('precoPorPorte') || duracaoIndefinida(sv)) return sv; // duração indefinida (F): sem tabela por porte // tipo sem preço por porte (barbearia): preço e duração são os do serviço
   const p = porteValido(porte) ? porte : PORTE_PADRAO;
   const duracao = sv.duracoes ? Number(sv.duracoes[p]) : NaN;
   // v124: preço específico do porte (se o dono definiu) ou preço base × fator do porte
@@ -54,7 +55,7 @@ export function materiaisDoServico(state, sv) {
   for (const id of sv.componentes || []) for (const m of state.servicos.find((x) => x.id === id)?.materiais || []) soma.set(m.materialId, (soma.get(m.materialId) || 0) + Number(m.qtd));
   return [...soma].map(([materialId, qtd]) => ({ materialId, qtd }));
 }
-export const duracaoMin = (servicos) => servicos.reduce((t, s) => t + s.duracao, 0);
+export const duracaoMin = (servicos) => servicos.reduce((t, s) => t + (Number(s.duracao) || 0), 0); // indefinida conta 0: o tempo dela vem dos blocos
 export const intervaloMin = (servicos) => (servicos.length ? servicos[servicos.length - 1].intervalo || 0 : 0);
 export const ocupadoMin = (servicos) => duracaoMin(servicos) + intervaloMin(servicos);
 export const totalPreco = (servicos) => servicos.reduce((t, s) => t + s.preco, 0);
@@ -140,15 +141,18 @@ export function statusVisual(a, agora) {
 // O que um atendimento ocupa: `profissional` = blocos em que a pessoa está trabalhando (mais o intervalo depois do último) e `box` = a janela em que o carro
 // fica no box, da entrada até o fim do último bloco + intervalo (um serviço de vários dias mantém o carro lá entre um dia e outro).
 // `retirada` = quando o serviço termina. Devolve null se a entrada não é horário de trabalho do profissional ou se o serviço não cabe.
-export function ocupacao(state, { profissionalId, inicio, servicoIds, porte }) {
+export function ocupacao(state, { profissionalId, inicio, servicoIds, porte, blocos }) {
   const sv = servicosPorIds(state, servicoIds, porte);
   const est = state.usuarios.find((u) => u.id === profissionalId);
   if (!est || !sv.length || !Number.isInteger(inicio)) return null;
+  // F: blocos escolhidos à mão (serviço de duração indefinida): cada um cabe no expediente do profissional
+  if (blocos && blocos.length) return blocos.every(([a, b]) => cabeEm(faixasDoProfissional(state.estabelecimento, est, a), a, b)) ? montarOcupacao(blocos, intervaloMin(sv)) : null;
   const minutos = duracaoMin(sv);
-  const blocos = sv.some((x) => x.multiDia)
+  if (!(minutos > 0)) return null;
+  const feitos = sv.some((x) => x.multiDia)
     ? blocosDeTrabalho(state.estabelecimento, est, inicio, minutos)
     : (cabeEm(faixasDoProfissional(state.estabelecimento, est, inicio), inicio, inicio + minutos * MIN) ? [[inicio, inicio + minutos * MIN]] : null);
-  return blocos ? montarOcupacao(blocos, intervaloMin(sv)) : null;
+  return feitos ? montarOcupacao(feitos, intervaloMin(sv)) : null;
 }
 function montarOcupacao(blocos, intervalo) {
   const fimServico = blocos[blocos.length - 1][1];
@@ -159,10 +163,11 @@ function montarOcupacao(blocos, intervalo) {
 }
 // Ocupação de um agendamento que já existe. Se a escala mudou e o serviço não cabe mais, vale a janela simples (nunca some da conta).
 export function ocupacaoDe(state, a) {
-  const o = ocupacao(state, { profissionalId: a.profissionalId, inicio: a.inicio, servicoIds: a.servicoIds, porte: a.porte });
+  const o = ocupacao(state, { profissionalId: a.profissionalId, inicio: a.inicio, servicoIds: a.servicoIds, porte: a.porte, blocos: a.blocos });
   if (o) return o;
   const sv = servicosDoAg(state, a);
-  return montarOcupacao([[a.inicio, a.inicio + duracaoMin(sv) * MIN]], intervaloMin(sv));
+  if (a.blocos && a.blocos.length) return montarOcupacao(a.blocos, intervaloMin(sv));
+  return montarOcupacao([[a.inicio, a.inicio + Math.max(1, duracaoMin(sv)) * MIN]], intervaloMin(sv));
 }
 // Quando o carro pode ser retirado (fim do serviço).
 export const retiradaDe = (state, a) => ocupacaoDe(state, a).retirada;
@@ -231,7 +236,7 @@ function fixoReservado(state, { profissionalId, ocup, clienteId, agora }) {
   return false;
 }
 
-export function validarHorario(state, { profissionalId, inicio, servicoIds, porte, boxId, boxPreferido, ignoreId, encaixe = false, origem = 'painel', agora, clienteId }) {
+export function validarHorario(state, { profissionalId, inicio, servicoIds, porte, boxId, boxPreferido, ignoreId, encaixe = false, origem = 'painel', agora, clienteId, blocos }) {
   const erros = [];
   const cliente = origem === 'whatsapp' || origem === 'link'; // o próprio cliente agenda: prazos de cliente
   const e0 = errosServicoIds(state, servicoIds);
@@ -246,8 +251,10 @@ export function validarHorario(state, { profissionalId, inicio, servicoIds, port
   else if (agora && inicio > agora + (cliente ? 60 : 400) * DIA) erros.push(cliente ? 'Só dá para agendar com até 60 dias de antecedência.' : 'Data distante demais.');
   if (profissional && !profissional.atende) erros.push(`${profissional.apelido || profissional.nome} está desativado e não recebe novos agendamentos.`);
   { const ev = erroDeVinculo(state, profissionalId, servicoIds); if (ev) erros.push(ev); } // A1: o profissional precisa realizar cada serviço
+  { const eb = erroDeBlocos(sv, blocos && blocos.length ? blocos : null); if (eb) erros.push(eb); } // F: duração indefinida só com blocos; a soma atende os serviços fixos
+  if (blocos && blocos.length) out.duracao = minutosDosBlocos(blocos);
   if (erros.length) return out;
-  const ocup = ocupacao(state, { profissionalId, inicio, servicoIds, porte });
+  const ocup = ocupacao(state, { profissionalId, inicio, servicoIds, porte, blocos });
   if (!ocup) {
     const trabalha = faixasDoProfissional(state.estabelecimento, profissional, inicio).some(([a, b]) => inicio >= a && inicio < b);
     erros.push(trabalha && sv.some((x) => x.multiDia) ? 'Não há expediente suficiente nos próximos dias para concluir esse serviço.' : `${profissional.apelido || profissional.nome} não atende nesse horário.`);

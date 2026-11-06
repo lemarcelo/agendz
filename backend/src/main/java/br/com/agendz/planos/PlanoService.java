@@ -679,7 +679,7 @@ public class PlanoService {
                 if (a.assinatura() != null) return new UsoPublico(true, false, false);
                 if (a.limite()) { esgotado = true; if (trocas.isEmpty()) trocas = opcoesDoCliente(jdbc, cliente, cfg); }
             }
-            return trocas.isEmpty() ? new UsoPublico(false, esgotado, restrito) : new UsoPublico(false, esgotado, restrito, trocas, cfg.descontoPct(), cfg.whatsapp());
+            return trocas.isEmpty() ? new UsoPublico(false, esgotado, restrito) : new UsoPublico(false, esgotado, restrito, trocas, cfg.descontoPct(), cfg.whatsapp() != null ? cfg.whatsapp() : br.com.agendz.configuracao.WhatsappDaLoja.ler(jdbc)); // V60: sem o da troca, vale o WhatsApp do estabelecimento
         });
     }
 
