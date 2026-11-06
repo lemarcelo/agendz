@@ -168,9 +168,9 @@ class AtendimentoTest extends BaseApi {
         // o dono marca nome e telefone: volta a exigir
         regras(APEX, davi, "{\"camposObrigatorios\":{\"futuro\":[\"nome\",\"telefone\"],\"local\":[]}}").andExpect(status().isOk());
         atender(APEX, davi, corpo(pabloId, ",\"inicio\":\"" + outro.plus(2, ChronoUnit.DAYS) + "\"")).andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.mensagem").value("Preencha os campos obrigatórios: nome, telefone."));
+                .andExpect(jsonPath("$.mensagem").value("Preencha os campos obrigatórios: apelido, telefone."));
         atender(APEX, davi, corpo(pabloId, ",\"inicio\":\"" + futuro + "\"")).andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.mensagem").value("Preencha os campos obrigatórios: nome, telefone."));
+                .andExpect(jsonPath("$.mensagem").value("Preencha os campos obrigatórios: apelido, telefone."));
         atender(APEX, davi, corpo(pabloId, ",\"inicio\":\"" + futuro + "\",\"nome\":\"Ana\"")).andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.mensagem").value("Preencha o campo obrigatório: telefone."));
         atender(APEX, davi, corpo(pabloId, ",\"inicio\":\"" + futuro + "\",\"nome\":\"Ana Lima\",\"telefone\":\"53999000006\"")).andExpect(status().isCreated())
@@ -428,7 +428,7 @@ class AtendimentoTest extends BaseApi {
         atender(APEX, davi, corpo(pabloId, ",\"telefone\":\"53999000011\",\"formaPagamento\":\"pix\"")).andExpect(status().isCreated());
         // o futuro agora só exige o nome
         atender(APEX, davi, corpo(pabloId, ",\"telefone\":\"53999000012\",\"inicio\":\"" + futuro + "\"")).andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.mensagem").value("Preencha o campo obrigatório: nome."));
+                .andExpect(jsonPath("$.mensagem").value("Preencha o campo obrigatório: apelido."));
         assertEquals(1, jdbc.queryForObject("select count(*) from agendamento", Integer.class));
     }
 

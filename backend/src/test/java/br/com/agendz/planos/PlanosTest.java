@@ -615,6 +615,7 @@ class PlanosTest extends BaseApi {
         escrever(put("/api/planos/troca"), dono, "{\"descontoPct\":25,\"whatsapp\":\"(53) 99900-1234\"}").andExpect(status().isOk())
                 .andExpect(jsonPath("$.descontoPct").value(25.0)).andExpect(jsonPath("$.whatsapp").value("5553999001234"));
         pedirPeloLink(tel, c, 2, 9).andExpect(status().isCreated());
+        pedirPeloLink(tel, c, 8, 9).andExpect(status().isCreated()); // como em cotaAcabadaBarraOLink...: com dois pedidos a prévia já acusa a cota acabada
         // cota acabada: a prévia oferece só o plano que inclui o corte e mais um serviço e custa mais; diferença (100 − 60) com 25% de desconto = 30
         previa("10.70.0.1", tel, c, 14, 9).andExpect(jsonPath("$.esgotado").value(true)).andExpect(jsonPath("$.trocas.length()").value(1))
                 .andExpect(jsonPath("$.trocas[0].nome").value("Plano Completo")).andExpect(jsonPath("$.trocas[0].diferenca").value(30.0)).andExpect(jsonPath("$.trocas[0].preco").value(100.0))
