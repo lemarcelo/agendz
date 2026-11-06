@@ -55,11 +55,11 @@ public class PlanoService {
     public record ClienteMini(UUID id, String nome, String apelido) {
     }
 
-    public record PlanoDto(UUID id, String nome, String descricao, BigDecimal preco, int cortes, List<UUID> servicoIds, int adianta, int acumuloMeses, int intervaloDias, boolean ativo, Instant criadoEm) {
+    public record PlanoDto(UUID id, String nome, String descricao, BigDecimal preco, int cortes, List<UUID> servicoIds, int adianta, int acumuloMeses, int intervaloDias, boolean ativo, Instant criadoEm, boolean restringeServicos) {
     }
 
     public record PlanoEntrada(@NotNull @Size(max = 60) String nome, @Size(max = 200) String descricao, BigDecimal preco, Integer cortes, @Size(max = 10) List<UUID> servicoIds,
-                               Integer adianta, Integer acumuloMeses, Integer intervaloDias, Boolean ativo) {
+                               Integer adianta, Integer acumuloMeses, Integer intervaloDias, Boolean ativo, Boolean restringeServicos) {
     }
 
     public record Remocao(boolean desativado) {
@@ -115,8 +115,8 @@ public class PlanoService {
     public record SaldoPublico(List<ItemSaldo> planos, String aviso) {
     }
 
-    /** Resultado de usar o plano num agendamento: o texto do histórico e o aviso para a tela. */
-    public record Uso(UUID assinaturaId, String planoNome, String aviso, boolean adiantado) {
+    /** Resultado de usar o plano num agendamento: o texto do histórico, o aviso para a tela e (E2) quantos atendimentos ainda restam no mês do horário. */
+    public record Uso(UUID assinaturaId, String planoNome, String aviso, boolean adiantado, int restantes, String mes) {
     }
 
     private final LojaJdbc banco;
@@ -160,12 +160,12 @@ public class PlanoService {
         Map<UUID, List<UUID>> servicos = new HashMap<>();
         jdbc.query("select plano_id, servico_id from plano_servico order by servico_id",
                 rs -> { servicos.computeIfAbsent(rs.getObject(1, UUID.class), k -> new ArrayList<>()).add(rs.getObject(2, UUID.class)); });
-        return jdbc.query("select id, nome, descricao, preco, cortes, adianta, acumulo_meses, intervalo_dias, ativo, criado_em from plano"
+        return jdbc.query("select id, nome, descricao, preco, cortes, adianta, acumulo_meses, intervalo_dias, ativo, criado_em, restringe_servicos from plano"
                         + (filtro == null ? "" : " where id = ?") + " order by lower(nome), id",
                 (rs, i) -> {
                     UUID id = rs.getObject("id", UUID.class);
                     return new PlanoDto(id, rs.getString("nome"), rs.getString("descricao"), rs.getBigDecimal("preco"), rs.getInt("cortes"), servicos.getOrDefault(id, List.of()),
-                            rs.getInt("adianta"), rs.getInt("acumulo_meses"), rs.getInt("intervalo_dias"), rs.getBoolean("ativo"), instante(rs, "criado_em"));
+                            rs.getInt("adianta"), rs.getInt("acumulo_meses"), rs.getInt("intervalo_dias"), rs.getBoolean("ativo"), instante(rs, "criado_em"), rs.getBoolean("restringe_servicos"));
                 }, filtro == null ? new Object[0] : new Object[]{filtro});
     }
 
@@ -210,16 +210,17 @@ public class PlanoService {
             if (descricao.length() > 200) erros.add("A descrição pode ter até 200 letras.");
             if (!erros.isEmpty()) throw recusa(String.join(" ", erros));
             boolean ativo = !Boolean.FALSE.equals(d.ativo());
+            boolean restringe = Boolean.TRUE.equals(d.restringeServicos());
             BigDecimal valor = preco.setScale(2, RoundingMode.HALF_UP);
             UUID planoId = id;
             try {
                 if (id == null) {
-                    planoId = jdbc.queryForObject("insert into plano (loja_id, nome, descricao, preco, cortes, adianta, acumulo_meses, intervalo_dias, ativo, criado_por) "
-                                    + "values (?::uuid, ?, ?, ?, ?, ?, ?, ?, ?, ?) returning id",
-                            UUID.class, lojaId.toString(), nome, descricao, valor, cortes, adianta, acumulo, intervalo, ativo, autor);
+                    planoId = jdbc.queryForObject("insert into plano (loja_id, nome, descricao, preco, cortes, adianta, acumulo_meses, intervalo_dias, ativo, criado_por, restringe_servicos) "
+                                    + "values (?::uuid, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) returning id",
+                            UUID.class, lojaId.toString(), nome, descricao, valor, cortes, adianta, acumulo, intervalo, ativo, autor, restringe);
                 } else {
-                    jdbc.update("update plano set nome = ?, descricao = ?, preco = ?, cortes = ?, adianta = ?, acumulo_meses = ?, intervalo_dias = ?, ativo = ? where id = ?",
-                            nome, descricao, valor, cortes, adianta, acumulo, intervalo, ativo, id);
+                    jdbc.update("update plano set nome = ?, descricao = ?, preco = ?, cortes = ?, adianta = ?, acumulo_meses = ?, intervalo_dias = ?, ativo = ?, restringe_servicos = ? where id = ?",
+                            nome, descricao, valor, cortes, adianta, acumulo, intervalo, ativo, restringe, id);
                     jdbc.update("delete from plano_servico where plano_id = ?", id);
                 }
             } catch (DuplicateKeyException e) {
@@ -368,8 +369,8 @@ public class PlanoService {
     private UUID contratarNaTransacao(JdbcTemplate jdbc, UUID lojaId, UUID clienteId, UUID planoId, String inicioMesPedido, Integer diaPedido, Autor autor, Instant agora) {
         Integer cli = jdbc.queryForObject("select count(*) from cliente where id = ?", Integer.class, clienteId);
         if (cli == null || cli == 0) throw naoAchou("Cliente não encontrado.");
-        List<Object[]> pl = jdbc.query("select ativo, nome, preco, cortes, adianta, acumulo_meses, intervalo_dias from plano where id = ?",
-                (rs, i) -> new Object[]{rs.getBoolean(1), rs.getString(2), rs.getBigDecimal(3), rs.getInt(4), rs.getInt(5), rs.getInt(6), rs.getInt(7)}, planoId);
+        List<Object[]> pl = jdbc.query("select ativo, nome, preco, cortes, adianta, acumulo_meses, intervalo_dias, restringe_servicos from plano where id = ?",
+                (rs, i) -> new Object[]{rs.getBoolean(1), rs.getString(2), rs.getBigDecimal(3), rs.getInt(4), rs.getInt(5), rs.getInt(6), rs.getInt(7), rs.getBoolean(8)}, planoId);
         if (pl.isEmpty() || !(Boolean) pl.get(0)[0]) throw naoAchou("Plano não encontrado ou desativado.");
         Integer total = jdbc.queryForObject("select count(*) from assinatura", Integer.class);
         if (total != null && total >= PlanoRegras.LIMITE_ASSINATURAS) throw recusa("Limite de assinaturas atingido.");
@@ -385,7 +386,7 @@ public class PlanoService {
         int dia = diaPedido == null ? 5 : diaPedido;
         if (dia < 1 || dia > 28) throw recusa("O dia de cobrança vai de 1 a 28.");
         List<UUID> servicos = jdbc.query("select servico_id from plano_servico where plano_id = ? order by servico_id", (rs, i) -> rs.getObject(1, UUID.class), planoId);
-        Foto foto = new Foto((String) pl.get(0)[1], (BigDecimal) pl.get(0)[2], (Integer) pl.get(0)[3], servicos, (Integer) pl.get(0)[4], (Integer) pl.get(0)[5], (Integer) pl.get(0)[6]);
+        Foto foto = new Foto((String) pl.get(0)[1], (BigDecimal) pl.get(0)[2], (Integer) pl.get(0)[3], servicos, (Integer) pl.get(0)[4], (Integer) pl.get(0)[5], (Integer) pl.get(0)[6], (Boolean) pl.get(0)[7]);
         String fotoJson;
         try {
             fotoJson = json.writeValueAsString(foto);
@@ -563,30 +564,65 @@ public class PlanoService {
         for (Map.Entry<UUID, BigDecimal> e : PlanoRegras.descontos(t.foto().servicoIds(), itens).entrySet()) {
             jdbc.update("update agendamento_servico set desconto = ?, plano = true where agendamento_id = ? and servico_id = ?", e.getValue(), agendamentoId, e.getKey());
         }
-        return new Uso(assinaturaId, t.foto().nome(), pode.aviso(), pode.adiantado());
+        // E2: com este horário já gravado, quanto sobra do plano no mês dele (o cliente vê no fim do agendamento)
+        PlanoRegras.Extrato ex = PlanoRegras.extrato(t.foto(), t.inicioMes(), pagos(jdbc, assinaturaId), usos(jdbc, assinaturaId, null), PlanoRegras.mesDe(agora), List.of());
+        String mesDoHorario = PlanoRegras.mesDe(inicio);
+        return new Uso(assinaturaId, t.foto().nome(), pode.aviso(), pode.adiantado(), PlanoRegras.restantesNoMes(ex, mesDoHorario), mesDoHorario);
     }
 
     /**
      * O próprio cliente agenda (link): se tem plano ativo que cobre algum serviço e as travas deixam (saldo, intervalo, adiantar), o horário gasta 1 corte.
-     * Nunca recusa por causa do plano: sem plano, sem corte ou serviço fora do plano devolve null e o agendamento segue pelo preço normal (mesma regra do simulador).
+     * E2: se um plano que cobre o serviço NÃO deixa porque os atendimentos do mês acabaram (cota), o link recusa (409) e manda falar com a equipe, que agenda sem a
+     * restrição do plano (cobrança normal, como serviço fora do plano). Sem plano, mensalidade em falta, intervalo ou serviço fora do plano: devolve null e segue pelo preço normal.
      */
     public Uso usarSeCouber(JdbcTemplate jdbc, UUID agendamentoId, UUID clienteId, List<UUID> servicoIds, Instant inicio, Instant agora) {
-        UUID assinatura = assinaturaQueCabe(jdbc, clienteId, servicoIds, inicio, agora, true);
-        return assinatura == null ? null : usar(jdbc, agendamentoId, assinatura, clienteId, servicoIds, inicio, agora);
+        String restricao = restricaoDoLink(jdbc, clienteId, servicoIds);
+        if (restricao != null) throw conflito(restricao);
+        Achada a = assinaturaQueCabe(jdbc, clienteId, servicoIds, inicio, agora, true);
+        if (a.limite()) throw conflito(MSG_LIMITE_PREFIXO + PlanoRegras.rotuloMes(PlanoRegras.mesDe(inicio)) + MSG_LIMITE_SUFIXO);
+        return a.assinatura() == null ? null : usar(jdbc, agendamentoId, a.assinatura(), clienteId, servicoIds, inicio, agora);
     }
 
-    private UUID assinaturaQueCabe(JdbcTemplate jdbc, UUID clienteId, List<UUID> servicoIds, Instant inicio, Instant agora, boolean travar) {
+    /**
+     * E2: plano ativo que RESTRINGE o link aos serviços dele e algum serviço pedido está fora: devolve a mensagem (o link recusa; a equipe agenda qualquer serviço pelo painel).
+     * Sem cliente, sem plano ativo ou plano que não restringe: null.
+     */
+    private String restricaoDoLink(JdbcTemplate jdbc, UUID clienteId, List<UUID> servicoIds) {
         if (clienteId == null) return null;
-        List<UUID> ids = jdbc.queryForList("select id from assinatura where cliente_id = ? and status = 'ativa' order by criado_em, id", UUID.class, clienteId);
-        for (UUID id : ids) {
-            Trava t = ler(jdbc, id, travar);
-            if (!PlanoRegras.cobreAlgum(t.foto(), servicoIds)) continue;
-            if (PlanoRegras.podeUsar(t.foto(), t.status(), t.inicioMes(), pagos(jdbc, id), usos(jdbc, id, null), inicio, agora).ok()) return id;
+        for (UUID id : jdbc.queryForList("select id from assinatura where cliente_id = ? and status = 'ativa' order by criado_em, id", UUID.class, clienteId)) {
+            Foto f = ler(jdbc, id, false).foto();
+            if (!PlanoRegras.foraDaRestricao(f, servicoIds)) continue;
+            List<String> nomes = new ArrayList<>();
+            for (UUID s : f.servicoIds()) nomes.addAll(jdbc.queryForList("select nome from servico where id = ?", String.class, s));
+            java.util.Collections.sort(nomes, String.CASE_INSENSITIVE_ORDER);
+            return "Seu plano permite agendar pelo link só: " + String.join(", ", nomes) + ". Para outros serviços, fale com a equipe.";
         }
         return null;
     }
 
-    public record UsoPublico(boolean usaPlano) {
+    private static final String MSG_LIMITE_PREFIXO = "Os atendimentos do seu plano em ";
+    private static final String MSG_LIMITE_SUFIXO = " acabaram. Para agendar fora do plano, fale com a equipe.";
+
+    /** assinatura: a que dá para usar; limite: nenhuma deu e a causa em algum plano que cobre o serviço foi a cota do mês (E2). */
+    private record Achada(UUID assinatura, boolean limite) {
+    }
+
+    private Achada assinaturaQueCabe(JdbcTemplate jdbc, UUID clienteId, List<UUID> servicoIds, Instant inicio, Instant agora, boolean travar) {
+        if (clienteId == null) return new Achada(null, false);
+        List<UUID> ids = jdbc.queryForList("select id from assinatura where cliente_id = ? and status = 'ativa' order by criado_em, id", UUID.class, clienteId);
+        boolean limite = false;
+        for (UUID id : ids) {
+            Trava t = ler(jdbc, id, travar);
+            if (!PlanoRegras.cobreAlgum(t.foto(), servicoIds)) continue;
+            Pode p = PlanoRegras.podeUsar(t.foto(), t.status(), t.inicioMes(), pagos(jdbc, id), usos(jdbc, id, null), inicio, agora);
+            if (p.ok()) return new Achada(id, false);
+            if (p.limite()) limite = true;
+        }
+        return new Achada(null, limite);
+    }
+
+    /** esgotado (E2): o telefone tem plano que cobre o serviço, mas os atendimentos do mês acabaram (o link não agenda; a equipe agenda fora do plano). */
+    public record UsoPublico(boolean usaPlano, boolean esgotado, boolean restrito) {
     }
 
     /**
@@ -598,14 +634,19 @@ public class PlanoService {
         consultaLiberada(loja, "planos-uso-ip:" + ip, 60, Duration.ofMinutes(15));
         consultaLiberada(loja, "planos-uso-loja", 240, Duration.ofMinutes(1));
         String tel = Documentos.telefone(telefone);
-        if (tel == null || inicio == null || servicoIds == null || servicoIds.isEmpty() || servicoIds.size() > 10) return new UsoPublico(false);
+        if (tel == null || inicio == null || servicoIds == null || servicoIds.isEmpty() || servicoIds.size() > 10) return new UsoPublico(false, false, false);
         consultaLiberada(loja, "planos-uso-tel:" + tel, 10, Duration.ofMinutes(15));
         String hash = cifra.hash(loja.id(), "tel", tel);
         return banco.naLoja(jdbc -> {
+            boolean esgotado = false;
+            boolean restrito = false;
             for (UUID cliente : jdbc.queryForList("select id from cliente where telefone_hash = ?", UUID.class, hash)) {
-                if (assinaturaQueCabe(jdbc, cliente, servicoIds, inicio, agora, false) != null) return new UsoPublico(true);
+                if (restricaoDoLink(jdbc, cliente, servicoIds) != null) { restrito = true; continue; }
+                Achada a = assinaturaQueCabe(jdbc, cliente, servicoIds, inicio, agora, false);
+                if (a.assinatura() != null) return new UsoPublico(true, false, false);
+                if (a.limite()) esgotado = true;
             }
-            return new UsoPublico(false);
+            return new UsoPublico(false, esgotado, restrito);
         });
     }
 

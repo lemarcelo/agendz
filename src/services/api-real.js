@@ -923,11 +923,13 @@ const FORMAS_PLANO = ['pix', 'dinheiro', 'cartao'];
 const STATUS_ASSINATURA = ['pendente', 'ativa', 'cancelada'];
 const idsDe = (v, max) => listaDe(v, max).map((x) => texto(x, 40)).filter((x) => ID.test(x));
 const mesPlano = (v) => (typeof v === 'string' && MES_PLANO.test(v) ? v : '');
+// E2: o plano que o horário do link usou e quantos atendimentos restam no mês dele (mes = AAAA-MM); sem plano: null
+const lerPlanoUsado = (p) => (p && typeof p === 'object' && typeof p.nome === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(String(p.mes)) ? { nome: p.nome.slice(0, 60), restantes: Number.isInteger(p.restantes) && p.restantes > 0 ? p.restantes : 0, mes: p.mes } : null);
 const inteiroPlano = (v) => (Number.isInteger(v) ? v : 0); // o saldo do extrato pode ser negativo (corte adiantado)
 function lerPlano(d) {
   d = d && typeof d === 'object' ? d : {};
   return { id: texto(d.id, 40), nome: texto(d.nome, 60), descricao: texto(d.descricao, 200), preco: dinheiroOuZero(d.preco), cortes: inteiroPlano(d.cortes), servicoIds: idsDe(d.servicoIds, 10),
-    adianta: inteiroPlano(d.adianta), acumuloMeses: inteiroPlano(d.acumuloMeses), intervaloDias: inteiroPlano(d.intervaloDias), ativo: d.ativo !== false };
+    adianta: inteiroPlano(d.adianta), acumuloMeses: inteiroPlano(d.acumuloMeses), intervaloDias: inteiroPlano(d.intervaloDias), restringeServicos: d.restringeServicos === true, ativo: d.ativo !== false };
 }
 const lerFixo = (f) => ({ id: texto(f && f.id, 40), dia: Number.isInteger(f && f.dia) && f.dia >= 0 && f.dia <= 6 ? f.dia : 0, hm: /^([01]\d|2[0-3]):[0-5]\d$/.test(f && f.hm) ? f.hm : '00:00',
   profissionalId: texto(f && f.profissionalId, 40), servicoIds: idsDe(f && f.servicoIds, 10), ...(f && ID.test(String(f.veiculoId)) ? { veiculoId: f.veiculoId } : {}) });
@@ -938,7 +940,7 @@ function lerAssinatura(d) {
   const c = d.cliente && typeof d.cliente === 'object' ? d.cliente : {};
   return {
     id: texto(d.id, 40), clienteId: texto(d.clienteId, 40), cliente: { id: texto(c.id, 40), nome: texto(c.nome, 150), apelido: texto(c.apelido, 100) }, planoId: texto(d.planoId, 40),
-    plano: { nome: texto(f.nome, 60), preco: dinheiroOuZero(f.preco), cortes: inteiroPlano(f.cortes), servicoIds: idsDe(f.servicoIds, 10), adianta: inteiroPlano(f.adianta), acumuloMeses: inteiroPlano(f.acumuloMeses), intervaloDias: inteiroPlano(f.intervaloDias) },
+    plano: { nome: texto(f.nome, 60), preco: dinheiroOuZero(f.preco), cortes: inteiroPlano(f.cortes), servicoIds: idsDe(f.servicoIds, 10), adianta: inteiroPlano(f.adianta), acumuloMeses: inteiroPlano(f.acumuloMeses), intervaloDias: inteiroPlano(f.intervaloDias), restringeServicos: f.restringeServicos === true },
     status: STATUS_ASSINATURA.includes(d.status) ? d.status : 'pendente', inicioMes: mesPlano(d.inicioMes), diaCobranca: inteiroPlano(d.diaCobranca),
     pagamentos: listaDe(d.pagamentos, 120).map((p) => ({ id: texto(p && p.id, 40), mes: mesPlano(p && p.mes), valor: dinheiroOuZero(p && p.valor), forma: FORMAS_PLANO.includes(p && p.forma) ? p.forma : 'pix', em: instante(p && p.em),
       autor: { nome: texto(p && p.autor && p.autor.nome, 150) }, estornado: !!(p && p.estornado === true), estornoMotivo: p && p.estornoMotivo ? texto(p.estornoMotivo, 200) : '' })).filter((p) => ID.test(p.id)),
@@ -967,7 +969,7 @@ export const planos = {
     d = d && typeof d === 'object' ? d : {};
     const ids = listaDe(d.servicoIds, 10).map((x) => String(x ?? ''));
     if (!ids.every((x) => ID.test(x))) return { ok: false, status: 0, erro: 'Serviço do plano não encontrado.' };
-    const corpo = { nome: texto(d.nome, 60), descricao: texto(d.descricao, 200), servicoIds: ids, ativo: d.ativo !== false };
+    const corpo = { nome: texto(d.nome, 60), descricao: texto(d.descricao, 200), servicoIds: ids, ativo: d.ativo !== false, restringeServicos: d.restringeServicos === true };
     for (const k of ['preco', 'cortes', 'adianta', 'acumuloMeses', 'intervaloDias']) {
       const n = numeroDoCampo(d[k]);
       if (n !== null && !Number.isFinite(n)) return { ok: false, status: 0, erro: 'Informe só números nos valores e nos limites.' };
@@ -1083,12 +1085,12 @@ export const planosPublico = {
     const r = await chamar('POST', '/api/publico/planos/pedidos', corpo, undefined, PUB);
     return r.ok ? { ok: true } : r;
   },
-  // POST /api/publico/planos/uso  { telefone, servicoIds, inicio }  → { usaPlano }  (a tela avisa "este horário usa um atendimento do seu plano" antes de pedir; só sim ou não, telefone no corpo)
+  // POST /api/publico/planos/uso  { telefone, servicoIds, inicio }  → { usaPlano, esgotado }  (a tela avisa "este horário usa um atendimento do seu plano" antes de pedir; E2: esgotado = a cota do mês acabou e a equipe agenda fora do plano; só sim ou não, telefone no corpo)
   async uso({ telefone, servicoIds, inicio }) {
     const ids = Array.isArray(servicoIds) ? servicoIds.filter((x) => ID.test(String(x))).slice(0, 10) : [];
-    if (!texto(telefone, 30) || !ids.length || !Number.isFinite(inicio)) return { ok: true, usaPlano: false };
+    if (!texto(telefone, 30) || !ids.length || !Number.isFinite(inicio)) return { ok: true, usaPlano: false, esgotado: false, restrito: false };
     const r = await chamar('POST', '/api/publico/planos/uso', { telefone: texto(telefone, 30), servicoIds: ids, inicio: new Date(inicio).toISOString() }, undefined, PUB);
-    return r.ok ? { ok: true, usaPlano: !!(r.dados && r.dados.usaPlano === true) } : { ok: true, usaPlano: false }; // falha na prévia nunca atrapalha o pedido
+    return r.ok ? { ok: true, usaPlano: !!(r.dados && r.dados.usaPlano === true), esgotado: !!(r.dados && r.dados.esgotado === true), restrito: !!(r.dados && r.dados.restrito === true) } : { ok: true, usaPlano: false, esgotado: false, restrito: false }; // falha na prévia nunca atrapalha o pedido
   },
   // GET /api/publico/planos/saldo?telefone=  → { planos: [{ plano, mes, restantes, cortesPorMes, pagoMes }], aviso }  (só cortes; sem plano = resposta genérica)
   async saldo(telefone) {
@@ -1572,7 +1574,7 @@ export const publico = {
     const token = r.dados && typeof r.dados.token === 'string' && /^[0-9a-f]{48}$/.test(r.dados.token) ? r.dados.token : '';
     // B1: com profissionais diferentes vêm também os demais agendamentos da sequência, cada um com o seu token
     const outros = listaDe(r.dados && r.dados.outros, 9).map((o) => ({ agendamento: lerResumoPublico(o && o.agendamento), token: o && typeof o.token === 'string' && /^[0-9a-f]{48}$/.test(o.token) ? o.token : '' })).filter((o) => o.agendamento.id && o.agendamento.inicio !== null);
-    return { ok: true, agendamento: lerResumoPublico(r.dados && r.dados.agendamento), token, usouPlano: !!(r.dados && r.dados.usouPlano === true), outros };
+    return { ok: true, agendamento: lerResumoPublico(r.dados && r.dados.agendamento), token, usouPlano: !!(r.dados && r.dados.usouPlano === true), plano: lerPlanoUsado(r.dados && r.dados.plano), outros };
   },
   // POST /api/publico/meus  { tokens }  → [resumo]   (o token vai no corpo, nunca na URL)
   async meus(tokens, captcha) {

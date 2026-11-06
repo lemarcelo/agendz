@@ -759,6 +759,7 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
 .pub-aviso-horario .pub-hora { align-self: flex-start; }
 .pub-resumo { display: grid; gap: 2px; background: var(--surface-2); border-radius: 12px; padding: 12px; }
 .pub-aviso-plano { display: flex; gap: 8px; align-items: center; margin: 0; background: var(--verde-bg); color: var(--verde); border-radius: 12px; padding: 12px; font-weight: 600; }
+.pub-aviso-plano.esgotado { background: var(--amarelo-bg); color: var(--amarelo); } /* E2: cota do plano acabou (atenção, não confirmação) */
 .pub-form { display: grid; gap: 12px; }
 .pub-form input { min-height: 46px; font-size: 16px; }
 .pub-isca { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }

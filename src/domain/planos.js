@@ -68,11 +68,11 @@ export function montarPlano(s, d, atual) {
   const intervaloDias = inteiro(d.intervaloDias, INTERVALO_PADRAO, 0, INTERVALO_MAX, 'Intervalo entre atendimentos (dias)');
   const validadeMeses = inteiro(d.validadeMeses, 0, 0, VALIDADE_MAX, 'Validade (meses)');
   if (erros.length) return { ok: false, erros };
-  return { ok: true, dados: { nome, descricao: limparTexto(String(d.descricao ?? ''), 200).trim(), observacoes: limparTexto(String(d.observacoes ?? ''), 300).trim(), produtoIds: [...pids], validadeMeses, preco: r2(preco), cortes, servicoIds: [...ids], adianta, acumuloMeses, intervaloDias, ativo: d.ativo !== false } };
+  return { ok: true, dados: { nome, descricao: limparTexto(String(d.descricao ?? ''), 200).trim(), observacoes: limparTexto(String(d.observacoes ?? ''), 300).trim(), produtoIds: [...pids], validadeMeses, preco: r2(preco), cortes, servicoIds: [...ids], adianta, acumuloMeses, intervaloDias, restringeServicos: d.restringeServicos === true, ativo: d.ativo !== false } };
 }
 
 // Cópia do plano como era na hora da contratação: mudar o plano depois não mexe em quem já assinou.
-export const fotoDoPlano = (p) => ({ nome: p.nome, preco: p.preco, cortes: p.cortes, servicoIds: [...p.servicoIds], produtoIds: [...(p.produtoIds || [])], validadeMeses: p.validadeMeses || 0, adianta: p.adianta, acumuloMeses: p.acumuloMeses, intervaloDias: p.intervaloDias });
+export const fotoDoPlano = (p) => ({ nome: p.nome, preco: p.preco, cortes: p.cortes, servicoIds: [...p.servicoIds], produtoIds: [...(p.produtoIds || [])], validadeMeses: p.validadeMeses || 0, adianta: p.adianta, acumuloMeses: p.acumuloMeses, intervaloDias: p.intervaloDias, restringeServicos: p.restringeServicos === true });
 
 // Último mês em que o plano vale (validade em meses a partir do mês de início); sem validade, null.
 export const fimDoPlano = (as) => (as.plano.validadeMeses > 0 && as.inicioMes ? somaMeses(as.inicioMes, as.plano.validadeMeses - 1) : null);
@@ -152,14 +152,31 @@ export function podeUsar(s, as, { inicio, agora, ignoreId = null }) {
   const ruim = ex.linhas.find((l) => l.estourou);
   if (ruim) {
     if (!ruim.pago) return { ok: false, erro: `Os cortes do plano acabaram. A mensalidade de ${rotuloMes(ruim.mes)} ainda não foi registrada.` };
-    if (ruim.mes !== mes) return { ok: false, erro: `Esse horário deixaria o plano sem atendimentos em ${rotuloMes(ruim.mes)}.` };
-    return { ok: false, erro: `Os cortes do plano em ${rotuloMes(mes)} acabaram.` };
+    if (ruim.mes !== mes) return { ok: false, erro: `Esse horário deixaria o plano sem atendimentos em ${rotuloMes(ruim.mes)}.`, limite: true };
+    return { ok: false, erro: `Os cortes do plano em ${rotuloMes(mes)} acabaram.`, limite: true };
   }
   const linha = ex.linhas.find((l) => l.mes === mes);
   const adiantado = !!linha && linha.saldoFim < 0;
   const proximo = ex.linhas.find((l) => l.mes === somaMeses(mes, 1));
   return { ok: true, adiantado, aviso: adiantado ? `Esse corte foi adiantado do mês seguinte${proximo ? ` (em ${rotuloMes(proximo.mes)} restam ${Math.max(0, proximo.saldoFim)})` : ''}.` : '' };
 }
+
+// E2: quantos atendimentos do plano ainda restam em `mes` (sem contar adiantamento): o saldo do fim do mês, nunca negativo; mês fora do extrato = 0. Espelho de PlanoRegras.restantesNoMes.
+export function restantesNoMes(ex, mes) {
+  const l = ex.linhas.find((x) => x.mes === mes);
+  return l ? Math.max(0, l.saldoFim) : 0;
+}
+
+// E2: plano que RESTRINGE o link aos serviços dele: se o cliente pediu algum serviço de fora, devolve a mensagem (o link recusa; a equipe agenda qualquer serviço). Sem restrição: null. Espelho de PlanoService.restricaoDoLink.
+export function restricaoDoLink(s, as, servicoIds) {
+  if (!as || as.status !== 'ativa' || !as.plano.restringeServicos) return null;
+  if (servicoIds.every((id) => as.plano.servicoIds.includes(id))) return null;
+  const nomes = as.plano.servicoIds.map((id) => (s.servicos || []).find((x) => x.id === id)?.nome).filter(Boolean).sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
+  return `Seu plano permite agendar pelo link só: ${nomes.join(', ')}. Para outros serviços, fale com a equipe.`;
+}
+
+// E2: o link (e o WhatsApp) recusa quando a COTA do mês acabou; a equipe agenda sem a restrição do plano. Mesma mensagem do servidor (PlanoService.usarSeCouber).
+export const mensagemLimiteDoPlano = (inicio) => `Os atendimentos do seu plano em ${rotuloMes(mesDe(inicio))} acabaram. Para agendar fora do plano, fale com a equipe.`;
 
 // Dívida de quem encerrou o plano devendo atendimento adiantado: os usos que passaram do que foi pago.
 export function dividaAoEncerrar(s, as, agora) {
@@ -176,8 +193,11 @@ export function usoParaAgendamento(s, { assinaturaId, clienteId, servicoIds, ini
   if (!as) return { ok: false, erro: 'Plano não encontrado para esse cliente.' };
   if (!coberturaDoPlano(as.plano, servicoIds).length) return { ok: false, erro: `Nenhum dos serviços escolhidos faz parte do plano ${as.plano.nome}.` };
   const pu = podeUsar(s, as, { inicio, agora, ignoreId });
-  if (!pu.ok) return { ok: false, erro: pu.erro };
-  return { ok: true, uso: { assinaturaId: as.id, planoNome: as.plano.nome, incluidos: [...as.plano.servicoIds], produtosIncluidos: [...(as.plano.produtoIds || [])], em: agora }, aviso: pu.aviso, adiantado: pu.adiantado };
+  if (!pu.ok) return { ok: false, erro: pu.erro, ...(pu.limite ? { limite: true } : {}) };
+  // E2: com este horário contado, quanto sobra do plano no mês dele (a tela mostra no fim do agendamento)
+  const mesDoHorario = mesDe(inicio);
+  const restantes = restantesNoMes(extrato(s, as, agora, { extras: [inicio], ignoreId }), mesDoHorario);
+  return { ok: true, restantes, mes: mesDoHorario, uso: { assinaturaId: as.id, planoNome: as.plano.nome, incluidos: [...as.plano.servicoIds], produtosIncluidos: [...(as.plano.produtoIds || [])], em: agora }, aviso: pu.aviso, adiantado: pu.adiantado };
 }
 
 // Itens (de `itensDoAgendamento`) que o plano cobre: saem de graça. O que não é do plano é cobrado normalmente.

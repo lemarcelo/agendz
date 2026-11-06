@@ -5,7 +5,7 @@ import {
   ATIVOS, STATUS, comissaoJaPaga, ERRO_COMISSAO_PAGA, formaEfetiva, formatarTelefone, acharConflitos, cadastroPorCpf, somenteDigitos, telefoneNacional, telefoneDoCanal, errosServicoIds, limparTexto, duracaoMin, exigeConfirmacaoServico, identificarCliente, janelaOcupada,
   montarPlano, montarLembretes, notificacoesEfetivas, ocupadoMin, servicosPorIds, servicosDoAg, validarHorario, congelarComissoes, ocupacaoDe, retiradaDe, nomeBox, semBoxAtivo, ERRO_SEM_BOX,
 } from './rules.js';
-import { assinaturaDoCliente, podeUsar, usoParaAgendamento } from './planos.js';
+import { assinaturaDoCliente, mensagemLimiteDoPlano, podeUsar, restricaoDoLink, usoParaAgendamento } from './planos.js';
 import { LIMITE_VEICULOS, fotoDoVeiculo, limparVeiculoComRegras, resumoVeiculo, veiculoInformado, veiculoPorPlaca } from './veiculos.js';
 import { fmtDate, fmtHM, fmtMoney, HORA, MIN, startOfDay } from './time.js';
 import { consumoDoAgendamento, r2, r3, totalAgendamento } from './reports.js';
@@ -159,9 +159,12 @@ export function criarAgendamento(s, dados, autor, agora) {
     usoPlano = up;
   } else if (cliente && (origem === 'link' || origem === 'whatsapp')) {
     // O próprio cliente com plano ativo agenda (link ou WhatsApp): o horário gasta 1 corte do plano quando algum serviço é coberto e as travas deixam (saldo, intervalo, adiantar).
-    // Sem corte (ou serviço fora do plano) o agendamento segue normal, pelo preço normal; nunca é recusado por causa do plano.
+    // E2: se a COTA do mês acabou, o link recusa e manda falar com a equipe (que agenda sem a restrição do plano). Sem plano, mensalidade em falta, intervalo ou serviço fora do plano o agendamento segue normal, pelo preço normal.
     const ativa = assinaturaDoCliente(s, clienteId);
+    const restricao = ativa ? restricaoDoLink(s, ativa, servicoIds) : null; // E2: plano que restringe o link aos serviços dele
+    if (restricao) return { ok: false, erros: [restricao] };
     const up = ativa ? usoParaAgendamento(s, { assinaturaId: ativa.id, clienteId, servicoIds, inicio, agora }) : null;
+    if (up && !up.ok && up.limite) return { ok: false, erros: [mensagemLimiteDoPlano(inicio)] };
     if (up && up.ok) usoPlano = up;
   }
   const plano = montarPlano({ inicio, servicos: v.servicos, estab: s.estabelecimento, agora });
@@ -186,7 +189,7 @@ export function criarAgendamento(s, dados, autor, agora) {
   if (usoPlano) registrar(s, a, autor, 'plano', null, `Usa 1 atendimento do plano ${usoPlano.uso.planoNome}${usoPlano.aviso ? ` (${usoPlano.aviso})` : ''}`, agora);
   for (const g of aposCriar) g(s, a, autor, agora);
   tick(s, agora);
-  return { ok: true, agendamento: a, avisos: { pendentes: v.pendentes, confirmados: v.confirmados }, ...(usoPlano ? { plano: { nome: usoPlano.uso.planoNome, aviso: usoPlano.aviso, adiantado: usoPlano.adiantado } } : {}) };
+  return { ok: true, agendamento: a, avisos: { pendentes: v.pendentes, confirmados: v.confirmados }, ...(usoPlano ? { plano: { nome: usoPlano.uso.planoNome, aviso: usoPlano.aviso, adiantado: usoPlano.adiantado, restantes: usoPlano.restantes, mes: usoPlano.mes } } : {}) };
 }
 
 // Quem confirma primeiro fica com o horário: os pendentes sobrepostos são cancelados.

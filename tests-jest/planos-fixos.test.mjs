@@ -4,7 +4,7 @@
 import { test, jest, beforeEach, afterEach, beforeAll, afterAll } from '@jest/globals';
 import assert from 'node:assert/strict';
 import { store, auth, agenda, planos, publico, whatsapp, clientes, avisosDoUsuario } from '../src/services/api.js';
-import { DIAS_FIXOS_A_FRENTE, MAX_FIXOS } from '../src/domain/planos.js';
+import { DIAS_FIXOS_A_FRENTE, MAX_FIXOS, restantesNoMes } from '../src/domain/planos.js';
 import { modelosDePlanoDoTipo, formularioDoModelo } from '../src/domain/catalogo.js';
 import { sanearFixos, ocorrencias } from '../src/domain/fixos.js';
 
@@ -18,13 +18,13 @@ let plano;
 let assin;
 let CLI; // cliente novo (sem agendamentos abertos do seed)
 const TEL = '(51) 98123-4567';
-function preparar({ cortes = 4, intervaloDias = 3 } = {}) {
+function preparar({ cortes = 4, intervaloDias = 3, restringeServicos = false } = {}) {
   jest.useRealTimers();
   jest.useFakeTimers({ doNotFake: ['hrtime', 'nextTick', 'performance', 'queueMicrotask', 'setImmediate', 'clearImmediate', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'], now: HOJE });
   store.reiniciar();
   store.entrarNaLoja('dalforno');
   alan();
-  const p = planos.salvar({ nome: 'Degradê em Dia', preco: 75, cortes, servicoIds: ['s-degrade'], adianta: 1, acumuloMeses: 2, intervaloDias });
+  const p = planos.salvar({ nome: 'Degradê em Dia', preco: 75, cortes, servicoIds: ['s-degrade'], adianta: 1, acumuloMeses: 2, intervaloDias, restringeServicos });
   assert.ok(p.ok, JSON.stringify(p));
   plano = p.plano;
   const cl = clientes.salvar({ nome: 'Rafael Assinante', telefone: TEL });
@@ -237,9 +237,13 @@ const linkPara = (extra = {}) => publico.agendar({ nome: 'Rafael Assinante', tel
 test('link: cliente com plano ativo e serviço coberto gasta 1 corte; avisa antes e depois, sem valor nem nome do plano', () => {
   auth.logout();
   const previa = publico.usoDoPlano({ telefone: TEL, servicoIds: ['s-degrade'], inicio: em(4, 10) });
-  assert.deepEqual(previa, { ok: true, usaPlano: true });
+  assert.deepEqual(previa, { ok: true, usaPlano: true, esgotado: false, restrito: false });
   const r = linkPara();
   assert.ok(r.ok, JSON.stringify(r)); assert.equal(r.usouPlano, true);
+  // E2: no fim do agendamento o cliente vê quantos atendimentos do plano restam no mês do horário (sem valor nem saldo de outra pessoa)
+  assert.deepEqual(Object.keys(r.plano).sort(), ['mes', 'nome', 'restantes']);
+  assert.equal(r.plano.restantes, 3, 'o plano de teste tem 4 por mês e este horário usou 1');
+  assert.match(r.plano.mes, /^\d{4}-\d{2}$/);
   // o token do acesso é aleatório e pode conter "75": só vale o número solto (valor), nunca pedaço de palavra
   assert.equal(/(?<![0-9a-zA-Z])75(?![0-9a-zA-Z])/.test(JSON.stringify(r)), false, 'sem valor da mensalidade');
   alan();
@@ -249,28 +253,79 @@ test('link: cliente com plano ativo e serviço coberto gasta 1 corte; avisa ante
   assert.ok(st().avisosPainel.some((x) => x.agendamentoId === a.id && /atendimento do plano/.test(x.texto)), 'o dono vê que usa o plano');
 });
 
-test('link: sem saldo, serviço fora do plano, sem plano ou plano de outro: agenda normal, preço normal', () => {
+test('link: serviço fora do plano, sem plano ou plano de outro: agenda normal, preço normal; cota do mês acabada: o link recusa e a equipe agenda fora do plano (E2)', () => {
   preparar({ cortes: 2, intervaloDias: 0 });
   auth.logout();
-  assert.deepEqual(publico.usoDoPlano({ telefone: TEL, servicoIds: ['s-barba'], inicio: em(4, 10) }), { ok: true, usaPlano: false }, 'barba não é do plano');
-  assert.deepEqual(publico.usoDoPlano({ telefone: '(51) 99588-3374', servicoIds: ['s-degrade'], inicio: em(4, 10) }), { ok: true, usaPlano: false }, 'Jon não tem plano');
-  assert.deepEqual(publico.usoDoPlano({ telefone: '(54) 99000-0000', servicoIds: ['s-degrade'], inicio: em(4, 10) }), { ok: true, usaPlano: false }, 'telefone desconhecido: mesma resposta');
+  assert.deepEqual(publico.usoDoPlano({ telefone: TEL, servicoIds: ['s-barba'], inicio: em(4, 10) }), { ok: true, usaPlano: false, esgotado: false, restrito: false }, 'barba não é do plano');
+  assert.deepEqual(publico.usoDoPlano({ telefone: '(51) 99588-3374', servicoIds: ['s-degrade'], inicio: em(4, 10) }), { ok: true, usaPlano: false, esgotado: false, restrito: false }, 'Jon não tem plano');
+  assert.deepEqual(publico.usoDoPlano({ telefone: '(54) 99000-0000', servicoIds: ['s-degrade'], inicio: em(4, 10) }), { ok: true, usaPlano: false, esgotado: false, restrito: false }, 'telefone desconhecido: mesma resposta');
   const fora = linkPara({ servicoIds: ['s-barba'] });
   assert.ok(fora.ok, JSON.stringify(fora)); assert.equal(fora.usouPlano, false);
   alan();
   assert.equal(st().agendamentos.find((x) => x.id === fora.agendamentoId).planoUso, undefined);
-  // gasta todo o saldo (2 + 1 adiantado) com atendimentos feitos agora; o pedido seguinte pelo link é normal
+  // gasta todo o saldo (2 + 1 adiantado) com atendimentos feitos agora
   for (let k = 0; k < 3; k++) {
     const ag = agenda.atender({ clienteId: CLI, profissionalId: 'u-alan', servicoIds: ['s-degrade'], formaPagamento: 'pix', assinaturaId: assin });
     assert.ok(ag.ok, JSON.stringify(ag));
   }
   assert.equal(restantes(), 0);
   auth.logout();
-  assert.deepEqual(publico.usoDoPlano({ telefone: TEL, servicoIds: ['s-degrade'], inicio: em(21, 10) }), { ok: true, usaPlano: false });
-  const sem = linkPara({ inicio: em(21, 10) });
-  assert.ok(sem.ok, JSON.stringify(sem)); assert.equal(sem.usouPlano, false);
+  // E2: a prévia avisa "esgotado" (sem nome de plano nem saldo) e o LINK recusa o serviço coberto; nada é gravado
+  assert.deepEqual(publico.usoDoPlano({ telefone: TEL, servicoIds: ['s-degrade'], inicio: em(7, 10) }), { ok: true, usaPlano: false, esgotado: true, restrito: false });
+  const antes = st().agendamentos.length;
+  const sem = linkPara({ inicio: em(7, 10) });
+  assert.equal(sem.ok, false, 'cota do mês acabada: o link não agenda o serviço coberto');
+  assert.match(sem.erros[0], /Os atendimentos do seu plano em .+ acabaram\. Para agendar fora do plano, fale com a equipe\./);
+  assert.equal(st().agendamentos.length, antes, 'o pedido recusado não grava nada');
+  // serviço FORA do plano segue normal pelo link (a restrição é só dos serviços cobertos)
+  const barba = linkPara({ inicio: em(7, 10), servicoIds: ['s-barba'] });
+  assert.ok(barba.ok, JSON.stringify(barba)); assert.equal(barba.usouPlano, false);
+  // a equipe agenda o mesmo serviço sem a restrição: sem marcar o plano, cobrança normal (nada recusado)
   alan();
-  assert.equal(st().agendamentos.find((x) => x.id === sem.agendamentoId).planoUso, undefined, 'sem corte: agenda normal');
+  const equipe = agenda.atender({ clienteId: CLI, profissionalId: 'u-alan', servicoIds: ['s-degrade'], formaPagamento: 'pix' });
+  assert.ok(equipe.ok, JSON.stringify(equipe));
+  assert.equal(st().agendamentos.find((x) => x.id === equipe.agendamento.id).planoUso, undefined, 'fora do plano');
+  // pedir o PLANO explicitamente além da cota continua recusado (a equipe agenda sem marcar o plano)
+  assert.equal(agenda.atender({ clienteId: CLI, profissionalId: 'u-alan', servicoIds: ['s-degrade'], formaPagamento: 'pix', assinaturaId: assin }).ok, false);
+});
+
+test('link: mensalidade em falta ou intervalo do plano NÃO barram o link (só a cota do mês acabada): agenda normal pelo preço normal (E2)', () => {
+  preparar({ cortes: 2, intervaloDias: 3 });
+  auth.logout();
+  const a1 = linkPara(); assert.equal(a1.usouPlano, true);
+  const perto = linkPara({ inicio: em(5, 10) }); // 1 dia depois: o plano pede 3 dias; não é a cota
+  assert.ok(perto.ok, JSON.stringify(perto)); assert.equal(perto.usouPlano, false);
+  assert.deepEqual(publico.usoDoPlano({ telefone: TEL, servicoIds: ['s-degrade'], inicio: em(5, 10) }), { ok: true, usaPlano: false, esgotado: false, restrito: false });
+});
+
+test('E2: plano que restringe o link aos serviços dele: serviço de fora é recusado (com os permitidos), prévia avisa, a equipe agenda qualquer serviço', () => {
+  preparar({ restringeServicos: true });
+  auth.logout();
+  assert.deepEqual(publico.usoDoPlano({ telefone: TEL, servicoIds: ['s-barba'], inicio: em(4, 10) }), { ok: true, usaPlano: false, esgotado: false, restrito: true });
+  const antes = st().agendamentos.length;
+  const fora = linkPara({ servicoIds: ['s-barba'] });
+  assert.equal(fora.ok, false);
+  assert.match(fora.erros[0], /^Seu plano permite agendar pelo link só: .*Corte Degradê.*. Para outros serviços, fale com a equipe.$/);
+  assert.equal(linkPara({ servicoIds: ['s-degrade', 's-barba'] }).ok, false, 'misturar também é recusado');
+  assert.equal(st().agendamentos.length, antes, 'nada gravado');
+  assert.equal(linkPara().ok, true, 'o serviço do plano passa');
+  alan();
+  const equipe = agenda.atender({ clienteId: CLI, profissionalId: 'u-alan', servicoIds: ['s-barba'], formaPagamento: 'pix' });
+  assert.ok(equipe.ok, JSON.stringify(equipe));
+});
+
+test('E2: plano SEM restrição deixa o link agendar serviço de fora pelo preço normal', () => {
+  preparar({ intervaloDias: 0 });
+  auth.logout();
+  assert.equal(publico.usoDoPlano({ telefone: TEL, servicoIds: ['s-barba'], inicio: em(4, 10) }).restrito, false);
+  assert.equal(linkPara({ servicoIds: ['s-barba'] }).ok, true);
+});
+
+test('E2: restantesNoMes é o saldo do fim do mês, nunca negativo, e 0 fora do extrato', () => {
+  const ex = { linhas: [{ mes: '2026-10', saldoFim: 3 }, { mes: '2026-11', saldoFim: -1 }, { mes: '2026-12', saldoFim: 0 }] };
+  assert.equal(restantesNoMes(ex, '2026-10'), 3);
+  assert.equal(restantesNoMes(ex, '2026-11'), 0, 'adiantado não conta');
+  assert.equal(restantesNoMes(ex, '2027-01'), 0, 'fora do extrato');
 });
 
 test('link: respeita o intervalo entre cortes e o cancelamento devolve o corte; plano encerrado não vale', () => {
@@ -282,7 +337,7 @@ test('link: respeita o intervalo entre cortes e o cancelamento devolve o corte; 
   alan(); assert.equal(restantes(), 4, 'cancelou: o corte volta');
   assert.ok(planos.encerrar(assin, 'cliente mudou de cidade').ok);
   auth.logout();
-  assert.deepEqual(publico.usoDoPlano({ telefone: TEL, servicoIds: ['s-degrade'], inicio: em(8, 10) }), { ok: true, usaPlano: false });
+  assert.deepEqual(publico.usoDoPlano({ telefone: TEL, servicoIds: ['s-degrade'], inicio: em(8, 10) }), { ok: true, usaPlano: false, esgotado: false, restrito: false });
 });
 
 test('link: a consulta "usa plano" valida a entrada e tem limite por telefone', () => {

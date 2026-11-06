@@ -249,7 +249,7 @@ function agendarUm(s, d, agora) {
   const sv = servicosDoAg(s, a).map((x) => x.nome).join(', ');
   E.avisarPainel(s, a, `Cliente agendou: ${c.apelido || c.nome} pediu ${sv}${a.veiculo ? ` para o ${resumoVeiculo(a.veiculo)}` : ''} com ${profissional.apelido || profissional.nome} para ${fmtDate(a.inicio)} às ${fmtHM(a.inicio)}.${r.plano ? ` Usa 1 atendimento do plano ${r.plano.nome}.` : ''} Confirme ou recuse.`, agora);
   E.enviarAoCliente(s, a, 'cliente_agendou', agora);
-  return { ok: true, agendamentoId: a.id, token: emitirToken(s, c.id, agora), clienteNovo: !!r0.criado, usouPlano: !!r.plano };
+  return { ok: true, agendamentoId: a.id, token: emitirToken(s, c.id, agora), clienteNovo: !!r0.criado, usouPlano: !!r.plano, ...(r.plano ? { plano: { nome: r.plano.nome, restantes: r.plano.restantes, mes: r.plano.mes } } : {}) };
 }
 
 // ---------- gerenciar os próprios agendamentos ----------

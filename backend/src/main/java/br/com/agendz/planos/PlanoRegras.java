@@ -35,7 +35,10 @@ public final class PlanoRegras {
     }
 
     /** Cópia do plano como era na contratação (é o que a assinatura guarda). */
-    public record Foto(String nome, BigDecimal preco, int cortes, List<UUID> servicoIds, int adianta, int acumuloMeses, int intervaloDias) {
+    public record Foto(String nome, BigDecimal preco, int cortes, List<UUID> servicoIds, int adianta, int acumuloMeses, int intervaloDias, boolean restringeServicos) {
+        public Foto(String nome, BigDecimal preco, int cortes, List<UUID> servicoIds, int adianta, int acumuloMeses, int intervaloDias) {
+            this(nome, preco, cortes, servicoIds, adianta, acumuloMeses, intervaloDias, false);
+        }
     }
 
     public record Linha(String mes, boolean pago, int concedidos, int usados, int saldoFim, int limite, boolean estourou, boolean zerou) {
@@ -47,7 +50,11 @@ public final class PlanoRegras {
     public record Saldo(String planoNome, String situacao, int cortesPorMes, String mes, boolean pagoMes, int restantes, int usadosNoMes, int maisPermitidos, String pagoAte, boolean atrasado) {
     }
 
-    public record Pode(boolean ok, String erro, boolean adiantado, String aviso) {
+    /** limite (E2): a recusa veio da COTA do plano (os atendimentos pagos do mês acabaram); mensalidade em falta, intervalo e plano inativo não contam. */
+    public record Pode(boolean ok, String erro, boolean adiantado, String aviso, boolean limite) {
+        public Pode(boolean ok, String erro, boolean adiantado, String aviso) {
+            this(ok, erro, adiantado, aviso, false);
+        }
     }
 
     // ---------------------------------------------------------------- meses
@@ -158,8 +165,8 @@ public final class PlanoRegras {
         for (Linha l : ex.linhas()) {
             if (!l.estourou()) continue;
             if (!l.pago()) return new Pode(false, "Os cortes do plano acabaram. A mensalidade de " + rotuloMes(l.mes()) + " ainda não foi registrada.", false, "");
-            if (!l.mes().equals(mes)) return new Pode(false, "Esse horário deixaria o plano sem cortes em " + rotuloMes(l.mes()) + ".", false, "");
-            return new Pode(false, "Os cortes do plano em " + rotuloMes(mes) + " acabaram.", false, "");
+            if (!l.mes().equals(mes)) return new Pode(false, "Esse horário deixaria o plano sem cortes em " + rotuloMes(l.mes()) + ".", false, "", true);
+            return new Pode(false, "Os cortes do plano em " + rotuloMes(mes) + " acabaram.", false, "", true);
         }
         Linha linha = null;
         Linha proximo = null;
@@ -171,6 +178,12 @@ public final class PlanoRegras {
         boolean adiantado = linha != null && linha.saldoFim() < 0;
         String aviso = adiantado ? "Esse corte foi adiantado do mês seguinte" + (proximo == null ? "" : " (em " + rotuloMes(proximo.mes()) + " restam " + Math.max(0, proximo.saldoFim()) + ")") + "." : "";
         return new Pode(true, null, adiantado, aviso);
+    }
+
+    /** E2: quantos atendimentos do plano ainda restam em mes (sem contar adiantamento): o saldo do fim do mês, nunca negativo. Mês fora do extrato: 0. */
+    public static int restantesNoMes(Extrato ex, String mes) {
+        for (Linha l : ex.linhas()) if (l.mes().equals(mes)) return Math.max(0, l.saldoFim());
+        return 0;
     }
 
     /** Dívida de quem encerra o plano devendo corte adiantado: os usos que passaram do que foi pago. */
@@ -193,6 +206,13 @@ public final class PlanoRegras {
         if (incluidos == null || itens == null) return saida;
         for (Item i : itens) if (incluidos.contains(i.id()) && i.valor().signum() > 0) saida.put(i.id(), r2(i.valor()));
         return saida;
+    }
+
+    /** E2: plano que restringe o link aos serviços dele: algum serviço pedido está FORA do plano? */
+    public static boolean foraDaRestricao(Foto p, List<UUID> servicoIds) {
+        if (!p.restringeServicos()) return false;
+        for (UUID s : servicoIds) if (!p.servicoIds().contains(s)) return true;
+        return false;
     }
 
     public static boolean cobreAlgum(Foto p, List<UUID> servicoIds) {

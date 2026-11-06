@@ -238,7 +238,7 @@ function Extrato({ a, aoFechar, aoFeito }) {
 
 function FormPlano({ p, dica, servicos, aoCancelar, aoFeito }) {
   const [f, setF] = useState(() => ({ id: p.id || '', nome: p.nome || '', descricao: p.descricao || '', preco: p.preco ? String(p.preco) : '', cortes: String(p.cortes || 2), servicoIds: p.servicoIds || [],
-    adianta: String(p.adianta ?? 1), acumuloMeses: String(p.acumuloMeses || 2), intervaloDias: String(p.intervaloDias ?? 3), ativo: p.ativo !== false }));
+    adianta: String(p.adianta ?? 1), acumuloMeses: String(p.acumuloMeses || 2), intervaloDias: String(p.intervaloDias ?? 3), restringeServicos: p.restringeServicos === true, ativo: p.ativo !== false }));
   const { erro, enviando, enviar } = usarEnvio(() => api.salvar(f), () => aoFeito(f.id ? 'Plano salvo. Quem já assinou continua com as condições de quando contratou.' : 'Plano criado.'));
   const mudar = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const alternar = (id) => setF({ ...f, servicoIds: f.servicoIds.includes(id) ? f.servicoIds.filter((x) => x !== id) : [...f.servicoIds, id] });
@@ -260,6 +260,7 @@ function FormPlano({ p, dica, servicos, aoCancelar, aoFeito }) {
         <Campo rotulo={`Pode passar do saldo em (0 a ${ADIANTA_MAX})`} dica="Adianta atendimentos do mês seguinte."><input inputMode="numeric" value={f.adianta} onChange={mudar('adianta')} data-testid="plano-adianta" /></Campo>
         <Campo rotulo={`Meses que o saldo acumula (1 a ${ACUMULO_MAX})`}><input inputMode="numeric" value={f.acumuloMeses} onChange={mudar('acumuloMeses')} data-testid="plano-acumulo" /></Campo>
         <Campo rotulo={`Dias entre atendimentos (0 a ${INTERVALO_MAX})`}><input inputMode="numeric" value={f.intervaloDias} onChange={mudar('intervaloDias')} data-testid="plano-intervalo" /></Campo>
+        <label className="check-linha"><input type="checkbox" checked={f.restringeServicos} onChange={(e) => setF({ ...f, restringeServicos: e.target.checked })} data-testid="plano-restringe" /><span>Quem tem este plano só agenda pelo link os serviços dele (a equipe agenda qualquer serviço)</span></label>
         <label className="check-linha"><input type="checkbox" checked={f.ativo} onChange={(e) => setF({ ...f, ativo: e.target.checked })} data-testid="plano-ativo" /><span>À venda (desligado: não aceita assinatura nova)</span></label>
         <div className="planos-rodape-real"><Rodape erro={erro} enviando={enviando} aoCancelar={aoCancelar} rotuloSalvar="Salvar" testid="salvar-plano" /></div>
       </form>

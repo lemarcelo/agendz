@@ -80,10 +80,15 @@ async function modelos(vp, modo) {
   assert.equal(await a.T('plano-modelo-dica').count(), 0);
   assert.equal(a.srv.quantas('POST', '/api/planos'), 0, `${a.rotulo}: escolher o modelo não grava nada`);
   await a.nav.semRolagem(a.p, `${a.rotulo}: formulário do modelo`);
+  // E2: a restrição de serviços do link é opt-in (desligada de fábrica) e vai no corpo quando o dono liga
+  assert.equal(await a.T('plano-restringe').isChecked(), false, 'restrição desligada de fábrica');
+  await a.T('plano-restringe').check();
+  if (process.env.E2E_CAPTURAS) { await a.p.waitForTimeout(350); await a.p.screenshot({ fullPage: true, path: `${process.env.E2E_CAPTURAS}/e2-plano-real-${vp.width}-${modo}.png` }); }
+  await a.nav.semRolagem(a.p, `${a.rotulo}: formulário com a restrição ligada`);
   await a.T('salvar-plano').click();
   await a.T('planos-lista').waitFor();
   const salvo = a.srv.ultimo('POST', '/api/planos').corpo;
-  assert.equal(salvo.nome, 'Degradê em Dia'); assert.equal(salvo.preco, 75); assert.deepEqual(salvo.servicoIds, [DEGRADE]); assert.equal(salvo.intervaloDias, 7);
+  assert.equal(salvo.nome, 'Degradê em Dia'); assert.equal(salvo.preco, 75); assert.deepEqual(salvo.servicoIds, [DEGRADE]); assert.equal(salvo.intervaloDias, 7); assert.equal(salvo.restringeServicos, true, 'o corpo leva a restrição ligada');
   assert.deepEqual(a.nav.erros, [], `${a.rotulo}: sem erro de página`);
   await a.nav.b.close(); a.srv.fechar();
   ok(`${a.rotulo}: Usar modelo preenche, não grava sozinho e salva com os serviços achados`);

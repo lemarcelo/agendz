@@ -825,7 +825,7 @@ export const planos = {
   // POST /planos  |  PUT /planos/{id}
   salvar(entrada) {
     const n = exigir('planos'); if (n) return n;
-    const d = pegar(entrada, ['id', 'nome', 'descricao', 'observacoes', 'preco', 'cortes', 'servicoIds', 'produtoIds', 'validadeMeses', 'adianta', 'acumuloMeses', 'intervaloDias', 'ativo']);
+    const d = pegar(entrada, ['id', 'nome', 'descricao', 'observacoes', 'preco', 'cortes', 'servicoIds', 'produtoIds', 'validadeMeses', 'adianta', 'acumuloMeses', 'intervaloDias', 'restringeServicos', 'ativo']);
     if (d.id === undefined || d.id === null || d.id === '') delete d.id; else if (!idOk(d.id)) return erro('Plano inválido.');
     if (!texto(d.nome, 60)) return erro('Dê um nome ao plano (até 60 letras).');
     if (d.descricao !== undefined && !texto(String(d.descricao), 200, true)) return erro('A descrição pode ter até 200 letras.');

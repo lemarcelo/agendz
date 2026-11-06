@@ -153,6 +153,11 @@ class PlanosTest extends BaseApi {
                 + "],\"adianta\":1,\"acumuloMeses\":2,\"intervaloDias\":3}";
     }
 
+    private String criarPlanoRestrito(String nome, int preco, int cortes, String... servicos) throws Exception {
+        String corpo = corpoPlano(nome, preco, cortes, servicos);
+        return id(escrever(post("/api/planos"), dono, corpo.substring(0, corpo.length() - 1) + ",\"restringeServicos\":true}").andExpect(status().isCreated()).andExpect(jsonPath("$.restringeServicos").value(true)).andReturn().getResponse().getContentAsString());
+    }
+
     private String criarPlano(String nome, int preco, int cortes, String... servicos) throws Exception {
         return id(escrever(post("/api/planos"), dono, corpoPlano(nome, preco, cortes, servicos)).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
     }
@@ -493,7 +498,7 @@ class PlanosTest extends BaseApi {
     }
 
     @Test
-    void clienteComPlanoQueAgendaPeloLinkGastaOCorteENuncaEhRecusadoPorCausaDoPlano() throws Exception {
+    void clienteComPlanoQueAgendaPeloLinkGastaOCorteERecusaSoQuandoACotaDoMesAcaba() throws Exception {
         ipLink = 0;
         escrever(put("/api/estabelecimento/link-agendamento"), dono, "{\"ativo\":true,\"diasMax\":60}").andExpect(status().isOk());
         planoId = criarPlano("Plano Um", 60, 1, corte);
@@ -507,9 +512,12 @@ class PlanosTest extends BaseApi {
         assertEquals(assinatura, jdbc.queryForObject("select plano_assinatura_id::text from agendamento", String.class));
         assertEquals(0, new BigDecimal("40.00").compareTo(jdbc.queryForObject("select desconto from agendamento_servico where servico_id = ?::uuid", BigDecimal.class, corte)));
         assertEquals(1, contar("select count(*) from agendamento_evento where campo = 'plano'"));
-        // 2º corte: a cota (1 + adiantar 1) deixa; o 3º já não cabe e o pedido NÃO é recusado por causa do plano: segue pelo preço normal
+        // 2º corte: a cota (1 + adiantar 1) deixa; o 3º já não cabe e (E2) o LINK recusa em vez de cobrar pelo preço normal: o cliente fala com a equipe, que agenda sem a restrição do plano
         pedirPeloLink(tel, "\"" + corte + "\"", 8, 9).andExpect(status().isCreated()).andExpect(jsonPath("$.usouPlano").value(true));
-        pedirPeloLink(tel, "\"" + corte + "\"", 14, 9).andExpect(status().isCreated()).andExpect(jsonPath("$.usouPlano").value(false));
+        pedirPeloLink(tel, "\"" + corte + "\"", 14, 9).andExpect(status().isConflict()).andExpect(jsonPath("$.mensagem", containsString("acabaram"))).andExpect(jsonPath("$.mensagem", containsString("fale com a equipe")));
+        assertEquals(2, contar("select count(*) from agendamento"), "o pedido recusado não grava nada");
+        // serviço FORA do plano segue normal pelo link (a restrição é só dos serviços cobertos), pelo preço normal
+        pedirPeloLink(tel, "\"" + barba + "\"", 14, 9).andExpect(status().isCreated()).andExpect(jsonPath("$.usouPlano").value(false));
         assertEquals(2, contar("select count(*) from agendamento where plano_assinatura_id = ?::uuid", assinatura));
         assertEquals(0, new BigDecimal("0").compareTo(jdbc.queryForObject("select coalesce(sum(desconto), 0) from agendamento_servico a join agendamento g on g.id = a.agendamento_id where g.plano_assinatura_id is null", BigDecimal.class)));
         // quem não tem plano agenda normalmente
@@ -520,17 +528,81 @@ class PlanosTest extends BaseApi {
     }
 
     @Test
+    void fimDoAgendamentoPeloLinkDizQuantosAtendimentosDoPlanoRestamNoMes() throws Exception {
+        ipLink = 0;
+        escrever(put("/api/estabelecimento/link-agendamento"), dono, "{\"ativo\":true,\"diasMax\":60}").andExpect(status().isOk());
+        planoId = criarPlano("Plano Tres", 90, 3, corte);
+        String tel = novoTelefone();
+        String cliente = criarCliente("Cliente Plano", tel);
+        String assinatura = id(contratar(dono, cliente, planoId, mes1).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
+        pagar(assinatura, mes1).andExpect(status().isCreated());
+        pedirPeloLink(tel, "\"" + corte + "\"", 2, 9).andExpect(status().isCreated()).andExpect(jsonPath("$.plano.nome").value("Plano Tres"))
+                .andExpect(jsonPath("$.plano.restantes").value(2)).andExpect(jsonPath("$.plano.mes").value(mes1));
+        pedirPeloLink(tel, "\"" + corte + "\"", 8, 9).andExpect(status().isCreated()).andExpect(jsonPath("$.plano.restantes").value(1));
+        pedirPeloLink(tel, "\"" + corte + "\"", 14, 9).andExpect(status().isCreated()).andExpect(jsonPath("$.plano.restantes").value(0));
+        // quem não tem plano não recebe bloco de plano
+        pedirPeloLink(novoTelefone(), "\"" + corte + "\"", 20, 9).andExpect(status().isCreated()).andExpect(jsonPath("$.usouPlano").value(false)).andExpect(jsonPath("$.plano").doesNotExist());
+    }
+
+    @Test
+    void planoQueRestringeServicosBarraOutrosServicosNoLinkMasAEquipeAgendaQualquer() throws Exception {
+        ipLink = 0;
+        escrever(put("/api/estabelecimento/link-agendamento"), dono, "{\"ativo\":true,\"diasMax\":60}").andExpect(status().isOk());
+        planoId = criarPlanoRestrito("Plano Restrito", 60, 3, corte);
+        String tel = novoTelefone();
+        String cliente = criarCliente("Cliente Plano", tel);
+        String assinatura = id(contratar(dono, cliente, planoId, mes1).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
+        pagar(assinatura, mes1).andExpect(status().isCreated());
+        String b = "\"" + barba + "\"";
+        // a prévia avisa antes; o link recusa o serviço fora do plano (com os serviços permitidos) e nada é gravado
+        previa("10.65.0.1", tel, b, 2, 9).andExpect(content().json("{\"usaPlano\":false,\"esgotado\":false,\"restrito\":true}", true));
+        pedirPeloLink(tel, b, 2, 9).andExpect(status().isConflict()).andExpect(jsonPath("$.mensagem", containsString("Seu plano permite agendar pelo link só: Corte"))).andExpect(jsonPath("$.mensagem", containsString("fale com a equipe")));
+        assertEquals(0, contar("select count(*) from agendamento"));
+        // misturar serviço do plano com um de fora também é recusado
+        pedirPeloLink(tel, "\"" + corte + "\"," + b, 2, 9).andExpect(status().isConflict());
+        // o serviço do plano passa e usa o plano
+        pedirPeloLink(tel, "\"" + corte + "\"", 2, 9).andExpect(status().isCreated()).andExpect(jsonPath("$.usouPlano").value(true));
+        // quem não tem plano agenda qualquer serviço; a equipe agenda o serviço de fora sem restrição
+        pedirPeloLink(novoTelefone(), b, 8, 9).andExpect(status().isCreated());
+        atender(tel, b, 14, 9, null).andExpect(status().isCreated());
+    }
+
+    @Test
+    void cotaAcabadaBarraOLinkMasAEquipeAgendaSemARestricaoDoPlano() throws Exception {
+        ipLink = 0;
+        escrever(put("/api/estabelecimento/link-agendamento"), dono, "{\"ativo\":true,\"diasMax\":60}").andExpect(status().isOk());
+        planoId = criarPlano("Plano Um", 60, 1, corte);
+        String tel = novoTelefone();
+        String cliente = criarCliente("Cliente Plano", tel);
+        String assinatura = id(contratar(dono, cliente, planoId, mes1).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
+        pagar(assinatura, mes1).andExpect(status().isCreated());
+        String c = "\"" + corte + "\"";
+        pedirPeloLink(tel, c, 2, 9).andExpect(status().isCreated());
+        pedirPeloLink(tel, c, 8, 9).andExpect(status().isCreated());
+        // a prévia avisa antes (sem nome de plano nem saldo): esgotado, e o telefone sem plano continua sem pista
+        previa("10.64.0.1", tel, c, 14, 9).andExpect(content().json("{\"usaPlano\":false,\"esgotado\":true,\"restrito\":false}", true));
+        previa("10.64.0.2", novoTelefone(), c, 14, 9).andExpect(content().json("{\"usaPlano\":false,\"esgotado\":false,\"restrito\":false}", true));
+        pedirPeloLink(tel, c, 14, 9).andExpect(status().isConflict());
+        // a equipe (Atender) agenda o mesmo horário sem a restrição: sem plano, cobrança normal, nada recusado
+        atender(tel, c, 14, 9, null).andExpect(status().isCreated());
+        assertEquals(2, contar("select count(*) from agendamento where plano_assinatura_id = ?::uuid", assinatura));
+        assertEquals(3, contar("select count(*) from agendamento"));
+        // pedir o PLANO explicitamente além da cota continua recusado: a equipe agenda sem marcar o plano
+        atender(tel, c, 20, 9, assinatura).andExpect(status().isConflict());
+    }
+
+    @Test
     void previaDoLinkDizSoSimOuNaoELimitaPorTelefone() throws Exception {
         ipLink = 0;
         String[] a = assinaturaAtiva(true);
         String c = "\"" + corte + "\"";
         // com plano e corte livre: sim, e a resposta é só isso (nunca nome do plano, saldo, valor ou nome do cliente)
-        previa("10.61.0.1", a[2], c, 2, 9).andExpect(status().isOk()).andExpect(content().json("{\"usaPlano\":true}", true))
+        previa("10.61.0.1", a[2], c, 2, 9).andExpect(status().isOk()).andExpect(content().json("{\"usaPlano\":true,\"esgotado\":false,\"restrito\":false}", true))
                 .andExpect(content().string(not(containsString("Plano Mensal")))).andExpect(content().string(not(containsString("Cliente Plano"))));
         // serviço fora do plano, telefone sem plano e telefone inválido: a mesma resposta "não"
-        previa("10.61.0.2", a[2], "\"" + barba + "\"", 2, 9).andExpect(content().json("{\"usaPlano\":false}", true));
-        previa("10.61.0.3", novoTelefone(), c, 2, 9).andExpect(content().json("{\"usaPlano\":false}", true));
-        previa("10.61.0.4", "12", c, 2, 9).andExpect(status().isOk()).andExpect(content().json("{\"usaPlano\":false}", true));
+        previa("10.61.0.2", a[2], "\"" + barba + "\"", 2, 9).andExpect(content().json("{\"usaPlano\":false,\"esgotado\":false,\"restrito\":false}", true));
+        previa("10.61.0.3", novoTelefone(), c, 2, 9).andExpect(content().json("{\"usaPlano\":false,\"esgotado\":false,\"restrito\":false}", true));
+        previa("10.61.0.4", "12", c, 2, 9).andExpect(status().isOk()).andExpect(content().json("{\"usaPlano\":false,\"esgotado\":false,\"restrito\":false}", true));
         // a prévia não grava nem trava nada
         assertEquals(0, contar("select count(*) from agendamento"));
         // 10 consultas por telefone a cada 15 minutos (4 acima: 2 com este telefone): a 11ª é barrada

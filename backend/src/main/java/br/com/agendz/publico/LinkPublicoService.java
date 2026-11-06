@@ -135,9 +135,17 @@ public class LinkPublicoService {
     }
 
     /** `outros`: nos pedidos com profissionais diferentes (B1), os demais agendamentos da sequência (cada um com o seu token). */
-    public record Criado(Resumo agendamento, String token, boolean usouPlano, List<Criado> outros) {
+    /** E2: o plano que o horário usou e quantos atendimentos ainda restam no mês dele (mes = AAAA-MM). */
+    public record PlanoUsado(String nome, int restantes, String mes) {
+    }
+
+    public record Criado(Resumo agendamento, String token, boolean usouPlano, List<Criado> outros, PlanoUsado plano) {
+        public Criado(Resumo agendamento, String token, boolean usouPlano, List<Criado> outros) {
+            this(agendamento, token, usouPlano, outros, null);
+        }
+
         public Criado(Resumo agendamento, String token, boolean usouPlano) {
-            this(agendamento, token, usouPlano, List.of());
+            this(agendamento, token, usouPlano, List.of(), null);
         }
     }
 
@@ -615,7 +623,7 @@ return horariosDoDia(jdbc, cfg, base, dia, servicos, relogio.instant(), false, n
             comissoes.congelar(jdbc, id);
             evento(jdbc, loja.id(), id, "criação", null, servicos.stream().map(Svc::nome).collect(java.util.stream.Collectors.joining(" + "))
                     + (vei == null ? "" : " (" + vei.modelo() + " " + vei.placa() + ")") + " em " + dataHora(inicio));
-            // cliente com plano ativo: o horário gasta 1 corte quando algum serviço é coberto e a cota deixa; senão segue pelo preço normal (nunca recusa por causa do plano)
+            // cliente com plano ativo: o horário gasta 1 corte quando algum serviço é coberto e a cota deixa; se a COTA do mês acabou, recusa (409, E2: a equipe agenda fora do plano); demais casos seguem pelo preço normal
             PlanoService.Uso usoPlano = planos.usarSeCouber(jdbc, id, clienteId, servicoIds, inicio, agora);
             boolean usouPlano = usoPlano != null;
             if (usouPlano) evento(jdbc, loja.id(), id, "plano", null, "Usa 1 corte do plano " + usoPlano.planoNome() + (usoPlano.aviso().isEmpty() ? "" : " (" + usoPlano.aviso() + ")"));
@@ -628,7 +636,7 @@ return horariosDoDia(jdbc, cfg, base, dia, servicos, relogio.instant(), false, n
             jdbc.update("delete from acesso_publico where expira_em < ?", utc(agora));
             jdbc.update("insert into acesso_publico (loja_id, agendamento_id, token_hash, expira_em) values (?::uuid, ?, ?, ?)",
                     loja.id().toString(), id, hash(token), utc(agora.plus(TOKEN_DIAS, ChronoUnit.DAYS)));
-            return new Criado(resumo(jdbc, id, agora), token, usouPlano);
+            return new Criado(resumo(jdbc, id, agora), token, usouPlano, List.of(), usoPlano == null ? null : new PlanoUsado(usoPlano.planoNome(), usoPlano.restantes(), usoPlano.mes()));
     }
 
     /**
@@ -656,7 +664,7 @@ return horariosDoDia(jdbc, cfg, base, dia, servicos, relogio.instant(), false, n
         UUID grupoId = UUID.randomUUID();
         for (Criado c : feitos) jdbc.update("update agendamento set grupo_id = ? where id = ?", grupoId, c.agendamento().id());
         Criado primeiro = feitos.get(0);
-        return new Criado(primeiro.agendamento(), primeiro.token(), primeiro.usouPlano(), new ArrayList<>(feitos.subList(1, feitos.size())));
+        return new Criado(primeiro.agendamento(), primeiro.token(), primeiro.usouPlano(), new ArrayList<>(feitos.subList(1, feitos.size())), primeiro.plano());
     }
 
     /** serviço → profissional, sem repetir nem faltar dado. */

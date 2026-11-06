@@ -132,6 +132,8 @@ for (const vp of [{ width: 1440, height: 900 }, { width: 390, height: 780 }]) {
   await T('pub-enviar').click();
   await T('pub-feito-plano').waitFor();
   assert.match(await T('pub-feito-plano').innerText(), /atendimento do seu plano/);
+  // E2: o fim do pedido diz quantos atendimentos do plano restam no mês do horário (sem valor)
+  assert.match(await T('pub-feito-plano-restam').innerText(), /^(Restam \d+ atendimentos? do seu plano em [a-zç]+\/\d{4}\.|Este foi o último atendimento do seu plano em [a-zç]+\/\d{4}\.)$/);
   // quem não tem plano não vê o aviso
   await T('pub-novo').click();
   await T('pub-srv-s-degrade').check(); await T('pub-barb-u-alan').click(); await T('pub-continuar-1').click();

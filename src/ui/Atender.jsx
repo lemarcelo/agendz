@@ -163,6 +163,7 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
     if (!r.ok) { setErros(r.erros); rolarAoErro(); return; }
     toast(r.tipo === 'futuro' ? 'Agendamento criado.' : 'Atendimento registrado.');
     if (r.plano?.aviso) toast(`Plano ${r.plano.nome}: ${r.plano.aviso}`); // o aviso vem DEPOIS de salvar: nunca atrasa nem bloqueia o agendamento
+    else if (r.plano && Number.isInteger(r.plano.restantes) && r.plano.mes) toast(`Plano ${r.plano.nome}: ${r.plano.restantes > 0 ? `restam ${r.plano.restantes} atendimento${r.plano.restantes === 1 ? '' : 's'}` : 'este foi o último atendimento'} em ${rotuloMesPlano(r.plano.mes)}.`); // E2
     onSalvo && onSalvo(r.agendamento, r.tipo);
     onClose();
   };

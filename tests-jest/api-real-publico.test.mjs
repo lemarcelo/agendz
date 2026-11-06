@@ -94,6 +94,15 @@ test('agendar: corpo só com os campos aceitos; o token vem uma vez; mensagem do
   assert.equal((await publico.agendar({ nome: 'Maria', telefone: '(53) 99900-0001', servicoIds: [SRV], inicio })).usouPlano, true);
   servidor({ agendamento: resumo, token: TOKEN, usouPlano: 'true' }, 201);
   assert.equal((await publico.agendar({ nome: 'Maria', telefone: '(53) 99900-0001', servicoIds: [SRV], inicio })).usouPlano, false);
+  // E2: o bloco do plano (quantos restam no mês) só passa se vier no formato certo; o resto vira null
+  servidor({ agendamento: resumo, token: TOKEN, usouPlano: true, plano: { nome: 'Mensal', restantes: 2, mes: '2026-11', valor: 99 } }, 201);
+  assert.deepEqual((await publico.agendar({ nome: 'Maria', telefone: '(53) 99900-0001', servicoIds: [SRV], inicio })).plano, { nome: 'Mensal', restantes: 2, mes: '2026-11' }, 'nada além de nome, restantes e mês');
+  servidor({ agendamento: resumo, token: TOKEN, usouPlano: true, plano: { nome: 'Mensal', restantes: -3, mes: '2026-11' } }, 201);
+  assert.equal((await publico.agendar({ nome: 'Maria', telefone: '(53) 99900-0001', servicoIds: [SRV], inicio })).plano.restantes, 0, 'negativo vira 0');
+  for (const ruim of [{ nome: 'Mensal', restantes: 1, mes: 'qualquer' }, 'texto', null, { restantes: 1, mes: '2026-11' }]) {
+    servidor({ agendamento: resumo, token: TOKEN, usouPlano: true, plano: ruim }, 201);
+    assert.equal((await publico.agendar({ nome: 'Maria', telefone: '(53) 99900-0001', servicoIds: [SRV], inicio })).plano, null, JSON.stringify(ruim));
+  }
   // isca preenchida vai (o servidor recusa); sem profissional e sem cupom, os campos não vão
   servidor({ agendamento: resumo, token: 'curto' }, 201);
   const r2 = await publico.agendar({ nome: 'M', telefone: '1', servicoIds: [SRV], inicio, site: 'http://spam' });

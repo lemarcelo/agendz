@@ -25,7 +25,7 @@ test('salvar: cria com POST, edita com PUT; números viram número; serviço ou 
   servidor({ id: ID, nome: 'Plano Mensal', preco: 120, cortes: 2, servicoIds: [SRV], adianta: 1, acumuloMeses: 2, intervaloDias: 3, ativo: true }, 201);
   const r = await planos.salvar(plano);
   assert.equal(r.ok, true); assert.equal(r.plano.preco, 120);
-  assert.deepEqual(chamadas[0], { url: 'https://loja.teste/api/planos', metodo: 'POST', corpo: { nome: 'Plano Mensal', descricao: 'Dois cortes', servicoIds: [SRV], ativo: true, preco: 120, cortes: 2, adianta: 1, acumuloMeses: 2, intervaloDias: 3 }, cab: chamadas[0].cab });
+  assert.deepEqual(chamadas[0], { url: 'https://loja.teste/api/planos', metodo: 'POST', corpo: { nome: 'Plano Mensal', descricao: 'Dois cortes', servicoIds: [SRV], ativo: true, restringeServicos: false, preco: 120, cortes: 2, adianta: 1, acumuloMeses: 2, intervaloDias: 3 }, cab: chamadas[0].cab });
   await planos.salvar({ ...plano, id: ID, ativo: false });
   assert.equal(chamadas[1].metodo, 'PUT'); assert.equal(chamadas[1].url, `https://loja.teste/api/planos/${ID}`); assert.equal(chamadas[1].corpo.ativo, false);
   chamadas.length = 0;
@@ -123,13 +123,13 @@ test('planosPublico.uso: POST com o telefone no corpo (nunca na URL), só sim ou
   assert.deepEqual([chamadas[0].metodo, chamadas[0].url], ['POST', 'https://loja.teste/api/publico/planos/uso']);
   assert.deepEqual(chamadas[0].corpo, { telefone: '(53) 99900-0001', servicoIds: [SRV], inicio: '2026-11-02T12:00:00.000Z' });
   assert.ok(!chamadas[0].cab.Authorization, 'rota do cliente nunca leva o token do painel'); assert.ok(!chamadas[0].url.includes('99900'));
-  assert.deepEqual(r, { ok: true, usaPlano: true });
-  servidor({ usaPlano: 'sim', plano: 'Mensal', saldo: 3 }); assert.deepEqual(await planosPublico.uso({ telefone: '(53) 99900-0001', servicoIds: [SRV], inicio }), { ok: true, usaPlano: false }, 'só true de verdade vale; nada a mais sai');
-  servidor({ mensagem: 'Muitos pedidos' }, 429); assert.deepEqual(await planosPublico.uso({ telefone: '(53) 99900-0001', servicoIds: [SRV], inicio }), { ok: true, usaPlano: false });
+  assert.deepEqual(r, { ok: true, usaPlano: true, esgotado: false, restrito: false });
+  servidor({ usaPlano: 'sim', plano: 'Mensal', saldo: 3 }); assert.deepEqual(await planosPublico.uso({ telefone: '(53) 99900-0001', servicoIds: [SRV], inicio }), { ok: true, usaPlano: false, esgotado: false, restrito: false }, 'só true de verdade vale; nada a mais sai');
+  servidor({ mensagem: 'Muitos pedidos' }, 429); assert.deepEqual(await planosPublico.uso({ telefone: '(53) 99900-0001', servicoIds: [SRV], inicio }), { ok: true, usaPlano: false, esgotado: false, restrito: false });
   servidor({ usaPlano: true });
-  assert.deepEqual(await planosPublico.uso({ telefone: '', servicoIds: [SRV], inicio }), { ok: true, usaPlano: false });
-  assert.deepEqual(await planosPublico.uso({ telefone: '53999000001', servicoIds: ['lixo'], inicio }), { ok: true, usaPlano: false });
-  assert.deepEqual(await planosPublico.uso({ telefone: '53999000001', servicoIds: [SRV], inicio: NaN }), { ok: true, usaPlano: false });
+  assert.deepEqual(await planosPublico.uso({ telefone: '', servicoIds: [SRV], inicio }), { ok: true, usaPlano: false, esgotado: false, restrito: false });
+  assert.deepEqual(await planosPublico.uso({ telefone: '53999000001', servicoIds: ['lixo'], inicio }), { ok: true, usaPlano: false, esgotado: false, restrito: false });
+  assert.deepEqual(await planosPublico.uso({ telefone: '53999000001', servicoIds: [SRV], inicio: NaN }), { ok: true, usaPlano: false, esgotado: false, restrito: false });
   assert.equal(chamadas.length, 0, 'entrada ruim nem sai');
 });
 

@@ -7,7 +7,7 @@ import { contaDaForma, CATEGORIA_ESTORNO } from './pagamento.js';
 import { FORMAS_PAGAMENTO, STATUS, errosServicoIds, formaValida, ocupacao, sobrepoe, telefoneBrasileiro, telefoneNacional, validarHorario } from './rules.js';
 import {
   DIAS_FIXOS_A_FRENTE, fimDoPlano, LIMITE_ASSINATURAS, LIMITE_PLANOS, MAX_FIXOS, MAX_PEDIDOS_ABERTOS, MESES_A_FRENTE, MES, abertaDoCliente, assinaturaDoCliente, dividaAoEncerrar, dividaDoCliente, extrato, fotoDoPlano, mesDe, montarPlano,
-  pagamentosValidos, rotuloMes, saldoAtual, somaMeses, usoParaAgendamento,
+  pagamentosValidos, restricaoDoLink, rotuloMes, saldoAtual, somaMeses, usoParaAgendamento,
 } from './planos.js';
 import { ehDoFixo, chaveFixo, menorDistanciaDias, mesmoFixo, ocorrencias, proximoDia, sanearFixos } from './fixos.js';
 import { cap } from './tipos.js';
@@ -342,12 +342,17 @@ ganchos.push(materializarFixos);
 // GET /publico/planos/uso?telefone=&servicoIds=&inicio=  — a tela do cliente avisa "este horário usa um atendimento do seu plano" ANTES de pedir.
 // Só um sim ou não: nunca nome do plano, saldo, valor ou dado de outra pessoa; sem plano, sem saldo ou serviço fora do plano é a mesma resposta.
 export function usoDoPlanoPorTelefone(s, { telefone, servicoIds, inicio }, agora) {
-  const nao = { ok: true, usaPlano: false };
+  const nao = { ok: true, usaPlano: false, esgotado: false, restrito: false };
   if (!telefoneBrasileiro(telefone) || !Number.isFinite(inicio) || errosServicoIds(s, servicoIds, { ativos: true })) return nao;
   const nac = telefoneNacional(telefone);
+  let restrito = false; // E2: plano que restringe o link aos serviços dele e algum serviço pedido está fora
+  let esgotado = false; // E2: tem plano que cobre o serviço, mas a cota do mês acabou (o link não agenda; a equipe agenda fora do plano)
   for (const c of s.clientes.filter((x) => telefoneNacional(x.telefone) === nac)) {
     const as = assinaturaDoCliente(s, c.id);
-    if (as && usoParaAgendamento(s, { assinaturaId: as.id, clienteId: c.id, servicoIds, inicio, agora }).ok) return { ok: true, usaPlano: true };
+    if (as && restricaoDoLink(s, as, servicoIds)) { restrito = true; continue; }
+    const up = as ? usoParaAgendamento(s, { assinaturaId: as.id, clienteId: c.id, servicoIds, inicio, agora }) : null;
+    if (up && up.ok) return { ok: true, usaPlano: true, esgotado: false, restrito: false };
+    if (up && up.limite) esgotado = true;
   }
-  return nao;
+  return { ...nao, esgotado, restrito };
 }

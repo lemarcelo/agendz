@@ -277,7 +277,7 @@ function Extrato({ a, onClose, onChange }) {
 // ---------------------------------------------------------------- catálogo
 function Catalogo({ dados, st, recarregar }) {
   const [edit, setEdit] = useState(null);
-  const novo = () => setEdit({ nome: '', descricao: '', preco: '', cortes: 2, servicoIds: [], produtoIds: [], validadeMeses: 0, observacoes: '', adianta: 1, acumuloMeses: 2, intervaloDias: 3, ativo: true });
+  const novo = () => setEdit({ nome: '', descricao: '', preco: '', cortes: 2, servicoIds: [], produtoIds: [], validadeMeses: 0, observacoes: '', adianta: 1, acumuloMeses: 2, intervaloDias: 3, restringeServicos: false, ativo: true });
   const nomes = (p) => p.servicoIds.map((id) => st.servicos.find((s) => s.id === id)?.nome).filter(Boolean).join(', ');
   const modelos = modelosDePlanoDoTipo(tipoDe(st.estabelecimento)); // por tipo; sem modelo (estética), o botão nem aparece
   const [verModelos, setVerModelos] = useState(false);
@@ -365,6 +365,7 @@ function FormPlano({ p, st, onClose }) {
         <Campo rotulo={`Pode passar do saldo em (0 a ${ADIANTA_MAX})`} dica="Adianta atendimentos do mês seguinte; o aviso aparece depois de salvar."><input type="number" min="0" max={ADIANTA_MAX} value={f.adianta} onChange={num('adianta')} data-testid="plano-adianta" /></Campo>
         <Campo rotulo={`Meses que o saldo acumula (1 a ${ACUMULO_MAX})`}><input type="number" min="1" max={ACUMULO_MAX} value={f.acumuloMeses} onChange={num('acumuloMeses')} data-testid="plano-acumulo" /></Campo>
         <Campo rotulo={`Dias entre atendimentos (0 a ${INTERVALO_MAX})`}><input type="number" min="0" max={INTERVALO_MAX} value={f.intervaloDias} onChange={num('intervaloDias')} data-testid="plano-intervalo" /></Campo>
+        <label className="interruptor campo-largo"><input type="checkbox" checked={f.restringeServicos === true} onChange={(e) => setF({ ...f, restringeServicos: e.target.checked })} data-testid="plano-restringe" /><span className="trilho"><i className="bolinha" /></span><span className="interruptor-txt"><b>Restringir o link aos serviços do plano</b><small className="muted">Quem tem este plano só agenda pelo link os serviços dele; a equipe agenda qualquer serviço.</small></span></label>
         <label className="interruptor campo-largo"><input type="checkbox" checked={f.ativo !== false} onChange={(e) => setF({ ...f, ativo: e.target.checked })} data-testid="plano-ativo" /><span className="trilho"><i className="bolinha" /></span><span className="interruptor-txt"><b>À venda</b><small className="muted">Desligado: some do link de planos e não aceita assinatura nova.</small></span></label>
       </div>
       {erro && <Aviso tipo="erro">{erro}</Aviso>}

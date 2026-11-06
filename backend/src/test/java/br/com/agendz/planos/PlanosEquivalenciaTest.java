@@ -74,6 +74,7 @@ class PlanosEquivalenciaTest {
                 assertEquals(e.get("zerou").asBoolean(), l.zerou(), q + " zerou");
             }
             assertEquals(esp.get("divida").asInt(), PlanoRegras.dividaAoEncerrar(ex), nome + ": dívida");
+            for (PlanoRegras.Linha l : ex.linhas()) assertEquals(Math.max(0, l.saldoFim()), PlanoRegras.restantesNoMes(ex, l.mes()), nome + ": restantes em " + l.mes()); // E2
 
             Saldo sd = PlanoRegras.saldoAtual(foto, status, inicioMes, pagos, usos, agora);
             JsonNode s = esp.get("saldo");
@@ -93,6 +94,9 @@ class PlanosEquivalenciaTest {
                     assertEquals(e.get("aviso").asText(), p.aviso(), nome + ": aviso");
                 } else {
                     assertEquals(e.get("erro").asText(), p.erro(), nome + ": erro");
+                    // E2: a recusa pela COTA do mês (e só ela) é marcada como limite; o texto da fixture é o mesmo da API simulada
+                    boolean cota = e.get("erro").asText().startsWith("Os cortes do plano em ") || e.get("erro").asText().startsWith("Esse horário deixaria o plano sem");
+                    assertEquals(cota, p.limite(), nome + ": limite");
                 }
             }
         }

@@ -6,6 +6,7 @@ import { TOKEN_DEMO } from '../domain/link-profissional.js';
 import { DIAS_CURTOS, fmtDayLong, fmtHM, fmtMoney, maiuscula1, startOfDay, ymd } from '../domain/time.js';
 import { formatarTelefone, telefoneBrasileiro } from '../domain/rules.js';
 import { PORTE_PADRAO, formatarPlaca, limparVeiculoComRegras, placaValida, resumoVeiculo, tipoPlaca } from '../domain/veiculos.js';
+import { rotuloMes } from '../domain/planos.js';
 import { Aviso, Btn, Campo, Icon } from './common.jsx';
 import { LogoMarca, RodapePlataforma } from './Marca.jsx';
 import { useLocal, useStore } from './hooks.js';
@@ -279,11 +280,12 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
   const [feito, setFeito] = useState(null);
   const [lemb, setLemb] = useState(null);
   const [usaPlano, setUsaPlano] = useState(false); // o telefone é de quem tem plano com atendimento para este horário (só sim ou não)
+  const [planoRestrito, setPlanoRestrito] = useState(false); // E2: o plano do telefone restringe o link aos serviços dele e algum serviço escolhido está fora
+  const [planoEsgotado, setPlanoEsgotado] = useState(false); // E2: tem plano que cobre o serviço, mas os atendimentos do mês acabaram (o link não agenda; a equipe agenda fora do plano)
   const servicos = cfg.servicos.filter((x) => srv.includes(x.id));
   const total = servicos.reduce((t, x) => t + preco(x), 0);
   const duracao = servicos.reduce((t, x) => t + minutos(x), 0);
   const multiDia = servicos.some((x) => x.multiDia);
-  const chave = `${srv.join(',')}|${barb}|${porte}|${precisaAtribuir ? Object.entries(atrib).map(([k, v]) => `${k}:${v}`).sort().join(',') : ''}`;
   const nomeBarb = (id) => cfg.profissionais.find((b) => b.id === id)?.nome || `Qualquer ${rot('profissional')}`;
   const alternar = (id) => { setSrv((l) => (l.includes(id) ? l.filter((x) => x !== id) : [...l, id])); setEscolha(null); };
   // A1: escolhendo o profissional, só aparecem os serviços dele; escolhendo serviços, só aparecem quem realiza todos
@@ -303,6 +305,8 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
   useEffect(() => { setAtrib((a) => Object.fromEntries(Object.entries(a).filter(([sid, pid]) => srv.includes(sid) && (porServicoPub[sid] || []).includes(pid)))); }, [srv.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
   const faltaAtribuir = precisaAtribuir && srv.some((sid) => !atrib[sid]);
   const atribuicoes = precisaAtribuir && !faltaAtribuir ? atrib : undefined;
+  // (declarada depois de precisaAtribuir e atrib: antes ficava acima e quebrava a página inteira com "Cannot access before initialization")
+  const chave = `${srv.join(',')}|${barb}|${porte}|${precisaAtribuir ? Object.entries(atrib).map(([k, v]) => `${k}:${v}`).sort().join(',') : ''}`;
   const categorias = useMemo(() => {
     const m = new Map();
     for (const x of servicosVisiveis) { const k = x.categoria || 'Serviços'; if (!m.has(k)) m.set(k, []); m.get(k).push(x); }
@@ -320,10 +324,12 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
 
   // Avisa antes de pedir: "este horário usa um atendimento do seu plano". Só consulta com o telefone completo; o servidor responde apenas sim ou não.
   useEffect(() => {
-    setUsaPlano(false);
+    setUsaPlano(false); setPlanoEsgotado(false); setPlanoRestrito(false);
     if (etapa !== 3 || !escolha || !telefoneBrasileiro(tel)) return;
     const r = publico.usoDoPlano({ telefone: tel, servicoIds: srv, inicio: escolha.inicio });
     if (r.ok && r.usaPlano) setUsaPlano(true);
+    if (r.ok && r.esgotado) setPlanoEsgotado(true);
+    if (r.ok && r.restrito) setPlanoRestrito(true);
   }, [etapa, tel, srv, escolha]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const enviar = () => {
@@ -341,7 +347,7 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
     const r = publico.agendar({ nome, telefone: tel, ...(usaVeiculo ? { placa, marca, modelo, cor, ...(porte ? { porte } : {}) } : {}), servicoIds: srv, profissionalId: escolha?.profissionalId || barb, ...(atribuicoes ? { atribuicoes } : {}), inicio: escolha?.inicio, site: isca });
     setEnviando(false);
     if (!r.ok) { setErro(r.erros[0]); if (/ocupado/.test(r.erros[0])) { setEscolha(null); setEtapa(2); } return; }
-    if (r.token) setToken(r.token); setFeito({ partes: r.partes && r.partes.length > 1 ? r.partes : null, usouPlano: !!r.usouPlano, semTelefone: !r.token, inicio: escolha.inicio, profissionalId: escolha.profissionalId, servicos: servicos.map((x) => x.nome), veiculo: usaVeiculo ? [modelo.trim(), placa && formatarPlaca(placa)].filter(Boolean).join(' · ') : '' });
+    if (r.token) setToken(r.token); setFeito({ partes: r.partes && r.partes.length > 1 ? r.partes : null, usouPlano: !!r.usouPlano, plano: r.plano || null, semTelefone: !r.token, inicio: escolha.inicio, profissionalId: escolha.profissionalId, servicos: servicos.map((x) => x.nome), veiculo: usaVeiculo ? [modelo.trim(), placa && formatarPlaca(placa)].filter(Boolean).join(' · ') : '' });
     setEtapa(4);
   };
   const lembrar = (quer) => { const r = publico.lembretes(token, quer); if (r.ok) setLemb(quer); else setErro(r.erros[0]); };
@@ -355,6 +361,7 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
         {feito.partes ? <ul className="pub-partes" data-testid="pub-feito-partes">{feito.partes.map((x) => <li key={x.agendamentoId}>{x.servicoIds.map((id) => cfg.servicos.find((z) => z.id === id)?.nome).filter(Boolean).join(', ')} com <b>{nomeBarb(x.profissionalId)}</b> · <b>{fmtDayLong(x.inicio)}, {fmtHM(x.inicio)}</b></li>)}</ul> : null}
         {!feito.partes && <p>{feito.servicos.join(', ')}{feito.veiculo ? <> para <b>{feito.veiculo}</b></> : null} com <b>{nomeBarb(feito.profissionalId)}</b><br /><b>{fmtDayLong(feito.inicio)}, {fmtHM(feito.inicio)}</b></p>}
         {feito.usouPlano && <p data-testid="pub-feito-plano"><Icon n="ticket" size={14} /> Este horário usa um atendimento do seu plano.</p>}
+        {feito.plano && <p data-testid="pub-feito-plano-restam">{feito.plano.restantes > 0 ? `Restam ${feito.plano.restantes} atendimento${feito.plano.restantes === 1 ? '' : 's'} do seu plano em ${rotuloMes(feito.plano.mes)}.` : `Este foi o último atendimento do seu plano em ${rotuloMes(feito.plano.mes)}.`}</p>}
         <p className="muted">{!feito.semTelefone ? `${cfg.nome} vai confirmar o seu horário. Você acompanha em “Meus agendamentos”.` : `${cfg.nome} vai ver o seu pedido e confirmar o horário. Como não deixou telefone, a loja não consegue avisar você: guarde o dia e a hora.`}</p>
         {!feito.semTelefone && <div className="pub-pergunta" data-testid="pub-lembretes-pergunta">
           <b>Quer receber lembretes?</b>
@@ -472,6 +479,8 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
             <span className="muted">{multiDia ? 'Vários dias' : dur(duracao)} · {fmtMoney(total)}</span>
           </div>
           {usaPlano && <p className="pub-aviso-plano" role="status" data-testid="pub-usa-plano"><Icon n="ticket" size={14} /> Este horário usa um atendimento do seu plano.</p>}
+          {planoRestrito && <p className="pub-aviso-plano esgotado" role="status" data-testid="pub-plano-restrito"><Icon n="ticket" size={14} /> Seu plano permite agendar pelo link só os serviços dele. Para outros serviços, fale com a equipe.</p>}
+          {planoEsgotado && <p className="pub-aviso-plano esgotado" role="status" data-testid="pub-plano-esgotado"><Icon n="ticket" size={14} /> Os atendimentos do seu plano neste mês acabaram. Para agendar fora do plano, fale com a equipe.</p>}
           <form className="pub-form" onSubmit={(e) => { e.preventDefault(); enviar(); }} noValidate>
             <Campo rotulo={cfg.exigeNome === false ? 'Nome (opcional)' : 'Nome'}><input value={nome} onChange={(e) => setNome(e.target.value)} maxLength={60} autoComplete="name" data-testid="pub-nome" /></Campo>
             <Campo rotulo={cfg.exigeTelefone === false ? 'Telefone (WhatsApp) (opcional)' : 'Telefone (WhatsApp)'} dica={cfg.exigeTelefone === false ? 'Opcional. Com telefone avisamos do seu horário e você acompanha por aqui; sem ele, só a loja vê o seu pedido.' : 'Com DDD. Só usamos para falar do seu horário.'}><input type="tel" inputMode="tel" value={tel} onChange={(e) => setTel(formatarTelefone(e.target.value))} maxLength={16} autoComplete="tel" placeholder="(51) 99999-9999" data-testid="pub-telefone" /></Campo>
