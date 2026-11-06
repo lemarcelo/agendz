@@ -115,8 +115,10 @@ function FormPessoa({ ficha, aoSalvar, aoCancelar }) {
         <Campo rotulo="Telefone (opcional)"><input value={f.telefone} inputMode="tel" maxLength={20} onChange={(e) => setF({ ...f, telefone: formatarTelefone(e.target.value) })} data-testid="eq-tel" /></Campo>
         <Campo rotulo="Comissão sobre serviços (%, opcional)"><input value={f.comissao} inputMode="decimal" onChange={mudar('comissao')} data-testid="eq-comissao" /></Campo>
         <Campo rotulo="Comissão sobre produtos (%, opcional)"><input value={f.comissaoProduto} inputMode="decimal" onChange={mudar('comissaoProduto')} data-testid="eq-comissao-produto" /></Campo>
-        <label className="pa-check"><input type="checkbox" checked={f.atende} onChange={(e) => setF({ ...f, atende: e.target.checked })} data-testid="eq-atende" /> Atende clientes (aparece na agenda)</label>
-        <label className="pa-check"><input type="checkbox" checked={f.podeVender} onChange={(e) => setF({ ...f, podeVender: e.target.checked })} data-testid="eq-vender" /> Pode vender produtos</label>
+        <div className="eq-checks">
+          <label className="pa-check"><input type="checkbox" checked={f.atende} onChange={(e) => setF({ ...f, atende: e.target.checked })} data-testid="eq-atende" /> Atende clientes (aparece na agenda)</label>
+          <label className="pa-check"><input type="checkbox" checked={f.podeVender} onChange={(e) => setF({ ...f, podeVender: e.target.checked })} data-testid="eq-vender" /> Pode vender produtos</label>
+        </div>
         {f.papel !== 'dono' && (
           <fieldset className="conj eq-permissoes" data-testid="eq-permissoes">
             <legend>O que a pessoa acessa</legend>

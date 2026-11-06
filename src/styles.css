@@ -1679,10 +1679,12 @@ body.trava-scroll-modal {
 .vinculo-conj { grid-column: 1 / -1; max-width: 640px; }
 .vinculo-conj .pa-check small { margin-left: 4px; }
 .vinculo-acoes { margin-bottom: 6px; }
+.eq-checks { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px 28px; }
 .eq-expediente { grid-column: 1 / -1; margin-top: 8px; }
 .eq-permissoes { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 16px; align-items: start; }
 .eq-permissoes > legend, .eq-permissoes > p { grid-column: 1 / -1; }
 .vinculo-lista { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 4px 16px; }
 .vinculo-conj[data-testid="eq-servicos"] { max-width: none; }
+.eq-expediente .exp-form-real, .eq-expediente .exp-lista-real, .eq-expediente .aviso { max-width: none; }
 .eq-expediente .exp-lista-real { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 8px; }
 .eq-expediente .exp-faixas-real { flex-wrap: wrap; }
