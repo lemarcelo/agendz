@@ -185,6 +185,7 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
 
   const padraoOrdem = usaVeiculo ? COMO_A_PAGINA_DO_CLIENTE : PADRAO_ARTIFACT;
   const ordem = sanearOrdemAtender(st.estabelecimento.ordemAtender, padraoOrdem)[futuro ? 'futuro' : 'local']; // v133: ordem escolhida pelo proprietário (Estabelecimento > Regras)
+  const travaPorte = usaVeiculo && obrig.includes('porte') && !porteDefinido && ordem.etapas.indexOf('veiculo') < Math.min(ordem.etapas.indexOf('cliente'), ordem.etapas.indexOf('servicos')); // porte antes dos serviços na ordem escolhida: sem ele o serviço não pode ser marcado (muda preço e tempo)
   const camposVeic = {
     placa: (
                 <Campo rotulo={`Placa${marca('placa')}`} erro={vNovo.placa && !placaValida(vNovo.placa) ? 'Placa inválida (ABC-1234 ou ABC1D23).' : undefined}><input value={vNovo.placa} onChange={(e) => setVNovo({ ...vNovo, placa: e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 8) })} maxLength={8} autoComplete="off" placeholder="ABC1D23" data-testid="atender-placa" /></Campo>
@@ -269,10 +270,11 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
         ) : null,
     servicos: (
       <div id="atender-bloco-servicos" className="campo-largo">
+        {travaPorte && <p className="muted" role="status" data-testid="atender-trava-porte">Escolha o porte do veículo primeiro: ele define o preço e o tempo dos serviços.</p>}
         <ListaItens titulo="Serviços" testid="atender-lista-servicos" itens={servicos} selecionado={(s) => servicoIds.includes(s.id)} renderItem={(s) => (
           <div key={s.id} className={`servico-linha ${servicoIds.includes(s.id) ? 'on' : ''}`}>
             <label className="servico-op-lado">
-              <input type="checkbox" checked={servicoIds.includes(s.id)} onChange={() => setServicoIds((ids) => (ids.includes(s.id) ? ids.filter((x) => x !== s.id) : [...ids, s.id]))} data-testid={`atender-srv-${s.id}`} />
+              <input type="checkbox" checked={servicoIds.includes(s.id)} disabled={travaPorte && !servicoIds.includes(s.id)} onChange={() => setServicoIds((ids) => (ids.includes(s.id) ? ids.filter((x) => x !== s.id) : [...ids, s.id]))} data-testid={`atender-srv-${s.id}`} />
               <span><b>{s.nome}</b><small className="muted cod">cód. {s.codigo}{!ehProfissional && (() => { const n = servicoNoPorte(s, porteAtual); return duracaoIndefinida(s) ? <> · {textoDoPreco(s, fmtMoney)} · {s.duracaoTexto || 'duração indefinida'}</> : <> · {fmtMoney(n.preco)} · {s.multiDia ? 'vários dias' : fmtDuration(n.duracao)}{s.combo ? ' · combo' : ''}</>; })()}</small></span>
             </label>
           </div>

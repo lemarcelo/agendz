@@ -31,6 +31,7 @@ Protótipo React 19 + esbuild com API simulada (`src/services/api.js`), que depo
 - Status escolhido à mão com o horário já iniciado grava `a.statusManual` (com o `inicio`); o `tick` então não conclui, não cancela por falta de confirmação nem avisa o cliente. Remarcar (novo `inicio`) libera o fluxo automático.
 
 ## Antes de qualquer alteração
+- **Abrangência (regra da raiz):** toda correção ou regra nova é conferida nos outros tipos (estética/barbearia/futuros) e nas três camadas (demo, site real, servidor), com teste nos dois tipos; veja "Abrangência de correções e regras" no CLAUDE.md da raiz.
 - Leia a seção do `prompt-agendz-regras.md` que trata do assunto. O prompt é a fonte da verdade das regras de negócio.
 - Regra nova ou mudada: atualize o prompt (seção + entrada no **Histórico de implementação**, com as decisões tomadas sem confirmação) no mesmo trabalho.
 

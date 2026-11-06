@@ -242,7 +242,7 @@ servidor.listen(0, async () => {
       // Confere os rótulos de Cliente no Atender
       const labelNome = await pageAdmin.locator('[data-testid="atender-nome"]').evaluate((el) => el.closest('.campo').querySelector('.campo-rotulo').textContent);
       const labelTel = await pageAdmin.locator('[data-testid="atender-telefone"]').evaluate((el) => el.closest('.campo').querySelector('.campo-rotulo').textContent);
-      assert.equal(labelNome, 'Nome (opcional)', `Nome no Atender deve ser (opcional), veio: ${labelNome}`);
+      assert.equal(labelNome, 'Apelido (opcional)', `Nome no Atender deve ser (opcional), veio: ${labelNome}`);
       assert.equal(labelTel, 'Telefone (opcional)', `Telefone no Atender deve ser (opcional), veio: ${labelTel}`);
 
       // Confere Box e Cupom

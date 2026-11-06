@@ -122,6 +122,7 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
   const veiculoEscolhido = usaVeiculo && veiculoId ? doCliente.find((v) => v.id === veiculoId) || null : null;
   const digitando = usaVeiculo && !veiculoEscolhido;
   const porte = porteDoAtendimento(veiculoEscolhido, digitando ? novoVeic : null);
+  const porteDefinido = !!veiculoEscolhido || !!novoVeic.porte;
   const resumo = resumoDosServicos(servicos || [], ids, usaVeiculo ? porte : undefined, valores);
   const fixosMin = (servicos || []).filter((s) => ids.includes(s.id) && !duracaoIndefinida(s)).reduce((t, s) => t + servicoNoPorte(s, usaVeiculo ? porte : undefined).duracaoMin, 0);
   const listaProd = useMemo(() => filtrarProdutos(produtos || [], buscaProd), [produtos, buscaProd]);
@@ -171,6 +172,15 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
 
   const padraoOrdem = usaVeiculo ? COMO_A_PAGINA_DO_CLIENTE : PADRAO_PAINEL;
   const ordem = sanearOrdemAtender(regras.ordemAtender, padraoOrdem)[tipo]; // v133: ordem das etapas e dos campos escolhida pelo proprietário (Estabelecimento > Regras)
+  // Porte antes dos serviços (Estabelecimento > Regras > ordem): o passo Veículo vem primeiro e só avança com o porte escolhido (o porte muda preço e tempo).
+  // Veículo cadastrado do cliente só existe no passo Cliente; com o veículo antes dos serviços vale o veículo digitado (decisão sem confirmação).
+  const veiculoAntes = usaVeiculo && ordem.etapas.indexOf('veiculo') < Math.min(ordem.etapas.indexOf('cliente'), ordem.etapas.indexOf('servicos')); // veículo em primeiro lugar na ordem
+  const PASSOS = veiculoAntes ? [{ id: 'veiculo', nome: 'Veículo' }, ...PASSOS_ATENDER] : PASSOS_ATENDER;
+  const passoId = PASSOS[Math.min(etapaAtiva, PASSOS.length - 1)].id;
+  const irPara = (n) => {
+    if (veiculoAntes && passoId === 'veiculo' && n > etapaAtiva && exige(regras, tipo, 'porte') && !porteDefinido) { setErro('Escolha o porte do veículo: ele define o preço e o tempo dos serviços.'); return; }
+    setEtapaAtiva(n);
+  };
   const camposVeic = {
     placa: <Campo rotulo={`Placa${marca('placa')}`}><input value={novoVeic.placa} onChange={(e) => { setNovoVeic({ ...novoVeic, placa: e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 8) }); setErro(''); }} maxLength={8} autoComplete="off" placeholder="ABC1D23" data-testid="atender-v-placa" /></Campo>,
     modelo: <Campo rotulo={`Modelo${marca('modelo')}`}><input value={novoVeic.modelo} onChange={(e) => setNovoVeic({ ...novoVeic, modelo: e.target.value })} maxLength={40} autoComplete="off" data-testid="atender-v-modelo" /></Campo>,
@@ -334,17 +344,17 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
       </div>
 
       <ol className="pub-passos atender-passos-real">
-        {PASSOS_ATENDER.map((p, idx) => (
+        {PASSOS.map((p, idx) => (
           <li key={p.id} className={etapaAtiva === idx ? 'on' : ''}>
-            <button type="button" className="atender-passo-real" aria-current={etapaAtiva === idx ? 'step' : undefined} onClick={() => setEtapaAtiva(idx)}><span>{idx + 1}</span> {p.nome}</button>
+            <button type="button" className="atender-passo-real" aria-current={etapaAtiva === idx ? 'step' : undefined} onClick={() => irPara(idx)}><span>{idx + 1}</span> {p.nome}</button>
           </li>
         ))}
       </ol>
 
-      {ordem.etapas.filter((k) => k !== 'veiculo').map((k) => <div className="atender-pagina-real" key={k} hidden={(k === 'produtos' ? 'servicos' : k) !== PASSOS_ATENDER[etapaAtiva].id}>{blocos[k]}</div>)}
-      {usaVeiculo && <div className="atender-pagina-real" hidden={PASSOS_ATENDER[etapaAtiva].id !== 'cliente'}>{blocos.veiculo}</div>}
+      {ordem.etapas.filter((k) => k !== 'veiculo').map((k) => <div className="atender-pagina-real" key={k} hidden={(k === 'produtos' ? 'servicos' : k) !== passoId}>{blocos[k]}</div>)}
+      {usaVeiculo && <div className="atender-pagina-real" hidden={passoId !== (veiculoAntes ? 'veiculo' : 'cliente')}>{blocos.veiculo}</div>}
 
-      <div className="atender-conclusao-real" hidden={PASSOS_ATENDER[etapaAtiva].id !== 'cliente'}>
+      <div className="atender-conclusao-real" hidden={passoId !== 'cliente'}>
       <div className="form-grade">
         {porAtribuir && (
           <ProfissionalPorServico testid="atender-pps" servicos={ids.map((sid) => ({ id: sid, nome: (servicos || []).find((s) => s.id === sid)?.nome || '' }))} rotuloProfissional={Rot('profissional')}
@@ -395,14 +405,15 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
       {tipo === 'futuro' && <label className="check-linha"><input type="checkbox" checked={encaixe} onChange={(e) => setEncaixe(e.target.checked)} data-testid="atender-encaixe" /><span>Encaixe (pode ficar sobre um horário já confirmado)</span></label>}
       </div>
 
-      {faltam.length > 0 && <p className="muted" data-testid="atender-faltam">Falta preencher: {faltam.join(', ')}.</p>}
+      {passoId === 'cliente' && faltam.length > 0 && <p className="muted" data-testid="atender-faltam">Falta preencher: {faltam.join(', ')}.</p>}
       {erro && <Aviso tipo="erro" data-testid="atender-erro">{erro}</Aviso>}
       <div className="acoes atender-acoes-real">
         <Btn onClick={aoFechar} data-testid="atender-cancelar">Cancelar</Btn>
         {etapaAtiva > 0 && <Btn type="button" onClick={() => setEtapaAtiva(etapaAtiva - 1)} data-testid="atender-voltar">← Voltar</Btn>}
-        {etapaAtiva === 0 && <Btn variante="primario" type="button" onClick={() => setEtapaAtiva(1)} data-testid="atender-prox-quando">Próximo →</Btn>}
-        {etapaAtiva === 1 && <Btn variante="primario" type="button" onClick={() => setEtapaAtiva(2)} data-testid="atender-prox-cliente">Próximo →</Btn>}
-        {PASSOS_ATENDER[etapaAtiva].id === 'cliente' && <Btn variante="primario" type="submit" disabled={enviando || bloqueado} data-testid="salvar-atender">{enviando ? 'Salvando…' : tipo === 'futuro' ? 'Agendar' : 'Registrar'}</Btn>}
+        {passoId === 'veiculo' && <Btn variante="primario" type="button" onClick={() => irPara(etapaAtiva + 1)} data-testid="atender-prox-servicos">Próximo →</Btn>}
+        {passoId === 'servicos' && <Btn variante="primario" type="button" onClick={() => irPara(etapaAtiva + 1)} data-testid="atender-prox-quando">Próximo →</Btn>}
+        {passoId === 'quando' && <Btn variante="primario" type="button" onClick={() => irPara(etapaAtiva + 1)} data-testid="atender-prox-cliente">Próximo →</Btn>}
+        {passoId === 'cliente' && <Btn variante="primario" type="submit" disabled={enviando || bloqueado} data-testid="salvar-atender">{enviando ? 'Salvando…' : tipo === 'futuro' ? 'Agendar' : 'Registrar'}</Btn>}
       </div>
     </form>
   );
