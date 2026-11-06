@@ -28,6 +28,14 @@ export function textoReagendamento({ nomeEstab, nomeCliente, servicos, dataHora,
   return m.slice(0, MAX_TEXTO);
 }
 
+// E3: mensagem do cliente pedindo a troca de plano (a diferença já vem com o desconto da loja). Só diz o que o cliente já viu na tela; nunca dado de outra pessoa.
+const reais = (v) => `R$ ${(Math.round(Number(v) * 100) / 100).toFixed(2).replace('.', ',')}`;
+export function textoPedidoTroca({ nome, preco, diferenca, descontoPct, telefone }) {
+  const desc = Number(descontoPct) > 0 ? ` (já com ${String(Number(descontoPct)).replace('.', ',')}% de desconto)` : '';
+  const tel = String(telefone ?? '').replace(/[^\d()\s+-]/g, '').slice(0, 20);
+  return `Olá! Quero mudar o meu plano para o ${String(nome ?? '').slice(0, 60)}. Pago só a diferença: ${reais(diferenca)} neste mês${desc}; nos meses seguintes, ${reais(preco)}/mês.${tel ? ` Meu telefone: ${tel}.` : ''}`.slice(0, MAX_TEXTO);
+}
+
 // Número do cliente no formato do wa.me (55 + DDD + número), ou '' quando não é um telefone brasileiro válido (aí o WhatsApp abre sem contato).
 export function numeroWhatsapp(telefone) {
   const d = String(telefone ?? '').replace(/\D/g, '');

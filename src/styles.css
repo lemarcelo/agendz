@@ -760,6 +760,25 @@ label.btn.btn-desativado { opacity: .6; pointer-events: none; }
 .pub-resumo { display: grid; gap: 2px; background: var(--surface-2); border-radius: 12px; padding: 12px; }
 .pub-aviso-plano { display: flex; gap: 8px; align-items: center; margin: 0; background: var(--verde-bg); color: var(--verde); border-radius: 12px; padding: 12px; font-weight: 600; }
 .pub-aviso-plano.esgotado { background: var(--amarelo-bg); color: var(--amarelo); } /* E2: cota do plano acabou (atenção, não confirmação) */
+/* E3: troca de plano pagando só a diferença (ui/leve/TrocaDePlano.jsx; #agendar real e demo, Planos do dono) */
+.troca-pub { display: grid; gap: 10px; margin: 0; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
+.troca-titulo { display: flex; gap: 8px; align-items: center; margin: 0; font-size: 1rem; }
+.troca-aviso { margin: 0; }
+.troca-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.troca-opcao { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; cursor: pointer; min-width: 0; }
+.troca-opcao.marcada { border-color: var(--verde); background: var(--verde-bg); }
+.troca-opcao input { margin-top: 3px; flex: none; }
+.troca-corpo { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.troca-valor { font-weight: 700; color: var(--verde); }
+.troca-botao { text-align: center; text-decoration: none; justify-content: center; white-space: normal; height: auto; min-height: 48px; line-height: 1.25; }
+.troca-pub > *, .troca-config > * { min-width: 0; }
+.troca-botao.desligado { opacity: .55; pointer-events: none; }
+.troca-dica { display: block; }
+.troca-config { display: grid; gap: 10px; margin: 0 0 14px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; }
+.troca-campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.troca-detalhe { display: block; }
+.troca-forma { min-height: 34px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface); color: var(--fg); padding: 4px 8px; font: inherit; }
+.troca-detalhe { margin-top: 2px; }
 .pub-form { display: grid; gap: 12px; }
 .pub-form input { min-height: 46px; font-size: 16px; }
 .pub-isca { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }

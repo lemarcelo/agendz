@@ -13,6 +13,7 @@ import { useLocal, useStore } from './hooks.js';
 import { Rot, cap, capAtiva, rot } from '../domain/tipos.js';
 import ProfissionalPorServico from './leve/ProfissionalPorServico.jsx';
 import { precisaAtribuirPorServico } from '../domain/vinculo.js';
+import { OpcoesDeTroca } from './leve/TrocaDePlano.jsx';
 
 // Página do cliente (sem login): pede um horário com nome e telefone e depois gerencia só os próprios agendamentos.
 // Fala só com `publico.*`: nunca vê quem ocupa os outros horários.
@@ -281,6 +282,7 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
   const [lemb, setLemb] = useState(null);
   const [usaPlano, setUsaPlano] = useState(false); // o telefone é de quem tem plano com atendimento para este horário (só sim ou não)
   const [planoRestrito, setPlanoRestrito] = useState(false); // E2: o plano do telefone restringe o link aos serviços dele e algum serviço escolhido está fora
+  const [trocas, setTrocas] = useState(null); // E3: planos com mais serviços (só vêm com o aviso de cota acabada ou de restrição): { opcoes, descontoPct, whatsapp }
   const [planoEsgotado, setPlanoEsgotado] = useState(false); // E2: tem plano que cobre o serviço, mas os atendimentos do mês acabaram (o link não agenda; a equipe agenda fora do plano)
   const servicos = cfg.servicos.filter((x) => srv.includes(x.id));
   const total = servicos.reduce((t, x) => t + preco(x), 0);
@@ -324,12 +326,13 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
 
   // Avisa antes de pedir: "este horário usa um atendimento do seu plano". Só consulta com o telefone completo; o servidor responde apenas sim ou não.
   useEffect(() => {
-    setUsaPlano(false); setPlanoEsgotado(false); setPlanoRestrito(false);
+    setUsaPlano(false); setPlanoEsgotado(false); setPlanoRestrito(false); setTrocas(null);
     if (etapa !== 3 || !escolha || !telefoneBrasileiro(tel)) return;
     const r = publico.usoDoPlano({ telefone: tel, servicoIds: srv, inicio: escolha.inicio });
     if (r.ok && r.usaPlano) setUsaPlano(true);
     if (r.ok && r.esgotado) setPlanoEsgotado(true);
     if (r.ok && r.restrito) setPlanoRestrito(true);
+    if (r.ok && (r.esgotado || r.restrito) && Array.isArray(r.trocas) && r.trocas.length) setTrocas({ opcoes: r.trocas, descontoPct: r.descontoTrocaPct || 0, whatsapp: r.whatsapp || '' });
   }, [etapa, tel, srv, escolha]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const enviar = () => {
@@ -481,6 +484,7 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
           {usaPlano && <p className="pub-aviso-plano" role="status" data-testid="pub-usa-plano"><Icon n="ticket" size={14} /> Este horário usa um atendimento do seu plano.</p>}
           {planoRestrito && <p className="pub-aviso-plano esgotado" role="status" data-testid="pub-plano-restrito"><Icon n="ticket" size={14} /> Seu plano permite agendar pelo link só os serviços dele. Para outros serviços, fale com a equipe.</p>}
           {planoEsgotado && <p className="pub-aviso-plano esgotado" role="status" data-testid="pub-plano-esgotado"><Icon n="ticket" size={14} /> Os atendimentos do seu plano neste mês acabaram. Para agendar fora do plano, fale com a equipe.</p>}
+          {trocas && <OpcoesDeTroca opcoes={trocas.opcoes} descontoPct={trocas.descontoPct} whatsapp={trocas.whatsapp} telefone={tel} aoPedir={(o) => publico.pedirTroca({ telefone: tel, planoId: o.planoId })} />}
           <form className="pub-form" onSubmit={(e) => { e.preventDefault(); enviar(); }} noValidate>
             <Campo rotulo={cfg.exigeNome === false ? 'Nome (opcional)' : 'Nome'}><input value={nome} onChange={(e) => setNome(e.target.value)} maxLength={60} autoComplete="name" data-testid="pub-nome" /></Campo>
             <Campo rotulo={cfg.exigeTelefone === false ? 'Telefone (WhatsApp) (opcional)' : 'Telefone (WhatsApp)'} dica={cfg.exigeTelefone === false ? 'Opcional. Com telefone avisamos do seu horário e você acompanha por aqui; sem ele, só a loja vê o seu pedido.' : 'Com DDD. Só usamos para falar do seu horário.'}><input type="tel" inputMode="tel" value={tel} onChange={(e) => setTel(formatarTelefone(e.target.value))} maxLength={16} autoComplete="tel" placeholder="(51) 99999-9999" data-testid="pub-telefone" /></Campo>

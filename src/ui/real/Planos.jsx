@@ -11,6 +11,7 @@ import { DIAS_FIXOS_A_FRENTE, MAX_FIXOS } from '../../domain/planos.js';
 import { Rot, capAtiva, tipoAtivo } from '../../domain/tipos.js';
 import { formularioDoModelo, modelosDePlanoDoTipo } from '../../domain/catalogo.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
+import { AceitarTroca, CartaoConfigTroca, TextoDoPedidoTroca } from '../leve/TrocaDePlano.jsx';
 
 const FORMAS = { pix: 'Pix', dinheiro: 'Dinheiro', cartao: 'Cartão' };
 const nomeDe = (c) => (c && c.nome ? (c.apelido && c.apelido !== c.nome ? `${c.nome} (${c.apelido})` : c.nome) : '—');
@@ -313,7 +314,7 @@ function Assinaturas({ dados, aoAbrir, aoQuitar }) {
   );
 }
 
-function Catalogo({ dados, servicos, aoAbrir, aoRemover, aoUsarModelo }) {
+function Catalogo({ dados, servicos, aoAbrir, aoRemover, aoUsarModelo, aoSalvarTroca }) {
   const nomes = (p) => p.servicoIds.map((id) => (servicos.find((s) => s.id === id) || {}).nome).filter(Boolean).join(', ');
   const modelos = modelosDePlanoDoTipo(tipoAtivo()); // por tipo; sem modelo (estética), o botão nem aparece
   const [verModelos, setVerModelos] = useState(false);
@@ -354,6 +355,7 @@ function Catalogo({ dados, servicos, aoAbrir, aoRemover, aoUsarModelo }) {
           ))}
         </ul>
       )}
+      <CartaoConfigTroca inicial={{ descontoPct: dados.descontoTrocaPct, whatsapp: dados.whatsapp }} aoSalvar={aoSalvarTroca} />
     </div>
   );
 }
@@ -365,9 +367,13 @@ function Pedidos({ dados, aoAgir }) {
         <ul className="clientes-lista">
           {dados.pedidos.map((p) => (
             <li key={p.id} className="cliente-cartao" data-testid={`pedido-${p.id}`}>
-              <div className="cliente-dados"><b>{p.nome}</b> quer o plano <b>{p.planoNome}</b><span className="cliente-linha muted">{p.telefone.replace(/^55/, '')}</span></div>
+              {p.tipo === 'troca'
+                ? <div className="cliente-dados"><TextoDoPedidoTroca p={p} /><span className="cliente-linha muted">{p.telefone.replace(/^55/, '')}</span></div>
+                : <div className="cliente-dados"><b>{p.nome}</b> quer o plano <b>{p.planoNome}</b><span className="cliente-linha muted">{p.telefone.replace(/^55/, '')}</span></div>}
               <div className="acoes">
-                <Btn tamanho="sm" variante="primario" onClick={() => aoAgir(() => api.aceitarPedido(p.id), 'Pedido aceito: assinatura criada, aguardando a mensalidade.')} data-testid={`pedido-aceitar-${p.id}`}>Aceitar</Btn>
+                {p.tipo === 'troca'
+                  ? <AceitarTroca p={p} aoAceitar={(forma) => aoAgir(() => api.aceitarPedido(p.id, { forma }), 'Troca feita: o plano novo já está ativo com a diferença registrada.')} />
+                  : <Btn tamanho="sm" variante="primario" onClick={() => aoAgir(() => api.aceitarPedido(p.id), 'Pedido aceito: assinatura criada, aguardando a mensalidade.')} data-testid={`pedido-aceitar-${p.id}`}>Aceitar</Btn>}
                 <Btn tamanho="sm" onClick={() => aoAgir(() => api.recusarPedido(p.id), 'Pedido recusado.')} data-testid={`pedido-recusar-${p.id}`}>Recusar</Btn>
               </div>
             </li>
@@ -445,7 +451,7 @@ export default function Planos() {
         ))}
       </div>
       {aba === 'assinaturas' && <Assinaturas dados={dados} aoAbrir={(m) => { setAviso(''); setModo(m); }} aoQuitar={(a) => agir(() => api.quitar(a.id), 'Dívida quitada.')} />}
-      {aba === 'catalogo' && <Catalogo aoUsarModelo={usarModelo} dados={dados} servicos={servicos} aoAbrir={(m) => { setAviso(''); setModo(m); }} aoRemover={setConfirmar} />}
+      {aba === 'catalogo' && <Catalogo aoUsarModelo={usarModelo} dados={dados} servicos={servicos} aoAbrir={(m) => { setAviso(''); setModo(m); }} aoRemover={setConfirmar} aoSalvarTroca={async (d) => { const r = await api.salvarConfigTroca(d); if (r.ok) recarregar(); return r; }} />}
       {aba === 'pedidos' && <Pedidos dados={dados} aoAgir={agir} />}
     </section>
   );

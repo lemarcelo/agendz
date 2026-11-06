@@ -167,6 +167,24 @@ export function restantesNoMes(ex, mes) {
   return l ? Math.max(0, l.saldoFim) : 0;
 }
 
+// E3: troca de plano pagando só a diferença (espelho de PlanoRegras.diferencaDaTroca/ehUpgrade; casos em equivalencia/planos.json).
+// Diferença = (preço novo − preço atual) com o desconto % da loja sobre ela, cobrada UMA vez no mês da troca; conta em centavos inteiros (meio para cima); nunca negativa.
+export function diferencaDaTroca(precoNovo, precoAtual, descontoPct) {
+  const c = Math.round(precoNovo * 100) - Math.round(precoAtual * 100);
+  if (c <= 0) return 0;
+  const pct = Math.max(0, Math.min(10000, Math.round((Number(descontoPct) || 0) * 100))); // centésimos de por cento
+  return Math.floor((c * (10000 - pct) + 5000) / 10000) / 100;
+}
+// Upgrade de verdade: inclui TODOS os serviços do plano atual, mais algum, e custa mais.
+export const ehUpgrade = (atual, novo) => atual.servicoIds.every((id) => novo.servicoIds.includes(id)) && novo.servicoIds.length > atual.servicoIds.length && novo.preco > atual.preco;
+// Opções que o cliente vê (planos à venda, do mais barato ao mais caro, com a diferença JÁ descontada). `foto` = o plano atual da assinatura.
+export function opcoesDeTroca(s, foto, descontoPct) {
+  const nomeDe = (id) => (s.servicos || []).find((x) => x.id === id)?.nome;
+  return (s.planos || []).filter((p) => p.ativo !== false && ehUpgrade(foto, p))
+    .sort((a, b) => a.preco - b.preco || a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' }))
+    .map((p) => ({ planoId: p.id, nome: p.nome, preco: p.preco, cortes: p.cortes, servicos: p.servicoIds.map(nomeDe).filter(Boolean).sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' })), diferenca: diferencaDaTroca(p.preco, foto.preco, descontoPct) }));
+}
+
 // E2: plano que RESTRINGE o link aos serviços dele: se o cliente pediu algum serviço de fora, devolve a mensagem (o link recusa; a equipe agenda qualquer serviço). Sem restrição: null. Espelho de PlanoService.restricaoDoLink.
 export function restricaoDoLink(s, as, servicoIds) {
   if (!as || as.status !== 'ativa' || !as.plano.restringeServicos) return null;

@@ -591,6 +591,67 @@ class PlanosTest extends BaseApi {
         atender(tel, c, 20, 9, assinatura).andExpect(status().isConflict());
     }
 
+    private ResultActions pedirTroca(String ip, String tel, String plano) throws Exception {
+        return mvc.perform(post("/api/publico/planos/trocas").with(host(OFFBOX)).header("X-Forwarded-For", ip).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"telefone\":\"" + tel + "\",\"planoId\":\"" + plano + "\"}"));
+    }
+
+    @Test
+    void trocaDePlanoPagaSoADiferencaComODescontoDaLojaELevaOsAtendimentosDoMes() throws Exception {
+        ipLink = 0;
+        escrever(put("/api/estabelecimento/link-agendamento"), dono, "{\"ativo\":true,\"diasMax\":60}").andExpect(status().isOk());
+        planoId = criarPlano("Plano Um", 60, 1, corte);
+        String completo = criarPlano("Plano Completo", 100, 4, corte, barba);
+        String maisBarato = criarPlano("Plano Barato", 50, 4, corte, barba);   // custa menos: não é upgrade
+        String semCorte = criarPlano("Plano So Barba", 200, 4, barba);         // não inclui o serviço do plano atual: não é upgrade
+        String tel = novoTelefone();
+        String cliente = criarCliente("Cliente Plano", tel);
+        String assinatura = id(contratar(dono, cliente, planoId, mes1).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
+        pagar(assinatura, mes1).andExpect(status().isCreated());
+        String c = "\"" + corte + "\"";
+        // quem não tem a seção planos não configura; desconto fora de 0 a 100 é recusado
+        escrever(put("/api/planos/troca"), colaborador, "{\"descontoPct\":25}").andExpect(status().isForbidden());
+        escrever(put("/api/planos/troca"), dono, "{\"descontoPct\":101}").andExpect(status().isBadRequest());
+        escrever(put("/api/planos/troca"), dono, "{\"descontoPct\":25,\"whatsapp\":\"(53) 99900-1234\"}").andExpect(status().isOk())
+                .andExpect(jsonPath("$.descontoPct").value(25.0)).andExpect(jsonPath("$.whatsapp").value("5553999001234"));
+        pedirPeloLink(tel, c, 2, 9).andExpect(status().isCreated());
+        // cota acabada: a prévia oferece só o plano que inclui o corte e mais um serviço e custa mais; diferença (100 − 60) com 25% de desconto = 30
+        previa("10.70.0.1", tel, c, 14, 9).andExpect(jsonPath("$.esgotado").value(true)).andExpect(jsonPath("$.trocas.length()").value(1))
+                .andExpect(jsonPath("$.trocas[0].nome").value("Plano Completo")).andExpect(jsonPath("$.trocas[0].diferenca").value(30.0)).andExpect(jsonPath("$.trocas[0].preco").value(100.0))
+                .andExpect(jsonPath("$.descontoTrocaPct").value(25.0)).andExpect(jsonPath("$.whatsapp").value("5553999001234"))
+                .andExpect(content().string(not(containsString("Plano Um")))).andExpect(content().string(not(containsString("Cliente Plano"))));
+        previa("10.70.0.2", novoTelefone(), c, 14, 9).andExpect(content().json("{\"usaPlano\":false,\"esgotado\":false,\"restrito\":false}", true));
+        // o pedido só vale para plano que está entre as opções; mesma resposta e nada gravado para os outros, e o repetido não duplica
+        pedirTroca("10.70.1.1", tel, maisBarato).andExpect(status().isCreated());
+        pedirTroca("10.70.1.2", tel, semCorte).andExpect(status().isCreated());
+        pedirTroca("10.70.1.3", novoTelefone(), completo).andExpect(status().isCreated());
+        assertEquals(0, contar("select count(*) from pedido_plano"));
+        pedirTroca("10.70.1.4", tel, completo).andExpect(status().isCreated());
+        pedirTroca("10.70.1.5", tel, completo).andExpect(status().isCreated());
+        assertEquals(1, contar("select count(*) from pedido_plano where tipo = 'troca' and status = 'novo'"));
+        // o dono vê o pedido com o plano de origem e a diferença gravada na hora
+        ler("/api/planos", dono).andExpect(jsonPath("$.pedidos[0].tipo").value("troca")).andExpect(jsonPath("$.pedidos[0].planoAtualNome").value("Plano Um"))
+                .andExpect(jsonPath("$.pedidos[0].valorDiferenca").value(30.0)).andExpect(jsonPath("$.descontoTrocaPct").value(25.0));
+        String pedido = jdbc.queryForObject("select id::text from pedido_plano", String.class);
+        // aceitar exige a forma em que a diferença foi paga
+        escrever(post("/api/planos/pedidos/" + pedido + "/aceitar"), dono, "{}").andExpect(status().isBadRequest());
+        String novo = id(escrever(post("/api/planos/pedidos/" + pedido + "/aceitar"), dono, "{\"forma\":\"pix\"}").andExpect(status().isOk()).andExpect(jsonPath("$.status").value("ativa"))
+                .andExpect(jsonPath("$.plano.nome").value("Plano Completo")).andReturn().getResponse().getContentAsString());
+        assertEquals("cancelada", jdbc.queryForObject("select status from assinatura where id = ?::uuid", String.class, assinatura));
+        assertEquals(0, contar("select divida from assinatura where id = ?::uuid", assinatura));
+        assertEquals(0, new java.math.BigDecimal("30.00").compareTo(jdbc.queryForObject("select valor from assinatura_pagamento where assinatura_id = ?::uuid and mes = ?", java.math.BigDecimal.class, novo, mes1)),
+                "o mês da troca vale só a diferença");
+        // o atendimento já usado no mês passou para o plano novo e a cota nova (4) tem sobra: o link volta a usar o plano
+        assertEquals(1, contar("select count(*) from agendamento where plano_assinatura_id = ?::uuid", novo));
+        assertEquals(0, contar("select count(*) from agendamento where plano_assinatura_id = ?::uuid", assinatura));
+        assertEquals(1, contar("select count(*) from pedido_plano where status = 'aceito' and assinatura_id = ?::uuid", novo));
+        previa("10.70.2.1", tel, c, 14, 9).andExpect(content().json("{\"usaPlano\":true,\"esgotado\":false,\"restrito\":false}", true));
+        // nos meses seguintes vale o preço cheio do plano novo; o cliente fica com um plano em andamento só
+        pagar(novo, mes2).andExpect(status().isCreated());
+        assertEquals(0, new java.math.BigDecimal("100.00").compareTo(jdbc.queryForObject("select valor from assinatura_pagamento where assinatura_id = ?::uuid and mes = ?", java.math.BigDecimal.class, novo, mes2)));
+        assertEquals(1, contar("select count(*) from assinatura where cliente_id = ?::uuid and status in ('pendente', 'ativa')", cliente));
+    }
+
     @Test
     void previaDoLinkDizSoSimOuNaoELimitaPorTelefone() throws Exception {
         ipLink = 0;

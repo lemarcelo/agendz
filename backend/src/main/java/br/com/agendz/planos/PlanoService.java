@@ -7,6 +7,7 @@ import br.com.agendz.erro.ErroDeNegocio;
 import br.com.agendz.planos.PlanoRegras.Extrato;
 import br.com.agendz.planos.PlanoRegras.Foto;
 import br.com.agendz.planos.PlanoRegras.Linha;
+import br.com.agendz.planos.PlanoRegras.Opcao;
 import br.com.agendz.planos.PlanoRegras.Pode;
 import br.com.agendz.planos.PlanoRegras.Saldo;
 import br.com.agendz.publico.LimitePublico;
@@ -15,6 +16,7 @@ import br.com.agendz.tenant.LojaContext;
 import br.com.agendz.tenant.LojaJdbc;
 import br.com.agendz.validacao.Documentos;
 import br.com.agendz.validacao.Texto;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.constraints.NotNull;
@@ -75,10 +77,22 @@ public class PlanoService {
                                 int divida, boolean dividaQuitada, Instant criadoEm, Instant encerradoEm, List<EventoDto> log, Saldo saldo, List<Linha> extrato, List<FixosDoPlano.Fixo> fixos) {
     }
 
-    public record PedidoDto(UUID id, String nome, String telefone, UUID planoId, String planoNome, String status, Instant criadoEm) {
+    /** E3: tipo 'troca' = o cliente pediu mudar de plano (planoAtualNome, valorDiferenca já com o desconto da loja e descontoPct gravados na hora do pedido). */
+    public record PedidoDto(UUID id, String nome, String telefone, UUID planoId, String planoNome, String status, Instant criadoEm, String tipo, String planoAtualNome, BigDecimal valorDiferenca, BigDecimal descontoPct) {
     }
 
-    public record Listagem(List<PlanoDto> planos, List<AssinaturaDto> assinaturas, List<PedidoDto> pedidos, List<UUID> aReceber, String mes) {
+    /** E3: descontoTrocaPct (0 a 100, desconto da loja sobre a diferença da troca) e whatsapp (55+DDD+número, ou nulo) valem para a loja toda. */
+    public record Listagem(List<PlanoDto> planos, List<AssinaturaDto> assinaturas, List<PedidoDto> pedidos, List<UUID> aReceber, String mes, BigDecimal descontoTrocaPct, String whatsapp) {
+    }
+
+    public record ConfigTroca(BigDecimal descontoPct, String whatsapp) {
+    }
+
+    public record PedidoTroca(@Size(max = 30) String telefone, UUID planoId, @Size(max = 100) String site) {
+    }
+
+    /** Corpo opcional do aceite: na troca, como a diferença foi paga (pix, dinheiro, cartao). */
+    public record Aceite(@Size(max = 20) String forma) {
     }
 
     public record Contrato(@NotNull UUID clienteId, @NotNull UUID planoId, @Size(max = 7) String inicioMes, Integer diaCobranca) {
@@ -337,10 +351,12 @@ public class PlanoService {
                 boolean pagoNoMes = a.pagamentos().stream().anyMatch(p -> !p.estornado() && p.mes().equals(mes));
                 if ("ativa".equals(a.status()) && PlanoRegras.mi(a.inicioMes()) <= PlanoRegras.mi(mes) && !pagoNoMes) aReceber.add(a.id());
             }
-            List<PedidoDto> pedidos = jdbc.query("select id, nome, telefone_cif, plano_id, plano_nome, status, criado_em from pedido_plano where status = 'novo' order by criado_em desc, id",
+            List<PedidoDto> pedidos = jdbc.query("select p.id, p.nome, p.telefone_cif, p.plano_id, p.plano_nome, p.status, p.criado_em, p.tipo, p.valor_diferenca, p.desconto_pct, "
+                            + "(select a.plano_foto ->> 'nome' from assinatura a where a.id = p.de_assinatura_id) as atual from pedido_plano p where p.status = 'novo' order by p.criado_em desc, p.id",
                     (rs, i) -> new PedidoDto(rs.getObject("id", UUID.class), rs.getString("nome"), cifra.decifrar(rs.getString("telefone_cif")), rs.getObject("plano_id", UUID.class),
-                            rs.getString("plano_nome"), rs.getString("status"), instante(rs, "criado_em")));
-            return new Listagem(carregarPlanos(jdbc, null), assinaturas, pedidos, aReceber, mes);
+                            rs.getString("plano_nome"), rs.getString("status"), instante(rs, "criado_em"), rs.getString("tipo"), rs.getString("atual"), rs.getBigDecimal("valor_diferenca"), rs.getBigDecimal("desconto_pct")));
+            ConfigTroca cfg = lerConfigTroca(jdbc);
+            return new Listagem(carregarPlanos(jdbc, null), assinaturas, pedidos, aReceber, mes, cfg.descontoPct(), cfg.whatsapp());
         });
     }
 
@@ -440,9 +456,14 @@ public class PlanoService {
             if (pagos(jdbc, assinaturaId).contains(mes)) throw conflito("A mensalidade de " + PlanoRegras.rotuloMes(mes) + " já está registrada.");
             String forma = d.forma() == null ? "" : d.forma();
             if (!FORMAS.containsKey(forma)) throw recusa("Escolha como foi pago: Pix, dinheiro ou cartão.");
+            BigDecimal valor = t.foto().preco();
+            if (mes.equals(t.inicioMes())) { // E3: o mês da troca vale só a diferença
+                List<BigDecimal> primeiro = jdbc.query("select valor_primeiro_mes from assinatura where id = ? and valor_primeiro_mes is not null", (rs, i) -> rs.getBigDecimal(1), assinaturaId);
+                if (!primeiro.isEmpty()) valor = primeiro.get(0);
+            }
             try {
                 jdbc.update("insert into assinatura_pagamento (loja_id, assinatura_id, mes, valor, forma, em, autor_id, autor_nome) values (?::uuid, ?, ?, ?, ?, ?, ?, ?)",
-                        lojaId.toString(), assinaturaId, mes, t.foto().preco(), forma, utc(agora), autor.id(), autor.nome());
+                        lojaId.toString(), assinaturaId, mes, valor, forma, utc(agora), autor.id(), autor.nome());
             } catch (DuplicateKeyException e) {
                 throw conflito("A mensalidade de " + PlanoRegras.rotuloMes(mes) + " já está registrada.");
             }
@@ -510,12 +531,18 @@ public class PlanoService {
 
     /** Aceitar acha (ou cria, por nome+telefone) o cliente e abre a assinatura "aguardando pagamento". */
     public AssinaturaDto aceitarPedido(UUID pedidoId, Autor autor, Instant agora) {
+        return aceitarPedido(pedidoId, null, autor, agora);
+    }
+
+    /** E3: pedido de troca de plano é aceito com a forma de pagamento da diferença; o pedido de plano novo ignora `forma`. */
+    public AssinaturaDto aceitarPedido(UUID pedidoId, String forma, Autor autor, Instant agora) {
         return banco.naLoja(jdbc -> {
             UUID lojaId = LojaContext.exigir().id();
-            List<Object[]> p = jdbc.query("select nome, telefone_cif, plano_id from pedido_plano where id = ? and status = 'novo' for update",
-                    (rs, i) -> new Object[]{rs.getString(1), rs.getString(2), rs.getObject(3, UUID.class)}, pedidoId);
+            List<Object[]> p = jdbc.query("select nome, telefone_cif, plano_id, tipo, de_assinatura_id, valor_diferenca from pedido_plano where id = ? and status = 'novo' for update",
+                    (rs, i) -> new Object[]{rs.getString(1), rs.getString(2), rs.getObject(3, UUID.class), rs.getString(4), rs.getObject(5, UUID.class), rs.getBigDecimal(6)}, pedidoId);
             if (p.isEmpty()) throw naoAchou("Pedido não encontrado.");
             UUID planoId = (UUID) p.get(0)[2];
+            if ("troca".equals(p.get(0)[3])) return aceitarTroca(jdbc, lojaId, pedidoId, planoId, (UUID) p.get(0)[4], (BigDecimal) p.get(0)[5], forma, autor, agora);
             Integer ativo = jdbc.queryForObject("select count(*) from plano where id = ? and ativo", Integer.class, planoId);
             if (ativo == null || ativo == 0) throw recusa("O plano desse pedido não está mais à venda.");
             ClienteService.DoAtendimento quem = clientes.resolverDoAtendimento(jdbc, (String) p.get(0)[0], cifra.decifrar((String) p.get(0)[1]), null);
@@ -622,7 +649,11 @@ public class PlanoService {
     }
 
     /** esgotado (E2): o telefone tem plano que cobre o serviço, mas os atendimentos do mês acabaram (o link não agenda; a equipe agenda fora do plano). */
-    public record UsoPublico(boolean usaPlano, boolean esgotado, boolean restrito) {
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
+    public record UsoPublico(boolean usaPlano, boolean esgotado, boolean restrito, List<Opcao> trocas, BigDecimal descontoTrocaPct, String whatsapp) {
+        public UsoPublico(boolean usaPlano, boolean esgotado, boolean restrito) {
+            this(usaPlano, esgotado, restrito, List.of(), null, null);
+        }
     }
 
     /**
@@ -640,13 +671,15 @@ public class PlanoService {
         return banco.naLoja(jdbc -> {
             boolean esgotado = false;
             boolean restrito = false;
+            List<Opcao> trocas = List.of();
+            ConfigTroca cfg = lerConfigTroca(jdbc);
             for (UUID cliente : jdbc.queryForList("select id from cliente where telefone_hash = ?", UUID.class, hash)) {
-                if (restricaoDoLink(jdbc, cliente, servicoIds) != null) { restrito = true; continue; }
+                if (restricaoDoLink(jdbc, cliente, servicoIds) != null) { restrito = true; if (trocas.isEmpty()) trocas = opcoesDoCliente(jdbc, cliente, cfg); continue; }
                 Achada a = assinaturaQueCabe(jdbc, cliente, servicoIds, inicio, agora, false);
                 if (a.assinatura() != null) return new UsoPublico(true, false, false);
-                if (a.limite()) esgotado = true;
+                if (a.limite()) { esgotado = true; if (trocas.isEmpty()) trocas = opcoesDoCliente(jdbc, cliente, cfg); }
             }
-            return new UsoPublico(false, esgotado, restrito);
+            return trocas.isEmpty() ? new UsoPublico(false, esgotado, restrito) : new UsoPublico(false, esgotado, restrito, trocas, cfg.descontoPct(), cfg.whatsapp());
         });
     }
 
@@ -717,6 +750,136 @@ public class PlanoService {
             }
             return new Recebido(true);
         });
+    }
+
+    // ---------------------------------------------------------------- E3: troca de plano pagando só a diferença
+
+    private ConfigTroca lerConfigTroca(JdbcTemplate jdbc) {
+        List<ConfigTroca> l = jdbc.query("select plano_desconto_troca_pct, plano_whatsapp from configuracao_loja", (rs, i) -> new ConfigTroca(rs.getBigDecimal(1), rs.getString(2)));
+        return l.isEmpty() ? new ConfigTroca(BigDecimal.ZERO.setScale(2), null) : l.get(0);
+    }
+
+    /** Desconto (0 a 100%) sobre a diferença da troca e o WhatsApp da loja para o pedido; vale para a loja toda. Quem tem a seção planos. */
+    public ConfigTroca salvarConfigTroca(BigDecimal descontoBruto, String whatsappBruto) {
+        BigDecimal pct = descontoBruto == null ? BigDecimal.ZERO : descontoBruto;
+        if (pct.compareTo(BigDecimal.ZERO) < 0 || pct.compareTo(new BigDecimal("100")) > 0) throw recusa("O desconto da troca vai de 0 a 100%.");
+        pct = pct.setScale(2, RoundingMode.HALF_UP);
+        String zap = null;
+        if (whatsappBruto != null && !whatsappBruto.isBlank()) {
+            zap = Documentos.telefone(whatsappBruto);
+            if (zap == null) throw recusa("Informe o WhatsApp da loja com DDD.");
+        }
+        final BigDecimal pctFinal = pct;
+        final String zapFinal = zap;
+        return banco.naLoja(jdbc -> {
+            jdbc.update("insert into configuracao_loja (loja_id, plano_desconto_troca_pct, plano_whatsapp) values (?::uuid, ?, ?) "
+                    + "on conflict (loja_id) do update set plano_desconto_troca_pct = excluded.plano_desconto_troca_pct, plano_whatsapp = excluded.plano_whatsapp, atualizado_em = now()",
+                    LojaContext.exigir().id().toString(), pctFinal, zapFinal);
+            return new ConfigTroca(pctFinal, zapFinal);
+        });
+    }
+
+    /** Planos à venda que incluem TODOS os serviços do atual e mais algum (e custam mais), do mais barato ao mais caro, com a diferença já descontada. */
+    private List<Opcao> opcoesDeTroca(JdbcTemplate jdbc, Foto atual, ConfigTroca cfg) {
+        List<Opcao> saida = new ArrayList<>();
+        for (Object[] p : jdbc.query("select id, nome, preco, cortes from plano where ativo order by preco, lower(nome)",
+                (rs, i) -> new Object[]{rs.getObject(1, UUID.class), rs.getString(2), rs.getBigDecimal(3), rs.getInt(4)})) {
+            UUID id = (UUID) p[0];
+            List<UUID> servicos = jdbc.query("select servico_id from plano_servico where plano_id = ?", (rs, i) -> rs.getObject(1, UUID.class), id);
+            if (!PlanoRegras.ehUpgrade(atual, (BigDecimal) p[2], servicos)) continue;
+            List<String> nomes = jdbc.query("select s.nome from plano_servico ps join servico s on s.id = ps.servico_id where ps.plano_id = ? order by lower(s.nome)", (rs, i) -> rs.getString(1), id);
+            saida.add(new Opcao(id, (String) p[1], (BigDecimal) p[2], (Integer) p[3], nomes, PlanoRegras.diferencaDaTroca((BigDecimal) p[2], atual.preco(), cfg.descontoPct())));
+        }
+        return saida;
+    }
+
+    private List<Opcao> opcoesDoCliente(JdbcTemplate jdbc, UUID clienteId, ConfigTroca cfg) {
+        List<UUID> ativa = jdbc.queryForList("select id from assinatura where cliente_id = ? and status = 'ativa' order by criado_em, id", UUID.class, clienteId);
+        return ativa.isEmpty() ? List.of() : opcoesDeTroca(jdbc, ler(jdbc, ativa.get(0), false).foto(), cfg);
+    }
+
+    /**
+     * O cliente (esgotado ou restrito, sem login) pede mudar para um plano com mais serviços. Só vale se o plano está entre as opções do plano ativo dele; a diferença e o
+     * desconto da hora ficam gravados no pedido. Telefone sem plano, plano fora das opções: mesma resposta, nada gravado. O dono aceita ou recusa.
+     */
+    public Recebido pedirTroca(String ip, Instant agora, PedidoTroca d) {
+        Loja loja = LojaContext.exigir();
+        consultaLiberada(loja, "planos-troca-ip:" + ip, 30, Duration.ofMinutes(10));
+        if (d.site() != null && !d.site().isBlank()) throw recusa("Dados inválidos.");
+        String tel = Documentos.telefone(d.telefone());
+        if (tel == null) throw recusa("Informe o telefone com DDD.");
+        if (d.planoId() == null) throw recusa("Plano indisponível.");
+        consultaLiberada(loja, "planos-troca-tel:" + tel, 3, Duration.ofMinutes(15));
+        consultaLiberada(loja, "planos-troca-loja", 60, Duration.ofMinutes(1));
+        String hash = cifra.hash(loja.id(), "tel", tel);
+        return banco.naLoja(jdbc -> {
+            if (!linkLigado(jdbc)) throw new ErroDeNegocio(HttpStatus.FORBIDDEN, "O pedido de plano não está disponível agora. Fale com a loja.");
+            ConfigTroca cfg = lerConfigTroca(jdbc);
+            for (UUID cliente : jdbc.queryForList("select id from cliente where telefone_hash = ?", UUID.class, hash)) {
+                List<UUID> ativa = jdbc.queryForList("select id from assinatura where cliente_id = ? and status = 'ativa' order by criado_em, id", UUID.class, cliente);
+                if (ativa.isEmpty()) continue;
+                Foto atual = ler(jdbc, ativa.get(0), false).foto();
+                Opcao alvo = opcoesDeTroca(jdbc, atual, cfg).stream().filter(o -> o.planoId().equals(d.planoId())).findFirst().orElse(null);
+                if (alvo == null) continue;
+                Integer abertos = jdbc.queryForObject("select count(*) from pedido_plano where status = 'novo'", Integer.class);
+                if (abertos != null && abertos >= PlanoRegras.MAX_PEDIDOS_ABERTOS) throw conflito("Não estamos recebendo novos pedidos agora. Fale com a loja.");
+                Integer repetido = jdbc.queryForObject("select count(*) from pedido_plano where status = 'novo' and telefone_hash = ? and plano_id = ? and tipo = 'troca'", Integer.class, hash, alvo.planoId());
+                if (repetido != null && repetido > 0) return new Recebido(true);
+                List<String> nomes = jdbc.query("select coalesce(nullif(apelido, ''), nome) from cliente where id = ?", (rs, i) -> rs.getString(1), cliente);
+                String nome = nomes.isEmpty() || nomes.get(0) == null ? "" : Texto.limpar(nomes.get(0));
+                if (nome.length() > 60) nome = nome.substring(0, 60);
+                if (nome.length() < 2) nome = "Cliente";
+                try {
+                    jdbc.update("insert into pedido_plano (loja_id, nome, telefone_cif, telefone_hash, plano_id, plano_nome, tipo, de_assinatura_id, valor_diferenca, desconto_pct) values (?::uuid, ?, ?, ?, ?, ?, 'troca', ?, ?, ?)",
+                            loja.id().toString(), nome, cifra.cifrar(tel), hash, alvo.planoId(), alvo.nome(), ativa.get(0), alvo.diferenca(), cfg.descontoPct());
+                } catch (DuplicateKeyException e) {
+                    // dois cliques ao mesmo tempo: o outro já gravou
+                }
+                return new Recebido(true);
+            }
+            return new Recebido(true);
+        });
+    }
+
+    /**
+     * O dono aceita o pedido de troca (numa transação só): encerra o plano atual, abre o novo a partir do mês da troca, leva para ele os atendimentos do mês (e dos meses
+     * seguintes, se houver adiantados) e registra a mensalidade do mês com a diferença; nos meses seguintes vale o preço cheio do plano novo. Se o cliente já usou mais
+     * atendimentos no mês do que o plano novo oferece, recusa (nada muda). Horários fixos do plano antigo saem e precisam ser definidos de novo.
+     */
+    private AssinaturaDto aceitarTroca(JdbcTemplate jdbc, UUID lojaId, UUID pedidoId, UUID planoId, UUID deId, BigDecimal diferenca, String forma, Autor autor, Instant agora) {
+        if (forma == null || !FORMAS.containsKey(forma)) throw recusa("Escolha como a diferença foi paga: Pix, dinheiro ou cartão.");
+        if (deId == null) throw recusa("Esse pedido não tem o plano de origem. Recuse e peça de novo.");
+        Trava antigo = travar(jdbc, deId);
+        if (!"ativa".equals(antigo.status())) throw recusa("O plano atual desse cliente mudou. Recuse este pedido.");
+        Integer ativo = jdbc.queryForObject("select count(*) from plano where id = ? and ativo", Integer.class, planoId);
+        if (ativo == null || ativo == 0) throw recusa("O plano desse pedido não está mais à venda.");
+        List<UUID> servicosNovo = jdbc.query("select servico_id from plano_servico where plano_id = ?", (rs, i) -> rs.getObject(1, UUID.class), planoId);
+        if (!servicosNovo.containsAll(antigo.foto().servicoIds())) throw recusa("O plano desse pedido não inclui mais todos os serviços do plano atual. Recuse este pedido.");
+        UUID clienteId = jdbc.queryForObject("select cliente_id from assinatura where id = ?", UUID.class, deId);
+        Integer dia = jdbc.queryForObject("select dia_cobranca from assinatura where id = ?", Integer.class, deId);
+        String mes = PlanoRegras.mesDe(agora);
+        if (antigo.inicioMes().compareTo(mes) > 0) mes = antigo.inicioMes(); // plano pago adiantado que ainda não começou: a troca vale desde o primeiro mês dele
+        FixosDoPlano.apagarFuturos(jdbc, deId, null, agora);
+        jdbc.update("delete from assinatura_fixo where assinatura_id = ?", deId);
+        jdbc.update("update assinatura set status = 'cancelada', encerrado_em = ? where id = ?", utc(agora), deId); // libera o "um plano em andamento por cliente"
+        UUID novo = contratarNaTransacao(jdbc, lojaId, clienteId, planoId, mes, dia, autor, agora);
+        Foto fotoNova = ler(jdbc, novo, false).foto();
+        jdbc.update("update assinatura set troca_de_id = ?, valor_primeiro_mes = ?, status = 'ativa' where id = ?", deId, diferenca, novo);
+        jdbc.update("update agendamento set plano_assinatura_id = ?, plano_nome = ?, atualizado_em = now() where plano_assinatura_id = ? and to_char(inicio at time zone 'America/Sao_Paulo', 'YYYY-MM') >= ?",
+                novo, fotoNova.nome(), deId, mes);
+        Extrato exAntigo = PlanoRegras.extrato(antigo.foto(), antigo.inicioMes(), pagos(jdbc, deId), usos(jdbc, deId, null), mes, List.of());
+        int divida = PlanoRegras.dividaAoEncerrar(exAntigo);
+        jdbc.update("update assinatura set divida = ?, divida_quitada = ? where id = ?", divida, divida == 0, deId);
+        jdbc.update("insert into assinatura_pagamento (loja_id, assinatura_id, mes, valor, forma, em, autor_id, autor_nome) values (?::uuid, ?, ?, ?, ?, ?, ?, ?)",
+                lojaId.toString(), novo, mes, diferenca, forma, utc(agora), autor.id(), autor.nome());
+        Extrato exNovo = PlanoRegras.extrato(fotoNova, mes, List.of(mes), usos(jdbc, novo, null), mes, List.of());
+        for (Linha l : exNovo.linhas()) {
+            if (l.estourou()) throw conflito("O cliente já usou mais atendimentos neste mês do que o plano novo oferece. Recuse o pedido e combine com ele.");
+        }
+        nota(jdbc, lojaId, deId, autor, "trocou", "Troca para " + fotoNova.nome() + " a pedido do cliente" + (divida > 0 ? " · " + divida + " atendimento(s) adiantado(s) sem pagar" : ""), agora);
+        nota(jdbc, lojaId, novo, autor, "mensalidade", PlanoRegras.rotuloMes(mes) + " · " + FORMAS.get(forma) + " · diferença da troca de " + antigo.foto().nome(), agora);
+        jdbc.update("update pedido_plano set status = 'aceito', assinatura_id = ?, resolvido_em = ? where id = ?", novo, utc(agora), pedidoId);
+        return montar(jdbc, novo, agora).get(0);
     }
 
     /**

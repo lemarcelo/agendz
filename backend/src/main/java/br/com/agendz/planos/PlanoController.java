@@ -1,7 +1,9 @@
 package br.com.agendz.planos;
 
+import br.com.agendz.planos.PlanoService.Aceite;
 import br.com.agendz.planos.PlanoService.AssinaturaDto;
 import br.com.agendz.planos.PlanoService.Autor;
+import br.com.agendz.planos.PlanoService.ConfigTroca;
 import br.com.agendz.planos.PlanoService.Contrato;
 import br.com.agendz.planos.PlanoService.Envelope;
 import br.com.agendz.planos.PlanoService.Listagem;
@@ -116,8 +118,15 @@ public class PlanoController {
 
     @PostMapping("/api/planos/pedidos/{id}/aceitar")
     @PreAuthorize(SECAO)
-    public AssinaturaDto aceitar(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
-        return planos.aceitarPedido(id, autor(jwt), relogio.instant());
+    public AssinaturaDto aceitar(@PathVariable UUID id, @Valid @RequestBody(required = false) Aceite d, @AuthenticationPrincipal Jwt jwt) {
+        return planos.aceitarPedido(id, d == null ? null : d.forma(), autor(jwt), relogio.instant());
+    }
+
+    /** E3: desconto (0 a 100%) sobre a diferença da troca de plano e WhatsApp da loja para o pedido. */
+    @PutMapping("/api/planos/troca")
+    @PreAuthorize(SECAO)
+    public ConfigTroca configurarTroca(@Valid @RequestBody ConfigTroca d) {
+        return planos.salvarConfigTroca(d.descontoPct(), d.whatsapp());
     }
 
     @PostMapping("/api/planos/pedidos/{id}/recusar")

@@ -1,9 +1,12 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
 // Avalia um caso de equivalencia/planos.json com o domínio JS (src/domain/planos.js). O servidor roda os MESMOS casos em PlanosEquivalenciaTest (PlanoRegras).
-import { consomeCorte, dividaAoEncerrar, descontosDoPlano, extrato, podeUsar, rotuloMes, saldoAtual, somaMeses } from '../src/domain/planos.js';
+import { consomeCorte, diferencaDaTroca, dividaAoEncerrar, descontosDoPlano, ehUpgrade, extrato, podeUsar, rotuloMes, saldoAtual, somaMeses } from '../src/domain/planos.js';
 
 // Hora local sem fuso ('2026-10-15T10:00'): o Node lê no fuso da máquina e o Java no fuso da loja; os casos ficam longe da virada do mês.
 export const ts = (iso) => new Date(iso).getTime();
+
+// E3: troca de plano pagando só a diferença
+export const troca = (c) => ({ upgrade: ehUpgrade(c.atual, c.novo), diferenca: diferencaDaTroca(c.novo.preco, c.atual.preco, c.descontoPct) });
 
 export function avaliar(c) {
   const foto = { ...c.plano, servicoIds: ['sv1'] };

@@ -3,7 +3,7 @@
 import { test, beforeEach, afterEach, beforeAll, afterAll } from '@jest/globals';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { avaliar, consome, meses, descontos } from '../tests/planos-equivalencia-util.mjs';
+import { avaliar, consome, meses, descontos, troca } from '../tests/planos-equivalencia-util.mjs';
 
 const dados = JSON.parse(readFileSync(new URL('../backend/src/test/resources/equivalencia/planos.json', import.meta.url), 'utf8'));
 
@@ -18,6 +18,11 @@ test('quem gasta corte e quem devolve', () => {
 
 test('meses: soma e rótulo', () => {
   for (const c of dados.meses) assert.deepEqual(meses(c), c.esperado, JSON.stringify(c));
+});
+
+test('E3 troca de plano: diferença com o desconto da loja (centavos inteiros) e só plano que inclui tudo do atual e mais algum', () => {
+  assert.ok(dados.trocas.length >= 9, 'fixture carregada');
+  for (const c of dados.trocas) assert.deepEqual(troca(c), c.esperado, c.nome);
 });
 
 test('desconto do plano: só o que ele inclui, valor zero fora, centavos arredondados', () => {

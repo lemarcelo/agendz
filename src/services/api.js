@@ -820,7 +820,15 @@ export const planos = {
       const c = state.clientes.find((x) => x.id === a.clienteId);
       return { ...structuredClone(a), cliente: c ? { id: c.id, nome: c.nome, apelido: c.apelido || '' } : null, saldo: saldoAtual(state, a, agora), extrato: extrato(state, a, agora).linhas };
     });
-    return { ok: true, planos: structuredClone(state.planos || []), assinaturas, pedidos: structuredClone((state.pedidosPlano || []).filter((p) => p.status === 'novo')), aReceber: aReceber(state, agora).map((a) => a.id), mes: AS_MES(agora) };
+    return { ok: true, planos: structuredClone(state.planos || []), assinaturas, pedidos: structuredClone((state.pedidosPlano || []).filter((p) => p.status === 'novo')), aReceber: aReceber(state, agora).map((a) => a.id), mes: AS_MES(agora), descontoTrocaPct: AS.configDaTroca(state).descontoPct, whatsapp: AS.configDaTroca(state).whatsapp };
+  },
+  // PUT /planos/troca  { descontoPct 0–100, whatsapp? }  (E3: desconto da loja sobre a diferença da troca de plano e WhatsApp para o pedido)
+  salvarConfigTroca(entrada) {
+    const n = exigir('planos'); if (n) return n;
+    const d = pegar(entrada, ['descontoPct', 'whatsapp']);
+    if (d.descontoPct !== undefined && d.descontoPct !== '' && !finito(Number(d.descontoPct))) return erro('O desconto da troca vai de 0 a 100%.');
+    if (d.whatsapp !== undefined && d.whatsapp !== null && !texto(String(d.whatsapp), 30, true)) return erro('Informe o WhatsApp da loja com DDD.');
+    return mutate((s) => AS.salvarConfigTroca(s, d), { metodo: 'PUT', rota: '/planos/troca' });
   },
   // POST /planos  |  PUT /planos/{id}
   salvar(entrada) {
@@ -879,7 +887,8 @@ export const planos = {
     return mutate((s, agora) => AS.definirFixos(s, id, d.fixos || [], autor(), agora), { metodo: 'POST', rota: `/assinaturas/${id}/fixos` });
   },
   // POST /planos/pedidos/{id}/aceitar  |  /recusar
-  aceitarPedido(id) { return exigir('planos') || (!idOk(id) ? erro('Pedido inválido.') : mutate((s, agora) => AS.aceitarPedido(s, id, autor(), agora), { metodo: 'POST', rota: `/planos/pedidos/${id}/aceitar` })); },
+  // E3: pedido de troca de plano aceita com { forma } (como a diferença foi paga)
+  aceitarPedido(id, entrada) { return exigir('planos') || (!idOk(id) ? erro('Pedido inválido.') : mutate((s, agora) => AS.aceitarPedido(s, id, autor(), agora, pegar(entrada || {}, ['forma']).forma), { metodo: 'POST', rota: `/planos/pedidos/${id}/aceitar` })); },
   recusarPedido(id) { return exigir('planos') || (!idOk(id) ? erro('Pedido inválido.') : mutate((s, agora) => AS.recusarPedido(s, id, autor(), agora), { metodo: 'POST', rota: `/planos/pedidos/${id}/recusar` })); },
   // GET /planos/cliente/{clienteId}  (Atender: plano ativo do cliente, quanto resta e se pode adiantar; quem lança na agenda precisa disso, sem ter a seção Planos)
   doCliente(clienteId) {
@@ -1632,6 +1641,15 @@ export const publico = {
     const tel = R.telefoneNacional(d.telefone);
     if (estourou(`pp:${tel}`, 3, 15 * 60000) || estourou('pp:*', 60, 60000)) return erro(MUITAS);
     return mutate((s, agora) => AS.pedirPlanoPorLink(s, d, agora), P('/publico/planos/pedidos'));
+  },
+  // POST /publico/planos/trocas  { telefone, planoId, site }  (E3: pede mudar para um plano com mais serviços; só vale para plano entre as opções; resposta igual se não valer)
+  pedirTroca(entrada) {
+    const d = pegar(entrada, ['telefone', 'planoId', 'site']);
+    if (!texto(d.telefone, 30) || !texto(d.planoId, 60)) return erro('Informe o telefone e o plano.');
+    if (d.site !== undefined && !texto(String(d.site), 100, true)) return erro('Dados inválidos.');
+    const tel = R.telefoneNacional(d.telefone);
+    if (estourou(`pt:${tel}`, 3, 15 * 60000) || estourou('pt:*', 60, 60000)) return erro(MUITAS);
+    return mutate((s, agora) => AS.pedirTrocaPorLink(s, d, agora), P('/publico/planos/trocas'));
   },
   // GET /publico/planos/uso?telefone=&servicoIds=&inicio=  (a tela do cliente avisa "este horário usa um atendimento do seu plano" antes de pedir; só sim ou não)
   usoDoPlano(entrada) {

@@ -2,6 +2,7 @@ package br.com.agendz.planos;
 
 import br.com.agendz.planos.PlanoService.PaginaPlanos;
 import br.com.agendz.planos.PlanoService.PedidoPublico;
+import br.com.agendz.planos.PlanoService.PedidoTroca;
 import br.com.agendz.planos.PlanoService.Recebido;
 import br.com.agendz.planos.PlanoService.SaldoPublico;
 import br.com.agendz.planos.PlanoService.UsoPublico;
@@ -55,6 +56,12 @@ public class PlanoPublicoController {
     @GetMapping("/api/publico/planos/saldo")
     public SaldoPublico saldo(@RequestParam String telefone, HttpServletRequest req) {
         return planos.saldoPorTelefone(ip(req), relogio.instant(), telefone);
+    }
+
+    /** E3: o cliente (plano esgotado ou restrito) pede mudar para um plano com mais serviços; o dono aceita ou recusa. */
+    @PostMapping("/api/publico/planos/trocas")
+    public ResponseEntity<Recebido> pedirTroca(@Valid @RequestBody PedidoTroca d, HttpServletRequest req) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(planos.pedirTroca(ip(req), relogio.instant(), d));
     }
 
     /** Corpo da prévia: telefone no corpo (POST), nunca na URL. */

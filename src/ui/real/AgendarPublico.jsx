@@ -17,6 +17,7 @@ import { Rot, capAtiva, rot } from '../../domain/tipos.js';
 import { PORTE_PADRAO, formatarPlaca, limparVeiculoComRegras, placaValida, tipoPlaca } from '../../domain/veiculos.js';
 import { logoValida } from '../../domain/tema.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
+import { OpcoesDeTroca } from '../leve/TrocaDePlano.jsx';
 import { useCaptcha } from './Captcha.jsx';
 import ProfissionalPorServico from '../leve/ProfissionalPorServico.jsx';
 import { precisaAtribuirPorServico } from '../../domain/vinculo.js';
@@ -333,6 +334,7 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
   const [feito, setFeito] = useState(null);
   const [usaPlano, setUsaPlano] = useState(false); // o telefone é de quem tem plano com corte para este horário (só sim ou não)
   const [planoRestrito, setPlanoRestrito] = useState(false); // E2: o plano do telefone restringe o link aos serviços dele e algum serviço escolhido está fora
+  const [trocas, setTrocas] = useState(null); // E3: planos com mais serviços (só vêm com o aviso de cota acabada ou de restrição): { opcoes, descontoPct, whatsapp }
   const [planoEsgotado, setPlanoEsgotado] = useState(false); // E2: tem plano que cobre o serviço, mas os atendimentos do mês acabaram (o link não agenda; a equipe agenda fora do plano)
   const cap = useCaptcha(loja.captchaChave);
   const servicos = pagina.servicos.filter((x) => srv.includes(x.id));
@@ -371,7 +373,7 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
 
   // Avisa antes de pedir: "este horário usa um atendimento do seu plano". Só consulta com o telefone completo; o servidor responde apenas sim ou não.
   useEffect(() => {
-    setUsaPlano(false); setPlanoEsgotado(false); setPlanoRestrito(false);
+    setUsaPlano(false); setPlanoEsgotado(false); setPlanoRestrito(false); setTrocas(null);
     if (etapa !== 3 || !escolha || !telefoneBrasileiro(tel)) return undefined;
     let vivo = true;
     const t = setTimeout(async () => {
@@ -379,6 +381,7 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
       if (vivo && r.ok && r.usaPlano) setUsaPlano(true);
       if (vivo && r.ok && r.esgotado) setPlanoEsgotado(true);
       if (vivo && r.ok && r.restrito) setPlanoRestrito(true);
+      if (vivo && r.ok && (r.esgotado || r.restrito) && Array.isArray(r.trocas) && r.trocas.length) setTrocas({ opcoes: r.trocas, descontoPct: r.descontoTrocaPct || 0, whatsapp: r.whatsapp || '' });
     }, 400);
     return () => { vivo = false; clearTimeout(t); };
   }, [etapa, tel, srv, escolha]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -534,6 +537,7 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
             {usaPlano && <p className="pub-aviso-plano" role="status" data-testid="pub-usa-plano"><Icone n="ticket" size={14} /> Este horário usa um atendimento do seu plano.</p>}
             {planoRestrito && <p className="pub-aviso-plano esgotado" role="status" data-testid="pub-plano-restrito"><Icone n="ticket" size={14} /> Seu plano permite agendar pelo link só os serviços dele. Para outros serviços, fale com a equipe.</p>}
             {planoEsgotado && <p className="pub-aviso-plano esgotado" role="status" data-testid="pub-plano-esgotado"><Icone n="ticket" size={14} /> Os atendimentos do seu plano neste mês acabaram. Para agendar fora do plano, fale com a equipe.</p>}
+            {trocas && <OpcoesDeTroca opcoes={trocas.opcoes} descontoPct={trocas.descontoPct} whatsapp={trocas.whatsapp} telefone={tel} aoPedir={(o) => planosPublico.pedirTroca({ telefone: tel, planoId: o.planoId, site: isca })} />}
             <Campo rotulo="Cupom (opcional)"><input value={cupom} onChange={(e) => setCupom(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 14))} maxLength={14} autoComplete="off" autoCapitalize="characters" placeholder="XXXX-XXXX-XXXX" data-testid="pub-cupom" /></Campo>
             <input className="pub-isca" tabIndex={-1} aria-hidden="true" autoComplete="off" name="site" value={isca} onChange={(e) => setIsca(e.target.value)} data-testid="pub-isca" />
             {erro && <Aviso tipo="erro"><span data-testid="pub-erro">{erro}</span></Aviso>}

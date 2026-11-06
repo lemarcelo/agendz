@@ -7,7 +7,7 @@ import { contaDaForma, CATEGORIA_ESTORNO } from './pagamento.js';
 import { FORMAS_PAGAMENTO, STATUS, errosServicoIds, formaValida, ocupacao, sobrepoe, telefoneBrasileiro, telefoneNacional, validarHorario } from './rules.js';
 import {
   DIAS_FIXOS_A_FRENTE, fimDoPlano, LIMITE_ASSINATURAS, LIMITE_PLANOS, MAX_FIXOS, MAX_PEDIDOS_ABERTOS, MESES_A_FRENTE, MES, abertaDoCliente, assinaturaDoCliente, dividaAoEncerrar, dividaDoCliente, extrato, fotoDoPlano, mesDe, montarPlano,
-  pagamentosValidos, restricaoDoLink, rotuloMes, saldoAtual, somaMeses, usoParaAgendamento,
+  diferencaDaTroca, opcoesDeTroca, pagamentosValidos, restricaoDoLink, rotuloMes, saldoAtual, somaMeses, usoParaAgendamento,
 } from './planos.js';
 import { ehDoFixo, chaveFixo, menorDistanciaDias, mesmoFixo, ocorrencias, proximoDia, sanearFixos } from './fixos.js';
 import { cap } from './tipos.js';
@@ -80,7 +80,7 @@ export function contratar(s, d, autor, agora) {
 // ---------- mensalidade ----------
 const lancsDaMensalidade = (s, as, pagId) => s.financeiro.lancamentos.filter((l) => l.origem === 'plano' && l.assinaturaId === as.id && l.pagamentoId === pagId);
 
-// POST /assinaturas/{id}/pagamentos   ({ mes, forma })  — o valor é sempre o do plano contratado
+// POST /assinaturas/{id}/pagamentos   ({ mes, forma })  — o valor é sempre o do plano contratado (E3: no mês da troca, só a diferença)
 export function registrarPagamento(s, assinaturaId, d, autor, agora) {
   const as = acharAssinatura(s, assinaturaId);
   if (!as) return falha('Assinatura não encontrada.');
@@ -93,11 +93,12 @@ export function registrarPagamento(s, assinaturaId, d, autor, agora) {
   if (pagamentosValidos(as).some((p) => p.mes === mes)) return falha(`A mensalidade de ${rotuloMes(mes)} já está registrada.`);
   const forma = formaValida(d.forma) ? d.forma : null;
   if (!forma) return falha('Escolha como foi pago: Pix, dinheiro ou cartão.');
-  const p = { id: nextId(s, 'mp'), mes, valor: as.plano.preco, forma, em: agora, autor: autorDe(autor), estornado: false };
+  const valor = mes === as.inicioMes && as.valorPrimeiroMes !== undefined && as.valorPrimeiroMes !== null ? as.valorPrimeiroMes : as.plano.preco;
+  const p = { id: nextId(s, 'mp'), mes, valor, forma, em: agora, autor: autorDe(autor), estornado: false };
   as.pagamentos.push(p);
   as.status = 'ativa';
   nota(as, autor, 'mensalidade', `${rotuloMes(mes)} · ${FORMAS_PAGAMENTO[forma]}`, agora);
-  const conta = contaDaForma(s, forma, null);
+  const conta = valor > 0 ? contaDaForma(s, forma, null) : null;
   if (conta) {
     const cli = s.clientes.find((c) => c.id === as.clienteId);
     s.financeiro.lancamentos.unshift({
@@ -177,9 +178,10 @@ export function pedirPlanoPorLink(s, d, agora) {
 }
 
 // POST /planos/pedidos/{id}/aceitar  — acha (ou cria, por nome+telefone) o cliente e abre a assinatura "aguardando pagamento"
-export function aceitarPedido(s, id, autor, agora) {
+export function aceitarPedido(s, id, autor, agora, forma) {
   const p = (s.pedidosPlano || []).find((x) => x.id === id);
   if (!p || p.status !== 'novo') return falha('Pedido não encontrado.');
+  if (p.tipo === 'troca') return aceitarTroca(s, p, forma, autor, agora);
   const plano = acharPlano(s, p.planoId);
   if (!plano || plano.ativo === false) return falha('O plano desse pedido não está mais à venda.');
   const rc = resolverClienteDoAtendimento(s, { nome: p.nome, telefone: p.telefone }, agora);
@@ -190,6 +192,83 @@ export function aceitarPedido(s, id, autor, agora) {
   p.status = 'aceito'; p.assinaturaId = r.assinatura.id; p.resolvidoEm = agora;
   return { ok: true, assinatura: r.assinatura };
 }
+// ---------- E3: troca de plano pagando só a diferença ----------
+export const configDaTroca = (s) => ({ descontoPct: Number(s.planosConfig?.descontoTrocaPct) || 0, whatsapp: s.planosConfig?.whatsapp || null });
+
+// PUT /planos/troca  ({ descontoPct 0–100, whatsapp? })  — vale para a loja toda
+export function salvarConfigTroca(s, d) {
+  const pct = d.descontoPct === undefined || d.descontoPct === null || d.descontoPct === '' ? 0 : Number(d.descontoPct);
+  if (!Number.isFinite(pct) || pct < 0 || pct > 100) return falha('O desconto da troca vai de 0 a 100%.');
+  let zap = null;
+  if (d.whatsapp !== undefined && d.whatsapp !== null && String(d.whatsapp).trim() !== '') {
+    if (!telefoneBrasileiro(d.whatsapp)) return falha('Informe o WhatsApp da loja com DDD.');
+    zap = `55${telefoneNacional(d.whatsapp)}`;
+  }
+  s.planosConfig = { ...(s.planosConfig || {}), descontoTrocaPct: Math.round(pct * 100) / 100, whatsapp: zap };
+  return { ok: true, descontoPct: s.planosConfig.descontoTrocaPct, whatsapp: zap };
+}
+
+// As opções de troca do plano ativo do cliente (o primeiro cliente do telefone que tiver plano ativo).
+function assinaturaAtivaDoTelefone(s, telefone) {
+  const nac = telefoneNacional(telefone);
+  for (const c of s.clientes.filter((x) => telefoneNacional(x.telefone) === nac)) {
+    const as = assinaturaDoCliente(s, c.id);
+    if (as) return { cliente: c, as };
+  }
+  return null;
+}
+
+// POST /publico/planos/trocas  ({ telefone, planoId, site })  — só vale para plano entre as opções do plano ativo; senão a mesma resposta, sem gravar nada
+export function pedirTrocaPorLink(s, d, agora) {
+  if (d.site) return falha('Dados inválidos.');
+  if (!telefoneBrasileiro(d.telefone)) return falha('Informe o telefone com DDD.');
+  if (typeof d.planoId !== 'string' || !d.planoId) return falha('Plano indisponível.');
+  const achou = assinaturaAtivaDoTelefone(s, d.telefone);
+  if (!achou) return { ok: true };
+  const cfg = configDaTroca(s);
+  const alvo = opcoesDeTroca(s, achou.as.plano, cfg.descontoPct).find((o) => o.planoId === d.planoId);
+  if (!alvo) return { ok: true };
+  const tel = telefoneNacional(d.telefone);
+  const abertos = (s.pedidosPlano ||= []).filter((x) => x.status === 'novo');
+  if (abertos.length >= MAX_PEDIDOS_ABERTOS) return falha('Não estamos recebendo novos pedidos agora. Fale com a loja.');
+  if (abertos.some((x) => x.tel === tel && x.planoId === alvo.planoId && x.tipo === 'troca')) return { ok: true };
+  const nome = limparTexto(String(achou.cliente.apelido || achou.cliente.nome || ''), 60).trim();
+  s.pedidosPlano.unshift({ id: nextId(s, 'pp'), nome: nome.length >= 2 ? nome : 'Cliente', tel, telefone: `55${tel}`, planoId: alvo.planoId, planoNome: alvo.nome, status: 'novo', criadoEm: agora, tipo: 'troca', deAssinaturaId: achou.as.id, planoAtualNome: achou.as.plano.nome, valorDiferenca: alvo.diferenca, descontoPct: cfg.descontoPct });
+  if (s.pedidosPlano.length > 300) s.pedidosPlano.length = 300;
+  return { ok: true };
+}
+
+// aceitar o pedido de troca: encerra o plano atual, abre o novo a partir do mês da troca, leva os atendimentos do mês (e adiantados) para ele e registra a mensalidade do mês com a diferença
+function aceitarTroca(s, p, forma, autor, agora) {
+  if (!formaValida(forma)) return falha('Escolha como a diferença foi paga: Pix, dinheiro ou cartão.');
+  const velho = acharAssinatura(s, p.deAssinaturaId);
+  if (!velho || velho.status !== 'ativa') return falha('O plano atual desse cliente mudou. Recuse este pedido.');
+  const plano = acharPlano(s, p.planoId);
+  if (!plano || plano.ativo === false) return falha('O plano desse pedido não está mais à venda.');
+  if (!velho.plano.servicoIds.every((id) => plano.servicoIds.includes(id))) return falha('O plano desse pedido não inclui mais todos os serviços do plano atual. Recuse este pedido.');
+  const hoje = mesDe(agora);
+  const mes = velho.inicioMes > hoje ? velho.inicioMes : hoje; // plano pago adiantado que ainda não começou: a troca vale desde o primeiro mês dele
+  apagarFixosFuturos(s, velho.id, null, agora);
+  velho.fixos = [];
+  velho.status = 'cancelada'; velho.encerradoEm = agora; velho.divida = 0; velho.dividaQuitada = false; // libera o "um plano em andamento por cliente"
+  const r = contratar(s, { clienteId: velho.clienteId, planoId: plano.id, inicioMes: mes, diaCobranca: velho.diaCobranca }, autor, agora);
+  if (!r.ok) return r;
+  const novo = r.assinatura;
+  novo.trocaDeId = velho.id; novo.valorPrimeiroMes = p.valorDiferenca;
+  for (const a of s.agendamentos || []) {
+    if (a.planoUso && a.planoUso.assinaturaId === velho.id && mesDe(a.inicio) >= mes) { a.planoUso.assinaturaId = novo.id; if ('planoNome' in a.planoUso) a.planoUso.planoNome = novo.plano.nome; }
+  }
+  const divida = dividaAoEncerrar(s, velho, agora);
+  velho.divida = divida; velho.dividaQuitada = divida === 0;
+  const pg = registrarPagamento(s, novo.id, { mes, forma }, autor, agora);
+  if (!pg.ok) return pg;
+  if (extrato(s, novo, agora).linhas.some((l) => l.estourou)) return falha('O cliente já usou mais atendimentos neste mês do que o plano novo oferece. Recuse o pedido e combine com ele.');
+  nota(velho, autor, 'trocou', `Troca para ${novo.plano.nome} a pedido do cliente${divida > 0 ? ` · ${divida} atendimento(s) adiantado(s) sem pagar` : ''}`, agora);
+  nota(novo, autor, 'mensalidade', `${rotuloMes(mes)} · ${FORMAS_PAGAMENTO[forma]} · diferença da troca de ${velho.plano.nome}`, agora);
+  p.status = 'aceito'; p.assinaturaId = novo.id; p.resolvidoEm = agora;
+  return { ok: true, assinatura: novo };
+}
+
 // POST /planos/pedidos/{id}/recusar
 export function recusarPedido(s, id, autor, agora) {
   const p = (s.pedidosPlano || []).find((x) => x.id === id);
@@ -343,16 +422,19 @@ ganchos.push(materializarFixos);
 // Só um sim ou não: nunca nome do plano, saldo, valor ou dado de outra pessoa; sem plano, sem saldo ou serviço fora do plano é a mesma resposta.
 export function usoDoPlanoPorTelefone(s, { telefone, servicoIds, inicio }, agora) {
   const nao = { ok: true, usaPlano: false, esgotado: false, restrito: false };
+  const cfg = configDaTroca(s);
+  let trocas = []; // E3: planos com mais serviços, quando o link recusou por cota ou por restrição
+  const opcoesDe = (as) => (as && !trocas.length ? opcoesDeTroca(s, as.plano, cfg.descontoPct) : trocas);
   if (!telefoneBrasileiro(telefone) || !Number.isFinite(inicio) || errosServicoIds(s, servicoIds, { ativos: true })) return nao;
   const nac = telefoneNacional(telefone);
   let restrito = false; // E2: plano que restringe o link aos serviços dele e algum serviço pedido está fora
   let esgotado = false; // E2: tem plano que cobre o serviço, mas a cota do mês acabou (o link não agenda; a equipe agenda fora do plano)
   for (const c of s.clientes.filter((x) => telefoneNacional(x.telefone) === nac)) {
     const as = assinaturaDoCliente(s, c.id);
-    if (as && restricaoDoLink(s, as, servicoIds)) { restrito = true; continue; }
+    if (as && restricaoDoLink(s, as, servicoIds)) { restrito = true; trocas = opcoesDe(as); continue; }
     const up = as ? usoParaAgendamento(s, { assinaturaId: as.id, clienteId: c.id, servicoIds, inicio, agora }) : null;
     if (up && up.ok) return { ok: true, usaPlano: true, esgotado: false, restrito: false };
-    if (up && up.limite) esgotado = true;
+    if (up && up.limite) { esgotado = true; trocas = opcoesDe(as); }
   }
-  return { ...nao, esgotado, restrito };
+  return { ...nao, esgotado, restrito, ...(trocas.length ? { trocas, descontoTrocaPct: cfg.descontoPct, ...(cfg.whatsapp ? { whatsapp: cfg.whatsapp } : {}) } : {}) };
 }

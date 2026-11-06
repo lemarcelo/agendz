@@ -152,3 +152,67 @@ test('horários fixos (v128): POST /api/assinaturas/{id}/fixos com a lista intei
   const e = await planos.definirFixos(ID, { fixos: [] });
   assert.equal(e.ok, false); assert.equal(chamadas[0].corpo.fixos.length, 0, 'lista vazia é válida: tira os fixos');
 });
+
+// ---------------------------------------------------------------- E3. troca de plano pagando só a diferença
+const PLANO_NOVO = '00000000-0000-4000-8000-000000000102';
+const OPCAO = { planoId: PLANO_NOVO, nome: 'Degradê e Barba', preco: 120, cortes: 4, servicos: ['Barba', 'Corte Degradê'], diferenca: 33.75 };
+
+test('E3 planosPublico.uso: as opções de troca só entram quando existem, com desconto e WhatsApp lidos com cuidado', async () => {
+  const inicio = Date.parse('2026-11-02T12:00:00Z');
+  const tel = '(53) 99900-0001';
+  servidor({ usaPlano: false, esgotado: true, restrito: false, trocas: [OPCAO, { planoId: 'lixo', nome: 'x' }], descontoTrocaPct: 25, whatsapp: '5551999991234' });
+  const r = await planosPublico.uso({ telefone: tel, servicoIds: [SRV], inicio });
+  assert.equal(r.esgotado, true);
+  assert.deepEqual(r.trocas, [OPCAO], 'opção sem id válido é descartada');
+  assert.equal(r.descontoTrocaPct, 25); assert.equal(r.whatsapp, '5551999991234');
+  servidor({ usaPlano: false, esgotado: true, restrito: false, trocas: [OPCAO], descontoTrocaPct: 25, whatsapp: 'javascript:alert(1)' });
+  const sem = await planosPublico.uso({ telefone: tel, servicoIds: [SRV], inicio });
+  assert.equal(sem.whatsapp, undefined, 'só 12 ou 13 dígitos viram número de WhatsApp');
+  servidor({ usaPlano: true });
+  assert.equal((await planosPublico.uso({ telefone: tel, servicoIds: [SRV], inicio })).trocas, undefined, 'sem opção a chave nem existe');
+});
+
+test('E3 planosPublico.pedirTroca: POST com telefone e plano no corpo, sem token do painel; entrada ruim nem sai', async () => {
+  servidor({ ok: true }, 201);
+  const r = await planosPublico.pedirTroca({ telefone: '(53) 99900-0001', planoId: PLANO_NOVO, site: '' });
+  assert.equal(r.ok, true);
+  assert.deepEqual([chamadas[0].metodo, chamadas[0].url], ['POST', 'https://loja.teste/api/publico/planos/trocas']);
+  assert.deepEqual(chamadas[0].corpo, { telefone: '(53) 99900-0001', planoId: PLANO_NOVO });
+  assert.ok(!chamadas[0].cab.Authorization); assert.ok(!chamadas[0].url.includes('99900'));
+  chamadas.length = 0;
+  assert.equal((await planosPublico.pedirTroca({ telefone: '', planoId: PLANO_NOVO })).ok, false);
+  assert.equal((await planosPublico.pedirTroca({ telefone: '53999000001', planoId: 'lixo' })).ok, false);
+  assert.equal(chamadas.length, 0);
+  servidor({ mensagem: 'Muitos pedidos em pouco tempo.' }, 429);
+  const f = await planosPublico.pedirTroca({ telefone: '(53) 99900-0001', planoId: PLANO_NOVO });
+  assert.equal(f.ok, false); assert.match(f.erro, /Muitos pedidos/);
+});
+
+test('E3 planos.salvarConfigTroca: PUT com desconto e WhatsApp; fora de 0 a 100 nem sai', async () => {
+  servidor({ descontoPct: 25, whatsapp: '5551999991234' });
+  const r = await planos.salvarConfigTroca({ descontoPct: '25', whatsapp: '(51) 99999-1234' });
+  assert.deepEqual(r, { ok: true, descontoPct: 25, whatsapp: '5551999991234' });
+  assert.deepEqual([chamadas[0].metodo, chamadas[0].url, chamadas[0].corpo], ['PUT', 'https://loja.teste/api/planos/troca', { descontoPct: 25, whatsapp: '(51) 99999-1234' }]);
+  chamadas.length = 0;
+  assert.equal((await planos.salvarConfigTroca({ descontoPct: 101 })).ok, false);
+  assert.equal((await planos.salvarConfigTroca({ descontoPct: -1 })).ok, false);
+  assert.equal((await planos.salvarConfigTroca({ descontoPct: 'muito' })).ok, false);
+  assert.equal(chamadas.length, 0);
+});
+
+test('E3 planos.listar lê o desconto, o WhatsApp e o pedido de troca; aceitarPedido leva a forma só quando é válida', async () => {
+  servidor({ planos: [], assinaturas: [], aReceber: [], mes: '2026-11', descontoTrocaPct: 25, whatsapp: '5551999991234',
+    pedidos: [{ id: ID, nome: 'Ana', telefone: '5553999000001', planoId: PLANO_NOVO, planoNome: 'Degradê e Barba', status: 'novo', criadoEm: '2026-11-03T10:00:00Z', tipo: 'troca', planoAtualNome: 'Degradê em Dia', valorDiferenca: 33.75, descontoPct: 25 },
+      { id: PAG, nome: 'Bia', telefone: '5553999000002', planoId: PLANO_NOVO, planoNome: 'Outro', status: 'novo', criadoEm: '2026-11-03T10:00:00Z' }] });
+  const l = await planos.listar();
+  assert.equal(l.descontoTrocaPct, 25); assert.equal(l.whatsapp, '5551999991234');
+  assert.equal(l.pedidos[0].tipo, 'troca'); assert.equal(l.pedidos[0].planoAtualNome, 'Degradê em Dia'); assert.equal(l.pedidos[0].valorDiferenca, 33.75); assert.equal(l.pedidos[0].descontoPct, 25);
+  assert.equal(l.pedidos[1].tipo, 'novo'); assert.equal(l.pedidos[1].valorDiferenca, null);
+  servidor({ id: ID, status: 'ativa' });
+  await planos.aceitarPedido(ID, { forma: 'pix' });
+  assert.deepEqual([chamadas[0].metodo, chamadas[0].url, chamadas[0].corpo], ['POST', `https://loja.teste/api/planos/pedidos/${ID}/aceitar`, { forma: 'pix' }]);
+  await planos.aceitarPedido(ID, { forma: 'ouro' });
+  assert.equal(chamadas[1].corpo, undefined, 'forma desconhecida nem vai; o servidor recusa a troca sem ela');
+  await planos.aceitarPedido(ID);
+  assert.equal(chamadas[2].corpo, undefined, 'pedido de plano novo segue sem corpo');
+});

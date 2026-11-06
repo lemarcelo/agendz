@@ -120,6 +120,22 @@ class PlanosEquivalenciaTest {
     }
 
     @Test
+    void trocaDePlanoPagaADiferencaComODescontoDaLoja() throws Exception {
+        for (JsonNode c : raiz().get("trocas")) {
+            Map<String, UUID> ids = new java.util.HashMap<>();
+            List<UUID> atual = new ArrayList<>(), novo = new ArrayList<>();
+            c.get("atual").get("servicoIds").forEach(x -> atual.add(ids.computeIfAbsent(x.asText(), k -> UUID.randomUUID())));
+            c.get("novo").get("servicoIds").forEach(x -> novo.add(ids.computeIfAbsent(x.asText(), k -> UUID.randomUUID())));
+            BigDecimal precoAtual = new BigDecimal(c.get("atual").get("preco").asText()), precoNovo = new BigDecimal(c.get("novo").get("preco").asText());
+            PlanoRegras.Foto foto = new PlanoRegras.Foto("Atual", precoAtual, 2, atual, 1, 2, 3);
+            String nome = c.get("nome").asText();
+            assertEquals(c.get("esperado").get("upgrade").asBoolean(), PlanoRegras.ehUpgrade(foto, precoNovo, novo), nome + ": upgrade");
+            BigDecimal dif = PlanoRegras.diferencaDaTroca(precoNovo, precoAtual, new BigDecimal(c.get("descontoPct").asText()));
+            assertTrue(dif.compareTo(new BigDecimal(c.get("esperado").get("diferenca").asText())) == 0, nome + ": diferença veio " + dif);
+        }
+    }
+
+    @Test
     void soOQueOPlanoIncluiSaiDeGratis() throws Exception {
         for (JsonNode c : raiz().get("descontos")) {
             // os ids do JSON são rótulos; o servidor trabalha com UUID, então cada rótulo ganha o seu

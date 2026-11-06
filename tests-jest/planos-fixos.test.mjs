@@ -370,3 +370,119 @@ test('aviso do horário fixo: o dono e o profissional do fixo veem; outro profis
   assert.equal(avisos('u-kiko').length, 1, 'profissional do fixo');
   assert.equal(avisos('u-tailuan').length, 0, 'outro profissional');
 });
+
+// ---------------------------------------------------------------- E3. trocar de plano pagando só a diferença
+function planosDaTroca() {
+  const completo = planos.salvar({ nome: 'Degradê e Barba', preco: 120, cortes: 4, servicoIds: ['s-degrade', 's-barba'], adianta: 1, acumuloMeses: 2, intervaloDias: 0 });
+  const barato = planos.salvar({ nome: 'Barato Completo', preco: 60, cortes: 4, servicoIds: ['s-degrade', 's-barba'], adianta: 1, acumuloMeses: 2, intervaloDias: 0 }); // custa menos: não é troca
+  const semDegrade = planos.salvar({ nome: 'Só Barba', preco: 200, cortes: 4, servicoIds: ['s-barba', 's-barba-degrade'], adianta: 1, acumuloMeses: 2, intervaloDias: 0 }); // não inclui o serviço atual
+  assert.ok(completo.ok && barato.ok && semDegrade.ok);
+  return { completo: completo.plano.id, barato: barato.plano.id, semDegrade: semDegrade.plano.id };
+}
+function esgotar() {
+  for (let k = 0; k < 3; k++) assert.ok(agenda.atender({ clienteId: CLI, profissionalId: 'u-alan', servicoIds: ['s-degrade'], formaPagamento: 'pix', assinaturaId: assin }).ok);
+  assert.equal(restantes(), 0);
+}
+
+test('E3: a prévia do link oferece só planos com TODOS os serviços do atual e mais algum, do mais barato, com a diferença já descontada', () => {
+  preparar({ cortes: 2, intervaloDias: 0 });
+  const p = planosDaTroca();
+  assert.deepEqual(planos.salvarConfigTroca({ descontoPct: 25, whatsapp: '(51) 99999-1234' }), { ok: true, descontoPct: 25, whatsapp: '5551999991234' });
+  esgotar(); auth.logout();
+  const r = publico.usoDoPlano({ telefone: TEL, servicoIds: ['s-degrade'], inicio: em(7, 10) });
+  assert.equal(r.esgotado, true);
+  assert.equal(JSON.stringify(r.trocas.map((o) => o.planoId)), JSON.stringify([p.completo]), 'só o upgrade de verdade');
+  assert.equal(r.trocas[0].diferenca, 33.75, '(120 − 75) com 25% de desconto');
+  assert.equal(r.trocas[0].preco, 120);
+  assert.equal(JSON.stringify(r.trocas[0].servicos), JSON.stringify(['Barba', 'Corte Degradê']));
+  assert.equal(r.descontoTrocaPct, 25); assert.equal(r.whatsapp, '5551999991234');
+  assert.ok(!JSON.stringify(r).includes('Degradê em Dia') && !JSON.stringify(r).includes('Rafael'), 'nunca o nome do plano atual nem do cliente');
+  // telefone sem plano: nenhuma opção
+  assert.equal(publico.usoDoPlano({ telefone: '(51) 90000-0000', servicoIds: ['s-degrade'], inicio: em(7, 10) }).trocas, undefined);
+});
+
+test('E3: o desconto da loja é 0 a 100 e só quem tem a seção Planos configura', () => {
+  assert.equal(planos.salvarConfigTroca({ descontoPct: 101 }).ok, false);
+  assert.equal(planos.salvarConfigTroca({ descontoPct: -1 }).ok, false);
+  assert.equal(planos.salvarConfigTroca({ descontoPct: 10, whatsapp: '123' }).ok, false);
+  assert.equal(planos.salvarConfigTroca({ descontoPct: 100 }).ok, true);
+  assert.equal(planos.listar().descontoTrocaPct, 100);
+  auth.logout();
+  assert.equal(planos.salvarConfigTroca({ descontoPct: 5 }).ok, false);
+});
+
+test('E3: o pedido de troca só vale para plano entre as opções; o repetido não duplica; o dono vê de onde para onde e a diferença', () => {
+  preparar({ cortes: 2, intervaloDias: 0 });
+  const p = planosDaTroca();
+  planos.salvarConfigTroca({ descontoPct: 10 });
+  esgotar(); auth.logout();
+  for (const planoId of [p.barato, p.semDegrade]) assert.deepEqual(publico.pedirTroca({ telefone: TEL, planoId }), { ok: true });
+  assert.deepEqual(publico.pedirTroca({ telefone: '(51) 90000-0000', planoId: p.completo }), { ok: true });
+  assert.equal((st().pedidosPlano || []).length, 0, 'plano fora das opções ou telefone sem plano: nada gravado');
+  assert.deepEqual(publico.pedirTroca({ telefone: TEL, planoId: p.completo }), { ok: true });
+  jest.advanceTimersByTime(16 * 60000); // passa a janela de 3 pedidos por telefone em 15 min
+  assert.deepEqual(publico.pedirTroca({ telefone: TEL, planoId: p.completo }), { ok: true }, 'o mesmo pedido de novo tem a mesma resposta');
+  assert.equal(publico.pedirTroca({ telefone: TEL, planoId: p.completo, site: 'robo' }).ok, false, 'isca preenchida');
+  alan();
+  const ped = planos.listar().pedidos;
+  assert.equal(ped.length, 1);
+  assert.equal(ped[0].tipo, 'troca'); assert.equal(ped[0].planoAtualNome, 'Degradê em Dia'); assert.equal(ped[0].planoNome, 'Degradê e Barba');
+  assert.equal(ped[0].valorDiferenca, 40.5, '(120 − 75) com 10% de desconto'); assert.equal(ped[0].descontoPct, 10);
+});
+
+test('E3: aceitar a troca encerra o plano atual, abre o novo com a diferença só neste mês, leva os atendimentos do mês e volta a liberar o link', () => {
+  preparar({ cortes: 2, intervaloDias: 0 });
+  const p = planosDaTroca();
+  planos.salvarConfigTroca({ descontoPct: 20 });
+  esgotar(); auth.logout();
+  publico.pedirTroca({ telefone: TEL, planoId: p.completo });
+  alan();
+  const pedido = planos.listar().pedidos[0];
+  assert.equal(pedido.valorDiferenca, 36, '(120 − 75) com 20% de desconto');
+  assert.equal(planos.aceitarPedido(pedido.id).ok, false, 'sem a forma de pagamento da diferença não aceita');
+  assert.equal(planos.aceitarPedido(pedido.id, { forma: 'ouro' }).ok, false);
+  const r = planos.aceitarPedido(pedido.id, { forma: 'pix' });
+  assert.ok(r.ok, JSON.stringify(r));
+  const velho = doAssin(); const novo = st().assinaturas.find((a) => a.id === r.assinatura.id);
+  assert.equal(velho.status, 'cancelada'); assert.equal(velho.divida, 0);
+  assert.equal(novo.status, 'ativa'); assert.equal(novo.plano.nome, 'Degradê e Barba'); assert.equal(novo.trocaDeId, assin);
+  assert.deepEqual(novo.pagamentos.map((x) => [x.mes, x.valor]), [['2026-10', 36]], 'o mês da troca vale só a diferença');
+  assert.equal(st().agendamentos.filter((a) => a.planoUso && a.planoUso.assinaturaId === novo.id).length, 3, 'os 3 atendimentos já usados no mês passaram para o plano novo');
+  assert.equal(st().agendamentos.filter((a) => a.planoUso && a.planoUso.assinaturaId === assin).length, 0);
+  assert.equal(planos.listar().assinaturas.find((a) => a.id === novo.id).saldo.restantes, 1, '4 do plano novo − 3 já usados');
+  assert.equal(planos.listar().pedidos.length, 0);
+  assert.equal(planos.aceitarPedido(pedido.id, { forma: 'pix' }).ok, false, 'pedido já resolvido');
+  // nos meses seguintes vale o preço cheio do plano novo
+  const nov = planos.pagar(novo.id, { mes: '2026-11', forma: 'pix' });
+  assert.ok(nov.ok, JSON.stringify(nov)); assert.equal(nov.pagamento.valor, 120);
+  // o cliente fica com um plano em andamento só e o link volta a usar o plano (sobrou 1)
+  assert.equal(st().assinaturas.filter((a) => a.clienteId === CLI && (a.status === 'ativa' || a.status === 'pendente')).length, 1);
+  auth.logout();
+  assert.equal(publico.usoDoPlano({ telefone: TEL, servicoIds: ['s-degrade'], inicio: em(7, 10) }).usaPlano, true);
+});
+
+test('E3: se o cliente já usou mais atendimentos no mês do que o plano novo oferece, a troca é recusada e nada muda', () => {
+  preparar({ cortes: 2, intervaloDias: 0 });
+  const pequeno = planos.salvar({ nome: 'Poucos', preco: 100, cortes: 1, servicoIds: ['s-degrade', 's-barba'], adianta: 0, acumuloMeses: 1, intervaloDias: 0 });
+  assert.ok(pequeno.ok);
+  esgotar(); auth.logout();
+  publico.pedirTroca({ telefone: TEL, planoId: pequeno.plano.id });
+  alan();
+  const pedido = planos.listar().pedidos[0];
+  const antes = JSON.stringify(st().assinaturas);
+  const r = planos.aceitarPedido(pedido.id, { forma: 'pix' });
+  assert.equal(r.ok, false); assert.match(r.erros[0], /já usou mais atendimentos neste mês do que o plano novo oferece/);
+  assert.equal(JSON.stringify(st().assinaturas), antes, 'recusado: nada mudou');
+  assert.equal(planos.listar().pedidos.length, 1, 'o pedido segue aberto para o dono recusar');
+});
+
+test('E3: 100% de desconto = diferença zero: a troca acontece e a mensalidade do mês vale 0', () => {
+  preparar({ cortes: 2, intervaloDias: 0 });
+  const p = planosDaTroca();
+  planos.salvarConfigTroca({ descontoPct: 100 });
+  auth.logout(); publico.pedirTroca({ telefone: TEL, planoId: p.completo });
+  alan();
+  assert.equal(planos.listar().pedidos[0].valorDiferenca, 0);
+  const r = planos.aceitarPedido(planos.listar().pedidos[0].id, { forma: 'dinheiro' });
+  assert.ok(r.ok, JSON.stringify(r)); assert.equal(r.assinatura.pagamentos[0].valor, 0);
+});

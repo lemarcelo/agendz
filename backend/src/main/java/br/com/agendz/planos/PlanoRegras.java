@@ -208,6 +208,30 @@ public final class PlanoRegras {
         return saida;
     }
 
+    // ---------------------------------------------------------------- E3: troca de plano pagando só a diferença
+
+    /** Plano de destino que o cliente pode escolher (nome, valor cheio, quantos atendimentos, serviços por nome e a diferença JÁ com o desconto da loja). */
+    public record Opcao(UUID planoId, String nome, BigDecimal preco, int cortes, List<String> servicos, BigDecimal diferenca) {
+    }
+
+    /**
+     * Diferença da troca: (preço do plano novo − preço do atual) com o desconto % da loja sobre essa diferença, cobrada UMA vez, no mês da troca. Conta em centavos
+     * inteiros (arredonda meio para cima) para casar com o espelho JS (domain/planos.js, equivalencia/planos.json). Nunca negativa.
+     */
+    public static BigDecimal diferencaDaTroca(BigDecimal precoNovo, BigDecimal precoAtual, BigDecimal descontoPct) {
+        long centavos = precoNovo.movePointRight(2).setScale(0, RoundingMode.HALF_UP).longValue() - precoAtual.movePointRight(2).setScale(0, RoundingMode.HALF_UP).longValue();
+        if (centavos <= 0) return BigDecimal.ZERO.setScale(2);
+        long pct = descontoPct == null ? 0 : descontoPct.movePointRight(2).setScale(0, RoundingMode.HALF_UP).longValue(); // centésimos de por cento
+        pct = Math.max(0, Math.min(10000, pct));
+        long resultado = (centavos * (10000 - pct) + 5000) / 10000;
+        return BigDecimal.valueOf(resultado, 2);
+    }
+
+    /** Upgrade de verdade: inclui TODOS os serviços do plano atual, mais algum, e custa mais. */
+    public static boolean ehUpgrade(Foto atual, BigDecimal precoNovo, List<UUID> servicosNovo) {
+        return servicosNovo.containsAll(atual.servicoIds()) && servicosNovo.size() > atual.servicoIds().size() && precoNovo.compareTo(atual.preco()) > 0;
+    }
+
     /** E2: plano que restringe o link aos serviços dele: algum serviço pedido está FORA do plano? */
     public static boolean foraDaRestricao(Foto p, List<UUID> servicoIds) {
         if (!p.restringeServicos()) return false;

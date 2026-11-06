@@ -1849,5 +1849,197 @@
    ],
    "esperado": {}
   }
+ ],
+ "trocas": [
+  {
+   "nome": "diferença com desconto da loja sobre ela",
+   "atual": {
+    "preco": 60,
+    "servicoIds": [
+     "a"
+    ]
+   },
+   "novo": {
+    "preco": 100,
+    "servicoIds": [
+     "a",
+     "b"
+    ]
+   },
+   "descontoPct": 25,
+   "esperado": {
+    "upgrade": true,
+    "diferenca": 30
+   }
+  },
+  {
+   "nome": "sem desconto paga a diferença inteira",
+   "atual": {
+    "preco": 60,
+    "servicoIds": [
+     "a"
+    ]
+   },
+   "novo": {
+    "preco": 100,
+    "servicoIds": [
+     "a",
+     "b"
+    ]
+   },
+   "descontoPct": 0,
+   "esperado": {
+    "upgrade": true,
+    "diferenca": 40
+   }
+  },
+  {
+   "nome": "100% de desconto: diferença zero",
+   "atual": {
+    "preco": 60,
+    "servicoIds": [
+     "a"
+    ]
+   },
+   "novo": {
+    "preco": 100,
+    "servicoIds": [
+     "a",
+     "b"
+    ]
+   },
+   "descontoPct": 100,
+   "esperado": {
+    "upgrade": true,
+    "diferenca": 0
+   }
+  },
+  {
+   "nome": "centavos: 49,99 com 33,33% de desconto",
+   "atual": {
+    "preco": 50,
+    "servicoIds": [
+     "a"
+    ]
+   },
+   "novo": {
+    "preco": 99.99,
+    "servicoIds": [
+     "a",
+     "b"
+    ]
+   },
+   "descontoPct": 33.33,
+   "esperado": {
+    "upgrade": true,
+    "diferenca": 33.33
+   }
+  },
+  {
+   "nome": "meio centavo arredonda para cima",
+   "atual": {
+    "preco": 10,
+    "servicoIds": [
+     "a"
+    ]
+   },
+   "novo": {
+    "preco": 10.01,
+    "servicoIds": [
+     "a",
+     "b"
+    ]
+   },
+   "descontoPct": 50,
+   "esperado": {
+    "upgrade": true,
+    "diferenca": 0.01
+   }
+  },
+  {
+   "nome": "menos de meio centavo arredonda para baixo",
+   "atual": {
+    "preco": 10,
+    "servicoIds": [
+     "a"
+    ]
+   },
+   "novo": {
+    "preco": 10.01,
+    "servicoIds": [
+     "a",
+     "b"
+    ]
+   },
+   "descontoPct": 51,
+   "esperado": {
+    "upgrade": true,
+    "diferenca": 0
+   }
+  },
+  {
+   "nome": "plano mais barato não é troca",
+   "atual": {
+    "preco": 100,
+    "servicoIds": [
+     "a"
+    ]
+   },
+   "novo": {
+    "preco": 60,
+    "servicoIds": [
+     "a",
+     "b"
+    ]
+   },
+   "descontoPct": 0,
+   "esperado": {
+    "upgrade": false,
+    "diferenca": 0
+   }
+  },
+  {
+   "nome": "mesmos serviços não é troca",
+   "atual": {
+    "preco": 60,
+    "servicoIds": [
+     "a",
+     "b"
+    ]
+   },
+   "novo": {
+    "preco": 100,
+    "servicoIds": [
+     "a",
+     "b"
+    ]
+   },
+   "descontoPct": 0,
+   "esperado": {
+    "upgrade": false,
+    "diferenca": 40
+   }
+  },
+  {
+   "nome": "plano que não inclui todos os serviços do atual não é troca",
+   "atual": {
+    "preco": 60,
+    "servicoIds": [
+     "a"
+    ]
+   },
+   "novo": {
+    "preco": 100,
+    "servicoIds": [
+     "b",
+     "c"
+    ]
+   },
+   "descontoPct": 0,
+   "esperado": {
+    "upgrade": false,
+    "diferenca": 40
+   }
+  }
  ]
 }

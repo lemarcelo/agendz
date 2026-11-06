@@ -952,7 +952,12 @@ function lerAssinatura(d) {
       limite: inteiroPlano(l && l.limite), estourou: !!(l && l.estourou === true), zerou: !!(l && l.zerou === true) })).filter((l) => l.mes),
   };
 }
-const lerPedidoPlano = (d) => ({ id: texto(d && d.id, 40), nome: texto(d && d.nome, 60), telefone: texto(d && d.telefone, 20), planoId: texto(d && d.planoId, 40), planoNome: texto(d && d.planoNome, 60), status: texto(d && d.status, 12), criadoEm: instante(d && d.criadoEm) });
+const dinheiroDoPedido = (v) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v < 1e6 ? v : null);
+// E3: tipo 'troca' = o cliente pediu mudar de plano (plano de origem, diferença já com o desconto e o % de desconto da hora do pedido)
+const lerPedidoPlano = (d) => ({ id: texto(d && d.id, 40), nome: texto(d && d.nome, 60), telefone: texto(d && d.telefone, 20), planoId: texto(d && d.planoId, 40), planoNome: texto(d && d.planoNome, 60), status: texto(d && d.status, 12), criadoEm: instante(d && d.criadoEm),
+  tipo: d && d.tipo === 'troca' ? 'troca' : 'novo', planoAtualNome: texto(d && d.planoAtualNome, 60), valorDiferenca: dinheiroDoPedido(d && d.valorDiferenca), descontoPct: dinheiroDoPedido(d && d.descontoPct) });
+// E3: opção de troca que o servidor mostra ao cliente (planoId, nome, preço cheio, quantos atendimentos, serviços por nome, diferença já com o desconto)
+const lerOpcaoTroca = (o) => ({ planoId: texto(o && o.planoId, 40), nome: texto(o && o.nome, 60), preco: dinheiroDoPedido(o && o.preco) ?? 0, cortes: Number.isInteger(o && o.cortes) ? o.cortes : 0, servicos: listaDe(o && o.servicos, 10).map((x) => texto(x, 60)), diferenca: dinheiroDoPedido(o && o.diferenca) ?? 0 });
 let ultimaMensalidade = { assinatura: '', chave: '' };
 const semAssinatura = { ok: false, status: 0, erro: 'Assinatura não encontrada.' };
 export const planos = {
@@ -962,7 +967,14 @@ export const planos = {
     if (!r.ok) return r;
     const d = r.dados || {};
     return { ok: true, planos: listaDe(d.planos, 20).map(lerPlano), assinaturas: listaDe(d.assinaturas, 1000).map(lerAssinatura), pedidos: listaDe(d.pedidos, 30).map(lerPedidoPlano),
-      aReceber: idsDe(d.aReceber, 1000), mes: mesPlano(d.mes) };
+      aReceber: idsDe(d.aReceber, 1000), mes: mesPlano(d.mes), descontoTrocaPct: dinheiroDoPedido(d.descontoTrocaPct) ?? 0, whatsapp: typeof d.whatsapp === 'string' && /^\d{12,13}$/.test(d.whatsapp) ? d.whatsapp : null };
+  },
+  // PUT /api/planos/troca  { descontoPct 0–100, whatsapp? }  → { descontoPct, whatsapp }  (E3: desconto da loja sobre a diferença da troca de plano e o WhatsApp para o pedido)
+  async salvarConfigTroca(d) {
+    const pct = Number(d && d.descontoPct === '' ? 0 : d && d.descontoPct);
+    if (!Number.isFinite(pct) || pct < 0 || pct > 100) return { ok: false, status: 0, erro: 'O desconto da troca vai de 0 a 100%.' };
+    const r = await chamar('PUT', '/api/planos/troca', { descontoPct: pct, whatsapp: d && d.whatsapp ? texto(String(d.whatsapp), 30) : null });
+    return r.ok ? { ok: true, descontoPct: dinheiroDoPedido(r.dados && r.dados.descontoPct) ?? 0, whatsapp: r.dados && typeof r.dados.whatsapp === 'string' ? r.dados.whatsapp : null } : r;
   },
   // POST /api/planos  |  PUT /api/planos/{id}   (quem já assina mantém a foto do plano de quando contratou)
   async salvar(d) {
@@ -1046,9 +1058,10 @@ export const planos = {
     return r.ok ? { ok: true, assinatura: lerAssinatura(r.dados) } : r;
   },
   // POST /api/planos/pedidos/{id}/aceitar  (acha ou cadastra o cliente por nome+telefone e abre a assinatura "aguardando pagamento")  |  …/recusar
-  async aceitarPedido(id) {
+  async aceitarPedido(id, d) {
     if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Pedido não encontrado.' };
-    const r = await chamar('POST', `/api/planos/pedidos/${id}/aceitar`);
+    const forma = d && ['pix', 'dinheiro', 'cartao'].includes(d.forma) ? d.forma : undefined; // E3: pedido de troca aceita com a forma em que a diferença foi paga
+    const r = await chamar('POST', `/api/planos/pedidos/${id}/aceitar`, forma ? { forma } : undefined);
     return r.ok ? { ok: true, assinatura: lerAssinatura(r.dados) } : r;
   },
   async recusarPedido(id) {
@@ -1090,7 +1103,18 @@ export const planosPublico = {
     const ids = Array.isArray(servicoIds) ? servicoIds.filter((x) => ID.test(String(x))).slice(0, 10) : [];
     if (!texto(telefone, 30) || !ids.length || !Number.isFinite(inicio)) return { ok: true, usaPlano: false, esgotado: false, restrito: false };
     const r = await chamar('POST', '/api/publico/planos/uso', { telefone: texto(telefone, 30), servicoIds: ids, inicio: new Date(inicio).toISOString() }, undefined, PUB);
-    return r.ok ? { ok: true, usaPlano: !!(r.dados && r.dados.usaPlano === true), esgotado: !!(r.dados && r.dados.esgotado === true), restrito: !!(r.dados && r.dados.restrito === true) } : { ok: true, usaPlano: false, esgotado: false, restrito: false }; // falha na prévia nunca atrapalha o pedido
+    if (!r.ok) return { ok: true, usaPlano: false, esgotado: false, restrito: false }; // falha na prévia nunca atrapalha o pedido
+    const dd = r.dados || {};
+    const trocas = listaDe(dd.trocas, 10).map(lerOpcaoTroca).filter((o) => ID.test(o.planoId));
+    // E3: as opções de troca só vêm quando o link recusou por cota ou por restrição (mesmo formato da demonstração: sem a chave quando não há opção)
+    return { ok: true, usaPlano: dd.usaPlano === true, esgotado: dd.esgotado === true, restrito: dd.restrito === true,
+      ...(trocas.length ? { trocas, descontoTrocaPct: dinheiroDoPedido(dd.descontoTrocaPct) ?? 0, ...(typeof dd.whatsapp === 'string' && /^\d{12,13}$/.test(dd.whatsapp) ? { whatsapp: dd.whatsapp } : {}) } : {}) };
+  },
+  // POST /api/publico/planos/trocas  { telefone, planoId, site }  → { ok }  (E3: o cliente com plano esgotado ou restrito pede mudar para um plano com mais serviços; o dono aceita ou recusa)
+  async pedirTroca({ telefone, planoId, site }) {
+    if (!texto(telefone, 30) || !ID.test(String(planoId ?? ''))) return { ok: false, status: 0, erro: 'Informe o telefone e o plano.' };
+    const r = await chamar('POST', '/api/publico/planos/trocas', { telefone: texto(telefone, 30), planoId, site: site ? texto(String(site), 100) : undefined }, undefined, PUB);
+    return r.ok ? { ok: true } : r;
   },
   // GET /api/publico/planos/saldo?telefone=  → { planos: [{ plano, mes, restantes, cortesPorMes, pagoMes }], aviso }  (só cortes; sem plano = resposta genérica)
   async saldo(telefone) {

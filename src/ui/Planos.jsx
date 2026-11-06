@@ -13,6 +13,7 @@ import { fmtMoney } from '../domain/time.js';
 import { LOJA_TROCAVEL, MODO_DEMO } from '../services/api.js';
 import { Abas, Aviso, rolarAoErro, Btn, Campo, Icon, Modal, Vazio } from './common.jsx';
 import PickerCliente from './PickerCliente.jsx';
+import { AceitarTroca, CartaoConfigTroca, TextoDoPedidoTroca } from './leve/TrocaDePlano.jsx';
 import Tabela from './Tabela.jsx';
 import { toast, useStore } from './hooks.js';
 
@@ -321,6 +322,7 @@ function Catalogo({ dados, st, recarregar }) {
           </article>
         ))}
       </div>
+      <CartaoConfigTroca inicial={{ descontoPct: dados.descontoTrocaPct, whatsapp: dados.whatsapp }} aoSalvar={(d) => { const r = api.salvarConfigTroca(d); if (r.ok) { recarregar(); return { ok: true }; } return { ok: false, erro: r.erros?.[0] }; }} />
       {edit && <FormPlano p={edit} st={st} onClose={() => { setEdit(null); recarregar(); }} />}
     </div>
   );
@@ -375,7 +377,7 @@ function FormPlano({ p, st, onClose }) {
 
 // ---------------------------------------------------------------- pedidos pelo link
 function Pedidos({ dados, recarregar }) {
-  const agir = (fn, id, ok) => { const r = fn(id); if (r.ok) { toast(ok); recarregar(); } else toast(r.erros[0], 'erro'); };
+  const agir = (fn, id, ok, extra) => { const r = fn(id, extra); if (r.ok) { toast(ok); recarregar(); } else toast(r.erros[0], 'erro'); };
   return (
     <div className="painel" data-testid="aba-pedidos">
       <h3>Pedidos pelo link de planos</h3>
@@ -384,9 +386,13 @@ function Pedidos({ dados, recarregar }) {
         {dados.pedidos.map((p) => (
           <li key={p.id} data-testid={`pedido-${p.id}`}>
             <Icon n="ticket" size={16} />
-            <span><b>{p.nome}</b> quer o plano <b>{p.planoNome}</b><br /><span className="muted">{p.telefone.replace(/^55/, '')}</span></span>
+            {p.tipo === 'troca'
+              ? <span><TextoDoPedidoTroca p={p} /><span className="muted troca-detalhe">{p.telefone.replace(/^55/, '')}</span></span>
+              : <span><b>{p.nome}</b> quer o plano <b>{p.planoNome}</b><br /><span className="muted">{p.telefone.replace(/^55/, '')}</span></span>}
             <div className="acoes">
-              <Btn tamanho="sm" variante="primario" onClick={() => agir(api.aceitarPedido, p.id, 'Pedido aceito: assinatura criada, aguardando a mensalidade.')} data-testid={`pedido-aceitar-${p.id}`}>Aceitar</Btn>
+              {p.tipo === 'troca'
+                ? <AceitarTroca p={p} aoAceitar={(forma) => agir(api.aceitarPedido, p.id, 'Troca feita: o plano novo já está ativo com a diferença registrada.', { forma })} />
+                : <Btn tamanho="sm" variante="primario" onClick={() => agir(api.aceitarPedido, p.id, 'Pedido aceito: assinatura criada, aguardando a mensalidade.')} data-testid={`pedido-aceitar-${p.id}`}>Aceitar</Btn>}
               <Btn tamanho="sm" onClick={() => agir(api.recusarPedido, p.id, 'Pedido recusado.')} data-testid={`pedido-recusar-${p.id}`}>Recusar</Btn>
             </div>
           </li>
