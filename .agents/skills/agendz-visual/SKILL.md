@@ -17,7 +17,8 @@ Use ao criar ou alterar telas do Agendz. Antes de editar, identifique comportame
 2. Faça o menor ajuste coerente. Priorize hierarquia, alinhamento, legibilidade, consistência entre componentes, navegação identificável, foco e alvos de toque; preserve uso com teclado e textos longos.
 3. Confira computador e celular, inclusive largura intermediária, sem cortes, sobreposição ou rolagem lateral indesejada. Itens novos, quantidade variável, estados vazios e erros não podem quebrar a disposição. Reutilize os componentes do projeto.
    Em listas reordenáveis aprovadas, use alça à esquerda, movimento perceptível durante o arraste e alternativa por teclado; não exiba setas redundantes. Preserve rolagem e persistência existentes.
-4. **Validação Visual Precisa e Barata (sem queimar tokens de visão)**:
+4. **Validação Visual Precisa, Barata e Testes Inteligentes**:
+   - **Testes Inteligentes (Foco no Escopo Alterado)**: Ao realizar uma alteração ou adicionar nova funcionalidade com impacto visual em uma tela, **não teste toda a aplicação**. Isole e execute os testes visuais e de interface estritamente sobre as telas e componentes alterados. Testes de toda a aplicação só devem ser executados quando o Marcelo solicitar expressamente uma validação global.
    - Em vez de analisar imagens pesadas com visão multimodal (caro e passível de alucinação), valide o layout **por código** via asserções geométricas de `boundingBox()` no Playwright:
      - `Math.abs(boxEsquerdaTop.x - boxEsquerdaBottom.x) < 2` (alinhamento lateral esquerdo).
      - `Math.abs((boxDireitaTop.x + boxDireitaTop.width) - (boxDireitaBottom.x + boxDireitaBottom.width)) < 2` (alinhamento lateral direito).
@@ -38,10 +39,29 @@ Use ao criar ou alterar telas do Agendz. Antes de editar, identifique comportame
 
 **Movimento e expansão de conteúdo:** ao abrir históricos, acordeões ou detalhes dentro de um modal, preserve a posição do topo e expanda para baixo com transição curta e suave. Limite a altura ao espaço visível e permita rolagem interna quando necessário; não desloque o fundo nem o foco. Respeite `prefers-reduced-motion` e garanta acesso por teclado e estados expandido/recolhido. Verifique em celular e computador com conteúdo curto e longo, inclusive a posição do modal antes e depois da abertura.
 
-8. **Bloqueio Obrigatório de Scroll Externo em Modais (Scroll Lock & Anti-Chaining)**:
-   - **Regra Geral**: Toda e qualquer sobreposição na tela (modal, diálogo de confirmação, drawer ou bottom sheet) deve travar imediatamente a rolagem da página externa (document.body com overflow: hidden ou container principal travado).
-   - **Isolamento de Rolagem Interna**: O container do modal e o backdrop devem conter overscroll-behavior: contain para impedir que o scroll interno encadeie para o fundo ao atingir o topo ou o fim do conteúdo (*scroll chaining*).
-   - **Restauração Limpa**: Ao fechar o modal (por botão, clique no backdrop ou tecla Escape), o scroll do fundo deve ser restaurado de imediato, sem saltos de posição.
-   - **Validação Automatizada por Código**: Validar em teste Playwright que window.scrollY não se altera ao disparar mouse.wheel() com o modal aberto e que document.body recebe a trava enquanto o modal existir no DOM.
+8. **Modais Obrigatórios para Edições/Detalhes e Bloqueio de Scroll Externo (Scroll Lock & Anti-Chaining)**:
+   - **Regra Visual Obrigatória para Seções e Cards**: Botões em cima de seções ou cards que realizam edições, alterações ou visualização de detalhes devem **SEMPRE** abrir em modal. Não abra fluxos na própria página deslocando seções ou quebrando o contexto visual.
+   - **Padrão de Interação de Todo Modal**:
+     - Clicar fora (no backdrop escuro) deve fechar o modal imediatamente.
+     - Fechamento acessível também por botão de fechar e pela tecla `Escape`.
+     - **Trava Geral de Scroll**: Toda sobreposição (modal, diálogo de confirmação, drawer ou bottom sheet) deve travar imediatamente a rolagem da página externa (`document.body` com trava sem rolagem).
+     - **Isolamento de Rolagem Interna**: O container do modal e o backdrop devem conter `overscroll-behavior: contain` para impedir vazamento de rolagem para o fundo (*scroll chaining*).
+     - **Restauração Limpa**: Ao fechar o modal (por botão, clique no backdrop ou Escape), o scroll do fundo deve ser restaurado de imediato, sem saltos de posição.
+     - **Validação Automatizada por Código**: Validar em teste Playwright que window.scrollY não se altera ao disparar mouse.wheel() com o modal aberto e que document.body recebe a trava enquanto o modal existir no DOM.
+
+9. **Transição Suave Obrigatória em Abas (Tab Switching)**:
+   - Em todas as telas do sistema com abas (`.abas`, `[role="tab"]`), a alternância nunca deve ser abrupta ou piscar seco.
+   - Utilizar transição suave em CSS (`transition: color, border-color, background 0.2s ease` nas abas e animação de fade-in suave com micro-deslocamento vertical de `4px` nos painéis de conteúdo).
+
+10. **Hints Explicativos em Blocos de Resultados e Relatórios**:
+    - Todo card de KPI, métrica ou bloco de resultado de relatório/faturamento deve incluir um hint explicativo discreto (ícone `ⓘ` ou botão de informação).
+    - **No desktop (PC)**: ao passar o mouse (`hover`) ou focar via teclado, exibe o balão com o texto explicativo do cálculo/métrica.
+    - **No celular (Mobile)**: ao clicar/tocar (`tap`), exibe o mesmo balãozinho explicativo, com fechamento ao tocar fora ou no próprio ícone.
+    - Padrão obrigatório para qualquer novo relatório ou painel de métricas no sistema.
+
+11. **Uso de Modelos Econômicos e Automação de Revisões**:
+    - Revisões visuais mecânicas e auditorias de código devem ser realizadas preferencialmente por modelos econômicos (ex.: Gemini Flash) e testes automatizados, evitando o consumo desnecessário de tokens de modelos de alto custo em tarefas operacionais.
 
 O desktop pode usar navegação lateral e o celular menu recolhível quando aprovados para a tela; mantenha todas as opções acessíveis, sem alterar regras ou permissões. Padrões visuais aprovados não substituem testes de funcionalidade.
+
+12. **Avisos breves de validação e configuração:** ao recusar uma tentativa, como mover uma etapa para uma ordem inválida, exiba a mesma mensagem em uma notificação breve visível na região atual da tela, que desapareça sozinha após tempo suficiente para leitura. Não dependa de aviso fixo fora da área visível. Anuncie a mensagem a leitores de tela e respeite movimento reduzido. Erros críticos ou que exijam ação continuada podem permanecer visíveis. A regra vale para alterações futuras e não exige refatoração global imediata.

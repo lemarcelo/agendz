@@ -2,9 +2,24 @@
 
 Regra de uso: toda funcionalidade nova pedida entra aqui com prioridade oficial alinhada a `BACKLOG.md` e `SESSAO.md`. Não alterar a ordem sem ordem expressa do Marcelo.
 
----
+17. **Menu "Relatórios" alterado para "Faturamento" com Ícone de Cifrão ($)**:
+    - Alterar o nome do menu 'Relatórios' para 'Faturamento'.
+    - Mudar o ícone do menu de lista para cifrão ($).
+    - Atualizar título da tela e preservar regras de acesso exclusivas do proprietário.
 
-## 🚀 Fila Imediata do Backlog (Ordem Priorizada: 1 a 9)
+18. **Agenda — Novas Abas "Atendimentos do Mês" e "Comissões" + Transição Suave Global de Abas**:
+    - Adicionar na tela principal da Agenda as abas 'Atendimentos do mês' e 'Comissões'.
+    - Eliminar troca abrupta de abas em todo o sistema, tornando a alternância fluida e suave com transição CSS.
+    - Regra mandatória para todas as abas do sistema em futuras revisões.
+
+19. **Faturamento (Relatórios) — Redesign de Layout e Hints Explicativos (Hover PC / Toque Mobile)**:
+    - Redesign da tela de Faturamento com cards de KPIs e organização mais intuitiva.
+    - Hints explicativos obrigatórios em cada bloco de resultado (hover no PC, toque no celular).
+    - Padronização dessa regra de balãozinho explicativo para todos os relatórios do sistema.
+    - Execução e revisão priorizando modelo econômico e testes automatizados.
+
+---
+## 🚀 Fila Imediata do Backlog (Ordem Priorizada)
 
 1. **Admin — Imagens e Design dos Chamados de Suporte**:
    - Corrigir o carregamento de imagens/anexos enviados pelos clientes que não abrem no painel de chamados do `agendz-admin`.
@@ -41,6 +56,42 @@ Regra de uso: toda funcionalidade nova pedida entra aqui com prioridade oficial 
     - Cada ticket recebe um ID visível e pode ser encerrado/fechado pelo admin.
     - No cliente (`Suporte.jsx`): coluna lateral à direita com "Chamados Anteriores" listando os chamados fechados do mês corrente.
     - Aba de histórico com filtro por data/período e caixa de busca universal (pesquisa por ID ou qualquer palavra do chamado).
+
+10. **Planos — Correção na Tela de Extrato (Histórico por Data)**:
+    - Corrigir a tela de extrato de planos para apresentar o histórico cronológico ordenado por data e corrigir eventuais inconsistências na listagem e agrupamento de movimentações/utilizações.
+
+11. **Planos — Nova Aba "Clientes"**:
+    - Adicionar aba "Clientes" no menu de Planos.
+    - Permitir buscar por clientes cadastrados.
+    - Permitir vincular/incluir plano diretamente para o cliente selecionado.
+    - Permitir inclusão de plano com vigência por período específico.
+
+12. **Planos — Nova Aba "Pagamentos" com Cobrança e Relatórios**:
+    - Adicionar aba "Pagamentos" no menu de Planos.
+    - Permitir envio de mensagem de cobrança de pagamento (utilizando mensagens/modelos já cadastrados no módulo de Mensagens).
+    - Opção interna de "Relatórios":
+      - Visualização de relatórios de planos e extratos de pagamentos.
+      - Filtros de visualização por plano ou por cliente.
+      - Filtro por período de datas, com padrão inicial pré-selecionado de 6 meses.
+
+13. **Autoagendamento — Oferta de Plano ao Concluir Agendamento**:
+    - Ao concluir um agendamento com sucesso pelo link público / tela de confirmação, exibir cartão ou modal com oferta de plano/assinatura para o cliente.
+
+14. **Padronização Visual Global — Modais para Edições e Detalhes**:
+    - Todos os botões sobre seções ou cards que acionam edições, alterações ou exibição de detalhes devem obrigatoriamente abrir em **modal** (nunca expandir desalinhado ou quebrar a navegação na mesma tela).
+    - Regras estritas do modal:
+      - Clicar fora (no backdrop escuro) fecha o modal imediatamente.
+      - Fechamento disponível por botão fechar e tecla `Escape`.
+      - Trava total de scroll na tela de baixo (`body` sem rolagem externa) e `overscroll-behavior: contain`.
+    - **Escopo desta solicitação:** Realizar auditoria e validação visual de ponta a ponta em **toda a aplicação** para garantir a conformidade dessa regra de modais em todos os cards e seções existentes.
+    - **Diretriz de Testes Inteligentes:** Nas próximas alterações/implementações visuais, os testes não devem rodar a aplicação inteira, mas focar inteligentemente apenas nas telas alteradas e novos fluxos de impacto visual.
+
+15. **Google Authenticator — intervalo de 8 horas**:
+    - Após a primeira validação pelo Google Authenticator, não solicitar outro código durante 8 horas; após esse período, voltar a pedir a validação.
+    - Escopo inicial: autenticação do painel administrativo. Confirmar os detalhes de sessão, aparelho e encerramento antes da implementação.
+
+16. **Admin — corrigir instalação como aplicativo PWA**:
+    - Investigar e corrigir a instalação do painel administrativo como aplicativo PWA, verificando o fluxo e os requisitos de instalação nos dispositivos e navegadores compatíveis.
 
 ---
 
