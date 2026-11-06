@@ -179,8 +179,18 @@ try {
     // ---------- A1/A2: Equipe > Editar
     await nav('equipe'); await T(`editar-${KIKO}`).or(p.getByRole('button', { name: /Editar Kiko/ })).first().click();
     await T('eq-servicos').waitFor();
-    assert.ok(await T(`eq-servicos-${CORTE}`).isChecked() && await T(`eq-servicos-${BARBA}`).isChecked() && !(await T(`eq-servicos-${SOBR}`).isChecked()), 'mostra os serviços que ele realiza');
-    await T(`eq-servicos-${BARBA}`).uncheck(); await T(`eq-servicos-${SOBR}`).check();
+    assert.equal(await T(`eq-servicos-sel-${CORTE}`).count() + await T(`eq-servicos-sel-${BARBA}`).count(), 2, 'a caixa da direita mostra os serviços que ele realiza');
+    assert.equal(await T(`eq-servicos-sel-${SOBR}`).count(), 0);
+    assert.equal(await T(`eq-servicos-add-${SOBR}`).count(), 1, 'o que falta aparece na lista da esquerda');
+    await T('eq-servicos-busca').fill('zzz'); await T('eq-servicos-sem-opcoes').waitFor();
+    await T('eq-servicos-busca').fill('SOBRANC'); // busca sem acento e sem diferença de maiúscula, enquanto digita
+    assert.equal(await T(`eq-servicos-add-${SOBR}`).count(), 1);
+    if (pasta) { await T('eq-servicos').scrollIntoViewIfNeeded(); await p.screenshot({ path: `${pasta}/real-equipe-servicos-busca-${vp.nome}.png` }); }
+    await T(`eq-servicos-add-${SOBR}`).click();
+    assert.equal(await T(`eq-servicos-sel-${SOBR}`).count(), 1, 'clicar adiciona na caixa da direita');
+    await T(`eq-servicos-rem-${BARBA}`).click();
+    assert.equal(await T(`eq-servicos-sel-${BARBA}`).count(), 0, 'o X remove');
+    assert.match(await T('eq-servicos-contagem').innerText(), /2/);
     await T('eq-expediente').waitFor();
     await T('exp-form').waitFor();
     await semLateral('Equipe > Editar');
@@ -212,8 +222,11 @@ try {
     // ---------- A1: Serviços > Editar
     await nav('servicos'); await T(`editar-${CORTE}`).click();
     await T('srv-quem').waitFor();
-    assert.ok(await T(`srv-quem-${DONO}`).isChecked() && await T(`srv-quem-${KIKO}`).isChecked());
-    await T(`srv-quem-${BRUNO}`).uncheck();
+    assert.equal(await T(`srv-quem-sel-${DONO}`).count() + await T(`srv-quem-sel-${KIKO}`).count(), 2);
+    await T('srv-quem-busca').fill('bru');
+    await T(`srv-quem-sel-${BRUNO}`).waitFor();
+    await T(`srv-quem-rem-${BRUNO}`).click();
+    assert.equal(await T(`srv-quem-sel-${BRUNO}`).count(), 0);
     await semLateral('Serviços > Editar');
     if (pasta) { await T('srv-quem').scrollIntoViewIfNeeded(); await p.screenshot({ path: `${pasta}/real-servicos-quem-${vp.nome}.png` }); }
     await T('salvar-servico').click();

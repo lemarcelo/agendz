@@ -8,6 +8,7 @@ import { reiniciar } from '../tests/helpers.mjs';
 import { addDays, startOfDay, tsAt, MIN, ymd } from '../src/domain/time.js';
 import { faixasDoDia } from '../src/domain/schedule.js';
 import * as V from '../src/domain/vinculo.js';
+import { filtrarPorTermo } from '../src/domain/busca-vinculo.js';
 import * as R from '../src/domain/rules.js';
 
 const st = () => store.getState();
@@ -76,6 +77,16 @@ test('A1 só o proprietário muda quem realiza; o link do cliente só mostra que
   const pablo = cfg.profissionais.find((p) => p.id === 'u-pablo');
   assert.ok(pablo && Array.isArray(pablo.servicoIds) && !pablo.servicoIds.includes('s-lav-simples'), 'a página sabe que Pablo não faz esse serviço');
   assert.ok(cfg.profissionais.find((p) => p.id === 'u-davi').servicoIds.includes('s-lav-simples'));
+});
+
+test('A1 busca do seletor: por termos, sem acento nem maiúscula, várias palavras em qualquer ordem, também pelo código', () => {
+  const itens = [{ id: 'a', rotulo: 'Corte de cabelo', nota: '#12' }, { id: 'b', rotulo: 'Barba' }, { id: 'c', rotulo: 'Sobrancelha', nota: '#7' }, { id: 'd', rotulo: 'Hidratação capilar' }];
+  assert.deepEqual(filtrarPorTermo(itens, '').map((x) => x.id), ['a', 'b', 'c', 'd'], 'sem termo, todos na ordem');
+  assert.deepEqual(filtrarPorTermo(itens, 'HIDRATACAO').map((x) => x.id), ['d'], 'sem acento e sem maiúscula');
+  assert.deepEqual(filtrarPorTermo(itens, 'cabelo corte').map((x) => x.id), ['a'], 'várias palavras, qualquer ordem');
+  assert.deepEqual(filtrarPorTermo(itens, '#7').map((x) => x.id), ['c'], 'pelo código');
+  assert.deepEqual(filtrarPorTermo(itens, 'sobr cabelo'), [], 'todas as palavras precisam aparecer');
+  assert.deepEqual(filtrarPorTermo(itens, '   ').map((x) => x.id), ['a', 'b', 'c', 'd']);
 });
 
 // ---------- A3 ausência ----------
