@@ -21,8 +21,6 @@ import { sanearModoAgenda, sanearRolagem } from '../domain/agenda-modo.js';
 import { alternarMulti, escolherUnico, removerUm, sanearSelecao } from '../domain/selecao.js';
 import { BotaoRemover, useGestosSelecao } from './selecao.jsx';
 import { copiarTexto } from './clipboard.js';
-import FormaPagamento from './leve/FormaPagamento.jsx';
-import { useToqueLongo } from './leve/segurar.js';
 import { abrirWhatsapp } from './whatsapp.js';
 import { textoConvite } from '../domain/whatsapp.js';
 import { rot } from '../domain/tipos.js';
@@ -48,13 +46,9 @@ function FotoProfissional({ u }) {
 
 function CartaoAgendamento({ a, st, agora, onClick, mostraBarb, testid = 'cartao' }) {
   const v = visualDoCartao(a, agora);
-  const [trocando, setTrocando] = useState(false); // v119: segurar o cartão abre a forma de pagamento (futuro ou concluído; cancelado não)
-  const toque = useToqueLongo(() => setTrocando(true));
   return (
     <div className="cartao-bloco">
-    {trocando && <FormaPagamento quem={`${nomeCliente(st, a)} · ${fmtHM(a.inicio)}`} atual={(a.pagamento && a.pagamento.forma) || ''} aoFechar={() => setTrocando(false)}
-      aoEscolher={async (k) => { const r = apiAgenda.mudarFormaPagamento(a.id, k); if (r.ok) toast('Forma de pagamento alterada.'); return r; }} />}
-    <button type="button" className={`cartao st-${v.chave}`} onClick={onClick} data-testid={testid} data-status={v.chave} {...(a.status !== STATUS.CANCELADO ? toque : {})}
+    <button type="button" className={`cartao st-${v.chave}`} onClick={onClick} data-testid={testid} data-status={v.chave}
       title={`${fmtHM(a.inicio)} ${nomeCliente(st, a)} · ${nomeServicos(st, a)}${a.veiculo ? ` · ${textoVeiculo(a)}` : ''} · ${v.rotulo}`}>
       <div className="cartao-topo">
         <div className="cartao-quem">

@@ -17,8 +17,7 @@ import { Rot, capAtiva } from '../../domain/tipos.js';
 import { ROTULO_PORTE, rotuloVeiculo } from '../../domain/veiculos.js';
 import { boxesAtivos } from '../../domain/atender-form.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
-import FormaPagamento from '../leve/FormaPagamento.jsx';
-import { useToqueLongo } from '../leve/segurar.js';
+import FormaPagamentoMenu, { rotuloDaForma } from '../leve/FormaPagamentoMenu.jsx';
 import { montarLinkAgendamento } from '../../domain/link-publico.js';
 import { numeroWhatsapp, textoConvite, textoReagendamento } from '../../domain/whatsapp.js';
 import { abrirWhatsapp } from '../whatsapp.js';
@@ -35,15 +34,14 @@ const aoLocal = (ts) => { const d = new Date(ts); const p = (n) => String(n).pad
 const doLocal = (v) => { const t = new Date(v).getTime(); return Number.isFinite(t) ? t : null; };
 
 
-function Cartao({ a, nomeCliente, nomeProf, mostraProf, aberto, aoAbrir, aoSegurar, testid, destaque = false, parceiro = false, children }) {
+function Cartao({ a, nomeCliente, nomeProf, mostraProf, aberto, aoAbrir, testid, destaque = false, parceiro = false, children }) {
   const v = visual(a);
-  const toque = useToqueLongo(() => { if (aoSegurar) aoSegurar(a); }); // v119: segurar abre a forma de pagamento (concluído ou futuro; cancelado não)
   const venda = a.produtos.length ? a.produtos.map((p) => `${p.qtd}× ${p.nome}`).join(', ') : '';
   const servicos = a.servicos.map((s) => s.nome).join(' + ') || (venda ? 'Venda de produtos' : 'Sem serviço');
   return (
     <div className={`cartao-real st-${v.cor}${destaque ? ' cartao-novo-real' : ''}`} data-testid={testid} data-status={a.status} data-id={a.id} data-destaque={destaque ? 'sim' : undefined}>
       <div className="cartao-bloco">
-      <button type="button" className="cartao" onClick={aoAbrir} aria-expanded={aberto} data-testid={`${testid}-abrir`} {...(aoSegurar && a.status !== 'cancelado' ? toque : {})}>
+      <button type="button" className="cartao" onClick={aoAbrir} aria-expanded={aberto} data-testid={`${testid}-abrir`}>
         <div className="cartao-topo">
           <div className="cartao-quem">
             <span className="cartao-nome" title={nomeCliente} data-testid={`${testid}-cliente`}>{abreviarNome(nomeCliente, 24)}</span>
@@ -235,13 +233,16 @@ function Detalhe({ a, nomeCliente, nomeProf, nomeDe, profissionais, boxes, ehDon
           <div className="detalhe-linha-real">
             <Icone n="wallet" size={16} />
             <span>
-              <b>{valorFinal}</b>
+              <span className="forma-atual" data-testid="detalhe-forma">{rotuloDaForma(a.formaPagamento) || 'Sem forma'}</span> · <b>{valorFinal}</b>
               {a.cupom && <span data-testid="detalhe-cupom"> · Cupom {a.cupom.nome}: −{fmtMoney(a.desconto)} · a pagar {valorFinal}</span>}
               {cliente && cliente.parceiro && (
                 <span data-testid="detalhe-parceiro-desconto"> · Parceria: {cliente.parceiroDescontoPct ? `${cliente.parceiroDescontoPct}% de desconto` : 'Abono total (cortesia)'}</span>
               )}
             </span>
             {podeCupom && a.cupom && !cancelando && !remarcando && <Btn tamanho="sm" disabled={ocupado} onClick={() => executar(() => api.retirarCupom(a.id), 'Cupom retirado.', false)} data-testid="acao-retirar-cupom">Retirar cupom</Btn>}
+            {ativoStatus !== 'cancelado' && (
+              <FormaPagamentoMenu atual={a.formaPagamento || ''} aoEscolher={async (k) => { const r = await api.mudarFormaPagamento(a.id, k); if (r.ok && aoAlterar) aoAlterar('Forma de pagamento alterada.', r.agendamento); return r; }} />
+            )}
           </div>
         </div>
         {erro && <Aviso tipo="erro" data-testid="agendamento-erro">{erro}</Aviso>}
@@ -426,13 +427,12 @@ export default function Agenda({ podeAusencia = false, ehProprio = false, ehDono
   const [semBoxAberto, setSemBoxAberto] = useState(false); // aviso "falta cadastrar o box" (estética): bloqueia Atender e Link Agenda
   const semBox = capAtiva('usaRecursoFisico') && boxesPronto && boxes.length === 0;
   const [pendLink, setPendLink] = useState([]); // só o proprietário: o que falta cadastrar para o link do cliente ter horários
-  const [trocaForma, setTrocaForma] = useState(null); // agendamento cuja forma de pagamento está sendo trocada (segurar o cartão)
   const [ausenciaAberta, setAusenciaAberta] = useState(false); // A3: janela de lançar ausência (aba Calendário)
   const [ausencias, setAusencias] = useState([]);
   const [versaoAus, setVersaoAus] = useState(0);
   const [removendoAus, setRemovendoAus] = useState(null);
   const [ausenciasAbertas, setAusenciasAbertas] = useState(null); // início do dia com a linha de ausências aberta
-  useTravaScroll(atendendo || !!trocaForma || diaModal !== null || ausenciaAberta);
+  useTravaScroll(atendendo || diaModal !== null || ausenciaAberta);
   useEffect(() => {
     let vivo = true;
     apiAus.listar(addDays(startOfDay(Date.now()), -1), addDays(startOfDay(Date.now()), 121)).then((r) => { if (vivo && r.ok) setAusencias(r.ausencias); });
@@ -579,7 +579,7 @@ export default function Agenda({ podeAusencia = false, ehProprio = false, ehDono
     const fichaCli = a.clienteId ? fichas.get(a.clienteId) || null : null;
     return (
       <Cartao key={a.id} a={a} testid={testid} nomeCliente={nomeCliente(a)} nomeProf={nomeProf(a.profissionalId)} mostraProf={!ehProprio && selecionado === 'todos' && atendem.length > 1}
-        aberto={aberto === a.id} aoAbrir={() => setAberto(aberto === a.id ? null : a.id)} aoSegurar={setTrocaForma} destaque={destaqueIds.includes(a.id) || destaqueAtendido === a.id} parceiro={!!(fichaCli && fichaCli.parceiro)}>
+        aberto={aberto === a.id} aoAbrir={() => setAberto(aberto === a.id ? null : a.id)} destaque={destaqueIds.includes(a.id) || destaqueAtendido === a.id} parceiro={!!(fichaCli && fichaCli.parceiro)}>
         <Detalhe a={a} nomeCliente={nomeCliente(a)} nomeProf={nomeProf(a.profissionalId)} nomeDe={nomeProf} profissionais={atendem} boxes={boxes} ehDono={ehDono} ehProprietario={ehProprietario} podeSuporte={podeSuporte} aoFechar={() => setAberto(null)} aoAlterar={alterou} aoClienteAlterado={lerClientes} aoAvisar={setAvisoRemarcar} cliente={fichaCli} loja={{ nome: nomeLoja, ...lojaInfo }} />
       </Cartao>
     );
@@ -618,10 +618,6 @@ export default function Agenda({ podeAusencia = false, ehProprio = false, ehDono
       {pendLink.length > 0 && <Aviso tipo="erro" data-testid="agenda-link-pendencia">O link do cliente está sem horários: {pendLink[0]}</Aviso>}
       {erro && <Aviso tipo="erro" data-testid="agenda-erro">{erro}</Aviso>}
       {aviso && <Aviso data-testid="agenda-aviso">{aviso}</Aviso>}
-      {trocaForma && (
-        <FormaPagamento quem={`${nomeCliente(trocaForma)} · ${fmtDateTime(trocaForma.inicio)}`} atual={trocaForma.formaPagamento || ''} aoFechar={() => setTrocaForma(null)}
-          aoEscolher={async (k) => { const r = await api.mudarFormaPagamento(trocaForma.id, k); if (r.ok) alterou('Forma de pagamento alterada.', r.agendamento); return r; }} />
-      )}
       {avisoRemarcar && <AvisoRemarcado avisar={avisoRemarcar} aoFechar={() => setAvisoRemarcar(null)} aoErro={setErro} />}
       {lista === null && <p className="muted" role="status" data-testid="agenda-carregando">Carregando…</p>}
       {lista !== null && modo === 'calendario' && <Calendario cursor={cursor} lista={visiveis} aoEscolherDia={(d) => { setAberto(null); setDiaModal(startOfDay(d)); }} />}

@@ -337,54 +337,64 @@ const textoDe = (p, t) => p.getByTestId(t).innerText();
   await ctx.close();
 }
 
-// 4b. v119: segurar o cartão abre a forma de pagamento (mouse e toque); clique curto continua abrindo os detalhes; recusa do servidor aparece na própria janela
+// 4b. Bloco D: a forma de pagamento troca pelo lápis na linha do valor dos Detalhes (menu que abre para baixo); segurar o cartão não abre mais nada;
+// recusa do servidor aparece no próprio menu; mesma forma não chama o servidor; Escape fecha só o menu
 for (const [w, h] of [[1280, 860], [390, 800]]) {
   const { ctx, p } = await abrir({ width: w, height: h });
   await p.waitForFunction(() => document.querySelectorAll('[data-testid="cartao"]').length === 2);
   const alvo = p.locator('[data-testid="cartao-abrir"]').first();
   const centro = async () => { await alvo.scrollIntoViewIfNeeded(); const r = await alvo.boundingBox(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; };
-  const segurar = async (ms = 650, anda = 0) => {
+  // segurar o cartão (mouse ou toque) não abre menu nenhum; só o clique abre os Detalhes
+  {
     const c = await centro();
     if (w < 700) {
       const cdp = await ctx.newCDPSession(p); const t = (type, x, y) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y }] });
-      await t('touchStart', c.x, c.y);
-      if (anda) for (let i = 1; i <= 4; i++) { await t('touchMove', c.x, c.y + (anda * i) / 4); await p.waitForTimeout(30); }
-      await p.waitForTimeout(ms); await t('touchEnd');
-    } else { await p.mouse.move(c.x, c.y); await p.mouse.down(); await p.waitForTimeout(ms); await p.mouse.up(); }
-    await p.waitForTimeout(150);
-  };
-  await segurar();
-  await p.getByTestId('forma-pagamento').waitFor();
-  assert.equal(await alvo.getAttribute('aria-expanded'), 'false', `${w}: segurar não abre os detalhes`);
+      await t('touchStart', c.x, c.y); await p.waitForTimeout(650); await t('touchEnd');
+    } else { await p.mouse.move(c.x, c.y); await p.mouse.down(); await p.waitForTimeout(650); await p.mouse.up(); }
+    await p.waitForTimeout(200);
+    assert.equal(await p.getByTestId('forma-menu').count(), 0, `${w}: segurar o cartão não abre a forma`);
+    assert.equal(await p.getByTestId('forma-pagamento').count(), 0);
+  }
+  if (!(await p.getByTestId('detalhe-modal').count())) await alvo.click();
+  await p.getByTestId('detalhe-modal').waitFor();
+  assert.match(await textoDe(p, 'detalhe-forma'), /Sem forma/, 'sem forma gravada, a linha do valor diz "Sem forma"');
+  const lapis = await p.getByTestId('forma-editar').boundingBox();
+  const valor = await p.locator('.detalhe-linha-real', { has: p.getByTestId('forma-editar') }).locator('b').first().boundingBox();
+  const formaBox = await p.getByTestId('detalhe-forma').boundingBox();
+  assert.ok(formaBox.x + formaBox.width <= valor.x + 1, `${w}: a forma fica à esquerda do valor`);
+  assert.ok(lapis.x >= valor.x + valor.width - 1 || lapis.y > valor.y + valor.height - 1, `${w}: o lápis fica à direita do valor (ou na linha de baixo se faltar largura)`);
+  await p.getByTestId('forma-editar').click(); await p.getByTestId('forma-menu').waitFor();
+  const menu = await p.getByTestId('forma-menu').boundingBox();
+  assert.ok(menu.y >= lapis.y + lapis.height - 1, `${w}: o menu abre para baixo do botão`);
+  assert.ok(menu.x >= 0 && menu.x + menu.width <= w + 1, `${w}: o menu cabe na largura`);
   assert.equal(await p.getByTestId('forma-sem-atual').count(), 1, 'sem forma gravada: avisa que vale a padrão');
+  if (process.env.E2E_CAPTURAS) { await p.waitForTimeout(350); await p.screenshot({ path: `${process.env.E2E_CAPTURAS}/d-menu-${w}.png` }); }
   await p.getByTestId('forma-cartao').click();
-  await p.getByTestId('forma-pagamento').waitFor({ state: 'detached' });
+  await p.getByTestId('forma-menu').waitFor({ state: 'detached' });
   assert.deepEqual(ultimo('PUT', '/forma-pagamento').corpo, { formaPagamento: 'cartao' });
   assert.match(await textoDe(p, 'agenda-aviso'), /Forma de pagamento alterada/);
-  await p.waitForFunction(() => document.querySelectorAll('[data-testid="cartao"]').length === 2);
-  await segurar();
-  await p.getByTestId('forma-pagamento').waitFor();
-  assert.equal(await p.getByTestId('forma-cartao').getAttribute('aria-pressed'), 'true', 'a troca ficou marcada');
+  await p.waitForFunction(() => /Cartão/.test(document.querySelector('[data-testid="detalhe-forma"]')?.textContent || ''));
+  await p.getByTestId('forma-editar').click(); await p.getByTestId('forma-menu').waitFor();
+  assert.equal(await p.getByTestId('forma-cartao').getAttribute('aria-checked'), 'true', 'a troca ficou marcada');
   const antes = chamadas.filter((c) => c.u.endsWith('/forma-pagamento')).length;
   await p.getByTestId('forma-cartao').click(); // a mesma forma: só fecha, sem chamada
-  await p.getByTestId('forma-pagamento').waitFor({ state: 'detached' });
+  await p.getByTestId('forma-menu').waitFor({ state: 'detached' });
   assert.equal(chamadas.filter((c) => c.u.endsWith('/forma-pagamento')).length, antes, 'mesma forma não chama o servidor');
-  // recusa do servidor: erro na janela, que continua aberta
+  // recusa do servidor: erro dentro do menu, que continua aberto
   negarForma = true;
-  await segurar(); await p.getByTestId('forma-pagamento').waitFor();
+  await p.getByTestId('forma-editar').click(); await p.getByTestId('forma-menu').waitFor();
   await p.getByTestId('forma-pix').click();
   assert.match(await textoDe(p, 'forma-erro'), /cancelado não tem forma/);
-  assert.equal(await p.getByTestId('forma-pagamento').count(), 1, 'recusado: a janela fica');
+  assert.equal(await p.getByTestId('forma-menu').count(), 1, 'recusado: o menu fica');
   negarForma = false;
-  if (w < 700) await p.touchscreen.tap(3, 3); else await p.mouse.click(3, 3);
-  await p.getByTestId('forma-pagamento').waitFor({ state: 'detached' });
-  // soltar cedo ou rolar não abre; clique curto abre os detalhes
-  if (w >= 700) await segurar(200); else await segurar(650, 40);
-  assert.equal(await p.getByTestId('forma-pagamento').count(), 0, `${w}: soltou cedo/rolou: nada abre`);
-  if (w >= 700) { await p.waitForTimeout(100); assert.equal(await alvo.getAttribute('aria-expanded'), 'true', 'o clique curto abre os detalhes'); }
+  // Escape fecha só o menu; os Detalhes continuam
+  await p.keyboard.press('Escape');
+  assert.equal(await p.getByTestId('forma-menu').count(), 0, 'Escape fecha o menu');
+  assert.equal(await p.getByTestId('detalhe-modal').count(), 1, 'e os Detalhes continuam abertos');
   assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `${w}: sem rolagem lateral`);
+  await p.getByTestId('detalhe-fechar').click();
   banco.forEach((a) => { delete a.formaPagamento; });
-  ok(`${w} px: segurar o cartão troca a forma de pagamento`);
+  ok(`${w} px: lápis nos Detalhes troca a forma de pagamento (menu para baixo); segurar o cartão não abre nada`);
   await ctx.close();
 }
 

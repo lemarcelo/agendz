@@ -1,5 +1,5 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
-// v119: trocar a forma de pagamento do agendamento (segurar o cartão). Domínio + API simulada.
+// v119: trocar a forma de pagamento do agendamento (pelo lápis dos Detalhes desde o bloco D; a interface mora em e2e46/e2e92). Domínio + API simulada.
 import { test, beforeEach, afterEach, beforeAll, afterAll } from '@jest/globals';
 import assert from 'node:assert/strict';
 import { store, auth, agenda } from '../src/services/api.js';

@@ -16,6 +16,7 @@ import { Aviso, rolarAoErro, Btn, Campo, Etiquetas, Icon, Modal, StatusChip } fr
 import { profissionalDe, campoLog, clienteDe, nomeProfissional, nomeCliente, nomeServicos, textoSemConfirmacao, textoUltimo } from './format.js';
 import { Pagamento } from './Pagamento.jsx';
 import EditarCliente from './leve/EditarCliente.jsx';
+import FormaPagamentoMenu, { rotuloDaForma } from './leve/FormaPagamentoMenu.jsx';
 import { nomeReal } from '../domain/cliente-rotulo.js';
 import { comissaoJaPaga, ehDono, formatarTelefone, usaIntegracaoPix } from '../domain/rules.js';
 import { agendamentosVisiveis } from '../services/api.js';
@@ -389,6 +390,12 @@ export function GavetaAgendamento({ id, user, onClose, onRemarcar }) {
                   ))}
                 </ul>
                 <span className="v-total"><span className="muted">{(sv.some((x) => x.multiDia) && oc ? `${oc.dias} dias` : fmtDuration(duracaoMin(sv)))} · Serviços {fmtMoney(sv.reduce((t, s) => t + (a.precos?.[s.id] ?? s.preco), 0))}{totalAcrescimos(a) > 0 ? ` + acréscimos ${fmtMoney(totalAcrescimos(a))}` : ''}</span><b data-testid="total-gaveta">Total {fmtMoney(sv.reduce((t, s) => t + (a.precos?.[s.id] ?? s.preco), 0) + totalAcrescimos(a) - descontoCupom)}</b></span>
+              </dd></div>
+            )}
+            {a.status !== STATUS.CANCELADO && (
+              <div><dt>Pagamento</dt><dd className="forma-linha">
+                <span><span className="forma-atual" data-testid="detalhe-forma">{rotuloDaForma(a.pagamento && a.pagamento.forma) || 'Sem forma'}</span> · <b data-testid="detalhe-valor">{fmtMoney(sv.reduce((t, s) => t + (a.precos?.[s.id] ?? s.preco), 0) + totalAcrescimos(a) - descontoCupom + totalProdutos(st, a))}</b></span>
+                <FormaPagamentoMenu atual={(a.pagamento && a.pagamento.forma) || ''} aoEscolher={async (k) => { const r = agenda.mudarFormaPagamento(a.id, k); if (r.ok) toast('Forma de pagamento alterada.'); return r; }} />
               </dd></div>
             )}
             {(a.produtos || []).length > 0 && (

@@ -1706,3 +1706,17 @@ body.trava-scroll-modal {
 @media (max-width: 560px) { .pps-linha { grid-template-columns: minmax(0, 1fr); gap: 4px; } }
 
 .pub-partes { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 6px; text-align: left; }
+
+/* Bloco D: forma de pagamento nos Detalhes — forma atual ao lado do valor e botão (lápis) à direita com menu que abre para baixo */
+.forma-menu-pos { position: relative; margin-left: auto; display: inline-flex; flex: none; }
+.forma-linha { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.forma-atual { font-weight: 600; }
+.forma-menu { position: absolute; top: calc(100% + 6px); right: 0; z-index: 140; min-width: 200px; display: grid; gap: 2px; padding: 6px; background: var(--surface, #fff); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--sombra, 0 8px 24px rgba(0, 0, 0, .18)); transform-origin: top right; animation: forma-menu-abre .16s ease-out; }
+.forma-item { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 40px; padding: 6px 10px; border: 0; border-radius: 8px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.forma-item:hover:not(:disabled), .forma-item:focus-visible { background: var(--line); outline: none; }
+.forma-item.on { font-weight: 700; }
+.forma-marca { width: 16px; text-align: center; flex: none; }
+.forma-menu small { padding: 2px 10px 4px; font-size: 12px; }
+.forma-erro { color: var(--erro, #b3261e); }
+@keyframes forma-menu-abre { from { opacity: 0; transform: translateY(-6px) scale(.98); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .forma-menu { animation: none; } }

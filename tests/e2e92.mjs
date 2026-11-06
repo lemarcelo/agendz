@@ -1,6 +1,6 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
-// v119 no Artifact: segurar o cartão (mouse e toque de verdade) abre a forma de pagamento; clique curto continua abrindo o agendamento;
-// rolar a lista (mexer o dedo) não abre; a troca vale (marcada ao abrir de novo); 390 px sem rolagem lateral, claro e escuro.
+// Bloco D no Artifact: a forma de pagamento troca pelo lápis na linha do valor dos Detalhes (menu que abre para baixo); segurar o cartão não abre mais nada;
+// a forma atual fica à esquerda do valor; Escape e clique fora fecham só o menu; a troca vale; 390 px sem rolagem lateral, claro e escuro.
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import { salvarAtender } from './e2e-util.mjs';
@@ -52,31 +52,44 @@ for (const [w, h, modo] of [[1360, 860, 'claro'], [390, 780, 'escuro']]) {
   await lancar(p, T);
   const c = cartao(p); await c.waitFor();
 
-  // clique curto: abre o agendamento, nunca a forma de pagamento
-  await c.click(); await T('gaveta').waitFor(); assert.equal(await T('forma-pagamento').count(), 0, 'clique curto não abre a forma');
-  await p.keyboard.press('Escape'); if (await T('gaveta').count()) await p.mouse.click(5, 5);
+  // segurar o cartão NÃO abre mais a forma de pagamento (bloco D): vale só o clique, que abre os Detalhes
+  if (w >= 700) await segurarMouse(p, c); else await toque(p, ctx, c);
+  assert.equal(await T('forma-menu').count(), 0, 'segurar o cartão não abre a forma');
+  assert.equal(await T('forma-pagamento').count(), 0);
   await p.waitForTimeout(150);
+  if (!(await T('gaveta').count())) await c.click();
+  await T('gaveta').waitFor();
 
-  // segurar: abre a forma de pagamento e NÃO abre o agendamento
-  if (w >= 700) await segurarMouse(p, c); else await toque(p, ctx, c);
-  await T('forma-pagamento').waitFor();
-  assert.equal(await T('gaveta').count(), 0, 'segurar não abre o agendamento');
+  // Detalhes: forma atual ao lado do valor e lápis à direita; o menu abre PARA BAIXO
+  const linha = T('gaveta').locator('.forma-linha');
+  await linha.waitFor();
+  assert.match(await T('detalhe-forma').innerText(), /Pix/, 'a forma padrão da loja aparece (Pix)');
+  const caixaForma = await T('detalhe-forma').boundingBox(); const caixaValor = await T('detalhe-valor').boundingBox(); const lapis = await T('forma-editar').boundingBox();
+  assert.ok(caixaForma.x + caixaForma.width <= caixaValor.x + 1, 'a forma fica à esquerda do valor');
+  assert.ok(lapis.x >= caixaValor.x + caixaValor.width - 1, 'o lápis fica à direita do valor');
+  assert.ok(lapis.x + lapis.width <= w + 1, 'o lápis cabe na tela');
+  assert.equal(await T('forma-menu').count(), 0, 'o menu só abre ao tocar no lápis');
+  await T('forma-editar').click(); await T('forma-menu').waitFor();
+  const menu = await T('forma-menu').boundingBox();
+  assert.ok(menu.y >= lapis.y + lapis.height - 1, 'o menu abre para baixo do botão');
+  assert.ok(menu.x >= 0 && menu.x + menu.width <= w + 1, 'o menu cabe na largura');
+  assert.equal(await T('forma-pix').getAttribute('aria-checked'), 'true', 'a forma atual vem marcada');
   await semRolagem(p, `forma ${w}`);
-  const pix = T('forma-pix');
-  assert.equal(await pix.getAttribute('aria-pressed'), 'true', 'a forma padrão da loja vem marcada (Pix)');
-  await T('forma-cartao').click(); await T('forma-pagamento').waitFor({ state: 'detached' });
+  if (process.env.E2E_CAPTURAS) { await p.waitForTimeout(350); await p.screenshot({ path: `${process.env.E2E_CAPTURAS}/d-demo-menu-${w}.png` }); }
+  await T('forma-cartao').click(); await T('forma-menu').waitFor({ state: 'detached' });
+  assert.match(await T('detalhe-forma').innerText(), /Cartão/, 'a troca aparece ao lado do valor');
 
-  // abrir de novo: Cartão marcado
-  if (w >= 700) await segurarMouse(p, c); else await toque(p, ctx, c);
-  await T('forma-pagamento').waitFor();
-  assert.equal(await T('forma-cartao').getAttribute('aria-pressed'), 'true', 'a troca ficou');
-  assert.equal(await T('forma-pix').getAttribute('aria-pressed'), 'false');
-  await T('forma-fechar').click(); await T('forma-pagamento').waitFor({ state: 'detached' });
-
-  // segurar pouco (soltou antes) não abre; Esc fecha
-  if (w >= 700) { await segurarMouse(p, c, 200); assert.equal(await T('forma-pagamento').count(), 0, 'soltou cedo: nada'); await p.waitForTimeout(200); await T('gaveta').waitFor(); await p.keyboard.press('Escape'); await p.mouse.click(5, 5).catch(() => {}); }
-  else { await toque(p, ctx, c, { ms: 650, arrastar: 40 }); assert.equal(await T('forma-pagamento').count(), 0, 'rolar a lista (dedo andou) não abre'); }
-  ok(`segurar o cartão troca a forma (${w} px, ${modo})`);
+  // abrir de novo: Cartão marcado; Escape fecha só o menu (os Detalhes ficam); clique fora também fecha
+  await T('forma-editar').click(); await T('forma-menu').waitFor();
+  assert.equal(await T('forma-cartao').getAttribute('aria-checked'), 'true', 'a troca ficou');
+  assert.equal(await T('forma-pix').getAttribute('aria-checked'), 'false');
+  await p.keyboard.press('Escape');
+  assert.equal(await T('forma-menu').count(), 0, 'Escape fecha o menu');
+  assert.equal(await T('gaveta').count(), 1, 'e os Detalhes continuam abertos');
+  await T('forma-editar').click(); await T('forma-menu').waitFor();
+  await T('gaveta').locator('h2').first().click();
+  assert.equal(await T('forma-menu').count(), 0, 'clique fora fecha o menu');
+  ok(`lápis troca a forma de pagamento nos Detalhes (${w} px, ${modo})`);
   await ctx.close();
 }
 await b.close();
