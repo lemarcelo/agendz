@@ -98,7 +98,7 @@ async function tentar(metodo, caminho, corpo, chave, opcoes = {}) {
     if (r.ok) return { ok: true, status: r.status, dados };
     // 401 com token = sessão vencida: some com o token (a tela volta ao login). No login o 401 é senha errada e não há token ainda.
     if (r.status === 401 && token && !opcoes.publico) sair();
-    const msg = dados && typeof dados.mensagem === 'string' && dados.mensagem.length <= 200 ? dados.mensagem : mensagemPadrao(r.status);
+    const msg = dados && typeof dados.mensagem === 'string' && dados.mensagem.length <= 300 ? dados.mensagem : mensagemPadrao(r.status);
     return { ok: false, status: r.status, erro: msg };
   } catch {
     return { ok: false, status: 0, erro: 'Sem conexão com o servidor. Confira a internet e tente de novo.' };
@@ -1363,6 +1363,86 @@ export const expediente = {
     return r.ok ? { ok: true, escala: lerSemana(r.dados) || { semana: {} } } : r;
   },
 };
+// Escala própria do profissional (bloco A2). Semana sem nenhum dia aberto APAGA a escala dele: volta a seguir a da loja.
+export const escalaDoProfissional = {
+  // GET /api/profissionais/{id}/escala  (dono lê qualquer um; o profissional só a própria)
+  async obter(id) {
+    if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Profissional não encontrado.' };
+    const r = await chamar('GET', `/api/profissionais/${id}/escala`);
+    return r.ok ? { ok: true, escala: lerSemana(r.dados) || { semana: {} } } : r;
+  },
+  // PUT /api/profissionais/{id}/escala
+  async gravar(id, campos) {
+    if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Profissional não encontrado.' };
+    if (!campos || typeof campos !== 'object' || !campos.dias) return { ok: false, status: 0, erro: 'Informe o horário.' };
+    const algum = Object.values(campos.dias).some((d) => d && d.aberto);
+    const erro = algum ? erroDaSemana(campos) : null;
+    if (erro) return { ok: false, status: 0, erro };
+    const r = await chamar('PUT', `/api/profissionais/${id}/escala`, algum ? corpoDaSemana(campos) : { semana: {} });
+    return r.ok ? { ok: true, escala: lerSemana(r.dados) || { semana: {} } } : r;
+  },
+};
+
+// Serviços × profissionais (bloco A1): a mesma tabela é editada em Serviços > Editar e em Equipe > Editar.
+const listaDeIds = (v) => (Array.isArray(v) ? v.filter((x) => ID.test(String(x))).map(String).slice(0, 500) : []);
+export const vinculos = {
+  // GET /api/servicos/profissionais  →  { "<servicoId>": ["<usuarioId>", ...] }
+  async porServico() {
+    const r = await chamar('GET', '/api/servicos/profissionais');
+    if (!r.ok) return r;
+    const mapa = {};
+    if (r.dados && typeof r.dados === 'object') for (const k of Object.keys(r.dados).slice(0, 500)) if (ID.test(k)) mapa[k] = listaDeIds(r.dados[k]);
+    return { ok: true, mapa };
+  },
+  // PUT /api/servicos/{id}/profissionais  { ids }  (quem tem a seção Serviços)
+  async definirDoServico(id, ids) {
+    if (!ID.test(String(id ?? '')) || !Array.isArray(ids)) return { ok: false, status: 0, erro: 'Serviço não encontrado.' };
+    const r = await chamar('PUT', `/api/servicos/${id}/profissionais`, { ids: listaDeIds(ids) });
+    return r.ok ? { ok: true, ids: listaDeIds(r.dados && r.dados.ids) } : r;
+  },
+  // GET /api/usuarios/{id}/servicos
+  async doProfissional(id) {
+    if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Profissional não encontrado.' };
+    const r = await chamar('GET', `/api/usuarios/${id}/servicos`);
+    return r.ok ? { ok: true, ids: listaDeIds(r.dados && r.dados.ids) } : r;
+  },
+  // PUT /api/usuarios/{id}/servicos  { ids }  (só o proprietário)
+  async definirDoProfissional(id, ids) {
+    if (!ID.test(String(id ?? '')) || !Array.isArray(ids)) return { ok: false, status: 0, erro: 'Profissional não encontrado.' };
+    const r = await chamar('PUT', `/api/usuarios/${id}/servicos`, { ids: listaDeIds(ids) });
+    return r.ok ? { ok: true, ids: listaDeIds(r.dados && r.dados.ids) } : r;
+  },
+};
+
+// Ausência (bloco A3): intervalos em que o profissional não recebe agendamento. Servidor recusa se já há agendamento no período (409 com a lista).
+const lerAusencia = (d) => ({
+  id: texto(d && d.id, 40), profissionalId: texto(d && d.profissionalId, 40), profissional: d && d.profissional ? texto(d.profissional, 80) : '',
+  ini: Date.parse(d && d.ini) || 0, fim: Date.parse(d && d.fim) || 0, diaInteiro: !!(d && d.diaInteiro),
+});
+export const ausencias = {
+  // GET /api/ausencias?de=&ate=  (ISO; o profissional só vê as próprias)
+  async listar(de, ate) {
+    const q = [];
+    if (Number.isFinite(de)) q.push(`de=${encodeURIComponent(new Date(de).toISOString())}`);
+    if (Number.isFinite(ate)) q.push(`ate=${encodeURIComponent(new Date(ate).toISOString())}`);
+    const r = await chamar('GET', `/api/ausencias${q.length ? '?' + q.join('&') : ''}`);
+    return r.ok ? { ok: true, ausencias: listaDe(r.dados, 1000).map(lerAusencia) } : r;
+  },
+  // POST /api/ausencias  { profissionalId, intervalos: [{ ini, fim } | { dia: 'AAAA-MM-DD' }] }  (o próprio profissional ou o proprietário/administrador)
+  async criar(profissionalId, intervalos) {
+    if (!ID.test(String(profissionalId ?? ''))) return { ok: false, status: 0, erro: 'Escolha o profissional.' };
+    if (!Array.isArray(intervalos) || !intervalos.length || intervalos.length > 300) return { ok: false, status: 0, erro: 'Marque ao menos um horário ou um dia.' };
+    const corpo = intervalos.map((i) => (i && typeof i.dia === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(i.dia) ? { dia: i.dia } : { ini: new Date(i.ini).toISOString(), fim: new Date(i.fim).toISOString() }));
+    const r = await chamar('POST', '/api/ausencias', { profissionalId, intervalos: corpo });
+    return r.ok ? { ok: true, ausencias: listaDe(r.dados, 300).map(lerAusencia) } : r;
+  },
+  // DELETE /api/ausencias/{id}
+  async remover(id) {
+    if (!ID.test(String(id ?? ''))) return { ok: false, status: 0, erro: 'Ausência não encontrada.' };
+    return chamar('DELETE', `/api/ausencias/${id}`);
+  },
+};
+
 const lerMarca = (d) => {
   d = d && typeof d === 'object' ? d : {};
   return { logo: logoValida(d.logo) ? d.logo : null, temaCor: corValida(d.temaCor) ? d.temaCor : null, temaCor2: corValida(d.temaCor2) ? d.temaCor2 : null };
@@ -1414,7 +1494,7 @@ function lerPaginaPublica(d) {
       id: x.id, nome: texto(x.nome, 120), duracao: inteiroOuZero(x.duracao), preco: dinheiroOuZero(x.preco), antecedenciaH: inteiroOuZero(x.antecedenciaH),
       precos: tabelaPorPorte(x.precos, dinheiroOuNulo), duracoes: tabelaPorPorte(x.duracoes, minutosOuNulo),
     })),
-    profissionais: listaDe(d.profissionais, 100).filter((x) => x && IDV(x.id)).map((x) => ({ id: x.id, nome: texto(x.nome, 80), foto: typeof x.foto === 'string' && x.foto.startsWith('data:image/') ? x.foto : null })),
+    profissionais: listaDe(d.profissionais, 100).filter((x) => x && IDV(x.id)).map((x) => ({ id: x.id, nome: texto(x.nome, 80), foto: typeof x.foto === 'string' && x.foto.startsWith('data:image/') ? x.foto : null, servicoIds: Array.isArray(x.servicoIds) ? x.servicoIds.filter((s) => IDV(s)).map(String).slice(0, 500) : null })),
   };
 }
 function lerResumoPublico(d) {

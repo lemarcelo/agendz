@@ -4,6 +4,7 @@ import PickerCliente from './PickerCliente.jsx';
 import { porUltimoUso } from '../domain/codigo.js';
 import { servicosNaOrdemDaLoja } from '../domain/ordem-servicos.js';
 import React, { useEffect, useMemo, useState } from 'react';
+import { realizaServico } from '../domain/vinculo.js';
 import { agenda, agendamentosVisiveis, planos as apiPlanos } from '../services/api.js';
 import { rotuloMes as rotuloMesPlano } from '../domain/planos.js';
 import { acharClientePorTelefone, CAMPOS_DE_VEICULO, camposObrigatorios, nomeMaisCompleto } from '../domain/engine.js';
@@ -64,7 +65,14 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
   // Últimos usados primeiro (no histórico que este usuário enxerga); quem nunca foi usado vem depois, na ordem do cadastro.
   const visiveis = agendamentosVisiveis(st, user);
   const produtos = porUltimoUso(st.materiais.filter((m) => m.tipo === 'produto' && m.ativo !== false), visiveis, 'produto');
-  const servicos = servicosNaOrdemDaLoja(st, st.servicos.filter((s) => s.ativo !== false)); // mais usados primeiro ou a ordem do dono (Estabelecimento > Regras)
+  // A1: quem atende só vê os próprios serviços; escolhendo o profissional à mão a lista passa a ser a dele; senão aparecem os que alguém da equipe realiza
+  const [profManual, setProfManual] = useState(false);
+  const doProfissional = st.usuarios.find((u) => u.id === profissionalId);
+  const servicos = servicosNaOrdemDaLoja(st, st.servicos.filter((s) => s.ativo !== false && (ehProfissional || (profManual && !auto) ? realizaServico(doProfissional, s.id) : profissionais.some((p) => realizaServico(p, s.id))))); // mais usados primeiro ou a ordem do dono (Estabelecimento > Regras)
+  // ...e o campo do profissional oferece só quem realiza TODOS os serviços já marcados
+  const profOpcoes = profissionais.filter((p) => servicoIds.every((id) => realizaServico(p, id)));
+  useEffect(() => { if (profOpcoes.length && !profOpcoes.some((p) => p.id === profissionalId)) setProfissionalId(profOpcoes[0].id); }, [servicoIds]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (ehProfissional || (profManual && !auto)) setServicoIds((ids) => ids.filter((id) => realizaServico(doProfissional, id))); }, [profissionalId, profManual]); // eslint-disable-line react-hooks/exhaustive-deps
   const itensProduto = produtos.filter((m) => Number(qtds[m.id]) > 0).map((m) => ({ materialId: m.id, qtd: Number(qtds[m.id]) }));
   const temServico = servicoIds.length > 0;
   const vendeProduto = itensProduto.length > 0;
@@ -328,8 +336,8 @@ export default function Atender({ user, inicial = {}, onClose, onSalvo }) {
         {ordem.etapas.map((k) => <React.Fragment key={k}>{blocos[k]}</React.Fragment>)}
         {!auto && (
         <Campo rotulo={`${Rot('profissional')}${pede('profissional') ? ' *' : ''}`}>
-          <select value={profissionalId} onChange={(e) => setProfissionalId(e.target.value)} disabled={ehProfissional} data-testid="atender-profissional">
-            {profissionais.map((b) => <option key={b.id} value={b.id}>{b.apelido || b.nome}</option>)}
+          <select value={profissionalId} onChange={(e) => { setProfissionalId(e.target.value); setProfManual(true); }} disabled={ehProfissional} data-testid="atender-profissional">
+            {profOpcoes.map((b) => <option key={b.id} value={b.id}>{b.apelido || b.nome}</option>)}
           </select>
         </Campo>
         )}

@@ -5,6 +5,7 @@ import { ehDoFixo } from './fixos.js';
 import { blocosDeTrabalho, cabeEm, faixasDoProfissional, proximaAbertura } from './schedule.js';
 import { cpfValido } from './pix.js';
 import { limparTexto } from './texto.js';
+import { ausenciaNoHorario, erroDeVinculo } from './vinculo.js';
 import { PORTE_PADRAO, porteValido, precoNoPorte } from './veiculos.js';
 import { Rot, rot, capAtiva, cap } from './tipos.js';
 
@@ -244,6 +245,7 @@ export function validarHorario(state, { profissionalId, inicio, servicoIds, port
   else if (!Number.isInteger(inicio) || inicio % MIN !== 0) erros.push('Data e hora inválidas.');
   else if (agora && inicio > agora + (cliente ? 60 : 400) * DIA) erros.push(cliente ? 'Só dá para agendar com até 60 dias de antecedência.' : 'Data distante demais.');
   if (profissional && !profissional.atende) erros.push(`${profissional.apelido || profissional.nome} está desativado e não recebe novos agendamentos.`);
+  { const ev = erroDeVinculo(state, profissionalId, servicoIds); if (ev) erros.push(ev); } // A1: o profissional precisa realizar cada serviço
   if (erros.length) return out;
   const ocup = ocupacao(state, { profissionalId, inicio, servicoIds, porte });
   if (!ocup) {
@@ -251,6 +253,7 @@ export function validarHorario(state, { profissionalId, inicio, servicoIds, port
     erros.push(trabalha && sv.some((x) => x.multiDia) ? 'Não há expediente suficiente nos próximos dias para concluir esse serviço.' : `${profissional.apelido || profissional.nome} não atende nesse horário.`);
     return out;
   }
+  if (ausenciaNoHorario(state, profissionalId, ocup.blocos)) { erros.push(`${profissional.apelido || profissional.nome} está ausente nesse horário.`); return out; } // A3
   out.retirada = ocup.retirada; out.dias = ocup.dias; out.ocup = ocup;
   if (cliente) {
     const min = antecedenciaMinH(sv);

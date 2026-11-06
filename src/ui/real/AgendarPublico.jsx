@@ -330,6 +330,11 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
   const [usaPlano, setUsaPlano] = useState(false); // o telefone é de quem tem plano com corte para este horário (só sim ou não)
   const cap = useCaptcha(loja.captchaChave);
   const servicos = pagina.servicos.filter((x) => srv.includes(x.id));
+  // A1: quem realiza o quê. Escolhendo o profissional, só aparecem os serviços dele; escolhendo serviços, só aparecem quem realiza todos. `servicoIds: null` = servidor antigo, sem filtro.
+  const realiza = (b, sid) => !b || b.servicoIds === null || b.servicoIds === undefined || b.servicoIds.includes(sid);
+  const profSel = pagina.profissionais.find((b) => b.id === barb);
+  const servicosVisiveis = pagina.servicos.filter((x) => (profSel ? realiza(profSel, x.id) : pagina.profissionais.length === 0 || pagina.profissionais.some((b) => realiza(b, x.id))));
+  const profissionaisVisiveis = pagina.profissionais.filter((b) => srv.every((sid) => realiza(b, sid)));
   const preco = (x) => (usaVeiculo ? x.precos[porte || PORTE_PADRAO] ?? x.preco : x.preco); // sem porte (dono tirou a obrigatoriedade) vale o médio
   const minutos = (x) => (usaVeiculo ? x.duracoes[porte || PORTE_PADRAO] ?? x.duracao : x.duracao);
   const total = servicos.reduce((t, x) => t + preco(x), 0);
@@ -452,7 +457,7 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
           {usaVeiculo && <p className="muted" data-testid="pub-veiculo-atual">{textoV || 'Sem dados do veículo'} <button type="button" className="link" onClick={() => { setErro(''); setEtapa(0); }} data-testid="pub-trocar-veiculo">Trocar</button></p>}
           {!pagina.servicos.length && <p className="muted" data-testid="pub-sem-servicos">Nenhum serviço disponível para agendar por aqui. Fale com a loja.</p>}
           <div className="pub-lista">
-            {pagina.servicos.map((x) => (
+            {servicosVisiveis.map((x) => (
               <label key={x.id} className={`pub-item ${srv.includes(x.id) ? 'on' : ''}`}>
                 <input type="checkbox" checked={srv.includes(x.id)} onChange={() => alternar(x.id)} data-testid={`pub-srv-${x.id}`} />
                 <span className="pub-item-txt"><b>{x.nome}</b><small className="muted">{fmtDur(minutos(x))}{x.antecedenciaH > 0 ? ` · agende com ${x.antecedenciaH} h de antecedência` : ''}</small></span>
@@ -464,7 +469,7 @@ function Agendar({ pagina, loja, profissionalInicial, cliente, aoCriar, irParaMe
           <h3>Com quem?</h3>
           <div className="pub-barbs" role="group" aria-label={Rot('profissional')}>
             <button type="button" className={`pub-barb ${barb === '' ? 'on' : ''}`} aria-pressed={barb === ''} onClick={() => { setBarb(''); setEscolha(null); }} data-testid="pub-barb-qualquer">Qualquer um</button>
-            {pagina.profissionais.map((b) => <button type="button" key={b.id} className={`pub-barb ${barb === b.id ? 'on' : ''}`} aria-pressed={barb === b.id} onClick={() => { setBarb(b.id); setEscolha(null); }} data-testid={`pub-barb-${b.id}`}>{b.nome}</button>)}
+            {profissionaisVisiveis.map((b) => <button type="button" key={b.id} className={`pub-barb ${barb === b.id ? 'on' : ''}`} aria-pressed={barb === b.id} onClick={() => { setBarb(b.id); setEscolha(null); }} data-testid={`pub-barb-${b.id}`}>{b.nome}</button>)}
           </div>
           </>}
           <div className="pub-rodape">

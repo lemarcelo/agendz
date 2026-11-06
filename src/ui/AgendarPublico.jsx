@@ -283,11 +283,16 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
   const chave = `${srv.join(',')}|${barb}|${porte}`;
   const nomeBarb = (id) => cfg.profissionais.find((b) => b.id === id)?.nome || `Qualquer ${rot('profissional')}`;
   const alternar = (id) => { setSrv((l) => (l.includes(id) ? l.filter((x) => x !== id) : [...l, id])); setEscolha(null); };
+  // A1: escolhendo o profissional, só aparecem os serviços dele; escolhendo serviços, só aparecem quem realiza todos
+  const realizaPub = (b, sid) => !b || !Array.isArray(b.servicoIds) || b.servicoIds.includes(sid);
+  const profSel = cfg.profissionais.find((b) => b.id === barb);
+  const servicosVisiveis = cfg.servicos.filter((x) => (profSel ? realizaPub(profSel, x.id) : cfg.profissionais.length === 0 || cfg.profissionais.some((b) => realizaPub(b, x.id))));
+  const profissionaisVisiveis = cfg.profissionais.filter((b) => srv.every((sid) => realizaPub(b, sid)));
   const categorias = useMemo(() => {
     const m = new Map();
-    for (const x of cfg.servicos) { const k = x.categoria || 'Serviços'; if (!m.has(k)) m.set(k, []); m.get(k).push(x); }
+    for (const x of servicosVisiveis) { const k = x.categoria || 'Serviços'; if (!m.has(k)) m.set(k, []); m.get(k).push(x); }
     return [...m.entries()];
-  }, [cfg.servicos]);
+  }, [cfg.servicos, barb]); // eslint-disable-line react-hooks/exhaustive-deps
   const placaOk = placaValida(placa);
   const exV = cfg.exigeVeiculo || ['placa', 'modelo', 'porte']; // o que o dono marcou como obrigatório (Estabelecimento > Regras > Link)
   const veiculoOk = limparVeiculoComRegras({ placa, modelo, porte }, exV).ok;
@@ -412,7 +417,7 @@ function Agendar({ cfg, profissionalInicial, token, setToken, irParaMeus }) {
           <h3>Com quem?</h3>
           <div className="pub-barbs" role="group" aria-label={Rot('profissional')}>
             <button type="button" className={`pub-barb ${barb === '' ? 'on' : ''}`} aria-pressed={barb === ''} onClick={() => { setBarb(''); setEscolha(null); }} data-testid="pub-barb-qualquer">Qualquer um</button>
-            {cfg.profissionais.map((b) => <button type="button" key={b.id} className={`pub-barb ${barb === b.id ? 'on' : ''}`} aria-pressed={barb === b.id} onClick={() => { setBarb(b.id); setEscolha(null); }} data-testid={`pub-barb-${b.id}`}>{b.nome}</button>)}
+            {profissionaisVisiveis.map((b) => <button type="button" key={b.id} className={`pub-barb ${barb === b.id ? 'on' : ''}`} aria-pressed={barb === b.id} onClick={() => { setBarb(b.id); setEscolha(null); }} data-testid={`pub-barb-${b.id}`}>{b.nome}</button>)}
           </div>
           </>}
           <div className="pub-rodape">

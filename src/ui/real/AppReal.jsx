@@ -363,7 +363,7 @@ function Painel({ loja, sessao, aoSair, aoMudarMarca }) {
               <Avisos />
             </section>
           )}
-          {aba === 'agenda' && <Agenda ehProprietario={dono} podeSuporte={dono || (sessao.secoes || []).includes('suporte') || sessao.papel === 'suporte'} aoIrBoxes={setAba} destaqueIds={Object.keys(destaques)} foco={foco} recarregar={recarregar} nomeLoja={loja.nome} meuId={sessao.id} ehProprio={sessao.papel === 'profissional'} ehDono={dono || sessao.papel === 'admin' || sessao.papel === 'atendente'} />}
+          {aba === 'agenda' && <Agenda podeAusencia={dono || sessao.papel === 'admin' || sessao.papel === 'profissional'} ehProprietario={dono} podeSuporte={dono || (sessao.secoes || []).includes('suporte') || sessao.papel === 'suporte'} aoIrBoxes={setAba} destaqueIds={Object.keys(destaques)} foco={foco} recarregar={recarregar} nomeLoja={loja.nome} meuId={sessao.id} ehProprio={sessao.papel === 'profissional'} ehDono={dono || sessao.papel === 'admin' || sessao.papel === 'atendente'} />}
           {aba === 'clientes' && <Clientes podePlanos={dono || (sessao.secoes || []).includes('planos')} aoIr={setAba} />}
           {aba === 'servicos' && <Servicos ehDono={dono || (sessao.secoes || []).includes('servicos')} />}
           {aba === 'equipe' && dono && <Equipe meuId={sessao.id} />}

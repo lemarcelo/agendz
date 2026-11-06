@@ -4,13 +4,15 @@
 // A tela confere antes de enviar (domain/expediente.js), mas quem decide é o servidor. Só o proprietário altera.
 // Não importa `api.js`, `hooks.js` nem `common.jsx` (tests/estatico.test.mjs).
 import React, { useEffect, useState } from 'react';
-import { expediente as api } from '../../services/api-real.js';
+import { expediente as api, escalaDoProfissional } from '../../services/api-real.js';
 import { DIAS_SEMANA, MAX_FAIXAS, camposDaSemana, erroDaSemana, resumoDoDia } from '../../domain/expediente.js';
 import { Aviso, Btn, Icone } from '../leve/mini.jsx';
 
 const FAIXA_NOVA = ['09:00', '18:00'];
 
-export default function Expediente() {
+// `profissionalId` (Equipe > Editar, bloco A2): escala própria da pessoa. Sem nenhum dia aberto = sem escala própria, ela segue a da loja.
+export default function Expediente({ profissionalId = null, nome = '' }) {
+  const proprio = !!profissionalId;
   const [campos, setCampos] = useState(null); // null = carregando
   const [erro, setErro] = useState('');
   const [ok, setOk] = useState('');
@@ -18,7 +20,7 @@ export default function Expediente() {
   const [vazio, setVazio] = useState(false); // a loja ainda não tem horário cadastrado
   useEffect(() => {
     let vivo = true;
-    api.obter().then((r) => {
+    (proprio ? escalaDoProfissional.obter(profissionalId) : api.obter()).then((r) => {
       if (!vivo) return;
       if (!r.ok) { setErro(r.erro); setCampos({ dias: {} }); return; }
       const c = camposDaSemana(r.escala);
@@ -26,9 +28,9 @@ export default function Expediente() {
       setCampos(c);
     });
     return () => { vivo = false; };
-  }, []);
+  }, [profissionalId]); // eslint-disable-line react-hooks/exhaustive-deps
   if (campos === null) return <p className="muted" role="status" data-testid="exp-carregando">Carregando…</p>;
-  if (!campos.dias[0]) return <Aviso tipo="erro" data-testid="exp-erro">{erro || 'Não foi possível abrir o horário de funcionamento.'}</Aviso>;
+  if (!campos.dias[0]) return <Aviso tipo="erro" data-testid="exp-erro">{erro || (proprio ? 'Não foi possível abrir o horário desta pessoa.' : 'Não foi possível abrir o horário de funcionamento.')}</Aviso>;
 
   const mexer = (f) => { setOk(''); setErro(''); setCampos((c) => { const n = { dias: { ...c.dias } }; f(n.dias); return n; }); };
   const abrirFechar = (d, aberto) => mexer((dias) => { dias[d] = { aberto, faixas: aberto ? (dias[d].faixas.length ? dias[d].faixas : [[...FAIXA_NOVA]]) : dias[d].faixas }; });
@@ -41,19 +43,21 @@ export default function Expediente() {
     e.preventDefault();
     if (enviando) return;
     setErro(''); setOk('');
-    const problema = erroDaSemana(campos);
+    const algumAberto = Object.values(campos.dias).some((d) => d.aberto);
+    const problema = proprio && !algumAberto ? null : erroDaSemana(campos); // pessoa sem dia aberto = volta a seguir a loja
     if (problema) { setErro(problema); return; }
     setEnviando(true);
-    const r = await api.gravar(campos);
+    const r = proprio ? await escalaDoProfissional.gravar(profissionalId, campos) : await api.gravar(campos);
     setEnviando(false);
     if (!r.ok) { setErro(r.erro); return; }
-    setCampos(camposDaSemana(r.escala)); setVazio(false);
-    setOk('Horário de funcionamento salvo.');
+    const novos = camposDaSemana(r.escala); setCampos(novos); setVazio(!Object.values(novos.dias).some((d) => d.aberto));
+    setOk(proprio ? (Object.values(camposDaSemana(r.escala).dias).some((d) => d.aberto) ? 'Horário da pessoa salvo.' : 'Sem horário próprio: segue o horário da loja.') : 'Horário de funcionamento salvo.');
   };
 
   return (
     <form onSubmit={salvar} className="exp-form-real" data-testid="exp-form">
-      {vazio && <Aviso data-testid="exp-sem">A loja ainda não tem horário de funcionamento: a agenda aceita qualquer horário. Cadastre para a agenda e o link do cliente respeitarem o expediente.</Aviso>}
+      {vazio && proprio && <Aviso data-testid="exp-sem">{nome ? `${nome} não tem` : 'Esta pessoa não tem'} horário próprio: segue o horário de funcionamento da loja. Abra os dias abaixo só se o horário dela for diferente.</Aviso>}
+      {vazio && !proprio && <Aviso data-testid="exp-sem">A loja ainda não tem horário de funcionamento: a agenda aceita qualquer horário. Cadastre para a agenda e o link do cliente respeitarem o expediente.</Aviso>}
       <ul className="exp-lista-real">
         {DIAS_SEMANA.map(([d, nome]) => {
           const dia = campos.dias[d];
@@ -81,10 +85,10 @@ export default function Expediente() {
           );
         })}
       </ul>
-      <p className="muted">Um atendimento só cabe se terminar dentro de um destes horários. Cada profissional pode ter uma escala própria, dentro da loja.</p>
+      <p className="muted">{proprio ? 'O atendimento só cabe dentro deste horário E dentro do horário da loja. Para voltar a seguir a loja, feche todos os dias e salve.' : 'Um atendimento só cabe se terminar dentro de um destes horários. Cada profissional pode ter uma escala própria, dentro da loja.'}</p>
       {erro && <Aviso tipo="erro" data-testid="exp-erro">{erro}</Aviso>}
       {ok && <Aviso data-testid="exp-ok"><span role="status">{ok}</span></Aviso>}
-      <div className="acoes"><Btn variante="primario" type="submit" disabled={enviando} data-testid="exp-salvar">{enviando ? 'Salvando…' : 'Salvar horário de funcionamento'}</Btn></div>
+      <div className="acoes"><Btn variante="primario" type="submit" disabled={enviando} data-testid="exp-salvar">{enviando ? 'Salvando…' : proprio ? 'Salvar horário da pessoa' : 'Salvar horário de funcionamento'}</Btn></div>
     </form>
   );
 }

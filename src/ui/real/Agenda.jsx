@@ -5,6 +5,8 @@
 // nas lojas com veículo/porte e box (estética) o Atender pede o veículo e deixa escolher o box; o cartão e a ficha mostram veículo, porte e box.
 // Não importa `api.js`, `hooks.js` nem `common.jsx` (tests/estatico.test.mjs).
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ausencias as apiAus } from '../../services/api-real.js';
+import Ausencia from './Ausencia.jsx';
 import { agenda as api, boxes as apiBoxes, clientes as apiClientes, linkAgendamento as apiLink, local as apiLocal, profissionais as apiProf } from '../../services/api-real.js';
 import { DIAS_CURTOS, addDays, addMonths, fmtDateTime, fmtDayLong, maiuscula1, fmtDiaMesSemana, fmtHM, fmtMoney, fmtMonthYear, monthStart, sameDay, startOfDay, weekStart, ymd } from '../../domain/time.js';
 import { ATIVOS, ROTULO_STATUS } from '../../domain/rules.js';
@@ -370,7 +372,7 @@ function AvisoRemarcado({ avisar, aoFechar, aoErro }) {
   );
 }
 
-export default function Agenda({ ehProprio = false, ehDono = false, ehProprietario = false, podeSuporte = false, aoIrBoxes = null, meuId = '', nomeLoja = '', destaqueIds = [], foco = null, recarregar = 0 }) {
+export default function Agenda({ podeAusencia = false, ehProprio = false, ehDono = false, ehProprietario = false, podeSuporte = false, aoIrBoxes = null, meuId = '', nomeLoja = '', destaqueIds = [], foco = null, recarregar = 0 }) {
   const [modo, setModo] = useState('horarios');
   const [diaModal, setDiaModal] = useState(null);
   const diaModalRef = useRef(null);
@@ -403,7 +405,17 @@ export default function Agenda({ ehProprio = false, ehDono = false, ehProprietar
   const semBox = capAtiva('usaRecursoFisico') && boxesPronto && boxes.length === 0;
   const [pendLink, setPendLink] = useState([]); // só o proprietário: o que falta cadastrar para o link do cliente ter horários
   const [trocaForma, setTrocaForma] = useState(null); // agendamento cuja forma de pagamento está sendo trocada (segurar o cartão)
-  useTravaScroll(atendendo || !!trocaForma || diaModal !== null);
+  const [ausenciaAberta, setAusenciaAberta] = useState(false); // A3: janela de lançar ausência (aba Calendário)
+  const [ausencias, setAusencias] = useState([]);
+  const [versaoAus, setVersaoAus] = useState(0);
+  const [removendoAus, setRemovendoAus] = useState(null);
+  const [ausenciasAbertas, setAusenciasAbertas] = useState(null); // início do dia com a linha de ausências aberta
+  useTravaScroll(atendendo || !!trocaForma || diaModal !== null || ausenciaAberta);
+  useEffect(() => {
+    let vivo = true;
+    apiAus.listar(addDays(startOfDay(Date.now()), -1), addDays(startOfDay(Date.now()), 121)).then((r) => { if (vivo && r.ok) setAusencias(r.ausencias); });
+    return () => { vivo = false; };
+  }, [versaoAus, versao]);
   const [avisoRemarcar, setAvisoRemarcar] = useState(null); // { tel, texto } | { semTelefone }: fica na Agenda porque o cartão pode sair da lista ao mudar de dia
   const [fichas, setFichas] = useState(new Map()); // id → { nome, telefone }: só para avisar o cliente pelo WhatsApp (quem não lê Clientes fica sem o aviso)
   const [lojaInfo, setLojaInfo] = useState({ endereco: '', mapaUrl: '' });
@@ -500,6 +512,15 @@ export default function Agenda({ ehProprio = false, ehDono = false, ehProprietar
   const { ativos: doDia, cancelados: canceladosDia } = separarCancelados(doDiaTodos);
   const [canceladosAbertos, setCanceladosAbertos] = useState(null); // início do dia com a linha aberta
   const abertoCancelados = canceladosAbertos === cursor;
+  const ausenciasDoDia = ausencias.filter((x) => x.ini < addDays(cursor, 1) && x.fim > cursor && (selecionado === 'todos' || x.profissionalId === selecionado));
+  const abertoAusencias = ausenciasAbertas === cursor;
+  const horarioDaAusencia = (x) => (x.diaInteiro || (x.ini <= cursor && x.fim >= addDays(cursor, 1)) ? 'Dia inteiro' : `${fmtHM(Math.max(x.ini, cursor))}–${fmtHM(Math.min(x.fim, addDays(cursor, 1)))}`);
+  const removerAusencia = async (x) => {
+    setRemovendoAus(null); setErro('');
+    const r = await apiAus.remover(x.id);
+    if (!r.ok) { setErro(r.erro); return; }
+    setAviso('Ausência removida: os horários voltaram a ficar livres.'); setVersaoAus((v) => v + 1);
+  };
   const futuros = visiveis.filter((a) => a.inicio >= addDays(cursor, 1) && ATIVOS.includes(a.status));
   const grupos = agruparPorDia(futuros);
   const agora = Date.now();
@@ -541,7 +562,11 @@ export default function Agenda({ ehProprio = false, ehDono = false, ehProprietar
       <div className="abas" role="tablist" aria-label="Visão da agenda">
         <button type="button" role="tab" className={modo === 'horarios' ? 'on' : ''} aria-selected={modo === 'horarios'} onClick={() => { setModo('horarios'); setAberto(null); }} data-testid="aba-horarios">Horários</button>
         <button type="button" role="tab" className={modo === 'calendario' ? 'on' : ''} aria-selected={modo === 'calendario'} onClick={() => { setModo('calendario'); setAberto(null); }} data-testid="aba-calendario">Calendário</button>
+        {modo === 'calendario' && podeAusencia && <Btn tamanho="sm" onClick={() => { setAviso(''); setAusenciaAberta(true); }} disabled={atendem.length === 0} data-testid="ausencia-abrir"><Icone n="clock" size={15} />Ausência</Btn>}
       </div>
+      {ausenciaAberta && <div className="atender-fundo-real" role="dialog" aria-modal="true" aria-label="Ausência" data-testid="ausencia-modal" onClick={(e) => { if (e.target === e.currentTarget) setAusenciaAberta(false); }} onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setAusenciaAberta(false); } }}>
+        <Ausencia profissionais={atendem} meuId={meuId} ehProprio={ehProprio} aoFechar={() => setAusenciaAberta(false)} aoSalvar={(n) => { setAusenciaAberta(false); setAviso(n > 1 ? 'Ausências lançadas.' : 'Ausência lançada.'); setVersaoAus((v) => v + 1); setVersao((v) => v + 1); }} />
+      </div>}
       <div className="agenda-barra">
         <Btn tamanho="sm" onClick={() => passo(-1)} aria-label={modo === 'horarios' ? 'Dia anterior' : 'Mês anterior'} data-testid="agenda-anterior"><Icone n="left" size={15} /></Btn>
         <Btn tamanho="sm" onClick={() => irPara(Date.now())} data-testid="agenda-hoje">Hoje</Btn>
@@ -580,6 +605,7 @@ export default function Agenda({ ehProprio = false, ehDono = false, ehProprietar
         <div className="agenda-paineis-real">
           <div className="agenda-dia-real" data-testid="agenda-dia">
             {doDiaTodos.length === 0 ? <p className="muted vazio" data-testid="agenda-vazio">Nenhum agendamento neste dia.</p> : doDia.map((a) => cartao(a, 'cartao'))}
+            {(canceladosDia.length > 0 || ausenciasDoDia.length > 0) && <div className="agenda-extras-real" data-testid="agenda-extras">
             {canceladosDia.length > 0 && (
               <div className="cancelados-dia cancelados-dia-real" data-testid="cancelados-dia">
                 <button type="button" className="cancelados-resumo" aria-expanded={abertoCancelados} onClick={() => setCanceladosAbertos(abertoCancelados ? null : cursor)} data-testid="cancelados-resumo">
@@ -588,6 +614,21 @@ export default function Agenda({ ehProprio = false, ehDono = false, ehProprietar
                 {abertoCancelados && <div className="agenda-lista-real" data-testid="cancelados-cartoes">{canceladosDia.map((a) => cartao(a, 'cartao'))}</div>}
               </div>
             )}
+            {ausenciasDoDia.length > 0 && (
+              <div className="cancelados-dia cancelados-dia-real ausencias-dia-real" data-testid="ausencias-dia">
+                <button type="button" className="cancelados-resumo" aria-expanded={abertoAusencias} onClick={() => setAusenciasAbertas(abertoAusencias ? null : cursor)} data-testid="ausencias-resumo">
+                  <span>{ausenciasDoDia.length === 1 ? '1 ausência' : `${ausenciasDoDia.length} ausências`}</span><Icone n={abertoAusencias ? 'up' : 'down'} size={15} />
+                </button>
+                {abertoAusencias && <ul className="ausencias-lista-real" data-testid="ausencias-lista">{ausenciasDoDia.map((x) => (
+                  <li key={x.id} data-testid="ausencia-item">
+                    <span><b>{nomeProf(x.profissionalId)}</b> · {horarioDaAusencia(x)}</span>
+                    {(!ehProprio || x.profissionalId === meuId) && (removendoAus === x.id
+                      ? <span className="acoes"><Btn tamanho="sm" variante="perigo" onClick={() => removerAusencia(x)} data-testid="ausencia-remover-sim">Remover</Btn><Btn tamanho="sm" onClick={() => setRemovendoAus(null)} data-testid="ausencia-remover-nao">Manter</Btn></span>
+                      : <Btn tamanho="sm" onClick={() => setRemovendoAus(x.id)} aria-label={`Remover ausência de ${nomeProf(x.profissionalId)}`} data-testid="ausencia-remover"><Icone n="trash" size={15} /></Btn>)}
+                  </li>))}</ul>}
+              </div>
+            )}
+            </div>}
           </div>
           <div className="agenda-proximos-real" data-testid="agenda-proximos">
             <h3 className="agenda-titulo-proximos-real">Próximos agendamentos</h3>

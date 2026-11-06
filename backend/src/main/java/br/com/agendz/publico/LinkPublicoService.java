@@ -14,7 +14,9 @@ import br.com.agendz.planos.PlanoService;
 import br.com.agendz.agenda.Ocupacao;
 import br.com.agendz.aviso.AvisosPainel;
 import br.com.agendz.erro.ErroDeNegocio;
+import br.com.agendz.escala.Ausencias;
 import br.com.agendz.escala.EscalaService;
+import br.com.agendz.servicos.VinculoServicos;
 import br.com.agendz.escala.EscalaService.Faixa;
 import br.com.agendz.escala.Fuso;
 import br.com.agendz.tenant.Capacidades;
@@ -91,7 +93,8 @@ public class LinkPublicoService {
     public record PortePublico(String id, String nome, String exemplo) {
     }
 
-    public record ProfissionalPublico(UUID id, String nome, String foto) {
+    /** `servicoIds`: os serviços que ele realiza (A1), para o cliente só ver quem atende o que escolheu. */
+    public record ProfissionalPublico(UUID id, String nome, String foto, List<UUID> servicoIds) {
     }
 
     /** `endereco` e `mapaUrl` só vêm quando o proprietário ligou "mostrar o endereço no link" e há endereço gravado. */
@@ -189,9 +192,15 @@ public class LinkPublicoService {
                     "select id, nome, preco, duracao_min, antecedencia_h, precos::text as precos, duracoes::text as duracoes from servico where ativo and not multi_dia order by " + OrdemDosServicos.sql(jdbc),
                     (rs, i) -> new ServicoPublico(rs.getObject("id", UUID.class), rs.getString("nome"), rs.getInt("duracao_min"), rs.getBigDecimal("preco"), rs.getInt("antecedencia_h"),
                             porPorte ? tabelaPrecos(listaPortes, rs.getBigDecimal("preco"), rs.getString("precos")) : null, porPorte ? tabelaDuracoes(listaPortes, rs.getString("duracoes")) : null));
+            Map<UUID, List<UUID>> vinculos = VinculoServicos.porServico(jdbc);
             List<ProfissionalPublico> profissionais = jdbc.query(
                     "select id, coalesce(nullif(apelido, ''), nome) as n, foto from usuario where ativo and atende order by lower(coalesce(nullif(apelido, ''), nome)), id",
-                    (rs, i) -> new ProfissionalPublico(rs.getObject("id", UUID.class), rs.getString("n"), rs.getString("foto")));
+                    (rs, i) -> {
+                        UUID pid = rs.getObject("id", UUID.class);
+                        List<UUID> dele = new ArrayList<>();
+                        vinculos.forEach((sid, quem) -> { if (quem.contains(pid)) dele.add(sid); });
+                        return new ProfissionalPublico(pid, rs.getString("n"), rs.getString("foto"), dele);
+                    });
             LocalDaLoja.Local local = LocalDaLoja.ler(jdbc);
             boolean mostra = local.enderecoNoLink() && local.temEndereco();
             List<PortePublico> portes = listaPortes.stream().filter(PorteController.Porte::ativo).map(x -> new PortePublico(x.id(), x.nome(), x.exemplo())).toList();
@@ -290,11 +299,16 @@ return horariosDoDia(jdbc, cfg, base, dia, servicos, relogio.instant(), false, n
                         (rs, i) -> new BoxOcupado(rs.getObject(1, UUID.class), rs.getObject(2, OffsetDateTime.class).toInstant(), rs.getObject(3, OffsetDateTime.class).toInstant()),
                         ignorar == null ? NINGUEM : ignorar, utc(diaFim.plus(1, ChronoUnit.DAYS)), utc(diaIni))
                 : List.of();
+        List<UUID> idsDosServicos = servicos.stream().map(Svc::id).toList();
+        Map<UUID, List<UUID>> vinculos = VinculoServicos.porServico(jdbc);
         for (Prof p : ordemDoDia(jdbc, base.profissionais(), dia)) {
+            if (!VinculoServicos.realizaTodos(vinculos, p.id(), idsDosServicos)) continue; // A1: só quem realiza todos os serviços escolhidos
             Map<Integer, List<Faixa>> deleEscala = base.escalas().get(p.id());
             List<Ocupado> ocupados = jdbc.query("select inicio, fim_ocupado from agendamento where profissional_id = ? and id <> ? and status <> 'cancelado' and inicio < ? and fim_ocupado > ?",
                     (rs, i) -> new Ocupado(rs.getObject("inicio", OffsetDateTime.class).toInstant(), rs.getObject("fim_ocupado", OffsetDateTime.class).toInstant()),
                     p.id(), ignorar == null ? NINGUEM : ignorar, utc(diaFim.plus(1, ChronoUnit.DAYS)), utc(diaIni));
+            ocupados = new ArrayList<>(ocupados);
+            for (Ausencias.Janela aus : Ausencias.doProfissional(jdbc, p.id(), diaIni, diaFim.plus(1, ChronoUnit.DAYS))) ocupados.add(new Ocupado(aus.ini(), aus.fim())); // A3: ausência é horário tomado
             for (Faixa f : EscalaService.faixasDoDia(base.loja(), deleEscala, dow)) {
                 Instant faixaIni = dia.atTime(f.ini() / 60, f.ini() % 60).atZone(Fuso.BRASIL).toInstant();
                 Instant faixaFim = dia.atTime(f.fim() / 60, f.fim() % 60).atZone(Fuso.BRASIL).toInstant();
@@ -482,8 +496,12 @@ return horariosDoDia(jdbc, cfg, base, dia, servicos, relogio.instant(), false, n
             int dow = local.getDayOfWeek().getValue() % 7;
             int ini = local.getHour() * 60 + local.getMinute();
             UUID profissional = null;
+            Map<UUID, List<UUID>> vinculos = VinculoServicos.porServico(jdbc);
+            List<UUID> idsDosServicos = servicos.stream().map(Svc::id).toList();
             for (Prof c : ordemDoDia(jdbc, base.profissionais(), local.toLocalDate())) {
                 if (!EscalaService.cabeNoDia(lojaEscala, base.escalas().get(c.id()), dow, ini, ini + duracao)) continue;
+                if (!VinculoServicos.realizaTodos(vinculos, c.id(), idsDosServicos)) continue; // A1
+                if (Ausencias.ocupado(jdbc, c.id(), inicio, fimOcupado)) continue; // A3
                 Integer ocupados = jdbc.queryForObject("select count(*) from agendamento where profissional_id = ? and status <> 'cancelado' and inicio < ? and fim_ocupado > ?",
                         Integer.class, c.id(), utc(fimOcupado), utc(inicio));
                 if (ocupados != null && ocupados == 0) { profissional = c.id(); break; }
@@ -688,6 +706,7 @@ return horariosDoDia(jdbc, cfg, base, dia, servicos, relogio.instant(), false, n
             Integer ocupados = jdbc.queryForObject("select count(*) from agendamento where profissional_id = ? and id <> ? and status <> 'cancelado' and inicio < ? and fim_ocupado > ?",
                     Integer.class, m.profissionalId(), id, utc(fimOcupado), utc(novoInicio));
             if (ocupados != null && ocupados > 0) throw new ErroDeNegocio(HttpStatus.CONFLICT, ERRO_HORARIO);
+            if (Ausencias.ocupado(jdbc, m.profissionalId(), novoInicio, fimServico)) throw new ErroDeNegocio(HttpStatus.CONFLICT, ERRO_HORARIO); // A3
             UUID boxId = escolherBoxDoLink(jdbc, loja, novoInicio, fimServico, fimOcupado, m.boxId(), id); // estética: fica no mesmo box se estiver livre, senão outro; nunca divide
 
             evento(jdbc, loja.id(), id, "data e hora", dataHora(m.inicio()), dataHora(novoInicio));

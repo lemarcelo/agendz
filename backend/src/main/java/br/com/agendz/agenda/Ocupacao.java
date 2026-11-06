@@ -1,6 +1,7 @@
 package br.com.agendz.agenda;
 
 import br.com.agendz.erro.ErroDeNegocio;
+import br.com.agendz.escala.Ausencias;
 import br.com.agendz.escala.EscalaService;
 import br.com.agendz.tenant.Capacidades;
 import br.com.agendz.tenant.Loja;
@@ -66,6 +67,9 @@ public class Ocupacao {
             Instant fim = inicio.plus(Duration.ofMinutes(minutos));
             if (!escalas.atende(jdbc, profissionalId, inicio, fim, false)) throw new ErroDeNegocio(HttpStatus.CONFLICT, nome(jdbc, profissionalId) + " não atende nesse horário.");
             blocos = List.<Instant[]>of(new Instant[]{inicio, fim});
+        }
+        for (Instant[] b : blocos) { // A3: ausência do profissional bloqueia o horário
+            if (Ausencias.ocupado(jdbc, profissionalId, b[0], b[1])) throw new ErroDeNegocio(HttpStatus.CONFLICT, nome(jdbc, profissionalId) + " está ausente nesse horário.");
         }
         Instant fimServico = blocos.get(blocos.size() - 1)[1];
         return new Plano(blocos, fimServico, fimServico.plus(Duration.ofMinutes(intervalo)));

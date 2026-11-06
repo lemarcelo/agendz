@@ -8,6 +8,7 @@ import { DIA, MIN, fmtDate, fmtHM, startOfDay } from './time.js';
 import * as E from './engine.js';
 import { CAMPOS_VEICULO_EXIGIVEIS, limparVeiculoComRegras } from './veiculos.js';
 import { cap, rot, tipoDe } from './tipos.js';
+import { realizaServico } from './vinculo.js';
 import { servicosNaOrdemDaLoja } from './ordem-servicos.js';
 import { limitesDoDia, ordemPorFolga, profissionalAutomatico } from './profissional-auto.js';
 
@@ -98,7 +99,7 @@ export function configPublica(s) {
     servicos: servicosNaOrdemDaLoja(s, s.servicos.filter((x) => x.ativo !== false)).map((x) => (cap(s.estabelecimento, 'precoPorPorte')
       ? { id: x.id, nome: x.nome, precos: Object.fromEntries(portesAtivos().map((p) => [p.id, precoNoPorte(x.preco, x.precos?.[p.id], p.id)])), duracoes: Object.fromEntries(portesAtivos().map((p) => [p.id, Number(x.duracoes?.[p.id]) > 0 ? Number(x.duracoes[p.id]) : x.duracao])), combo: !!x.combo, multiDia: !!x.multiDia, categoria: x.categoria || '' }
       : { id: x.id, nome: x.nome, duracao: x.duracao, preco: x.preco })),
-    profissionais: s.usuarios.filter((u) => u.atende).map((u) => ({ id: u.id, nome: u.apelido || u.nome, foto: u.foto || null })),
+    profissionais: s.usuarios.filter((u) => u.atende).map((u) => ({ id: u.id, nome: u.apelido || u.nome, foto: u.foto || null, servicoIds: s.servicos.filter((x) => realizaServico(u, x.id)).map((x) => x.id) })), // A1: quem realiza o quê
     profissionalAutomatico: profissionalAutomatico(s), // B9c: a página não pergunta "com quem?"; o app escolhe o mais livre (a não ser que o link seja de um profissional)
   };
 }

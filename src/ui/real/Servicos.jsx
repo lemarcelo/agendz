@@ -4,7 +4,8 @@
 // Só o proprietário escreve; o profissional apenas consulta. Notificações próprias, materiais e financeiro do serviço chegam com os módulos deles.
 // Não importa `api.js`, `hooks.js` nem `common.jsx` (tests/estatico.test.mjs).
 import React, { useEffect, useState } from 'react';
-import { servicos as api } from '../../services/api-real.js';
+import { servicos as api, equipe as apiEquipe, vinculos } from '../../services/api-real.js';
+import SeletorVinculo from '../leve/SeletorVinculo.jsx';
 import { capAtiva } from '../../domain/tipos.js';
 import { PORTES, PORTE_PADRAO, ROTULO_PORTE, portesAtivos, precoNoPorte } from '../../domain/veiculos.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
@@ -42,6 +43,21 @@ function FormServico({ ficha, todos, ehDono, aoSalvar, aoCancelar }) {
   }));
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
+  // A1: quem realiza este serviço (mesma tabela da Equipe > Editar). Serviço novo vem com todos os que atendem marcados.
+  const [equipeLista, setEquipeLista] = useState(null); // null = carregando (ou sem permissão: a seção some)
+  const [quem, setQuem] = useState(null);
+  useEffect(() => {
+    if (!ehDono) return undefined;
+    let vivo = true;
+    (async () => {
+      const [e, v] = await Promise.all([apiEquipe.listar(), vinculos.porServico()]);
+      if (!vivo || !e.ok || !v.ok) return;
+      const quemAtende = e.usuarios.filter((u) => u.atende);
+      setEquipeLista(quemAtende);
+      setQuem(novo ? quemAtende.map((u) => u.id) : (v.mapa[ficha.id] || []).filter((id) => quemAtende.some((u) => u.id === id)));
+    })();
+    return () => { vivo = false; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const mudar = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const mudarPorte = (grupo, p) => (e) => setF({ ...f, [grupo]: { ...f[grupo], [p]: e.target.value } });
   const opcoes = todos.filter((s) => !s.combo && s.id !== ficha.id && (s.ativo || f.componentes.includes(s.id)));
@@ -66,8 +82,12 @@ function FormServico({ ficha, todos, ehDono, aoSalvar, aoCancelar }) {
     if (f.combo) corpo.componentes = f.componentes;
     if (!novo) corpo.id = ficha.id;
     const r = await api.salvar(corpo);
+    if (!r.ok) { setEnviando(false); setErro(r.erro); return; }
+    if (quem !== null) {
+      const v = await vinculos.definirDoServico(r.servico.id, quem);
+      if (!v.ok) { setEnviando(false); setErro(`O serviço foi salvo, mas não consegui salvar quem o realiza: ${v.erro}`); return; }
+    }
     setEnviando(false);
-    if (!r.ok) { setErro(r.erro); return; }
     aoSalvar(r.servico);
   };
 
@@ -121,6 +141,10 @@ function FormServico({ ficha, todos, ehDono, aoSalvar, aoCancelar }) {
           )}
           <label className="pa-check"><input type="checkbox" checked={f.ativo} onChange={(e) => setF({ ...f, ativo: e.target.checked })} data-testid="srv-ativo" /> Ativo (aparece para agendar)</label>
         </fieldset>
+        {ehDono && equipeLista !== null && quem !== null && (
+          <SeletorVinculo testid="srv-quem" titulo="Quem realiza este serviço" ajuda="Só quem estiver marcado aparece para este serviço no Atender, na agenda e no link do cliente."
+            itens={equipeLista.map((u) => ({ id: u.id, rotulo: u.apelido || u.nome }))} marcados={quem} aoMudar={setQuem} />
+        )}
         {!ehDono && <Aviso data-testid="srv-somente-leitura">Só o proprietário altera os serviços.</Aviso>}
         {erro && <Aviso tipo="erro" data-testid="srv-erro">{erro}</Aviso>}
         <div className="acoes">

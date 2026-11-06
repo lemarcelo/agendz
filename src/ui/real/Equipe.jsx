@@ -4,7 +4,9 @@
 // A senha temporária é gerada no servidor e aparece UMA vez, aqui, até a pessoa tocar em "Anotei"; nunca vai para storage nem para a URL.
 // Não importa `api.js`, `hooks.js` nem `common.jsx` (tests/estatico.test.mjs). A foto do cadastro chega numa próxima atualização.
 import React, { useEffect, useRef, useState } from 'react';
-import { equipe as api } from '../../services/api-real.js';
+import { equipe as api, servicos as apiServicos, vinculos } from '../../services/api-real.js';
+import SeletorVinculo from '../leve/SeletorVinculo.jsx';
+import Expediente from './Expediente.jsx';
 import { Rot } from '../../domain/tipos.js';
 import { SECOES, SECOES_LIBERAVEIS, formatarCpf, formatarTelefone, somenteDigitos } from '../../domain/rules.js';
 import { Aviso, Btn, Campo, Icone } from '../leve/mini.jsx';
@@ -42,6 +44,21 @@ function FormPessoa({ ficha, aoSalvar, aoCancelar }) {
   }));
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
+  // A1: serviços que a pessoa realiza (mesma tabela de Serviços > Editar). Só na edição: o cadastro novo já nasce com todos os serviços.
+  const [todosServicos, setTodosServicos] = useState(null);
+  const [servicosDela, setServicosDela] = useState(null);
+  useEffect(() => {
+    if (novo) return undefined;
+    let vivo = true;
+    (async () => {
+      const [s, v] = await Promise.all([apiServicos.listar(), vinculos.doProfissional(ficha.id)]);
+      if (!vivo || !s.ok || !v.ok) return;
+      const ativos = s.servicos.filter((x) => x.ativo);
+      setTodosServicos(ativos);
+      setServicosDela(v.ids.filter((id) => ativos.some((x) => x.id === id)));
+    })();
+    return () => { vivo = false; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const mudar = (k) => (e) => setF({ ...f, [k]: e.target.value });
   // B6: promover, rebaixar ou cadastrar um proprietário pede a senha de quem faz (o servidor confere; senha errada = 403)
   const mudaProprietario = novo ? f.papel === 'dono' : (ficha.papel === 'dono') !== (f.papel === 'dono');
@@ -61,8 +78,12 @@ function FormPessoa({ ficha, aoSalvar, aoCancelar }) {
     if (f.papel !== 'dono') corpo.permissoes = Object.fromEntries(SECOES_LIBERAVEIS.filter((k) => f.permissoes[k] !== ESCOLHA.padrao).map((k) => [k, f.permissoes[k] === ESCOLHA.liberar]));
     if (!novo) corpo.id = ficha.id;
     const r = await api.salvar(corpo);
+    if (!r.ok) { setEnviando(false); setErro(r.erro); return; }
+    if (!novo && servicosDela !== null) {
+      const v = await vinculos.definirDoProfissional(ficha.id, servicosDela);
+      if (!v.ok) { setEnviando(false); setErro(`Os dados foram salvos, mas não consegui salvar os serviços: ${v.erro}`); return; }
+    }
     setEnviando(false);
-    if (!r.ok) { setErro(r.erro); return; }
     aoSalvar(r);
   };
   return (
@@ -104,6 +125,10 @@ function FormPessoa({ ficha, aoSalvar, aoCancelar }) {
             ))}
           </fieldset>
         )}
+        {!novo && todosServicos !== null && servicosDela !== null && (
+          <SeletorVinculo testid="eq-servicos" titulo="Serviços que realiza" ajuda="Só os serviços marcados aparecem para esta pessoa no Atender, na agenda e no link do cliente."
+            itens={todosServicos.map((s) => ({ id: s.id, rotulo: s.nome, nota: s.codigo ? `#${s.codigo}` : '' }))} marcados={servicosDela} aoMudar={setServicosDela} />
+        )}
         {novo && <Aviso>{f.senha ? 'Esta senha é temporária: a pessoa é obrigada a trocá-la no primeiro acesso. Ela aparece de novo uma única vez depois de salvar.' : 'Sem senha digitada, o sistema gera uma e ela aparece uma única vez depois de salvar. A pessoa troca no primeiro acesso.'}</Aviso>}
         {erro && <Aviso tipo="erro" data-testid="eq-erro">{erro}</Aviso>}
         <div className="acoes">
@@ -111,6 +136,12 @@ function FormPessoa({ ficha, aoSalvar, aoCancelar }) {
           <Btn variante="primario" type="submit" disabled={enviando} data-testid="salvar-pessoa">{enviando ? 'Salvando…' : 'Salvar'}</Btn>
         </div>
       </form>
+      {!novo && (
+        <section className="conj eq-expediente" data-testid="eq-expediente">
+          <h2>Horário de funcionamento de {ficha.apelido || ficha.nome}</h2>
+          <Expediente profissionalId={ficha.id} nome={ficha.apelido || ficha.nome} />
+        </section>
+      )}
     </section>
   );
 }

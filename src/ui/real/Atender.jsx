@@ -3,7 +3,7 @@
 // A regra toda (cliente por telefone, conflito, expediente, dia anterior com motivo, quem pode lançar) está no servidor (POST /api/atendimentos);
 // a tela mostra as mensagens dele. Produtos (5d-4a): venda com serviço ou só de produto (só no atendimento de agora), com vendedor; forma de pagamento (5d-4c) é a escolhida ou o padrão da loja e os campos obrigatórios vêm das regras da loja. Não importa `api.js`, `hooks.js` nem `common.jsx`.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { agenda as api, boxes as apiBoxes, clientes as apiClientes, produtos as apiProdutos, regras as apiRegras, servicos as apiServicos } from '../../services/api-real.js';
+import { agenda as api, boxes as apiBoxes, clientes as apiClientes, produtos as apiProdutos, regras as apiRegras, servicos as apiServicos, vinculos as apiVinculos } from '../../services/api-real.js';
 import { fmtMoney, startOfDay } from '../../domain/time.js';
 import { validarQuando } from '../../domain/validar-quando.js';
 import { formatarTelefone, somenteDigitos } from '../../domain/rules.js';
@@ -35,6 +35,8 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
   const [telefone, setTelefone] = useState('');
   const [profId, setProfId] = useState(() => (profissionais.some((p) => p.id === meuId) ? meuId : (profissionais[0] || {}).id || ''));
   const [servicos, setServicos] = useState(null);
+  const [vinculos, setVinculos] = useState(null); // A1: serviço -> quem realiza (null = ainda não chegou; não filtra)
+  const [profManual, setProfManual] = useState(false); // a pessoa escolheu o profissional à mão: a lista de serviços passa a ser a dele
   const [buscaSrv, setBuscaSrv] = useState('');
   const [ids, setIds] = useState([]);
   const [produtos, setProdutos] = useState(null);
@@ -71,6 +73,7 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
   }, [sucesso]);
 
   useEffect(() => { let vivo = true; apiServicos.listar({ para: 'atender' }).then((r) => { if (vivo) { if (r.ok) setServicos(r.servicos.filter((s) => s.ativo !== false)); else { setServicos([]); setErro(r.erro); } } }); return () => { vivo = false; }; }, []);
+  useEffect(() => { let vivo = true; apiVinculos.porServico().then((r) => { if (vivo && r.ok) setVinculos(r.mapa); }); return () => { vivo = false; }; }, []);
   useEffect(() => { let vivo = true; apiRegras.obter().then((r) => { if (vivo && r.ok) setRegras(r.regras); }); return () => { vivo = false; }; }, []);
   useEffect(() => { if (!usaBox) return undefined; let vivo = true; apiBoxes.listar().then((r) => { if (vivo && r.ok) setBoxes(boxesAtivos(r.boxes)); }); return () => { vivo = false; }; }, [usaBox]);
   useEffect(() => { let vivo = true; apiProdutos.listar().then((r) => { if (vivo) setProdutos(r.ok ? r.produtos : []); }); return () => { vivo = false; }; }, []);
@@ -90,7 +93,19 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
   const tipo = tipoDoAtendimento(instante, agora);
   const retro = personalizar && ehRetroativo(inicio, agora);
   const bloqueado = retro && ehProprio;
-  const lista = useMemo(() => filtrarServicos(ordenarServicos(servicos || [], regras.ordemServicos), buscaSrv), [servicos, buscaSrv, regras.ordemServicos]);
+  const realiza = (pid, sid) => vinculos === null || (vinculos[sid] || []).includes(pid);
+  const autoAtender = regras.profissionalAutomatico === true && !ehProprio; // B9c: o servidor escolhe quem está mais livre
+  // A1: quem atende só vê os próprios serviços; escolhendo o profissional à mão a lista passa a ser a dele; senão aparecem os que alguém da equipe realiza
+  const servicosVisiveis = useMemo(() => {
+    if (!servicos || vinculos === null) return servicos || [];
+    if (ehProprio || (profManual && !autoAtender)) return servicos.filter((s) => realiza(profId, s.id));
+    return servicos.filter((s) => profissionais.some((p) => realiza(p.id, s.id)));
+  }, [servicos, vinculos, ehProprio, profManual, profId, profissionais, autoAtender]); // eslint-disable-line react-hooks/exhaustive-deps
+  // ...e o campo do profissional oferece só quem realiza TODOS os serviços já marcados
+  const profOpcoes = useMemo(() => profissionais.filter((p) => ids.every((sid) => realiza(p.id, sid))), [profissionais, ids, vinculos]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (profOpcoes.length && !profOpcoes.some((p) => p.id === profId)) setProfId(profOpcoes[0].id); }, [profOpcoes]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (vinculos !== null && (ehProprio || (profManual && !autoAtender))) setIds((x) => x.filter((sid) => realiza(profId, sid))); }, [profId, profManual, vinculos]); // eslint-disable-line react-hooks/exhaustive-deps
+  const lista = useMemo(() => filtrarServicos(ordenarServicos(servicosVisiveis, regras.ordemServicos), buscaSrv), [servicosVisiveis, buscaSrv, regras.ordemServicos]);
   const doCliente = (cliente && cliente.veiculos) || [];
   const veiculoEscolhido = usaVeiculo && veiculoId ? doCliente.find((v) => v.id === veiculoId) || null : null;
   const digitando = usaVeiculo && !veiculoEscolhido;
@@ -102,7 +117,7 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
   const falta = faltaItem(tipo, ids, itens) || faltaVeiculo(usaVeiculo, ids, veiculoEscolhido, digitando ? novoVeic : null, exigenciasDoVeiculo(regras, tipo));
   const forma = formaEfetiva(regras, formaEscolhida);
   const faltam = camposFaltando(tipo, { nome, telefone, cliente, profissionalId: profId, vendedorId: itens.length ? vendedor : '', temProdutos: itens.length > 0, forma }, regras);
-  const auto = regras.profissionalAutomatico === true && !ehProprio; // B9c: o campo some e o servidor escolhe quem está mais livre
+  const auto = autoAtender; // B9c: o campo some e o servidor escolhe quem está mais livre
   const marca = (campo) => (exige(regras, tipo, campo) ? ' *' : ' (opcional)');
 
   const escolher = (c) => { setCliente(c); setVeiculoId(c.veiculos && c.veiculos.length === 1 ? c.veiculos[0].id : ''); setNome(c.apelido || c.nome); setTelefone(c.telefone ? formatarTelefone(telNacional(c.telefone)) : ''); setBusca(''); setAchados([]); setErro(''); };
@@ -306,8 +321,8 @@ export default function Atender({ profissionais, equipe, meuId, ehProprio, aoSal
       <div className="form-grade">
         {!auto && (
           <Campo rotulo={`${Rot('profissional')}${exige(regras, tipo, 'profissional') ? ' *' : ''}`}>
-            <select value={profId} onChange={(e) => setProfId(e.target.value)} disabled={ehProprio} data-testid="atender-profissional">
-              {profissionais.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+            <select value={profId} onChange={(e) => { setProfId(e.target.value); setProfManual(true); }} disabled={ehProprio} data-testid="atender-profissional">
+              {profOpcoes.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
             </select>
           </Campo>
         )}

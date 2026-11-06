@@ -9,6 +9,7 @@ import * as F from '../domain/financeiro.js';
 import { trocarFormaDoAgendamento } from '../domain/pagamento.js'; // registra no tick o lançamento das receitas e estornos do atendimento local
 import * as CU from '../domain/resgate.js';
 import * as AS from '../domain/assinaturas.js';
+import * as V from '../domain/vinculo.js'; // serviços por funcionário e ausência (bloco A)
 import { aReceber, extrato, rotuloMes, saldoAtual, planosPublicos } from '../domain/planos.js';
 import { TIPOS_CUPOM } from '../domain/cupons.js';
 import { cancelarComissao, intervaloComissao, pagarComissao, relatorioComissoes, relatorioDoProfissional, restaurarComissao } from '../domain/comissao.js';
@@ -545,8 +546,10 @@ export const servicos = {
   // POST /servicos  |  PUT /servicos/{id}
   salvar(entrada) {
     const n = exigir('servicos'); if (n) return n;
-    const sv = pegar(entrada, ['id', 'nome', 'preco', 'duracao', 'precos', 'duracoes', 'multiDia', 'combo', 'componentes', 'categoria', 'intervalo', 'antecedenciaH', 'notificacoes', 'confirmacaoServico', 'materiais', 'ativo', 'grupoMovimentacaoId', 'pixCancelamento', 'comissaoPct', 'codigo']);
+    const sv = pegar(entrada, ['id', 'nome', 'preco', 'duracao', 'precos', 'duracoes', 'multiDia', 'combo', 'componentes', 'categoria', 'intervalo', 'antecedenciaH', 'notificacoes', 'confirmacaoServico', 'materiais', 'ativo', 'grupoMovimentacaoId', 'pixCancelamento', 'comissaoPct', 'codigo', 'profissionalIds']);
     if ('comissaoPct' in sv && !R.ehDono(usuario())) delete sv.comissaoPct; // só o proprietário define comissão; para os outros o campo é ignorado
+    const profissionalIds = R.ehDono(usuario()) ? sv.profissionalIds : undefined; delete sv.profissionalIds; // A1: quem realiza o serviço (mesma tabela da Equipe > Editar); só o proprietário muda
+    if (profissionalIds !== undefined && !Array.isArray(profissionalIds)) return erro('Lista de profissionais inválida.');
     if ('comissaoPct' in sv) { const c = lerPct(sv.comissaoPct); if (!c.ok) return erro('A comissão vai de 0 a 100%.'); sv.comissaoPct = c.v; }
     if ('nome' in sv && !texto(sv.nome, 100)) return erro('O nome do serviço pode ter até 100 caracteres.');
     return mutate((s, agora) => {
@@ -606,11 +609,13 @@ export const servicos = {
         // Mudar a duração ou o intervalo não pode sobrepor agendamentos confirmados que já existem.
         const novos = paresSobrepostos(s, agora).filter((p) => !antes.includes(p));
         if (novos.length) return erro('Com essa duração, agendamentos confirmados passariam a se sobrepor. Remarque-os antes de mudar o serviço.');
+        if (profissionalIds !== undefined) { const v = V.definirProfissionaisDoServico(s, sv.id, profissionalIds); if (v.erro) return erro(v.erro); }
         return { ok: true, servico: s.servicos[i] };
       }
       const novo = { ativo: true, notificacoes: null, confirmacaoServico: null, grupoMovimentacaoId: null, materiais: [], multiDia: false, combo: false, componentes: [], categoria: '', ...dados, id: `s${++s.seq}` };
       novo.ordem = Math.max(0, ...s.servicos.map((x) => (Number.isFinite(x.ordem) ? x.ordem : 0))) + 1; // serviço novo entra no fim da ordem manual
       s.servicos.push(novo);
+      if (profissionalIds !== undefined) { const v = V.definirProfissionaisDoServico(s, novo.id, profissionalIds); if (v.erro) return erro(v.erro); } else V.servicoNovoParaTodos(s, novo.id); // padrão: todos os que atendem
       return { ok: true, servico: novo };
     }, { metodo: sv.id ? 'PUT' : 'POST', rota: sv.id ? `/servicos/${sv.id}` : '/servicos' });
   },
@@ -998,7 +1003,8 @@ export const equipe = {
   // POST /usuarios  |  PUT /usuarios/{id}
   salvar(entrada) {
     if (!R.ehDono(usuario())) return erro('Somente o proprietário cadastra e altera a equipe.');
-    const u = pegar(entrada, ['id', 'nome', 'apelido', 'cpf', 'nascimento', 'email', 'telefone', 'senha', 'papel', 'permissoes', 'atende', 'foto', 'comissaoPct', 'comissaoProdutoPct', 'podeVender', 'confirmaSenha']);
+    const u = pegar(entrada, ['id', 'nome', 'apelido', 'cpf', 'nascimento', 'email', 'telefone', 'senha', 'papel', 'permissoes', 'atende', 'foto', 'comissaoPct', 'comissaoProdutoPct', 'podeVender', 'confirmaSenha', 'servicoIds']);
+    if ('servicoIds' in u && (!Array.isArray(u.servicoIds) || u.servicoIds.length > 500)) return erro('Lista de serviços inválida.');
     if ('comissaoPct' in u && !R.ehDono(usuario())) delete u.comissaoPct;
     if ('comissaoProdutoPct' in u && !R.ehDono(usuario())) delete u.comissaoProdutoPct;
     if ('podeVender' in u && typeof u.podeVender !== 'boolean') return erro('Escolha se a pessoa pode vender produtos.');
@@ -1025,6 +1031,7 @@ export const equipe = {
       if (dup('cpf', (v) => R.somenteDigitos(v) === R.somenteDigitos(u.cpf))) return erro('Já existe alguém com esse CPF.');
       if (dup('apelido', (v) => String(v).toLowerCase() === String(u.apelido).toLowerCase())) return erro('Já existe alguém com esse apelido.');
       if (dup('email', (v) => String(v).toLowerCase() === String(u.email).toLowerCase())) return erro('Já existe alguém com esse e-mail.');
+      if ('servicoIds' in u && u.servicoIds.some((id) => !s.servicos.some((x) => x.id === id))) return erro('Serviço não encontrado.');
       if (u.id) {
         const i = s.usuarios.findIndex((x) => x.id === u.id);
         const atual = s.usuarios[i];
@@ -1702,6 +1709,46 @@ export const publico = {
   lembretes(token, quer) {
     if (!tokenOk(token) || typeof quer !== 'boolean') return erro(PU.ERRO_ACESSO);
     return mutate((s, agora) => PU.definirLembretes(s, token, quer, agora), P('/publico/lembretes', 'PUT'));
+  },
+};
+
+// ---------- ausência do profissional (A3): espelho de AusenciaController ----------
+export const ausencias = {
+  // GET /ausencias?de=&ate=  (o profissional só vê as próprias)
+  listar({ de, ate } = {}) {
+    const u = usuario();
+    if (!u || !R.pode(u, 'agenda')) return semPermissao();
+    const lista = (state.ausencias || []).filter((x) => (R.ehDono(u) || R.ehGestor(u) || x.profissionalId === u.id) && (!Number.isFinite(ate) || x.ini < ate) && (!Number.isFinite(de) || x.fim > de));
+    return { ok: true, ausencias: lista.map((x) => ({ ...x })).sort((a, b) => a.ini - b.ini) };
+  },
+  // POST /ausencias  { profissionalId, intervalos: [{ ini, fim } | { dia: 'AAAA-MM-DD' }] }  (o próprio profissional ou o proprietário/administrador; a recepção só lê)
+  criar(profissionalId, intervalos) {
+    const u = usuario();
+    if (!u || !R.pode(u, 'agenda')) return semPermissao();
+    if (u.papel === 'atendente') return erro('A recepção não lança ausência.');
+    if (!(R.ehDono(u) || u.papel === 'admin') && profissionalId !== u.id) return erro('Só o proprietário lança ausência de outra pessoa.');
+    return mutate((s, agora) => {
+      if (!s.usuarios.some((x) => x.id === profissionalId && x.atende !== false)) return erro('Profissional não encontrado.');
+      const v = V.intervalosDaAusencia(intervalos, agora); if (v.erro) return erro(v.erro);
+      const conflito = V.conflitoDaAusencia(s, profissionalId, v.intervalos, (a) => R.ocupacaoDe(s, a).profissional);
+      if (conflito) return erro(conflito);
+      s.ausencias = s.ausencias || [];
+      const novas = v.intervalos.map((j) => ({ id: `au${++s.seq}`, profissionalId, ini: j.ini, fim: j.fim, diaInteiro: j.diaInteiro, criadoPor: u.id }));
+      s.ausencias.push(...novas);
+      return { ok: true, ausencias: novas };
+    }, { metodo: 'POST', rota: '/ausencias' });
+  },
+  // DELETE /ausencias/{id}  (o próprio profissional ou o proprietário/administrador)
+  remover(id) {
+    const u = usuario();
+    if (!u || !R.pode(u, 'agenda')) return semPermissao();
+    if (u.papel === 'atendente') return erro('A recepção não remove ausência.');
+    return mutate((s) => {
+      const i = (s.ausencias || []).findIndex((x) => x.id === id && (R.ehDono(u) || u.papel === 'admin' || x.profissionalId === u.id));
+      if (i < 0) return erro('Ausência não encontrada.');
+      s.ausencias.splice(i, 1);
+      return { ok: true };
+    }, { metodo: 'DELETE', rota: `/ausencias/${id}` });
   },
 };
 

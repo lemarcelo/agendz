@@ -1,0 +1,12 @@
+{
+  "descricao": "Bloco A1: o profissional realiza TODOS os serviços pedidos? `porServico` = serviço → quem o realiza. Mesmos casos em VinculoEquivalenciaTest (servidor) e tests-jest/vinculo.test.mjs (demonstração).",
+  "casos": [
+    { "nome": "realiza o único serviço", "porServico": { "s1": ["p1", "p2"] }, "profissional": "p1", "servicos": ["s1"], "esperado": true },
+    { "nome": "não realiza o serviço", "porServico": { "s1": ["p2"] }, "profissional": "p1", "servicos": ["s1"], "esperado": false },
+    { "nome": "serviço sem ninguém marcado não é realizado por ninguém", "porServico": { "s1": [] }, "profissional": "p1", "servicos": ["s1"], "esperado": false },
+    { "nome": "serviço desconhecido não é realizado", "porServico": { "s1": ["p1"] }, "profissional": "p1", "servicos": ["s9"], "esperado": false },
+    { "nome": "precisa realizar todos os serviços do pedido", "porServico": { "s1": ["p1"], "s2": ["p1", "p2"], "s3": ["p2"] }, "profissional": "p1", "servicos": ["s1", "s2"], "esperado": true },
+    { "nome": "um serviço fora derruba o pedido inteiro", "porServico": { "s1": ["p1"], "s2": ["p1", "p2"], "s3": ["p2"] }, "profissional": "p1", "servicos": ["s1", "s2", "s3"], "esperado": false },
+    { "nome": "pedido sem serviços (venda só de produto) não restringe", "porServico": { "s1": ["p2"] }, "profissional": "p1", "servicos": [], "esperado": true }
+  ]
+}

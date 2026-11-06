@@ -1,7 +1,8 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:b3ec830fb7 */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { abreviarNome } from '../domain/abreviar.js';
-import { LOJA_TROCAVEL, MODO_DEMO, agenda as apiAgenda, agendamentosVisiveis, profissionaisVisiveis } from '../services/api.js';
+import { LOJA_TROCAVEL, MODO_DEMO, agenda as apiAgenda, agendamentosVisiveis, ausencias as apiAus, profissionaisVisiveis } from '../services/api.js';
+import AusenciaForm from './leve/AusenciaForm.jsx';
 import { baseDoLink, montarLinkAgendamento } from '../domain/link-publico.js';
 import { ATIVOS, STATUS, boxesAtivos, ocupacaoDe, pode, retiradaDe, semBoxAtivo } from '../domain/rules.js';
 import AvisoSemBox from './leve/AvisoSemBox.jsx';
@@ -134,6 +135,10 @@ export default function Agenda({ user, onAbrir, onNovo, onIrBoxes }) {
   const modo = sanearModoAgenda(modoSalvo);
   const view = modo === 'calendario' ? 'mes' : 'dia';
   const abrirDia = (d) => { setCursor(d); salvarModo('horarios'); };
+  // A3: ausência do profissional (botão na aba Calendário; lista ao lado dos cancelados do dia)
+  const [ausenciaAberta, setAusenciaAberta] = useState(false);
+  const [removendoAus, setRemovendoAus] = useState(null);
+  const podeAusencia = user.papel === 'profissional' || user.papel === 'dono' || user.papel === 'admin' || user.papel === 'master';
   const [cursor, setCursor] = useState(() => startOfDay(agora));
   const [selSalva, salvarSel] = useLocal(`agenda-profissionais:${user.id}`, []);
   const viewEfetiva = view; // 'dia' = Horários, 'mes' = Calendário
@@ -261,6 +266,20 @@ export default function Agenda({ user, onAbrir, onNovo, onIrBoxes }) {
             <button key={k} type="button" className={modo === k ? 'on' : ''} onClick={() => salvarModo(k)} aria-pressed={modo === k} data-testid={`agenda-modo-${k}`}>{r}</button>
           ))}
         </div>
+        {modo === 'calendario' && podeAusencia && <Btn tamanho="sm" icone="clock" onClick={() => setAusenciaAberta(true)} data-testid="ausencia-abrir">Ausência</Btn>}
+        {ausenciaAberta && <div className="atender-fundo-real" role="dialog" aria-modal="true" aria-label="Ausência" data-testid="ausencia-modal" onClick={(e) => { if (e.target === e.currentTarget) setAusenciaAberta(false); }} onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setAusenciaAberta(false); } }}>
+          <AusenciaForm profissionais={st.usuarios.filter((u) => u.atende && (user.papel !== 'profissional' || u.id === user.id)).map((u) => ({ id: u.id, nome: u.apelido || u.nome }))} meuId={user.id} ehProprio={user.papel === 'profissional'}
+            carregar={async (profId) => {
+              const u = st.usuarios.find((x) => x.id === profId);
+              return {
+                loja: st.estabelecimento.escala.semana, pessoa: u && u.escala ? u.escala.semana : {},
+                agenda: st.agendamentos.filter((a) => a.profissionalId === profId && ATIVOS.includes(a.status)).map((a) => { const o = ocupacaoDe(st, a); return { inicio: a.inicio, fim: o.retirada, fimOcupado: o.box[1] }; }),
+                existentes: (st.ausencias || []).filter((x) => x.profissionalId === profId).map((x) => ({ ini: x.ini, fim: x.fim })),
+              };
+            }}
+            criar={async (profId, intervalos) => { const r = apiAus.criar(profId, intervalos); return r.ok ? r : { ok: false, erro: r.erros[0] }; }}
+            aoFechar={() => setAusenciaAberta(false)} aoSalvar={(n) => { setAusenciaAberta(false); toast(n > 1 ? 'Ausências lançadas.' : 'Ausência lançada.'); }} />
+        </div>}
         <div className="barra-cal-nav">
           <Btn tamanho="sm" onClick={() => setCursor(startOfDay(agora))}>Hoje</Btn>
           <button type="button" className="icone-btn" onClick={() => mover(-1)} aria-label="Anterior"><Icon n="left" /></button>
@@ -319,6 +338,17 @@ export default function Agenda({ user, onAbrir, onNovo, onIrBoxes }) {
                 <span>{rotuloCancelados(canceladosDia.length)}</span><Icon n={abertoCancelados ? 'up' : 'down'} size={15} />
               </button>
               {abertoCancelados && <div className="cartoes agenda-cartoes" data-testid="cancelados-cartoes">{canceladosDia.map((a) => <CartaoAgendamento key={a.id} a={a} st={st} agora={agora} mostraBarb={ativosSel.length > 1} onClick={() => onAbrir(a.id)} />)}</div>}
+            </div>
+          )}
+          {(st.ausencias || []).filter((x) => x.ini < addDays(startOfDay(cursor), 1) && x.fim > startOfDay(cursor) && (ativosSel.length === 0 || ativosSel.some((p) => p.id === x.profissionalId))).length > 0 && (
+            <div className="cancelados-dia ausencias-dia-real" data-testid="ausencias-dia">
+              <ul className="ausencias-lista-real">{(st.ausencias || []).filter((x) => x.ini < addDays(startOfDay(cursor), 1) && x.fim > startOfDay(cursor) && (ativosSel.length === 0 || ativosSel.some((p) => p.id === x.profissionalId))).map((x) => (
+                <li key={x.id} data-testid="ausencia-item">
+                  <span>Ausência · <b>{nomeProfissional(st, x)}</b> · {x.diaInteiro || (x.ini <= startOfDay(cursor) && x.fim >= addDays(startOfDay(cursor), 1)) ? 'Dia inteiro' : `${fmtHM(Math.max(x.ini, startOfDay(cursor)))}–${fmtHM(Math.min(x.fim, addDays(startOfDay(cursor), 1)))}`}</span>
+                  {(user.papel !== 'profissional' || x.profissionalId === user.id) && user.papel !== 'atendente' && (removendoAus === x.id
+                    ? <span className="acoes"><Btn tamanho="sm" variante="perigo" onClick={() => { apiAus.remover(x.id); setRemovendoAus(null); toast('Ausência removida: os horários voltaram a ficar livres.'); }} data-testid="ausencia-remover-sim">Remover</Btn><Btn tamanho="sm" onClick={() => setRemovendoAus(null)}>Manter</Btn></span>
+                    : <Btn tamanho="sm" icone="trash" onClick={() => setRemovendoAus(x.id)} aria-label="Remover ausência" data-testid="ausencia-remover" />)}
+                </li>))}</ul>
             </div>
           )}
           {gruposProximos.length > 0 && (

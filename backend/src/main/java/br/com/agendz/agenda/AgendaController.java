@@ -7,6 +7,7 @@ import br.com.agendz.configuracao.RegrasAtendimento;
 import br.com.agendz.cupom.CupomService;
 import br.com.agendz.erro.ErroDeNegocio;
 import br.com.agendz.escala.EscalaService;
+import br.com.agendz.servicos.VinculoServicos;
 import br.com.agendz.planos.PlanoService;
 import br.com.agendz.tenant.Loja;
 import br.com.agendz.tenant.LojaContext;
@@ -306,6 +307,7 @@ public class AgendaController {
         ClienteService.VeiculoDoAgendamento vei = clientes.resolverVeiculo(jdbc, loja, clienteId, veiculoId, veiculoNovo, exigirVeiculo);
         List<ServicoLinha> servicos = carregarServicos(jdbc, servicoIds, vei == null ? null : vei.porte());
         travarProfissional(jdbc, profissionalId);
+        VinculoServicos.exigirRealiza(jdbc, profissionalId, servicoIds); // A1: o profissional precisa realizar cada serviço
         Instant inicio = conferirInicio(inicioBruto);
         int minutos = 0;
         BigDecimal total = BigDecimal.ZERO;
@@ -496,6 +498,9 @@ public class AgendaController {
     private UUID escolherAutomatico(JdbcTemplate jdbc, List<UUID> servicoIds, boolean futuro, Instant inicio, Instant agora) {
         List<UUID> equipe = jdbc.queryForList("select id from usuario where ativo and atende order by criado_em, id", UUID.class);
         if (equipe.isEmpty()) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Nenhum profissional da equipe atende. Marque quem atende em Equipe.");
+        Map<UUID, List<UUID>> porServico = VinculoServicos.porServico(jdbc);
+        equipe = equipe.stream().filter(p -> VinculoServicos.realizaTodos(porServico, p, servicoIds)).toList(); // A1: só quem realiza todos os serviços
+        if (equipe.isEmpty()) throw new ErroDeNegocio(HttpStatus.CONFLICT, "Nenhum profissional realiza todos esses serviços.");
         Instant quando = futuro ? inicio : agora;
         List<UUID> ordem = Folga.ordem(jdbc, equipe, quando.atZone(br.com.agendz.escala.Fuso.BRASIL).toLocalDate());
         if (!futuro) return ordem.get(0);
@@ -540,6 +545,7 @@ public class AgendaController {
             profissionalId = atende(jdbc, vendedor) ? vendedor : primeiroQueAtende(jdbc);
         }
         if (!atende(jdbc, profissionalId)) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Escolha o profissional que atendeu.");
+        if (!servicoIds.isEmpty()) VinculoServicos.exigirRealiza(jdbc, profissionalId, servicoIds); // A1
         Instant quando = d.inicio() == null ? agoraMinuto : d.inicio().truncatedTo(ChronoUnit.MINUTES);
         if (quando.isBefore(agoraMinuto.minus(400, ChronoUnit.DAYS))) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "A data do atendimento é antiga demais (máximo de 400 dias atrás).");
         // lançamento de um dia anterior ("esqueci de registrar"): exige o motivo, que fica no histórico; hoje, mesmo em hora anterior, é atendimento comum
@@ -699,6 +705,7 @@ public class AgendaController {
             Atual a = ler(jdbc, id, so, false);
             UUID alvo = d.profissionalId() == null ? a.profissionalId() : d.profissionalId();
             travarProfissional(jdbc, alvo);
+            if (!alvo.equals(a.profissionalId())) VinculoServicos.exigirRealiza(jdbc, alvo, jdbc.queryForList("select servico_id from agendamento_servico where agendamento_id = ?", UUID.class, id)); // A1
             a = ler(jdbc, id, so, true);
             // Concluído já aconteceu: reabra (status) antes. Cancelado só se remarca junto com a reativação (`status` não cancelado), validada no horário NOVO.
             if (CONCLUIDO.equals(a.status())) throw new ErroDeNegocio(HttpStatus.CONFLICT, "Agendamento concluído não pode ser remarcado.");

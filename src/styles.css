@@ -1650,3 +1650,30 @@ body.trava-scroll-modal {
 .modal-fundo { z-index: 130; }
 .modal-corpo, .detalhe-modal-real, .atender-real, .perfil-real, .gaveta-corpo { overscroll-behavior: contain; }
 @supports (-webkit-touch-callout: none) { body.trava-scroll-modal { position: fixed; top: var(--trava-scroll-top); width: 100%; } }
+
+/* A3 — Ausência do profissional (Agenda > Calendário > Ausência): grade "Dia e horário" com vários horários, borda azul e X para desmarcar */
+.aus-janela { width: min(560px, 100%); max-height: 92vh; overflow: hidden; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 10px; }
+.aus-janela > * { flex: none; }
+.aus-janela > .aus-grade { flex: 1 1 auto; min-height: 96px; max-height: none; }
+.aus-celula-hora > .pub-grid-slot, .aus-celula-hora .pub-grid-hora-texto { color: var(--ink); }
+.aus-celula { position: relative; flex: none; }
+.aus-celula-hora { width: 100%; }
+.aus-celula-hora > .pub-grid-slot { width: 100%; padding-right: 40px; }
+.aus-dias { padding-top: 12px; padding-right: 8px; }
+.aus-grade { max-height: 320px; margin: 4px 0 8px; }
+.pub-dia.aus-dia-marcado, .pub-grid-slot.pub-grid-livre.aus-hora-marcada { border: 2px solid var(--azul); box-shadow: 0 0 0 1px var(--azul); background: var(--azul-bg); color: inherit; }
+.pub-dia.aus-dia-marcado small { color: inherit; opacity: .85; }
+.aus-x { position: absolute; top: -8px; right: -6px; width: 24px; height: 24px; padding: 0; border-radius: 50%; border: 1px solid var(--azul); background: var(--surface); color: var(--azul); font-size: 16px; line-height: 1; display: grid; place-items: center; cursor: pointer; }
+.aus-celula-hora .aus-x { top: 6px; right: 8px; }
+.aus-rodape { align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+.aus-rodape .muted { flex: 1 0 100%; }
+.agenda-extras-real { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; align-items: start; grid-column: 1 / -1; }
+.agenda-extras-real > .cancelados-dia:only-child { grid-column: 1 / -1; }
+@media (max-width: 560px) { .agenda-extras-real { grid-template-columns: minmax(0, 1fr); } }
+.ausencias-lista-real { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 6px; }
+.ausencias-lista-real li { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.vinculo-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 260px; overflow-y: auto; overscroll-behavior: contain; }
+.vinculo-conj { grid-column: 1 / -1; max-width: 640px; }
+.vinculo-conj .pa-check small { margin-left: 4px; }
+.vinculo-acoes { margin-bottom: 6px; }
+.eq-expediente { margin-top: 16px; }

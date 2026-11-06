@@ -14,6 +14,8 @@ import { fotoDeExemplo } from './imagem.js';
 import { EditorNotificacoes, EditorPixCancelamento } from './Notif.jsx';
 import { SeletorGrupo, rotuloGrupo } from './Grupo.jsx';
 import { PainelEscala } from './Estabelecimento.jsx';
+import SeletorVinculo from './leve/SeletorVinculo.jsx';
+import { realizaServico } from '../domain/vinculo.js';
 import FilaMensagens from './FilaMensagens.jsx';
 import { textoUltimo } from './format.js';
 import { toast, useStore } from './hooks.js';
@@ -225,7 +227,9 @@ function ResumoDoServico({ id }) {
 
 function FormServico({ s, user, onClose }) {
   const { state: st } = useStore();
-  const [f, setF] = useState(s.id ? s : { ...s, codigo: proximoCodigo(st.servicos) }); // serviço novo já vem com o próximo código (dá para trocar)
+  // A1: quem realiza o serviço (marcados = os que atendem; serviço novo vem com todos marcados)
+  const quemAtende = st.usuarios.filter((u) => u.atende);
+  const [f, setF] = useState(() => ({ ...(s.id ? s : { ...s, codigo: proximoCodigo(st.servicos) }), profissionalIds: s.profissionalIds || quemAtende.filter((u) => !s.id || realizaServico(u, s.id)).map((u) => u.id) })); // serviço novo já vem com o próximo código (dá para trocar)
   const [erro, setErro] = useState('');
   const proprias = Array.isArray(f.notificacoes);
   const salvar = () => { const r = apiSrv.salvar(f); if (!r.ok) { setErro(r.erros[0]); rolarAoErro(); return; } toast('Serviço salvo.'); onClose(); };
@@ -311,6 +315,8 @@ function FormServico({ s, user, onClose }) {
         <Btn tamanho="sm" icone="plus" onClick={() => setF({ ...f, materiais: [...(f.materiais || []), { materialId: '', qtd: 1 }] })} disabled={!st.materiais.some((x) => x.tipo !== 'produto')} data-testid="add-material">Adicionar material</Btn>
         {st.materiais.length === 0 && <p className="muted">Cadastre materiais primeiro, na tela Estoque.</p>}
       </fieldset>
+      {ehDono(user) && <SeletorVinculo testid="srv-quem" titulo={`Quem realiza este serviço`} ajuda="Só quem estiver marcado aparece para este serviço no Atender, na agenda e no link do cliente."
+        itens={quemAtende.map((u) => ({ id: u.id, rotulo: u.apelido || u.nome }))} marcados={f.profissionalIds} aoMudar={(ids) => setF({ ...f, profissionalIds: ids })} />}
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
     </Modal>
   );
@@ -358,8 +364,9 @@ export function Equipe({ user }) {
 }
 
 function FormUsuario({ u, user, onClose }) {
-  const { sessao } = useStore();
-  const [f, setF] = useState({ ...u, senha: '' });
+  const { sessao, state: st } = useStore();
+  // A1: serviços que a pessoa realiza (só na edição; cadastro novo já nasce com todos)
+  const [f, setF] = useState({ ...u, senha: '', ...(u.id ? { servicoIds: st.servicos.filter((sv) => realizaServico(u, sv.id)).map((sv) => sv.id) } : {}) });
   const [erro, setErro] = useState('');
   const salvar = () => { const r = apiEq.salvar(f); if (!r.ok) { setErro(r.erros[0]); rolarAoErro(); return; } toast('Usuário salvo.'); onClose(); };
   const ehMaster = u.papel === 'master';
@@ -402,6 +409,9 @@ function FormUsuario({ u, user, onClose }) {
           </fieldset>
         )}
         <div className="campo-largo"><Interruptor checked={!!f.atende} onChange={(v) => setF({ ...f, atende: v })} rotulo="Atende clientes" descricao={`O proprietário pode atuar como ${rot('profissional')}. Para desativar, não pode haver agendamentos futuros. O histórico é mantido.`} /></div>
+        {u.id && Array.isArray(f.servicoIds) && <div className="campo-largo"><SeletorVinculo testid="eq-servicos" titulo="Serviços que realiza" ajuda="Só os serviços marcados aparecem para esta pessoa no Atender, na agenda e no link do cliente."
+          itens={st.servicos.filter((sv) => sv.ativo !== false).map((sv) => ({ id: sv.id, rotulo: sv.nome, nota: sv.codigo ? `#${sv.codigo}` : '' }))} marcados={f.servicoIds} aoMudar={(ids) => setF({ ...f, servicoIds: ids })} /></div>}
+        {u.id && u.atende && <div className="campo-largo eq-expediente" data-testid="eq-expediente"><h4>Horário de funcionamento de {u.apelido || u.nome}</h4><PainelEscala escopo={u.id} /></div>}
         <div className="campo-largo"><Interruptor checked={f.podeVender !== false} onChange={(v) => setF({ ...f, podeVender: v })} rotulo="Pode vender produtos" descricao="Quem pode aparecer como vendedor e ganhar a comissão do produto." id="usr-pode-vender" /></div>
       </div>
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
