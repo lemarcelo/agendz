@@ -559,10 +559,12 @@ export default function Agenda({ podeAusencia = false, ehProprio = false, ehDono
 
   return (
     <section className="tela agenda-real" data-testid="agenda-real">
+      <div className="agenda-abas-linha">
       <div className="abas" role="tablist" aria-label="Visão da agenda">
         <button type="button" role="tab" className={modo === 'horarios' ? 'on' : ''} aria-selected={modo === 'horarios'} onClick={() => { setModo('horarios'); setAberto(null); }} data-testid="aba-horarios">Horários</button>
         <button type="button" role="tab" className={modo === 'calendario' ? 'on' : ''} aria-selected={modo === 'calendario'} onClick={() => { setModo('calendario'); setAberto(null); }} data-testid="aba-calendario">Calendário</button>
-        {modo === 'calendario' && podeAusencia && <Btn tamanho="sm" onClick={() => { setAviso(''); setAusenciaAberta(true); }} disabled={atendem.length === 0} data-testid="ausencia-abrir"><Icone n="clock" size={15} />Ausência</Btn>}
+      </div>
+      {modo === 'calendario' && podeAusencia && <Btn tamanho="sm" onClick={() => { setAviso(''); setAusenciaAberta(true); }} disabled={atendem.length === 0} data-testid="ausencia-abrir"><Icone n="clock" size={15} />Ausência</Btn>}
       </div>
       {ausenciaAberta && <div className="atender-fundo-real" role="dialog" aria-modal="true" aria-label="Ausência" data-testid="ausencia-modal" onClick={(e) => { if (e.target === e.currentTarget) setAusenciaAberta(false); }} onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setAusenciaAberta(false); } }}>
         <Ausencia profissionais={atendem} meuId={meuId} ehProprio={ehProprio} aoFechar={() => setAusenciaAberta(false)} aoSalvar={(n) => { setAusenciaAberta(false); setAviso(n > 1 ? 'Ausências lançadas.' : 'Ausência lançada.'); setVersaoAus((v) => v + 1); setVersao((v) => v + 1); }} />

@@ -47,6 +47,7 @@ function FormPessoa({ ficha, aoSalvar, aoCancelar }) {
   // A1: serviços que a pessoa realiza (mesma tabela de Serviços > Editar). Só na edição: o cadastro novo já nasce com todos os serviços.
   const [todosServicos, setTodosServicos] = useState(null);
   const [servicosDela, setServicosDela] = useState(null);
+  const controleHorario = useRef(null); // horário da pessoa (Expediente embutido): salvo junto, só se mudou
   useEffect(() => {
     if (novo) return undefined;
     let vivo = true;
@@ -83,6 +84,10 @@ function FormPessoa({ ficha, aoSalvar, aoCancelar }) {
       const v = await vinculos.definirDoProfissional(ficha.id, servicosDela);
       if (!v.ok) { setEnviando(false); setErro(`Os dados foram salvos, mas não consegui salvar os serviços: ${v.erro}`); return; }
     }
+    if (!novo && controleHorario.current && controleHorario.current.sujo) {
+      const h = await controleHorario.current.salvar();
+      if (!h.ok) { setEnviando(false); setErro(`Os dados foram salvos, mas não consegui salvar o horário: ${h.erro}`); return; }
+    }
     setEnviando(false);
     aoSalvar(r);
   };
@@ -113,7 +118,7 @@ function FormPessoa({ ficha, aoSalvar, aoCancelar }) {
         <label className="pa-check"><input type="checkbox" checked={f.atende} onChange={(e) => setF({ ...f, atende: e.target.checked })} data-testid="eq-atende" /> Atende clientes (aparece na agenda)</label>
         <label className="pa-check"><input type="checkbox" checked={f.podeVender} onChange={(e) => setF({ ...f, podeVender: e.target.checked })} data-testid="eq-vender" /> Pode vender produtos</label>
         {f.papel !== 'dono' && (
-          <fieldset className="conj" data-testid="eq-permissoes">
+          <fieldset className="conj eq-permissoes" data-testid="eq-permissoes">
             <legend>O que a pessoa acessa</legend>
             <p className="muted">“Padrão” segue o perfil. Você pode liberar ou bloquear cada seção.</p>
             {SECOES_LIBERAVEIS.map((k) => (
@@ -129,6 +134,12 @@ function FormPessoa({ ficha, aoSalvar, aoCancelar }) {
           <SeletorVinculo testid="eq-servicos" titulo="Serviços que realiza" ajuda="Só os serviços marcados aparecem para esta pessoa no Atender, na agenda e no link do cliente."
             itens={todosServicos.map((s) => ({ id: s.id, rotulo: s.nome, nota: s.codigo ? `#${s.codigo}` : '' }))} marcados={servicosDela} aoMudar={setServicosDela} />
         )}
+        {!novo && (
+          <section className="conj eq-expediente" data-testid="eq-expediente">
+            <h2>Horário de funcionamento de {ficha.apelido || ficha.nome}</h2>
+            <Expediente profissionalId={ficha.id} nome={ficha.apelido || ficha.nome} embutido controle={controleHorario} />
+          </section>
+        )}
         {novo && <Aviso>{f.senha ? 'Esta senha é temporária: a pessoa é obrigada a trocá-la no primeiro acesso. Ela aparece de novo uma única vez depois de salvar.' : 'Sem senha digitada, o sistema gera uma e ela aparece uma única vez depois de salvar. A pessoa troca no primeiro acesso.'}</Aviso>}
         {erro && <Aviso tipo="erro" data-testid="eq-erro">{erro}</Aviso>}
         <div className="acoes">
@@ -136,12 +147,6 @@ function FormPessoa({ ficha, aoSalvar, aoCancelar }) {
           <Btn variante="primario" type="submit" disabled={enviando} data-testid="salvar-pessoa">{enviando ? 'Salvando…' : 'Salvar'}</Btn>
         </div>
       </form>
-      {!novo && (
-        <section className="conj eq-expediente" data-testid="eq-expediente">
-          <h2>Horário de funcionamento de {ficha.apelido || ficha.nome}</h2>
-          <Expediente profissionalId={ficha.id} nome={ficha.apelido || ficha.nome} />
-        </section>
-      )}
     </section>
   );
 }

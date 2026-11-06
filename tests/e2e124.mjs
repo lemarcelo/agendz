@@ -110,6 +110,11 @@ try {
     // ---------- A3: Ausência na Agenda
     assert.equal(await T('ausencia-abrir').count(), 0, 'o botão Ausência só aparece na aba Calendário');
     await T('aba-calendario').click();
+    await T('ausencia-abrir').waitFor();
+    const abas = await T('aba-calendario').boundingBox(); const botao = await T('ausencia-abrir').boundingBox();
+    assert.ok(botao.x > abas.x + abas.width && Math.abs((botao.y + botao.height / 2) - (abas.y + abas.height / 2)) < 30, 'o botão Ausência fica ao lado de Horários | Calendário');
+    assert.ok(botao.width >= 60 && botao.height >= 28, 'parece um botão, não uma aba');
+    if (pasta) await p.screenshot({ path: `${pasta}/real-calendario-botao-ausencia-${vp.nome}.png` });
     await T('ausencia-abrir').click();
     await T('aus-grade').waitFor();
     await T('aus-profissional').selectOption({ label: 'Kiko Gindri' });
@@ -179,9 +184,11 @@ try {
     await T('eq-expediente').waitFor();
     await T('exp-form').waitFor();
     await semLateral('Equipe > Editar');
+    if (pasta) await p.screenshot({ path: `${pasta}/real-equipe-form-completo-${vp.nome}.png`, fullPage: true });
     if (pasta) { await T('eq-servicos').scrollIntoViewIfNeeded(); await p.screenshot({ path: `${pasta}/real-equipe-servicos-${vp.nome}.png` }); await T('eq-expediente').scrollIntoViewIfNeeded(); await p.screenshot({ path: `${pasta}/real-equipe-expediente-${vp.nome}.png` }); }
-    await T('salvar-pessoa').click();
+    await T('salvar-pessoa').click(); // um botão só: dados, serviços e (se mudou) horário
     await p.waitForFunction(() => !document.querySelector('[data-testid=eq-form]'));
+    assert.ok(!chamadas.some((c) => c.p === `/api/profissionais/${KIKO}/escala` && c.m === 'PUT'), 'horário que não mudou não é reenviado');
     const put = chamadas.find((c) => c.m === 'PUT' && c.p === `/api/usuarios/${KIKO}/servicos`);
     assert.deepEqual([...put.dados.ids].sort(), [CORTE, SOBR].sort(), 'Equipe grava os serviços marcados');
     ok(`${vp.nome}px: Equipe > Editar mostra e grava os serviços da pessoa`);
@@ -191,14 +198,16 @@ try {
     await T('exp-form').waitFor();
     assert.ok(await T('exp-sem').isVisible(), 'sem horário próprio: avisa que segue o da loja');
     await T('exp-dia-1').check();
-    await T('exp-salvar').click();
-    await T('exp-ok').waitFor();
+    await T('salvar-pessoa').click();
+    await p.waitForFunction(() => !document.querySelector('[data-testid=eq-form]'));
     const putEscala = chamadas.find((c) => c.m === 'PUT' && c.p === `/api/profissionais/${KIKO}/escala`);
-    assert.ok(putEscala.dados.semana[1] && putEscala.dados.semana[1].aberto, 'grava a escala própria');
-    await T('exp-dia-1').uncheck(); await T('exp-salvar').click();
-    await p.waitForFunction(() => /segue o horário da loja/.test(document.body.innerText));
-    ok(`${vp.nome}px: horário por pessoa (própria ou seguindo a loja)`);
-    await T('eq-cancelar').click();
+    assert.ok(putEscala.dados.semana[1] && putEscala.dados.semana[1].aberto, 'grava a escala própria junto com o resto');
+    await T(`editar-${KIKO}`).or(p.getByRole('button', { name: /Editar Kiko/ })).first().click();
+    await T('exp-form').waitFor();
+    await T('exp-dia-1').uncheck(); await T('salvar-pessoa').click();
+    await p.waitForFunction(() => !document.querySelector('[data-testid=eq-form]'));
+    assert.deepEqual(chamadas.filter((c) => c.m === 'PUT' && c.p === `/api/profissionais/${KIKO}/escala`).pop().dados.semana, {}, 'sem dia aberto = volta a seguir a loja');
+    ok(`${vp.nome}px: horário por pessoa (própria ou seguindo a loja), salvo junto`);
 
     // ---------- A1: Serviços > Editar
     await nav('servicos'); await T(`editar-${CORTE}`).click();

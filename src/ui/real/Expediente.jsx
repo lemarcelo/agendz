@@ -11,8 +11,10 @@ import { Aviso, Btn, Icone } from '../leve/mini.jsx';
 const FAIXA_NOVA = ['09:00', '18:00'];
 
 // `profissionalId` (Equipe > Editar, bloco A2): escala própria da pessoa. Sem nenhum dia aberto = sem escala própria, ela segue a da loja.
-export default function Expediente({ profissionalId = null, nome = '' }) {
+// `embutido` (dentro do formulário da Equipe): sem formulário nem botão próprios; quem hospeda salva tudo de uma vez pelo `controle` ({ current: { sujo, salvar } }).
+export default function Expediente({ profissionalId = null, nome = '', embutido = false, controle = null }) {
   const proprio = !!profissionalId;
+  const [sujo, setSujo] = useState(false);
   const [campos, setCampos] = useState(null); // null = carregando
   const [erro, setErro] = useState('');
   const [ok, setOk] = useState('');
@@ -25,37 +27,41 @@ export default function Expediente({ profissionalId = null, nome = '' }) {
       if (!r.ok) { setErro(r.erro); setCampos({ dias: {} }); return; }
       const c = camposDaSemana(r.escala);
       setVazio(!Object.values(c.dias).some((d) => d.aberto));
-      setCampos(c);
+      setCampos(c); setSujo(false);
     });
     return () => { vivo = false; };
   }, [profissionalId]); // eslint-disable-line react-hooks/exhaustive-deps
   if (campos === null) return <p className="muted" role="status" data-testid="exp-carregando">Carregando…</p>;
   if (!campos.dias[0]) return <Aviso tipo="erro" data-testid="exp-erro">{erro || (proprio ? 'Não foi possível abrir o horário desta pessoa.' : 'Não foi possível abrir o horário de funcionamento.')}</Aviso>;
 
-  const mexer = (f) => { setOk(''); setErro(''); setCampos((c) => { const n = { dias: { ...c.dias } }; f(n.dias); return n; }); };
+  const mexer = (f) => { setOk(''); setErro(''); setSujo(true); setCampos((c) => { const n = { dias: { ...c.dias } }; f(n.dias); return n; }); };
   const abrirFechar = (d, aberto) => mexer((dias) => { dias[d] = { aberto, faixas: aberto ? (dias[d].faixas.length ? dias[d].faixas : [[...FAIXA_NOVA]]) : dias[d].faixas }; });
   const trocar = (d, i, k, v) => mexer((dias) => { dias[d] = { ...dias[d], faixas: dias[d].faixas.map((f, j) => (j === i ? (k === 0 ? [v, f[1]] : [f[0], v]) : f)) }; });
   const tirar = (d, i) => mexer((dias) => { const faixas = dias[d].faixas.filter((_, j) => j !== i); dias[d] = { aberto: faixas.length > 0, faixas }; });
   const mais = (d) => mexer((dias) => { if (dias[d].faixas.length < MAX_FAIXAS) dias[d] = { ...dias[d], faixas: [...dias[d].faixas, [...FAIXA_NOVA]] }; });
   const copiar = (d) => mexer((dias) => { for (const [x] of DIAS_SEMANA) if (x !== d && dias[x].aberto) dias[x] = { aberto: true, faixas: dias[d].faixas.map((f) => [...f]) }; });
 
-  const salvar = async (e) => {
-    e.preventDefault();
-    if (enviando) return;
+  const gravar = async () => {
+    if (enviando) return { ok: false, erro: 'Aguarde.' };
     setErro(''); setOk('');
     const algumAberto = Object.values(campos.dias).some((d) => d.aberto);
     const problema = proprio && !algumAberto ? null : erroDaSemana(campos); // pessoa sem dia aberto = volta a seguir a loja
-    if (problema) { setErro(problema); return; }
+    if (problema) { setErro(problema); return { ok: false, erro: problema }; }
     setEnviando(true);
     const r = proprio ? await escalaDoProfissional.gravar(profissionalId, campos) : await api.gravar(campos);
     setEnviando(false);
-    if (!r.ok) { setErro(r.erro); return; }
-    const novos = camposDaSemana(r.escala); setCampos(novos); setVazio(!Object.values(novos.dias).some((d) => d.aberto));
-    setOk(proprio ? (Object.values(camposDaSemana(r.escala).dias).some((d) => d.aberto) ? 'Horário da pessoa salvo.' : 'Sem horário próprio: segue o horário da loja.') : 'Horário de funcionamento salvo.');
+    if (!r.ok) { setErro(r.erro); return { ok: false, erro: r.erro }; }
+    const novos = camposDaSemana(r.escala); setCampos(novos); setSujo(false); setVazio(!Object.values(novos.dias).some((d) => d.aberto));
+    setOk(proprio ? (Object.values(novos.dias).some((d) => d.aberto) ? 'Horário da pessoa salvo.' : 'Sem horário próprio: segue o horário da loja.') : 'Horário de funcionamento salvo.');
+    return { ok: true };
   };
+  const salvar = async (e) => { e.preventDefault(); await gravar(); };
+  // quem hospeda (Equipe > Editar) salva o horário junto com o resto, e só se mudou
+  if (controle) controle.current = { sujo, salvar: gravar };
+  const Raiz = embutido ? 'div' : 'form';
 
   return (
-    <form onSubmit={salvar} className="exp-form-real" data-testid="exp-form">
+    <Raiz {...(embutido ? {} : { onSubmit: salvar })} className="exp-form-real" data-testid="exp-form">
       {vazio && proprio && <Aviso data-testid="exp-sem">{nome ? `${nome} não tem` : 'Esta pessoa não tem'} horário próprio: segue o horário de funcionamento da loja. Abra os dias abaixo só se o horário dela for diferente.</Aviso>}
       {vazio && !proprio && <Aviso data-testid="exp-sem">A loja ainda não tem horário de funcionamento: a agenda aceita qualquer horário. Cadastre para a agenda e o link do cliente respeitarem o expediente.</Aviso>}
       <ul className="exp-lista-real">
@@ -88,7 +94,7 @@ export default function Expediente({ profissionalId = null, nome = '' }) {
       <p className="muted">{proprio ? 'O atendimento só cabe dentro deste horário E dentro do horário da loja. Para voltar a seguir a loja, feche todos os dias e salve.' : 'Um atendimento só cabe se terminar dentro de um destes horários. Cada profissional pode ter uma escala própria, dentro da loja.'}</p>
       {erro && <Aviso tipo="erro" data-testid="exp-erro">{erro}</Aviso>}
       {ok && <Aviso data-testid="exp-ok"><span role="status">{ok}</span></Aviso>}
-      <div className="acoes"><Btn variante="primario" type="submit" disabled={enviando} data-testid="exp-salvar">{enviando ? 'Salvando…' : proprio ? 'Salvar horário da pessoa' : 'Salvar horário de funcionamento'}</Btn></div>
-    </form>
+      {!embutido && <div className="acoes"><Btn variante="primario" type="submit" disabled={enviando} data-testid="exp-salvar">{enviando ? 'Salvando…' : proprio ? 'Salvar horário da pessoa' : 'Salvar horário de funcionamento'}</Btn></div>}
+    </Raiz>
   );
 }
