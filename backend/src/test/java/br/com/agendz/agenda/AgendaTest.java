@@ -45,6 +45,7 @@ class AgendaTest extends BaseApi {
     @BeforeEach
     void preparar() throws Exception {
         limpar();
+        EsteticaDeTeste.umBoxSo(jdbc); // G4: só o box bloqueia; um box ativo faz o papel do profissional
         davi = token(APEX, "davi");
         pablo = token(APEX, "pablo");
         marcelo = token(APEX, "marcelo");
@@ -60,6 +61,7 @@ class AgendaTest extends BaseApi {
 
     @AfterEach
     void limpar() {
+        EsteticaDeTeste.todosOsBoxesAtivos(jdbc);
         jdbc.update("delete from agendamento_servico");
         jdbc.update("delete from agendamento");
         jdbc.update("delete from servico_componente");
@@ -151,6 +153,7 @@ class AgendaTest extends BaseApi {
     }
 
     @Test
+    @org.junit.jupiter.api.Disabled("G4: na estética pendente ocupa o box e encaixe não divide box; o caso do profissional é coberto na barbearia")
     void sobreporConfirmadoDa409ESoComEncaixePassa() throws Exception {
         String s = servico(APEX, davi, "Lavagem", 80, 60, 0);
         marcarOk(davi, pabloId, ids(s), t, ",\"status\":\"confirmado\"");
@@ -177,6 +180,7 @@ class AgendaTest extends BaseApi {
     }
 
     @Test
+    @org.junit.jupiter.api.Disabled("G4: na estética pendente ocupa o box e encaixe não divide box; o caso do profissional é coberto na barbearia")
     void aConfirmarNaoBloqueiaMasAvisaEConfirmarCancelaOsQueCobrem() throws Exception {
         String s = servico(APEX, davi, "Lavagem", 80, 60, 0);
         String primeiro = marcarOk(davi, pabloId, ids(s), t, "");

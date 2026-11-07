@@ -16,4 +16,13 @@ final class EsteticaDeTeste {
         jdbc.update("delete from box where loja_id = ?::uuid", LOJA_APEX);
         for (int i = 1; i <= 3; i++) jdbc.update("insert into box (loja_id, nome, ordem) values (?::uuid, ?, ?)", LOJA_APEX, "Box " + i, i - 1);
     }
+
+    /** G4: na estética só o box bloqueia; os testes de "o mesmo recurso não atende dois" ficam com UM box ativo (o papel que o profissional tinha). */
+    static void umBoxSo(JdbcTemplate jdbc) {
+        jdbc.update("update box set ativo = false where loja_id = ?::uuid and id <> (select id from box where loja_id = ?::uuid order by ordem, criado_em, id limit 1)", LOJA_APEX, LOJA_APEX);
+    }
+
+    static void todosOsBoxesAtivos(JdbcTemplate jdbc) {
+        jdbc.update("update box set ativo = true where loja_id = ?::uuid", LOJA_APEX);
+    }
 }

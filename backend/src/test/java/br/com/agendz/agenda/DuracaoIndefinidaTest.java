@@ -40,6 +40,7 @@ class DuracaoIndefinidaTest extends BaseApi {
     @BeforeEach
     void preparar() throws Exception {
         limpar();
+        EsteticaDeTeste.umBoxSo(jdbc); // G4: só o box bloqueia; um box ativo faz o papel do profissional
         davi = token(APEX, "davi");
         pabloId = jdbc.queryForObject("select id from usuario where loja_id = ?::uuid and identificador = 'pablo'", UUID.class, LOJA_APEX);
         pintura = id(servico("{\"nome\":\"Pintura de peça\",\"preco\":200,\"duracaoIndefinida\":true,\"duracaoTexto\":\"De 1 a 3 dias\"}").andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
@@ -49,6 +50,7 @@ class DuracaoIndefinidaTest extends BaseApi {
 
     @AfterEach
     void limpar() {
+        EsteticaDeTeste.todosOsBoxesAtivos(jdbc);
         jdbc.update("delete from idempotencia");
         jdbc.update("delete from agendamento_servico");
         jdbc.update("delete from agendamento_produto");

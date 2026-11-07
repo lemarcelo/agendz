@@ -215,12 +215,9 @@ class EsteticaTest extends BaseApi {
         agendar(clienteB, marceloId, lavagem, local(segunda.plusDays(1), 9, 30), PEQUENO).andExpect(status().isConflict());
         // a partir das 10h da terça o box e o Pablo estão livres
         agendar(clienteB, pabloId, lavagem, local(segunda.plusDays(1), 10, 0), PEQUENO).andExpect(status().isCreated());
-        // o Pablo está ocupado na terça das 9h às 10h (bloco), mesmo que o box de outro carro estivesse livre
+        // G4: o Pablo trabalhando no bloco da terça não bloqueia outro carro: com um segundo box livre ele atende lá ao mesmo tempo
         jdbc.update("insert into box (loja_id, nome, ordem) values (?::uuid, 'Box 2', 1)", EsteticaDeTeste.LOJA_APEX);
-        agendar(clienteB, pabloId, lavagem, local(segunda.plusDays(1), 9, 0), PEQUENO).andExpect(status().isConflict())
-                .andExpect(jsonPath("$.mensagem").value("Esse horário já está confirmado para outro cliente. Para forçar, marque como encaixe."));
-        // e livre entre os blocos: na segunda depois do expediente não há bloco, mas a escala impede; dentro do expediente o Pablo está ocupado o dia todo
-        agendar(clienteB, pabloId, lavagem, local(segunda, 14, 0), PEQUENO).andExpect(status().isConflict());
+        agendar(clienteB, pabloId, lavagem, local(segunda.plusDays(1), 9, 0), PEQUENO).andExpect(status().isCreated());
         // remarcar o serviço de vários dias recalcula os blocos
         remarcar(ag, "{\"inicio\":\"" + local(segunda.plusDays(7), 15, 0) + "\"}").andExpect(status().isOk());
         assertEquals(local(segunda.plusDays(8), 16, 0), jdbc.queryForObject("select fim_servico from agendamento where id = ?::uuid", OffsetDateTime.class, ag).toInstant()); // 3 h na segunda + 7 h na terça
