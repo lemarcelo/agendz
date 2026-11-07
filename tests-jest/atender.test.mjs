@@ -1,4 +1,5 @@
 // Entrega C: botão único "Atender" (local, passado e futuro), cadastro automático de cliente e campos obrigatórios por tipo.
+import { umBoxSo } from '../tests/um-box.mjs';
 import { test, jest, beforeEach, afterEach, beforeAll, afterAll } from '@jest/globals';
 import assert from 'node:assert/strict';
 import { store, auth, agenda, estabelecimento, clientes } from '../src/services/api.js';
@@ -49,6 +50,7 @@ test('telefone cria o cadastro (nome opcional); só nome não cria; mesmo telefo
 });
 
 test('data futura vira agendamento: com nome e telefone marcados como obrigatórios, exige, cria o cadastro, aceita produto e valida horário', () => {
+  umBoxSo();
   assert.ok(estabelecimento.salvar({ camposObrigatorios: { futuro: ['nome', 'telefone'], local: [] } }).ok);
   const inicio = tsAt(dia(9), '10:00');
   const sem = agenda.atender({ servicoIds: ['s-lav-simples'], profissionalId: 'u-pablo', inicio });
@@ -132,6 +134,7 @@ test('nomeMaisCompleto: contém o antigo (sem acento nem maiúscula) e é mais l
 });
 
 test('futuro sem nenhuma regra marcada: agenda sem cliente nem telefone (confirmado, sem mensagem); regra de fábrica é vazia', () => {
+  umBoxSo();
   assert.deepEqual({ futuro: [...st().estabelecimento.camposObrigatorios.futuro], local: [...st().estabelecimento.camposObrigatorios.local] }, { futuro: [], local: [] });
   const msgs = st().mensagensCliente.length;
   const n = st().clientes.length;

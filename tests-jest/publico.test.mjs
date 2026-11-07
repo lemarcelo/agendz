@@ -1,4 +1,5 @@
 // Autoagendamento pelo link: horários sem vazar ocupação, status "Cliente agendou", acesso do cliente, limites e lembretes de 24 h e 2 h.
+import { umBoxSo } from '../tests/um-box.mjs';
 import { test, jest, beforeEach, afterEach, beforeAll, afterAll } from '@jest/globals';
 import assert from 'node:assert/strict';
 import { store, auth, agenda, estabelecimento, publico } from '../src/services/api.js';
@@ -21,6 +22,7 @@ const msgs = (chave) => st().mensagensCliente.filter((m) => m.modeloId === `m-${
 beforeEach(() => { jest.useRealTimers(); jest.useFakeTimers({ doNotFake: ['hrtime', 'nextTick', 'performance', 'queueMicrotask', 'setImmediate', 'clearImmediate', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'], now: new Date('2026-10-12T07:00:00-03:00') }); reiniciar(); como('davi'); });
 
 test('horários públicos: só { inicio, profissionalId }, sem quem ocupa; horário ocupado some', () => {
+  umBoxSo();
   const antes = slots();
   assert.ok(antes.length > 3);
   for (const h of antes) assert.deepEqual(Object.keys(h).sort(), ['inicio', 'profissionalId']);
@@ -52,6 +54,7 @@ test('pedido pelo link: nasce "Cliente agendou", salva o contato, avisa o painel
 });
 
 test('ninguém disputa horário: o segundo pedido no mesmo horário é recusado; "qualquer esteticista" escolhe quem está livre', () => {
+  umBoxSo();
   const h = slots()[0].inicio;
   assert.ok(pedir(1, h).ok);
   const r2 = pedir(2, h);
@@ -160,6 +163,7 @@ test('cancelar: só com 24 h ou mais; dentro do prazo, recusado', () => {
 });
 
 test('remarcar: libera o horário antigo, volta a "Cliente agendou", recalcula os lembretes; horário ocupado é recusado', () => {
+  umBoxSo();
   const hs = slots();
   const r = pedir(1, hs[0].inicio); publico.lembretes(r.token, true);
   assert.ok(pedir(2, hs[6].inicio).ok);
@@ -226,6 +230,7 @@ test('lembretes: cancelado não recebe; relógio adiantado manda só o mais pró
 });
 
 test('fuzz: pedidos, remarcações e cancelamentos aleatórios nunca duplicam horário do mesmo esteticista', () => {
+  umBoxSo();
   let s = 7; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
   const tokens = [];
   const dias = [dia(2), dia(3), dia(4)];
@@ -253,6 +258,7 @@ test('fuzz: pedidos, remarcações e cancelamentos aleatórios nunca duplicam ho
 });
 
 test('telefone é obrigatório no link por padrão; o dono pode tirar e o pedido fica sem cadastro, a confirmar, sem mensagem nem acesso', () => {
+  umBoxSo();
   assert.equal(publico.config().exigeTelefone, true, 'de fábrica o telefone é obrigatório');
   const h = slots()[0].inicio;
   const sem = publico.agendar({ nome: 'Sem Fone', telefone: '', servicoIds: SV, profissionalId: 'u-pablo', inicio: h });

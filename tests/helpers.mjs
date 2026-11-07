@@ -45,3 +45,4 @@ padrao(agenda, 'criar', (d) => {
   const c = store.getState().clientes.find((x) => x.id === d.clienteId);
   return c && (c.veiculos || []).length > 1 ? { ...d, veiculoId: c.veiculos[0].id } : d;
 });
+

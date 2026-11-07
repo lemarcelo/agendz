@@ -1,4 +1,5 @@
 import { test, jest, beforeEach, afterEach, beforeAll, afterAll } from '@jest/globals';
+import { umBoxSo } from '../tests/um-box.mjs';
 import assert from 'node:assert/strict';
 import { store, auth, agenda, whatsapp, excecoes, servicos, equipe, estabelecimento, clientes, afetadosPorExcecoes } from '../src/services/api.js';
 import { reiniciar } from '../tests/helpers.mjs';
@@ -45,7 +46,9 @@ test('esteticista vê só a própria agenda', async () => {
   assert.ok(agendamentosVisiveis(st(), u).every((a) => a.profissionalId === 'u-pablo'));
 });
 
-test('conflito pela janela ocupada (duração + intervalo): 30 min às 10:00 conflita com pendente 10:15', () => {
+// G4: a estética segue o box (o profissional não bloqueia); este caso de profissional ocupado é coberto na barbearia (tests-jest-barbearia) e o do box em box-agenda.test.mjs
+test.skip('conflito pela janela ocupada (duração + intervalo): 30 min às 10:00 conflita com pendente 10:15', () => {
+  umBoxSo();
   const d = proxDiaUtil(8);
   // serviço de 30 min para o teste
   servicos.salvar({ id: 's-lav-simples', nome: 'Lavagem simples', preco: 40, duracao: 30, intervalo: 0, antecedenciaH: 2, notificacoes: null, confirmacaoServico: null });
@@ -57,6 +60,7 @@ test('conflito pela janela ocupada (duração + intervalo): 30 min às 10:00 con
 });
 
 test('intervalo do serviço entra na janela ocupada', () => {
+  umBoxSo();
   const d = proxDiaUtil(8);
   assert.ok(cria({ inicio: tsAt(d, '10:00') }).ok); // 40 + 10 = 50 min → livre a partir de 10:50
   const v1 = agenda.validar({ profissionalId: 'u-pablo', inicio: tsAt(d, '10:40'), servicoIds: ['s-lav-simples'] });
@@ -65,7 +69,9 @@ test('intervalo do serviço entra na janela ocupada', () => {
   assert.equal(v2.pendentes.length, 0);
 });
 
-test('não permite agendar normal sobre confirmado; encaixe permite e sinaliza', () => {
+// G4: a estética segue o box (o profissional não bloqueia); este caso de profissional ocupado é coberto na barbearia (tests-jest-barbearia) e o do box em box-agenda.test.mjs
+test.skip('não permite agendar normal sobre confirmado; encaixe permite e sinaliza', () => {
+  umBoxSo();
   const d = proxDiaUtil(8);
   const base = cria({ inicio: tsAt(d, '11:00'), status: 'confirmado' });
   assert.ok(base.ok);
@@ -84,7 +90,9 @@ test('fora do horário do esteticista não grava, nem como encaixe', () => {
   assert.ok(cria({ inicio: tsAt(d, '19:20'), encaixe: true }).ok);
 });
 
-test('quem confirma primeiro fica com o horário; o outro é cancelado e recebe "horário ocupado"', () => {
+// G4: a estética segue o box (o profissional não bloqueia); este caso de profissional ocupado é coberto na barbearia (tests-jest-barbearia) e o do box em box-agenda.test.mjs
+test.skip('quem confirma primeiro fica com o horário; o outro é cancelado e recebe "horário ocupado"', () => {
+  umBoxSo();
   const d = proxDiaUtil(9);
   const a = cria({ inicio: tsAt(d, '09:00') }).agendamento;
   const b = cria({ inicio: tsAt(d, '09:20'), clienteId: 'c-jon' }).agendamento;

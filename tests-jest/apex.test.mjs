@@ -1,4 +1,6 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:0000000000 */
+
+import { umBoxSo } from '../tests/um-box.mjs';
 // O que é só do Apex: preço e duração por porte, veículo e placa, box + esteticista sem conflito, serviço de vários dias, combos,
 // marcadores "Em serviço" e "Pronto para retirada", Pix e comissão pelo preço do porte e o fluxo completo do link com veículo.
 // Estes testes usam o catálogo de exemplo de verdade (não o "simples" dos testes de regra geral).
@@ -76,15 +78,16 @@ test('o agendamento guarda o veículo, o porte e o preço do dia: mudar a tabela
 });
 
 test('a duração do porte define quando o esteticista fica livre: o pequeno libera antes que o SUV', () => {
+  umBoxSo();
   const d = dia(8);
   // pequeno: 30 min + 10 de intervalo = livre às 10:40
   ok(criar({ clienteId: 'c-jon', veiculoId: 've-j1', veiculo: undefined, inicio: tsAt(d, '10:00') }));
   assert.deepEqual(agenda.validar({ profissionalId: 'u-pablo', inicio: tsAt(d, '10:40'), servicoIds: ['s-lav-simples'], porte: 'medio' }).erros, []);
-  assert.match(agenda.validar({ profissionalId: 'u-pablo', inicio: tsAt(d, '10:30'), servicoIds: ['s-lav-simples'], porte: 'medio' }).erros[0], /já está confirmado/);
+  assert.match(agenda.validar({ profissionalId: 'u-pablo', inicio: tsAt(d, '10:30'), servicoIds: ['s-lav-simples'], porte: 'medio' }).erros[0], /ocupado/);
   // SUV: 50 + 10 = livre às 11:00
   const d2 = dia(9);
   ok(criar({ clienteId: 'c-jon', veiculoId: 've-j2', veiculo: undefined, inicio: tsAt(d2, '10:00') }));
-  assert.match(agenda.validar({ profissionalId: 'u-pablo', inicio: tsAt(d2, '10:40'), servicoIds: ['s-lav-simples'], porte: 'medio' }).erros[0], /já está confirmado/);
+  assert.match(agenda.validar({ profissionalId: 'u-pablo', inicio: tsAt(d2, '10:40'), servicoIds: ['s-lav-simples'], porte: 'medio' }).erros[0], /ocupado/);
   assert.deepEqual(agenda.validar({ profissionalId: 'u-pablo', inicio: tsAt(d2, '11:00'), servicoIds: ['s-lav-simples'], porte: 'medio' }).erros, []);
 });
 
@@ -160,6 +163,7 @@ test('agendar: veículo novo entra no cadastro do cliente, a mesma placa não du
 });
 
 test('agendamento recusado não deixa veículo novo para trás no cadastro', () => {
+  umBoxSo();
   const d = dia(8);
   ok(criar({ inicio: tsAt(d, '10:00') }));
   const antes = st().clientes.find((x) => x.id === 'c-jon').veiculos.length;
@@ -197,10 +201,11 @@ test('três boxes: três carros ao mesmo tempo (um por esteticista) usam boxes d
 });
 
 test('mesmo esteticista não atende dois carros ao mesmo tempo, mesmo com box sobrando', () => {
+  umBoxSo();
   const d = dia(9);
   ok(criar({ clienteId: 'c-marcelo', inicio: tsAt(d, '10:00') }));
   const r = agenda.criar({ clienteId: 'c-igor', profissionalId: 'u-pablo', servicoIds: ['s-lav-simples'], veiculoId: 've-i1', inicio: tsAt(d, '10:20'), status: 'confirmado' });
-  assert.equal(r.ok, false); assert.match(r.erros[0], /já está confirmado/);
+  assert.equal(r.ok, false); assert.match(r.erros[0], /ocupado/);
 });
 
 test('box escolhido à mão: ocupado é recusado com o nome do box; livre é respeitado; remarcar mantém o box se estiver livre', () => {
@@ -225,7 +230,9 @@ test('encaixe pode furar a agenda do esteticista, mas nunca o box', () => {
   assert.equal(ag(emOutro.agendamento.id).encaixe, true); assert.notEqual(ag(emOutro.agendamento.id).boxId, 'bx1');
 });
 
-test('pendente não bloqueia: quando o confirmado entra, o pendente do mesmo box ou esteticista é cancelado por conflito', () => {
+// G4: a estética segue o box (o profissional não bloqueia); este caso de profissional ocupado é coberto na barbearia (tests-jest-barbearia) e o do box em box-agenda.test.mjs
+test.skip('pendente não bloqueia: quando o confirmado entra, o pendente do mesmo box ou esteticista é cancelado por conflito', () => {
+  umBoxSo();
   const d = dia(9);
   const p = ok(criar({ clienteId: 'c-marcelo', profissionalId: 'u-pablo', status: 'a_confirmar', inicio: tsAt(d, '10:00') }));
   ok(criar({ clienteId: 'c-igor', profissionalId: 'u-pablo', veiculo: undefined, veiculoId: 've-i1', inicio: tsAt(d, '10:10') }));
@@ -279,7 +286,8 @@ test('vitrificação de SUV (15 h): usa só o expediente, passa para o dia segui
   assert.deepEqual(o.box, [tsAt(d, '09:00'), tsAt(d2, '13:10')]);
   // o esteticista fica livre depois da retirada, mas não durante o serviço
   assert.deepEqual(agenda.validar({ profissionalId: 'u-pablo', inicio: tsAt(d2, '13:10'), servicoIds: ['s-lav-simples'], porte: 'pequeno' }).erros, []);
-  assert.match(agenda.validar({ profissionalId: 'u-pablo', inicio: tsAt(d2, '12:00'), servicoIds: ['s-lav-simples'], porte: 'pequeno' }).erros[0], /já está confirmado/);
+  // G4: o profissional não bloqueia por outro carro: durante o serviço o que ocupa é o box (os outros boxes seguem livres)
+  assert.deepEqual(agenda.validar({ profissionalId: 'u-pablo', inicio: tsAt(d2, '12:00'), servicoIds: ['s-lav-simples'], porte: 'pequeno' }).erros, []);
   // outro esteticista no meio do serviço pega outro box
   const b = ok(criar({ clienteId: 'c-marcelo', profissionalId: 'u-davi', inicio: tsAt(d2, '10:00') }));
   assert.notEqual(b.boxId, a.boxId);

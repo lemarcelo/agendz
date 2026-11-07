@@ -412,7 +412,8 @@ return horariosDoDia(jdbc, cfg, base, dia, servicos, relogio.instant(), false, n
         for (Prof p : ordemDoDia(jdbc, base.profissionais(), dia, idsDosServicos.get(0))) {
             if (!VinculoServicos.realizaTodos(vinculos, p.id(), idsDosServicos)) continue; // A1: só quem realiza todos os serviços escolhidos
             Map<Integer, List<Faixa>> deleEscala = base.escalas().get(p.id());
-            List<Ocupado> ocupados = jdbc.query("select inicio, fim_ocupado from agendamento where profissional_id = ? and id <> ? and status <> 'cancelado' and inicio < ? and fim_ocupado > ?",
+            // G4: na estética quem ocupa a agenda é o box; o profissional não bloqueia por outro carro (só pela ausência dele)
+            List<Ocupado> ocupados = usaBox ? List.of() : jdbc.query("select inicio, fim_ocupado from agendamento where profissional_id = ? and id <> ? and status <> 'cancelado' and inicio < ? and fim_ocupado > ?",
                     (rs, i) -> new Ocupado(rs.getObject("inicio", OffsetDateTime.class).toInstant(), rs.getObject("fim_ocupado", OffsetDateTime.class).toInstant()),
                     p.id(), ignorar == null ? NINGUEM : ignorar, utc(diaFim.plus(1, ChronoUnit.DAYS)), utc(diaIni));
             ocupados = new ArrayList<>(ocupados);
@@ -616,8 +617,8 @@ return horariosDoDia(jdbc, cfg, base, dia, servicos, relogio.instant(), false, n
                 if (!EscalaService.cabeNoDia(lojaEscala, base.escalas().get(c.id()), dow, ini, ini + duracao)) continue;
                 if (!VinculoServicos.realizaTodos(vinculos, c.id(), idsDosServicos)) continue; // A1
                 if (Ausencias.ocupado(jdbc, c.id(), inicio, fimOcupado)) continue; // A3
-                Integer ocupados = jdbc.queryForObject("select count(*) from agendamento where profissional_id = ? and status <> 'cancelado' and inicio < ? and fim_ocupado > ?",
-                        Integer.class, c.id(), utc(fimOcupado), utc(inicio));
+                Integer ocupados = Capacidades.usaRecursoFisico(loja) ? Integer.valueOf(0) : jdbc.queryForObject("select count(*) from agendamento where profissional_id = ? and status <> 'cancelado' and inicio < ? and fim_ocupado > ?",
+                        Integer.class, c.id(), utc(fimOcupado), utc(inicio)); // G4: na estética só o box bloqueia
                 if (ocupados != null && ocupados == 0) { profissional = c.id(); break; }
             }
             if (profissional == null) throw new ErroDeNegocio(HttpStatus.CONFLICT, ERRO_HORARIO);
@@ -858,8 +859,8 @@ return horariosDoDia(jdbc, cfg, base, dia, servicos, relogio.instant(), false, n
                     || !EscalaService.cabeNoDia(base.loja(), base.escalas().get(m.profissionalId()), local.getDayOfWeek().getValue() % 7, ini, ini + duracao)) {
                 throw new ErroDeNegocio(HttpStatus.CONFLICT, ERRO_HORARIO);
             }
-            Integer ocupados = jdbc.queryForObject("select count(*) from agendamento where profissional_id = ? and id <> ? and status <> 'cancelado' and inicio < ? and fim_ocupado > ?",
-                    Integer.class, m.profissionalId(), id, utc(fimOcupado), utc(novoInicio));
+            Integer ocupados = Capacidades.usaRecursoFisico(loja) ? Integer.valueOf(0) : jdbc.queryForObject("select count(*) from agendamento where profissional_id = ? and id <> ? and status <> 'cancelado' and inicio < ? and fim_ocupado > ?",
+                    Integer.class, m.profissionalId(), id, utc(fimOcupado), utc(novoInicio)); // G4
             if (ocupados != null && ocupados > 0) throw new ErroDeNegocio(HttpStatus.CONFLICT, ERRO_HORARIO);
             if (Ausencias.ocupado(jdbc, m.profissionalId(), novoInicio, fimServico)) throw new ErroDeNegocio(HttpStatus.CONFLICT, ERRO_HORARIO); // A3
             UUID boxId = escolherBoxDoLink(jdbc, loja, novoInicio, fimServico, fimOcupado, m.boxId(), id, BoxesDoServico.permitidos(jdbc, m.servicos().stream().map(Svc::id).toList())); // estética: fica no mesmo box se estiver livre, senão outro; nunca divide

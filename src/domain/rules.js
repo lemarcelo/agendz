@@ -186,12 +186,24 @@ export function acharConflitos(state, { profissionalId, boxId, inicio, fim, ocup
   return state.agendamentos.filter((x) => {
     if (x.id === ignoreId || !ATIVOS.includes(x.status)) return false;
     const xo = ocupacaoDe(state, x);
-    const doProfissional = !!profissionalId && x.profissionalId === profissionalId && o.profissional.some(([a, b]) => xo.profissional.some(([c, d]) => sobrepoe(a, b, c, d)));
+    // G4: na estética (box) quem ocupa a agenda é o box; o profissional só recebe comissão e não bloqueia por outro carro
+    const soBox = cap(state.estabelecimento, 'usaRecursoFisico') && !!x.boxId;
+    const doProfissional = !soBox && !!profissionalId && x.profissionalId === profissionalId && o.profissional.some(([a, b]) => xo.profissional.some(([c, d]) => sobrepoe(a, b, c, d)));
     const doBox = !!boxId && !!x.boxId && x.boxId === boxId && sobrepoe(o.box[0], o.box[1], xo.box[0], xo.box[1]);
     return doProfissional || doBox;
   });
 }
 
+export function conflitosDoPedido(state, { profissionalId, ocup, ignoreId, servicoIds }) {
+  if (!cap(state.estabelecimento, 'usaRecursoFisico')) return acharConflitos(state, { profissionalId, ocup, ignoreId });
+  const perm = boxesPermitidos(state, servicoIds);
+  const boxes = boxesAtivos(state).filter((b) => !perm || perm.has(b.id));
+  const por = boxes.map((b) => acharConflitos(state, { boxId: b.id, ocup: { profissional: [], box: ocup.box }, ignoreId }));
+  if (!por.length || por.some((l) => !l.length)) return [];
+  const vistos = new Map();
+  for (const l of por) for (const x of l) vistos.set(x.id, x);
+  return [...vistos.values()];
+}
 export const boxesAtivos = (state) => (state.estabelecimento.boxes || []).filter((b) => b.ativo !== false);
 // Estética sem nenhum box ativo (v120): não se atende, não se agenda e o link do cliente não abre até cadastrar um box.
 export const semBoxAtivo = (state) => cap(state.estabelecimento, 'usaRecursoFisico') && boxesAtivos(state).length === 0;
@@ -298,14 +310,15 @@ export function validarHorario(state, { profissionalId, inicio, servicoIds, port
     const min = antecedenciaMinH(sv);
     if (inicio < agora + min * HORA) erros.push(`Esse serviço exige ${min} h de antecedência.`);
   }
-  const conflitos = acharConflitos(state, { profissionalId, ocup, ignoreId });
+  // G4: na estética o recurso é o box; conflita só quando NENHUM box permitido está livre (quem barra são os agendamentos desses boxes)
+  const conflitos = conflitosDoPedido(state, { profissionalId, ocup, ignoreId, servicoIds });
   const dono = clienteId ?? (ignoreId ? state.agendamentos.find((x) => x.id === ignoreId)?.clienteId : undefined); // remarcar o próprio horário não esbarra no próprio fixo
   if ((!encaixe || cliente) && fixoReservado(state, { profissionalId, ocup, clienteId: dono, agora })) erros.push('Esse horário é fixo de um cliente com plano. Escolha outro horário.');
   out.pendentes = conflitos.filter((c) => c.status === STATUS.A_CONFIRMAR);
   out.confirmados = conflitos.filter((c) => c.status !== STATUS.A_CONFIRMAR);
-  if (!encaixe && out.confirmados.length) erros.push('Esse horário já está confirmado para outro cliente. Para forçar, marque como encaixe.');
+  if (!encaixe && out.confirmados.length && !cap(state.estabelecimento, 'usaRecursoFisico')) erros.push('Esse horário já está confirmado para outro cliente. Para forçar, marque como encaixe.');
   // o próprio cliente (link ou WhatsApp) nunca ocupa um horário já pedido ou confirmado por outro: só a equipe pode sobrepor um pedido a confirmar (e o encaixe, um confirmado)
-  else if (cliente && out.pendentes.length) erros.push('Esse horário acabou de ser reservado por outro cliente. Escolha outro horário.');
+  else if (cliente && out.pendentes.length && !cap(state.estabelecimento, 'usaRecursoFisico')) erros.push('Esse horário acabou de ser reservado por outro cliente. Escolha outro horário.');
   const box = escolherBox(state, ocup, { boxId, preferido: boxPreferido, ignoreId, permitidos: boxesPermitidos(state, servicoIds) });
   if (box.erro) erros.push(box.erro); else out.boxId = box.id;
   return out;

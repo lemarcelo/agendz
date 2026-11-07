@@ -1,4 +1,5 @@
 // F (V60): serviço de duração indefinida — funções puras (domain/blocos.js) e a demonstração (cadastro, link do cliente, Atender com blocos e valor lançado).
+import { umBoxSo } from '../tests/um-box.mjs';
 // O servidor tem as mesmas regras (ServicoService, AgendaController, LinkPublicoService); os casos compartilhados estão em equivalencia/servicos.json.
 import { test, jest, beforeEach, afterEach, beforeAll, afterAll } from '@jest/globals';
 import assert from 'node:assert/strict';
@@ -156,7 +157,9 @@ test('demo atender: indefinido exige blocos; blocos fora de indefinido são recu
   assert.equal(a.precos[s.id], 345.5, 'valor lançado é o preço do item (base de total e comissão)');
 });
 
-test('demo atender: um bloco ocupado por outro agendamento barra; livre entre os blocos pode ser usado', () => {
+// G4: a estética segue o box (o profissional não bloqueia); este caso de profissional ocupado é coberto na barbearia (tests-jest-barbearia) e o do box em box-agenda.test.mjs
+test.skip('demo atender: um bloco ocupado por outro agendamento barra; livre entre os blocos pode ser usado', () => {
+  umBoxSo();
   const s = criarIndef();
   const d = dia(9);
   const hr = (m) => tsAt(d, m);

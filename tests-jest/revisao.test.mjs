@@ -1,4 +1,5 @@
 // Achados da revisão independente (agente revisor): cada teste reproduz o ataque e confere que ele falha.
+import { umBoxSo } from '../tests/um-box.mjs';
 import { test, beforeEach, afterEach, beforeAll, afterAll } from '@jest/globals';
 import assert from 'node:assert/strict';
 import { store, auth, agenda, clientes, equipe, estabelecimento, financeiro, estoque, modelos, excecoes, whatsapp, bancoSimulado, servicos, MODO_DEMO } from '../src/services/api.js';
@@ -152,6 +153,7 @@ test('M1: escala, exceção, notificações e calendário inválidos são recusa
 
 // M2 – edições de agendamento
 test('M2: editar serviços não invade outro agendamento nem estoura o expediente', () => {
+  umBoxSo();
   como('davi');
   const d = dia(9);
   const a = agenda.criar({ clienteId: 'c-igor', profissionalId: 'u-pablo', servicoIds: ['s-lav-simples'], inicio: tsAt(d, '10:00'), status: 'confirmado' }).agendamento;

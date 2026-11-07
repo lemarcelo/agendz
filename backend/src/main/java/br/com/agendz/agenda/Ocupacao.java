@@ -4,6 +4,7 @@ import br.com.agendz.erro.ErroDeNegocio;
 import br.com.agendz.escala.Ausencias;
 import br.com.agendz.escala.EscalaService;
 import br.com.agendz.tenant.Capacidades;
+import br.com.agendz.tenant.LojaContext;
 import br.com.agendz.tenant.Loja;
 import java.time.Duration;
 import java.time.Instant;
@@ -109,6 +110,8 @@ public class Ocupacao {
     /** Agendamentos ativos (não cancelados) do mesmo profissional cujos blocos se sobrepõem aos do plano. */
     public List<Conflito> conflitos(JdbcTemplate jdbc, UUID profissionalId, UUID ignorar, Plano plano) {
         Map<UUID, Conflito> achados = new LinkedHashMap<>();
+        // G4: na estética quem ocupa a agenda é o box (escolherBox/livre); o profissional só recebe comissão e não bloqueia por outro carro
+        if (Capacidades.usaRecursoFisico(LojaContext.exigir())) return new ArrayList<>();
         for (Instant[] b : plano.doProfissional()) {
             jdbc.query("select distinct a.id, a.status from agendamento a join agendamento_bloco k on k.agendamento_id = a.id "
                             + "where a.profissional_id = ? and a.id <> ? and a.status <> 'cancelado' and k.ini < ? and k.fim > ?",
@@ -123,6 +126,7 @@ public class Ocupacao {
     /** Quem confirma primeiro fica com o horário: os "a confirmar" (não encaixe) que dividem o profissional com `mantido` são cancelados. Devolve os cancelados. */
     public List<UUID> cancelarPendentes(JdbcTemplate jdbc, UUID profissionalId, UUID mantido, Plano plano) {
         List<UUID> perdedores = new ArrayList<>();
+        if (Capacidades.usaRecursoFisico(LojaContext.exigir())) return perdedores; // G4: o box decide, não o profissional
         for (Instant[] b : plano.doProfissional()) {
             perdedores.addAll(jdbc.queryForList("update agendamento set status = 'cancelado', motivo_cancelamento = 'conflito', atualizado_em = now() "
                             + "where profissional_id = ? and id <> ? and status = 'a_confirmar' and not encaixe "

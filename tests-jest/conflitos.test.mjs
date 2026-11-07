@@ -1,4 +1,5 @@
 // Testes de conflito e de fluxo: disputa por horário, Pix duplicado/atrasado, aviso e crédito, e um fuzz com invariantes.
+import { umBoxSo } from '../tests/um-box.mjs';
 import { test, beforeEach, afterEach, beforeAll, afterAll } from '@jest/globals';
 import assert from 'node:assert/strict';
 import { store, auth, agenda, financeiro, whatsapp, bancoSimulado, equipe } from '../src/services/api.js';
@@ -20,8 +21,10 @@ const ATIVOS = ['a_confirmar', 'confirmado', 'concluido'];
 function semSobreposicao() {
   for (const a of st().agendamentos) assert.ok(['a_confirmar', 'confirmado', 'concluido', 'cancelado'].includes(a.status), 'status fora do domínio: ' + a.status);
   const confirmados = st().agendamentos.filter((a) => ['confirmado', 'concluido'].includes(a.status));
-  for (const b of new Set(confirmados.map((a) => a.profissionalId))) {
-    const lista = confirmados.filter((a) => a.profissionalId === b).sort((x, y) => x.inicio - y.inicio);
+  // G4: na estética o recurso é o box (o profissional não bloqueia); sem box (barbearia, atendimento local) vale o profissional
+  const chave = (a) => a.boxId || a.profissionalId;
+  for (const b of new Set(confirmados.map(chave))) {
+    const lista = confirmados.filter((a) => chave(a) === b).sort((x, y) => x.inicio - y.inicio);
     for (let i = 1; i < lista.length; i++) {
       const prev = lista[i - 1];
       const dur = prev.servicoIds.reduce((t, id) => t + (st().servicos.find((s) => s.id === id)?.duracao || 0), 0) * MIN;
@@ -57,6 +60,7 @@ function invariantesFinanceiras() {
 
 // ---------- disputa por horário ----------
 test('dois clientes pendentes no mesmo horário: quem confirma primeiro fica; o outro é cancelado por conflito', () => {
+  umBoxSo();
   const t = tsAt(dia(), '10:00');
   const a = cria({ inicio: t, clienteId: 'c-igor' }).agendamento;
   const b = cria({ inicio: t, clienteId: st().clientes.find((c) => c.id !== 'c-igor').id, encaixe: false });
@@ -81,6 +85,7 @@ test('confirmação repetida (duplo clique / reenvio do WhatsApp) não duplica n
 });
 
 test('esteticista confirma sobre pendente: pendente é cancelada por conflito e o cliente recebe oferta de remarcar', () => {
+  umBoxSo();
   const t = tsAt(dia(), '11:00');
   const pend = cria({ inicio: t, clienteId: 'c-igor' }).agendamento;
   const outroCli = st().clientes.find((c) => c.id !== 'c-igor').id;
@@ -93,6 +98,7 @@ test('esteticista confirma sobre pendente: pendente é cancelada por conflito e 
 });
 
 test('remarcar para horário de agendamento confirmado é recusado', () => {
+  umBoxSo();
   const t = tsAt(dia(), '10:00');
   const a = cria({ inicio: t }).agendamento; assert.ok(agenda.alterarStatus(a.id, 'confirmado').ok);
   const b = cria({ inicio: tsAt(dia(), '15:00'), clienteId: st().clientes.find((c) => c.id !== 'c-igor').id }).agendamento;
@@ -110,6 +116,7 @@ test('cancelar duas vezes e cancelar concluído não repetem efeitos', () => {
 });
 
 test('status inválido é recusado; reativar cancelado em horário ocupado também', () => {
+  umBoxSo();
   const t = tsAt(dia(), '10:00');
   const a = cria({ inicio: t }).agendamento;
   assert.equal(agenda.alterarStatus(a.id, 'hackeado').ok, false);
@@ -302,7 +309,9 @@ for (const seed of [1, 7, 42, 2026]) {
   });
 }
 
-test('o cliente (link ou WhatsApp) nunca ocupa um horário que outro cliente já pediu (a confirmar) ou confirmou; a equipe ainda pode sobrepor um pedido a confirmar', () => {
+// G4: a estética segue o box (o profissional não bloqueia); este caso de profissional ocupado é coberto na barbearia (tests-jest-barbearia) e o do box em box-agenda.test.mjs
+test.skip('o cliente (link ou WhatsApp) nunca ocupa um horário que outro cliente já pediu (a confirmar) ou confirmou; a equipe ainda pode sobrepor um pedido a confirmar', () => {
+  umBoxSo();
   const inicio = tsAt(dia(4), '10:00');
   const a = cria({ inicio }); assert.ok(a.ok, JSON.stringify(a));
   assert.equal(st().agendamentos.find((x) => x.id === a.agendamento.id).status, 'a_confirmar');

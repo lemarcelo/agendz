@@ -199,7 +199,7 @@ export function criarAgendamento(s, dados, autor, agora) {
 
 // Quem confirma primeiro fica com o horário: os pendentes sobrepostos são cancelados.
 export function cancelarPendentesConflitantes(s, vencedor, agora) {
-  const perdedores = acharConflitos(s, { profissionalId: vencedor.profissionalId, ocup: ocupacaoDe(s, vencedor), ignoreId: vencedor.id })
+  const perdedores = acharConflitos(s, { profissionalId: vencedor.profissionalId, boxId: vencedor.boxId, ocup: ocupacaoDe(s, vencedor), ignoreId: vencedor.id })
     .filter((o) => o.status === STATUS.A_CONFIRMAR && !o.encaixe);
   for (const p of perdedores) {
     p.status = STATUS.CANCELADO;
