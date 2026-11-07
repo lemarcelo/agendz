@@ -4,7 +4,7 @@
 // Só o proprietário escreve; o profissional apenas consulta. Notificações próprias, materiais e financeiro do serviço chegam com os módulos deles.
 // Não importa `api.js`, `hooks.js` nem `common.jsx` (tests/estatico.test.mjs).
 import React, { useEffect, useState } from 'react';
-import { servicos as api, equipe as apiEquipe, vinculos } from '../../services/api-real.js';
+import { servicos as api, equipe as apiEquipe, vinculos, boxes as apiBoxes, servicoBoxes } from '../../services/api-real.js';
 import SeletorVinculo from '../leve/SeletorVinculo.jsx';
 import { capAtiva } from '../../domain/tipos.js';
 import { PORTES, PORTE_PADRAO, ROTULO_PORTE, portesAtivos, precoNoPorte } from '../../domain/veiculos.js';
@@ -53,6 +53,8 @@ function FormServico({ ficha, todos, ehDono, aoSalvar, aoCancelar }) {
   // A1: quem realiza este serviço (mesma tabela da Equipe > Editar). Serviço novo vem com todos os que atendem marcados.
   const [equipeLista, setEquipeLista] = useState(null); // null = carregando (ou sem permissão: a seção some)
   const [quem, setQuem] = useState(null);
+  const [boxesLista, setBoxesLista] = useState(null); // G3: boxes da loja (só estética); null = carregando ou tipo sem box
+  const [boxSel, setBoxSel] = useState([]);
   useEffect(() => {
     if (!ehDono) return undefined;
     let vivo = true;
@@ -63,6 +65,17 @@ function FormServico({ ficha, todos, ehDono, aoSalvar, aoCancelar }) {
       setPessoas(e.usuarios.filter((u) => u.ativo !== false).map((u) => ({ id: u.id, rotulo: u.apelido || u.nome })));
       setEquipeLista(quemAtende);
       setQuem(novo ? quemAtende.map((u) => u.id) : (v.mapa[ficha.id] || []).filter((id) => quemAtende.some((u) => u.id === id)));
+    })();
+    return () => { vivo = false; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { // G3 (V63): em que boxes o serviço pode ser feito (nenhum marcado = qualquer box)
+    if (!ehDono) return undefined;
+    let vivo = true;
+    (async () => {
+      const [b, m] = await Promise.all([apiBoxes.listar(), servicoBoxes.mapa()]);
+      if (!vivo || !b.ok || !m.ok || b.boxes.length === 0) return;
+      setBoxesLista(b.boxes.filter((x) => x.ativo));
+      setBoxSel(novo ? [] : (m.mapa[ficha.id] || []));
     })();
     return () => { vivo = false; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -96,6 +109,11 @@ function FormServico({ ficha, todos, ehDono, aoSalvar, aoCancelar }) {
     if (quem !== null) {
       const v = await vinculos.definirDoServico(r.servico.id, quem);
       if (!v.ok) { setEnviando(false); setErro(`O serviço foi salvo, mas não consegui salvar quem o realiza: ${v.erro}`); return; }
+    }
+    if (boxesLista !== null) {
+      const todos = boxesLista.every((b) => boxSel.includes(b.id));
+      const v = await servicoBoxes.definir(r.servico.id, todos ? [] : boxSel);
+      if (!v.ok) { setEnviando(false); setErro(`O serviço foi salvo, mas não consegui salvar os boxes permitidos: ${v.erro}`); return; }
     }
     setEnviando(false);
     aoSalvar(r.servico);
@@ -157,6 +175,10 @@ function FormServico({ ficha, todos, ehDono, aoSalvar, aoCancelar }) {
         {ehDono && equipeLista !== null && quem !== null && (
           <SeletorVinculo testid="srv-quem" titulo="Quem realiza este serviço" ajuda="Só quem estiver marcado aparece para este serviço no Atender, na agenda e no link do cliente."
             itens={equipeLista.map((u) => ({ id: u.id, rotulo: u.apelido || u.nome }))} marcados={quem} aoMudar={setQuem} />
+        )}
+        {ehDono && boxesLista !== null && (
+          <SeletorVinculo testid="srv-boxes" titulo="Boxes permitidos" ajuda="Só os boxes marcados recebem este serviço (nenhum marcado = qualquer box). Quem agenda não escolhe o box: o sistema decide."
+            textoNenhum="Nenhum escolhido: qualquer box recebe este serviço." itens={boxesLista.map((b) => ({ id: b.id, rotulo: b.nome }))} marcados={boxSel} aoMudar={setBoxSel} />
         )}
         {!ehDono && <Aviso data-testid="srv-somente-leitura">Só o proprietário altera os serviços.</Aviso>}
         {erro && <Aviso tipo="erro" data-testid="srv-erro">{erro}</Aviso>}

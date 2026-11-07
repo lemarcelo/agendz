@@ -141,6 +141,23 @@ class EsteticaTest extends BaseApi {
     }
 
     @Test
+    void servicoComBoxesPermitidosSoVaiParaEles() throws Exception {
+        soUmBox();
+        jdbc.update("insert into box (loja_id, nome, ordem) values (?::uuid, 'Box 2', 1)", EsteticaDeTeste.LOJA_APEX);
+        mvc.perform(put("/api/servicos/" + lavagem + "/boxes").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"boxIds\":[\"" + box("Box 2") + "\"]}")).andExpect(status().isOk());
+        // o primeiro box está livre, mas o serviço só aceita o Box 2
+        agendar(clienteA, pabloId, lavagem, t, SUV).andExpect(status().isCreated()).andExpect(jsonPath("$.estetica.box").value("Box 2"));
+        // o único box permitido está ocupado: não há outro; box pedido fora da lista é recusado
+        agendar(clienteB, marceloId, lavagem, t.plus(30, ChronoUnit.MINUTES), PEQUENO).andExpect(status().isConflict());
+        agendar(clienteB, marceloId, lavagem, t.plus(24, ChronoUnit.HOURS), PEQUENO + ",\"boxId\":\"" + box("Box 1") + "\"").andExpect(status().isConflict())
+                .andExpect(jsonPath("$.mensagem").value("Esse box não atende a esses serviços."));
+        // sem restrição volta a valer qualquer box
+        mvc.perform(put("/api/servicos/" + lavagem + "/boxes").with(host(APEX)).header(HttpHeaders.AUTHORIZATION, bearer(davi)).contentType(MediaType.APPLICATION_JSON).content("{\"boxIds\":[]}")).andExpect(status().isOk());
+        agendar(clienteB, marceloId, lavagem, t.plus(30, ChronoUnit.MINUTES), PEQUENO).andExpect(status().isCreated()).andExpect(jsonPath("$.estetica.box").value("Box 1"));
+    }
+
+    @Test
     void oBoxNuncaDuplicaEOCancelamentoLibera() throws Exception {
         soUmBox();
         String primeiro = agendarOk(clienteA, pabloId, t, SUV);

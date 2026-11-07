@@ -12,6 +12,7 @@ import br.com.agendz.servicos.OrdemDosServicos;
 import br.com.agendz.configuracao.LocalDaLoja;
 import br.com.agendz.cupom.CupomService;
 import br.com.agendz.planos.PlanoService;
+import br.com.agendz.agenda.BoxesDoServico;
 import br.com.agendz.agenda.Ocupacao;
 import br.com.agendz.aviso.AvisosPainel;
 import br.com.agendz.erro.ErroDeNegocio;
@@ -392,6 +393,14 @@ return horariosDoDia(jdbc, cfg, base, dia, servicos, relogio.instant(), false, n
         Map<Instant, UUID> achados = new TreeMap<>();
         // estética: o horário só existe se houver profissional E box livres (o carro nunca divide o box); sem nenhum box cadastrado não há horário
         boolean usaBox = base.boxes() != null;
+        // G3 (V63): só contam os boxes que servem a TODOS os serviços do pedido; nenhum = não há horário
+        List<UUID> boxesQuePodem = base.boxes();
+        if (usaBox) {
+            Set<UUID> permitidos = BoxesDoServico.permitidos(jdbc, servicos.stream().map(Svc::id).toList());
+            if (permitidos != null) boxesQuePodem = base.boxes().stream().filter(permitidos::contains).toList();
+            if (boxesQuePodem.isEmpty()) return List.of();
+        }
+        final List<UUID> boxesDoPedido = boxesQuePodem;
         List<BoxOcupado> boxesOcupados = usaBox
                 ? jdbc.query("select box_id, inicio, fim_ocupado from agendamento where box_id is not null and id <> ? and status <> 'cancelado' and inicio < ? and fim_ocupado > ? "
                         + "union all select box_id, ini, fim from ausencia_box where ini < ? and fim > ?", // G2: ausência do box ocupa como um carro
@@ -443,7 +452,7 @@ return horariosDoDia(jdbc, cfg, base, dia, servicos, relogio.instant(), false, n
                     if (!inicio.isAfter(agora) || inicio.isBefore(minimo)) continue;
                     Instant fimOcupado = inicio.plus(duracao + folga, ChronoUnit.MINUTES);
                     if (ocupados.stream().anyMatch(o -> o.inicio().isBefore(fimOcupado) && o.fimOcupado().isAfter(inicio))) continue;
-                    if (usaBox && boxesOcupados.stream().filter(o -> o.inicio().isBefore(fimOcupado) && o.fimOcupado().isAfter(inicio)).map(BoxOcupado::boxId).distinct().count() >= base.boxes().size()) continue;
+                    if (usaBox && boxesOcupados.stream().filter(o -> boxesDoPedido.contains(o.boxId()) && o.inicio().isBefore(fimOcupado) && o.fimOcupado().isAfter(inicio)).map(BoxOcupado::boxId).distinct().count() >= boxesDoPedido.size()) continue;
 
                     // Regra anti-buraco: proíbe intervalo ocioso menor que cfg.intervaloMin()
                     int minTol = cfg.intervaloMin();
@@ -613,7 +622,7 @@ return horariosDoDia(jdbc, cfg, base, dia, servicos, relogio.instant(), false, n
             }
             if (profissional == null) throw new ErroDeNegocio(HttpStatus.CONFLICT, ERRO_HORARIO);
             EscolhaAutomatica.registrar(jdbc, idsDosServicos.get(0), profissional); // B2: na fila, o ponteiro só avança aqui, na criação (mesma transação)
-            UUID boxId = escolherBoxDoLink(jdbc, loja, inicio, fimServico, fimOcupado, null, NINGUEM);
+            UUID boxId = escolherBoxDoLink(jdbc, loja, inicio, fimServico, fimOcupado, null, NINGUEM, BoxesDoServico.permitidos(jdbc, idsDosServicos));
 
             // sem telefone não há cadastro: o pedido guarda só o nome (`nome_avulso`) e o limite de abertos fica por conta do limite por IP e da loja
             String nomeNaAgenda = nome.isEmpty() ? "Sem nome" : nome; // dono tirou a obrigatoriedade do nome
@@ -853,7 +862,7 @@ return horariosDoDia(jdbc, cfg, base, dia, servicos, relogio.instant(), false, n
                     Integer.class, m.profissionalId(), id, utc(fimOcupado), utc(novoInicio));
             if (ocupados != null && ocupados > 0) throw new ErroDeNegocio(HttpStatus.CONFLICT, ERRO_HORARIO);
             if (Ausencias.ocupado(jdbc, m.profissionalId(), novoInicio, fimServico)) throw new ErroDeNegocio(HttpStatus.CONFLICT, ERRO_HORARIO); // A3
-            UUID boxId = escolherBoxDoLink(jdbc, loja, novoInicio, fimServico, fimOcupado, m.boxId(), id); // estética: fica no mesmo box se estiver livre, senão outro; nunca divide
+            UUID boxId = escolherBoxDoLink(jdbc, loja, novoInicio, fimServico, fimOcupado, m.boxId(), id, BoxesDoServico.permitidos(jdbc, m.servicos().stream().map(Svc::id).toList())); // estética: fica no mesmo box se estiver livre, senão outro; nunca divide
 
             evento(jdbc, loja.id(), id, "data e hora", dataHora(m.inicio()), dataHora(novoInicio));
             if ("confirmado".equals(m.status())) evento(jdbc, loja.id(), id, "status", "Confirmado", "A confirmar (cliente remarcou pelo link)");
@@ -986,11 +995,11 @@ return horariosDoDia(jdbc, cfg, base, dia, servicos, relogio.instant(), false, n
     }
 
     /** Box do pedido (estética): o preferido se estiver livre, senão o primeiro livre. Sem box livre o horário "acabou de ser ocupado". Tipo sem box devolve null. */
-    private UUID escolherBoxDoLink(JdbcTemplate jdbc, Loja loja, Instant inicio, Instant fimServico, Instant fimOcupado, UUID preferido, UUID ignorar) {
+    private UUID escolherBoxDoLink(JdbcTemplate jdbc, Loja loja, Instant inicio, Instant fimServico, Instant fimOcupado, UUID preferido, UUID ignorar, Set<UUID> permitidos) {
         if (!Capacidades.usaRecursoFisico(loja)) return null;
         Ocupacao.Plano plano = new Ocupacao.Plano(List.<Instant[]>of(new Instant[]{inicio, fimServico}), fimServico, fimOcupado);
         try {
-            return ocupacao.escolherBox(jdbc, loja, plano, null, preferido, ignorar);
+            return ocupacao.escolherBox(jdbc, loja, plano, null, preferido, ignorar, permitidos);
         } catch (ErroDeNegocio e) {
             throw new ErroDeNegocio(HttpStatus.CONFLICT, ERRO_HORARIO); // a mensagem de box é da equipe; o cliente só vê que o horário acabou
         }

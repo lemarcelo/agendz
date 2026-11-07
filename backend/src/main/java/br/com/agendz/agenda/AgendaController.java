@@ -404,7 +404,7 @@ public class AgendaController {
                 : ocupacao.planejar(jdbc, profissionalId, inicio, minutos, intervaloFinal, servicos.stream().anyMatch(ServicoLinha::multiDia));
         List<UUID> pendentes = conferirConflitos(ocupacao.conflitos(jdbc, profissionalId, new UUID(0, 0), plano), encaixe);
         if (!encaixe) conferirFixoReservado(jdbc, loja, profissionalId, clienteId, plano); // horário fixo de assinante (v128): ninguém mais toma, só encaixe da equipe passa por cima
-        UUID boxId = ocupacao.escolherBox(jdbc, loja, plano, boxPedido, null, new UUID(0, 0));
+        UUID boxId = ocupacao.escolherBox(jdbc, loja, plano, boxPedido, null, new UUID(0, 0), BoxesDoServico.permitidos(jdbc, servicoIds));
         UUID id = jdbc.queryForObject(
                 "insert into agendamento (loja_id, cliente_id, nome_avulso, profissional_id, inicio, fim_servico, fim_ocupado, status, encaixe, total, box_id, veiculo_id, porte, veiculo_placa, veiculo_marca, veiculo_modelo, veiculo_cor) "
                         + "values (?::uuid, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) returning id",
@@ -829,7 +829,7 @@ public class AgendaController {
                 Ocupacao.Plano novoPlano = replanejar(jdbc, id, a, a.profissionalId(), a.inicio(), a.fimOcupado().isAfter(a.fimServico()) ? (int) Duration.between(a.fimServico(), a.fimOcupado()).toMinutes() : 0);
                 pendentes = conferirConflitos(ocupacao.conflitos(jdbc, a.profissionalId(), id, novoPlano), a.encaixe());
                 planos.conferirNovoHorario(jdbc, id, a.inicio(), relogio.instant()); // plano: o corte volta a gastar a cota do mês
-                UUID box = a.boxId() == null && !usaBox(loja) ? null : ocupacao.escolherBox(jdbc, loja, novoPlano, null, a.boxId(), id);
+                UUID box = a.boxId() == null && !usaBox(loja) ? null : ocupacao.escolherBox(jdbc, loja, novoPlano, null, a.boxId(), id, BoxesDoServico.permitidos(jdbc, BoxesDoServico.servicosDe(jdbc, id)));
                 jdbc.update("update agendamento set box_id = ? where id = ?", box, id);
                 ocupacao.gravarBlocos(jdbc, loja.id(), id, novoPlano);
                 plano = novoPlano;
@@ -897,7 +897,7 @@ public class AgendaController {
             if (!encaixe) conferirFixoReservado(jdbc, loja, alvo, jdbc.queryForObject("select cliente_id from agendamento where id = ?", UUID.class, id), plano); // remarcar o próprio fixo não esbarra nele mesmo
             if (!CANCELADO.equals(novoStatus)) planos.conferirNovoHorario(jdbc, id, novoInicio, relogio.instant()); // plano: o mês novo também precisa ter corte
             // sem box pedido o carro continua no mesmo box se estiver livre (senão vai para o primeiro livre)
-            UUID box = a.boxId() == null && d.boxId() == null && !usaBox(loja) ? null : ocupacao.escolherBox(jdbc, loja, plano, d.boxId(), a.boxId(), id);
+            UUID box = a.boxId() == null && d.boxId() == null && !usaBox(loja) ? null : ocupacao.escolherBox(jdbc, loja, plano, d.boxId(), a.boxId(), id, BoxesDoServico.permitidos(jdbc, BoxesDoServico.servicosDe(jdbc, id)));
             registrar(jdbc, loja.id(), id, jwt, "data e hora", dataHora(a.inicio()), dataHora(novoInicio));
             if (!novoStatus.equals(a.status())) registrar(jdbc, loja.id(), id, jwt, "status", ROTULOS.get(a.status()), ROTULOS.get(novoStatus));
             if (!alvo.equals(a.profissionalId())) registrar(jdbc, loja.id(), id, jwt, "profissional", nomeDe(jdbc, a.profissionalId()), nomeDe(jdbc, alvo));

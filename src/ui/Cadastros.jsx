@@ -231,7 +231,7 @@ function FormServico({ s, user, onClose }) {
   const { state: st } = useStore();
   // A1: quem realiza o serviço (marcados = os que atendem; serviço novo vem com todos marcados)
   const quemAtende = st.usuarios.filter((u) => u.atende);
-  const [f, setF] = useState(() => ({ ...(s.id ? s : { ...s, codigo: proximoCodigo(st.servicos) }), profissionalIds: s.profissionalIds || quemAtende.filter((u) => !s.id || realizaServico(u, s.id)).map((u) => u.id) })); // serviço novo já vem com o próximo código (dá para trocar)
+  const [f, setF] = useState(() => ({ ...(s.id ? s : { ...s, codigo: proximoCodigo(st.servicos) }), boxIds: s.boxIds || [], profissionalIds: s.profissionalIds || quemAtende.filter((u) => !s.id || realizaServico(u, s.id)).map((u) => u.id) })); // serviço novo já vem com o próximo código (dá para trocar)
   const [erro, setErro] = useState('');
   const proprias = Array.isArray(f.notificacoes);
   // F: duração indefinida (duracao nula): textos, preço em lista/intervalo e quem combina vêm do bloco compartilhado
@@ -241,7 +241,9 @@ function FormServico({ s, user, onClose }) {
   const [ind, setInd] = useState(() => formDoServicoIndefinido(s, txt));
   const [precoInd, setPrecoInd] = useState(() => txt(s.preco));
   const pessoas = st.usuarios.filter((u) => u.ativo !== false && u.papel !== 'master').map((u) => ({ id: u.id, rotulo: u.apelido || u.nome }));
-  const salvar = () => { const r = apiSrv.salvar(indef ? { ...f, ...corpoDoServicoIndefinido(ind, precoInd, lerNum) } : f); if (!r.ok) { setErro(r.erros[0]); rolarAoErro(); return; } toast('Serviço salvo.'); onClose(); };
+  const boxesAtivosDoServico = capAtiva('usaRecursoFisico') ? (st.estabelecimento.boxes || []).filter((b) => b.ativo !== false) : [];
+  const boxIdsFinal = boxesAtivosDoServico.length && boxesAtivosDoServico.every((b) => f.boxIds.includes(b.id)) ? [] : f.boxIds; // todos marcados = qualquer box
+  const salvar = () => { const base = { ...f, boxIds: boxIdsFinal }; const r = apiSrv.salvar(indef ? { ...base, ...corpoDoServicoIndefinido(ind, precoInd, lerNum) } : base); if (!r.ok) { setErro(r.erros[0]); rolarAoErro(); return; } toast('Serviço salvo.'); onClose(); };
   const num = (k) => (e) => setF({ ...f, [k]: e.target.value === '' ? '' : Number(e.target.value) });
   return (
     <Modal titulo={s.id ? 'Editar serviço' : 'Novo serviço'} onClose={onClose} largura={680}
@@ -325,6 +327,8 @@ function FormServico({ s, user, onClose }) {
         <Btn tamanho="sm" icone="plus" onClick={() => setF({ ...f, materiais: [...(f.materiais || []), { materialId: '', qtd: 1 }] })} disabled={!st.materiais.some((x) => x.tipo !== 'produto')} data-testid="add-material">Adicionar material</Btn>
         {st.materiais.length === 0 && <p className="muted">Cadastre materiais primeiro, na tela Estoque.</p>}
       </fieldset>
+      {ehDono(user) && boxesAtivosDoServico.length > 0 && <SeletorVinculo testid="srv-boxes" titulo="Boxes permitidos" ajuda="Só os boxes marcados recebem este serviço (nenhum marcado = qualquer box). Quem agenda não escolhe o box: o sistema decide."
+        textoNenhum="Nenhum escolhido: qualquer box recebe este serviço." itens={boxesAtivosDoServico.map((b) => ({ id: b.id, rotulo: b.nome }))} marcados={f.boxIds} aoMudar={(ids) => setF({ ...f, boxIds: ids })} />}
       {ehDono(user) && <SeletorVinculo testid="srv-quem" titulo={`Quem realiza este serviço`} ajuda="Só quem estiver marcado aparece para este serviço no Atender, na agenda e no link do cliente."
         itens={quemAtende.map((u) => ({ id: u.id, rotulo: u.apelido || u.nome }))} marcados={f.profissionalIds} aoMudar={(ids) => setF({ ...f, profissionalIds: ids })} />}
       {erro && <Aviso tipo="erro">{erro}</Aviso>}

@@ -568,7 +568,12 @@ export const servicos = {
   // POST /servicos  |  PUT /servicos/{id}
   salvar(entrada) {
     const n = exigir('servicos'); if (n) return n;
-    const sv = pegar(entrada, ['id', 'nome', 'preco', 'duracao', 'precos', 'duracoes', 'multiDia', 'combo', 'componentes', 'categoria', 'intervalo', 'antecedenciaH', 'notificacoes', 'confirmacaoServico', 'materiais', 'ativo', 'grupoMovimentacaoId', 'pixCancelamento', 'comissaoPct', 'codigo', 'profissionalIds', 'duracaoIndefinida', 'duracaoTexto', 'combinarMsg', 'precoModo', 'precoOpcoes', 'precoMax', 'combinaIds']);
+    const sv = pegar(entrada, ['id', 'nome', 'preco', 'duracao', 'precos', 'duracoes', 'multiDia', 'combo', 'componentes', 'categoria', 'intervalo', 'antecedenciaH', 'notificacoes', 'confirmacaoServico', 'materiais', 'ativo', 'grupoMovimentacaoId', 'pixCancelamento', 'comissaoPct', 'codigo', 'profissionalIds', 'duracaoIndefinida', 'duracaoTexto', 'combinarMsg', 'precoModo', 'precoOpcoes', 'precoMax', 'combinaIds', 'boxIds']);
+    if ('boxIds' in sv) { // G3: boxes permitidos do serviço; só o proprietário, só boxes da loja, até 20; vazio = qualquer box
+      if (!R.ehDono(usuario())) delete sv.boxIds;
+      else if (!Array.isArray(sv.boxIds) || sv.boxIds.length > 20 || sv.boxIds.some((x) => !(store.getState().estabelecimento.boxes || []).some((b) => b.id === x))) return erro('Escolha só boxes da loja.');
+      else sv.boxIds = [...new Set(sv.boxIds)];
+    }
     if ('comissaoPct' in sv && !R.ehDono(usuario())) delete sv.comissaoPct; // só o proprietário define comissão; para os outros o campo é ignorado
     const profissionalIds = R.ehDono(usuario()) ? sv.profissionalIds : undefined; delete sv.profissionalIds; // A1: quem realiza o serviço (mesma tabela da Equipe > Editar); só o proprietário muda
     if (profissionalIds !== undefined && !Array.isArray(profissionalIds)) return erro('Lista de profissionais inválida.');
@@ -635,6 +640,7 @@ export const servicos = {
         : { duracaoTexto: null, combinarMsg: null, precoModo: 'fixo', precoOpcoes: null, precoMax: null, combinaIds: [] }); // serviço de duração fixa nunca guarda texto, lista nem intervalo de preço
       // Campos opcionais só mudam quando vêm na chamada (editar o preço não zera a categoria nem o "vários dias").
       if (sv.multiDia !== undefined) dados.multiDia = sv.multiDia;
+      if (sv.boxIds !== undefined) dados.boxIds = sv.boxIds;
       if (sv.categoria !== undefined) dados.categoria = sv.categoria || '';
       if (sv.combo !== undefined || sv.componentes !== undefined) { dados.combo = !!sv.combo; dados.componentes = sv.combo ? [...sv.componentes] : []; }
       if (sv.id) {

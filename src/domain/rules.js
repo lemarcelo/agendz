@@ -211,10 +211,25 @@ export function registrarBox(state, boxId) {
   if (boxId && modoSaneado(state.estabelecimento.modoEscolhaBox) === 'fila') state.estabelecimento.filaBox = boxId;
 }
 // Box para o atendimento: o pedido (se estiver livre), senão o preferido (o que já tinha), senão o primeiro livre. Box nunca é "forçado": dois carros não ocupam o mesmo.
-export function escolherBox(state, ocup, { boxId, preferido, ignoreId } = {}) {
+// G3 (V63): boxes que servem a TODOS os serviços do pedido (interseção das listas dos serviços com restrição). null = qualquer box.
+export function boxesPermitidos(state, servicoIds) {
+  let r = null;
+  for (const id of servicoIds || []) {
+    const lista = (state.servicos || []).find((s) => s.id === id)?.boxIds;
+    if (!Array.isArray(lista) || !lista.length) continue;
+    r = r === null ? new Set(lista) : new Set([...r].filter((x) => lista.includes(x)));
+  }
+  return r;
+}
+export function escolherBox(state, ocup, { boxId, preferido, ignoreId, permitidos = null } = {}) {
   if (!cap(state.estabelecimento, 'usaRecursoFisico')) return { id: null }; // tipo sem box/cadeira reservada
-  const ativos = boxesAtivos(state);
+  let ativos = boxesAtivos(state);
   if (!ativos.length) return { erro: 'Cadastre ao menos um box em Estabelecimento > Boxes.' };
+  if (permitidos) {
+    if (boxId && ativos.some((b) => b.id === boxId) && !permitidos.has(boxId)) return { erro: 'Esse box não atende a esses serviços.' };
+    ativos = ativos.filter((b) => permitidos.has(b.id));
+    if (!ativos.length) return { erro: 'Nenhum box ativo atende a todos os serviços escolhidos.' };
+  }
   // G2: a ausência do box (folga, manutenção) também o deixa ocupado, como no servidor (`AusenciasBox`)
   const livre = (id) => !acharConflitos(state, { boxId: id, ocup: { profissional: [], box: ocup.box }, ignoreId }).length
     && !(state.ausenciasBox || []).some((x) => x.boxId === id && sobrepoe(ocup.box[0], ocup.box[1], x.ini, x.fim));
@@ -291,7 +306,7 @@ export function validarHorario(state, { profissionalId, inicio, servicoIds, port
   if (!encaixe && out.confirmados.length) erros.push('Esse horário já está confirmado para outro cliente. Para forçar, marque como encaixe.');
   // o próprio cliente (link ou WhatsApp) nunca ocupa um horário já pedido ou confirmado por outro: só a equipe pode sobrepor um pedido a confirmar (e o encaixe, um confirmado)
   else if (cliente && out.pendentes.length) erros.push('Esse horário acabou de ser reservado por outro cliente. Escolha outro horário.');
-  const box = escolherBox(state, ocup, { boxId, preferido: boxPreferido, ignoreId });
+  const box = escolherBox(state, ocup, { boxId, preferido: boxPreferido, ignoreId, permitidos: boxesPermitidos(state, servicoIds) });
   if (box.erro) erros.push(box.erro); else out.boxId = box.id;
   return out;
 }

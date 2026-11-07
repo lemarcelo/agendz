@@ -7,7 +7,7 @@ import React, { useState } from 'react';
 import { filtrarPorTermo } from '../../domain/busca-vinculo.js';
 import { Btn, Icone } from './mini.jsx';
 
-export default function SeletorVinculo({ titulo, ajuda, itens, marcados, aoMudar, desabilitado = false, testid, rotuloBusca = 'Buscar' }) {
+export default function SeletorVinculo({ titulo, ajuda, itens, marcados, aoMudar, desabilitado = false, testid, rotuloBusca = 'Buscar', textoNenhum = null }) {
   const [busca, setBusca] = useState('');
   const set = new Set(marcados || []);
   const escolhidos = itens.filter((x) => set.has(x.id));
@@ -47,7 +47,7 @@ export default function SeletorVinculo({ titulo, ajuda, itens, marcados, aoMudar
                   <button type="button" className="aus-x vinculo-x" onClick={() => remover(x.id)} aria-label={`Remover ${x.rotulo}`} data-testid={`${testid}-rem-${x.id}`}>×</button>
                 </li>
               ))}
-              {escolhidos.length === 0 && <li className="muted vinculo-vazio" data-testid={`${testid}-nenhum`}>Nenhum escolhido: {titulo.toLowerCase().includes('quem') ? 'ninguém' : 'nenhum serviço'} fica disponível.</li>}
+              {escolhidos.length === 0 && <li className="muted vinculo-vazio" data-testid={`${testid}-nenhum`}>{textoNenhum || <>Nenhum escolhido: {titulo.toLowerCase().includes('quem') ? 'ninguém' : 'nenhum serviço'} fica disponível.</>}</li>}
             </ul>
             <div className="acoes vinculo-acoes">
               <Btn tamanho="sm" disabled={escolhidos.length === 0} onClick={() => aoMudar([])} data-testid={`${testid}-limpar`}>Limpar</Btn>

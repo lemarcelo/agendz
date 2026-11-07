@@ -137,10 +137,20 @@ public class Ocupacao {
      * Tipo sem recurso físico (barbearia) devolve null. Os boxes ativos ficam travados até o fim da transação.
      */
     public UUID escolherBox(JdbcTemplate jdbc, Loja loja, Plano plano, UUID pedido, UUID preferido, UUID ignorar) {
+        return escolherBox(jdbc, loja, plano, pedido, preferido, ignorar, null);
+    }
+
+    /** G3: `permitidos` = boxes que servem a todos os serviços do pedido (BoxesDoServico); null = qualquer. */
+    public UUID escolherBox(JdbcTemplate jdbc, Loja loja, Plano plano, UUID pedido, UUID preferido, UUID ignorar, java.util.Set<UUID> permitidos) {
         if (!Capacidades.usaRecursoFisico(loja)) return null;
         List<Object[]> ativos = jdbc.query("select id, nome from box where ativo order by ordem, criado_em, id for update",
                 (rs, i) -> new Object[]{rs.getObject("id", UUID.class), rs.getString("nome")});
         if (ativos.isEmpty()) throw new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Cadastre ao menos um box em Estabelecimento > Boxes.");
+        if (permitidos != null) {
+            if (pedido != null && !permitidos.contains(pedido)) throw new ErroDeNegocio(HttpStatus.CONFLICT, "Esse box não atende a esses serviços.");
+            ativos = new ArrayList<>(ativos.stream().filter(x -> permitidos.contains((UUID) x[0])).toList());
+            if (ativos.isEmpty()) throw new ErroDeNegocio(HttpStatus.CONFLICT, "Nenhum box ativo atende a todos os serviços escolhidos.");
+        }
         if (pedido != null) {
             Object[] b = ativos.stream().filter(x -> x[0].equals(pedido)).findFirst().orElseThrow(() -> new ErroDeNegocio(HttpStatus.BAD_REQUEST, "Box não encontrado."));
             if (!livre(jdbc, (UUID) b[0], plano, ignorar)) throw new ErroDeNegocio(HttpStatus.CONFLICT, b[1] + " está ocupado nesse horário.");

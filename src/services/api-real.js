@@ -846,6 +846,25 @@ export const agenda = {
   },
 };
 
+// ---------- boxes permitidos por serviço (G3, V63; ServicoBoxController) ----------
+export const servicoBoxes = {
+  // GET /api/servicos/boxes → { mapa: { servicoId: [boxId] } } só dos serviços com restrição (vazio = qualquer box)
+  async mapa() {
+    const r = await chamar('GET', '/api/servicos/boxes');
+    if (!r.ok) return r;
+    const mapa = {};
+    for (const [k, v] of Object.entries(r.dados && typeof r.dados === 'object' ? r.dados : {})) if (ID.test(k)) mapa[k] = listaDe(v, 20).map((x) => texto(x, 40)).filter((x) => ID.test(x));
+    return { ok: true, mapa };
+  },
+  // PUT /api/servicos/{id}/boxes { boxIds }  (só o proprietário; lista vazia = qualquer box)
+  async definir(servicoId, boxIds) {
+    if (!ID.test(String(servicoId ?? ''))) return { ok: false, status: 0, erro: 'Serviço não encontrado.' };
+    const ids = listaDe(boxIds, 20).map((x) => String(x ?? '')).filter((x) => ID.test(x));
+    const r = await chamar('PUT', `/api/servicos/${servicoId}/boxes`, { boxIds: ids });
+    return r.ok ? { ok: true } : r;
+  },
+};
+
 // ---------- boxes (estética; regras no servidor: BoxController) ----------
 const lerBox = (b) => ({ id: texto(b && b.id, 40), nome: texto(b && b.nome, 30), ativo: !(b && b.ativo === false) });
 export const boxes = {
