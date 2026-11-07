@@ -129,7 +129,8 @@ class DuracaoIndefinidaTest extends BaseApi {
     void blocoSobrepostoBarraEOVaoEntreBlocosFicaLivre() throws Exception {
         atender(corpo("\"" + pintura + "\"", ",\"blocos\":[" + bloco(0, 60) + "," + bloco(240, 300) + "]")).andExpect(status().isCreated());
         atender(corpo("\"" + pintura + "\"", ",\"blocos\":[" + bloco(30, 90) + "]")).andExpect(status().isConflict());
-        atender(corpo("\"" + pintura + "\"", ",\"blocos\":[" + bloco(120, 180) + "]")).andExpect(status().isCreated());
+        // G4: o box fica ocupado do 1º ao último bloco, então o vão também barra (com um box só)
+        atender(corpo("\"" + pintura + "\"", ",\"blocos\":[" + bloco(120, 180) + "]")).andExpect(status().isConflict());
     }
 
     @Test

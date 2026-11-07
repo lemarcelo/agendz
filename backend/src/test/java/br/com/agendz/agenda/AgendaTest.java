@@ -174,6 +174,7 @@ class AgendaTest extends BaseApi {
 
     @Test
     void outroProfissionalNaoConflita() throws Exception {
+        EsteticaDeTeste.todosOsBoxesAtivos(jdbc); // G4: dois carros ao mesmo tempo precisam de dois boxes
         String s = servico(APEX, davi, "Lavagem", 80, 60, 0);
         marcarOk(davi, pabloId, ids(s), t, ",\"status\":\"confirmado\"");
         marcarOk(davi, marceloId, ids(s), t, ",\"status\":\"confirmado\"");
@@ -203,6 +204,7 @@ class AgendaTest extends BaseApi {
 
     @Test
     void profissionalSoMexeNaPropriaAgenda() throws Exception {
+        EsteticaDeTeste.todosOsBoxesAtivos(jdbc); // G4: dois carros ao mesmo tempo precisam de dois boxes
         String s = servico(APEX, davi, "Lavagem", 80, 60, 0);
         String doMarcelo = marcarOk(davi, marceloId, ids(s), t, "");
         String doPablo = marcarOk(pablo, pabloId, ids(s), t, "");
