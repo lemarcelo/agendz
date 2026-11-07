@@ -1,7 +1,7 @@
 /* © 2026 Marcelo — Agendz. Todos os direitos reservados. Uso, cópia ou redistribuição só com autorização por escrito. ref:f2513d1752 */
 // Autoagendamento pelo link: o cliente (sem login) vê só horários livres, pede um horário e depois gerencia só os próprios agendamentos.
 // Tudo aqui é regra pura. A API pública (`publico.*` em api.js) acrescenta os limites de uso; nada daqui devolve dado de outro cliente.
-import { STATUS, acharConflitos, duracaoMin, errosServicoIds, limparTexto, retiradaDe, semBoxAtivo, servicosPorIds, servicosDoAg, statusVisual, telefoneBrasileiro, telefoneNacional, validarHorario } from './rules.js';
+import { STATUS, conflitosDoPedido, duracaoMin, errosServicoIds, limparTexto, retiradaDe, semBoxAtivo, servicosPorIds, servicosDoAg, statusVisual, telefoneBrasileiro, telefoneNacional, validarHorario } from './rules.js';
 import { PORTE_PADRAO, porteAtivo, portesAtivos, precoNoPorte, resumoVeiculo } from './veiculos.js';
 import { faixasDoProfissional } from './schedule.js';
 import { DIA, MIN, fmtDate, fmtHM, startOfDay } from './time.js';
@@ -59,7 +59,7 @@ export function horarioLivre(s, { profissionalId, inicio, servicoIds, porte, ago
   if (!(inicio > agora)) return false;
   const v = validarHorario(s, { profissionalId, inicio, servicoIds, porte, boxPreferido, ignoreId, origem: 'link', agora });
   if (v.erros.length) return false;
-  return !acharConflitos(s, { profissionalId, ocup: v.ocup, ignoreId }).length;
+  return !conflitosDoPedido(s, { profissionalId, ocup: v.ocup, ignoreId, servicoIds }).length; // G4: na estética só conta quando nenhum box serve
 }
 
 // B9c: com a escolha automática ligada (e o cliente sem escolher quem), a ordem de quem tenta o horário primeiro é a do mais livre no dia (domain/profissional-auto.js).

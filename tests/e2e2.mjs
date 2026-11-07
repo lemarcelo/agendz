@@ -43,17 +43,11 @@ const chips = (p) => p.locator('[data-testid=wa-chips]');
   await T('hora-h').fill('14'); await T('hora-m').fill('15');
   await T('atender-srv-s-lav-simples').check();
   await p.waitForTimeout(100);
-  await T('aviso-pendente').waitFor(); await shot('21-form-conflito'); ok('aviso vermelho de conflito com pendente');
-  // sobre confirmado: Davi segunda 10:00 confirmado
-  await T('atender-profissional').selectOption('u-davi');
-  await T('atender-data').fill('2026-10-12'); await T('hora-h').fill('10'); await T('hora-m').fill('10');
-  await p.waitForTimeout(100);
-  await T('erro-horario').waitFor(); ok('bloqueia sobre confirmado');
-  await T('atender-encaixe').check();
-  await T('aviso-confirmado').waitFor(); await shot('22-form-encaixe'); ok('encaixe mostra aviso e libera');
+  // G4: na estética quem ocupa a agenda é o box; o esteticista com agendamento a confirmar no mesmo horário não gera aviso nem bloqueio (há box livre)
+  assert.equal(await T('aviso-pendente').count(), 0); assert.equal(await T('erro-horario').count(), 0); ok('esteticista ocupado em outro box não gera aviso (G4)');
   await salvarAtender(p);
   await p.waitForTimeout(300);
-  await irAteCartao(p, '[data-testid=cartao]:has-text("encaixe"), [data-testid=cartao]'); ok('encaixe salvo');
+  await irAteCartao(p, '[data-testid=cartao]'); ok('agendamento salvo');
   // seletor de hora: setas
   await T('atender').click();
   await T('atender-quando').click();

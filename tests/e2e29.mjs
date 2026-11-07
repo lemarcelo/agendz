@@ -113,7 +113,7 @@ const NOMES_DO_SEED = ['Igor', 'Marcos', 'Rafael'];
   await pubVeiculo(p);
   await T('pub-srv-s-lav-simples').check(); await T('pub-barb-u-pablo').click(); await T('pub-continuar-1').click();
   await p.locator('.pub-dia:not(.pub-mais)').nth(3).click();
-  assert.equal(await T(hora1).count(), 0, 'horário ocupado não aparece');
+  assert.equal(await T(hora1).count(), 1, 'G4: sobram boxes livres, então o horário segue oferecido');
   assert.ok((await p.locator('.pub-hora').count()) >= horas.length - 3, 'os outros horários continuam');
   ok('horário já pedido some para os outros clientes');
 

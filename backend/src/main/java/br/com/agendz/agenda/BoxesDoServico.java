@@ -20,7 +20,7 @@ public final class BoxesDoServico {
     public static Set<UUID> permitidos(JdbcTemplate jdbc, Collection<UUID> servicoIds) {
         if (servicoIds == null || servicoIds.isEmpty()) return null;
         List<Object[]> linhas = jdbc.query("select servico_id, box_id from servico_box where servico_id = any (?::uuid[])",
-                (rs, i) -> new Object[]{rs.getObject(1, UUID.class), rs.getObject(2, UUID.class)}, servicoIds.stream().map(UUID::toString).toArray(String[]::new));
+                (rs, i) -> new Object[]{rs.getObject(1, UUID.class), rs.getObject(2, UUID.class)}, (Object) servicoIds.stream().map(UUID::toString).toArray(String[]::new));
         if (linhas.isEmpty()) return null;
         Set<UUID> restritos = new HashSet<>();
         for (Object[] l : linhas) restritos.add((UUID) l[0]);
